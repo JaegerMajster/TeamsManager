@@ -220,6 +220,31 @@ Aplikacja TeamsManager wykorzystuje nastêpuj¹ce technologie:
 - **Git** - system kontroli wersji
 - **NuGet** - mened¿er pakietów
 
+### Pakiety NuGet
+
+#### TeamsManager.Core
+- **System.Management.Automation** - integracja z PowerShell i wykonywanie skryptów
+- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zale¿noœci
+- **Microsoft.Extensions.Logging** - system logowania
+
+#### TeamsManager.Api
+- **Microsoft.AspNetCore.SignalR** - komunikacja w czasie rzeczywistym (WebSockets)
+- **Swashbuckle.AspNetCore** - dokumentacja API (Swagger/OpenAPI)
+- **Microsoft.EntityFrameworkCore** - dostêp do danych (ORM)
+- **Microsoft.EntityFrameworkCore.Sqlite** - provider bazy danych SQLite
+
+#### TeamsManager.Data
+- **Microsoft.EntityFrameworkCore** - g³ówny pakiet Entity Framework Core
+- **Microsoft.EntityFrameworkCore.Sqlite** - obs³uga bazy danych SQLite
+- **Microsoft.EntityFrameworkCore.Tools** - narzêdzia CLI do migracji
+- **Microsoft.EntityFrameworkCore.Design** - narzêdzia projektowe dla EF Core
+
+#### TeamsManager.UI
+- **MaterialDesignThemes** - nowoczesny interfejs u¿ytkownika z ciemnym motywem
+- **Microsoft.AspNetCore.SignalR.Client** - klient SignalR dla powiadomieñ
+- **System.Net.Http.Json** - uproszczona komunikacja HTTP z JSON
+- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zale¿noœci w WPF
+
 ## 4. Harmonogram i realizacja projektu
 
 ### Harmonogram
