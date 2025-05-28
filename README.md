@@ -1,75 +1,81 @@
-# TeamsManager - Dokumentacja projektu
+ï»¿# TeamsManager - Dokumentacja projektu
 
-## Informacje ogólne
+## Informacje ogÃ³lne
 
-TeamsManager to aplikacja lokalnie uruchamiana na komputerze, która dzia³a jako zaawansowana nak³adka na PowerShell do zarz¹dzania grupami Microsoft Teams. Zamiast korzystaæ z licencjonowanego Microsoft Graph, aplikacja wykorzystuje darmowe skrypty PowerShell, oferuj¹c przy tym bogat¹ funkcjonalnoœæ i przyjazny interfejs u¿ytkownika.
+TeamsManager to aplikacja lokalnie uruchamiana na komputerze, ktÃ³ra dziaÅ‚a jako zaawansowana nakÅ‚adka na PowerShell do zarzÄ…dzania grupami Microsoft Teams. Zamiast korzystaÄ‡ z licencjonowanego Microsoft Graph, aplikacja wykorzystuje darmowe skrypty PowerShell, oferujÄ…c przy tym bogatÄ… funkcjonalnoÅ›Ä‡ i przyjazny interfejs uÅ¼ytkownika.
 
 Projekt realizowany jest jako zaliczenie przedmiotu "Programowanie aplikacji sieciowych".
 
 ## 1. Architektura aplikacji
 
-### Struktura rozwi¹zania
+### Struktura rozwiÄ…zania
 
-Rozwi¹zanie TeamsManager sk³ada siê z czterech g³ównych projektów, które razem tworz¹ kompletne rozwi¹zanie do zarz¹dzania grupami Microsoft Teams.
+RozwiÄ…zanie TeamsManager skÅ‚ada siÄ™ z czterech gÅ‚Ã³wnych projektÃ³w, ktÃ³re razem tworzÄ… kompletne rozwiÄ…zanie do zarzÄ…dzania grupami Microsoft Teams.
 
 #### TeamsManager.Core
 
-Biblioteka zawieraj¹ca g³ówn¹ logikê biznesow¹ aplikacji. Odpowiada za:
-- Integracjê z PowerShell i wykonywanie poleceñ
-- Zarz¹dzanie grupami Teams (tworzenie, modyfikowanie, archiwizowanie)
-- Operacje na u¿ytkownikach (dodawanie, usuwanie)
-- Definiowanie g³ównych interfejsów i modeli danych
+Biblioteka zawierajÄ…ca gÅ‚Ã³wnÄ… logikÄ™ biznesowÄ… aplikacji. Odpowiada za:
+- IntegracjÄ™ z PowerShell i wykonywanie poleceÅ„
+- ZarzÄ…dzanie grupami Teams (tworzenie, modyfikowanie, archiwizowanie)
+- Operacje na uÅ¼ytkownikach (dodawanie, usuwanie)
+- Definiowanie gÅ‚Ã³wnych interfejsÃ³w i modeli danych
 
 Kluczowe klasy:
 - `PowerShellService` - klasa do komunikacji z PowerShell
-- `TeamsService` - klasa obs³uguj¹ca operacje na zespo³ach Teams
-- `UserService` - klasa obs³uguj¹ca operacje na u¿ytkownikach Teams
+- `TeamsService` - klasa obsÅ‚ugujÄ…ca operacje na zespoÅ‚ach Teams
+- `UserService` - klasa obsÅ‚ugujÄ…ca operacje na uÅ¼ytkownikach Teams
+
+**Zaimplementowane klasy:**
+- `PowerShellService` - podstawowa integracja z PowerShell i Microsoft Teams
+  - Metody: ConnectToTeams(), CreateTeam(), Dispose()
+  - ZarzÄ…dzanie Runspace i obsÅ‚uga bÅ‚Ä™dÃ³w
+  - Logowanie wszystkich operacji
 
 #### TeamsManager.Api
 
-Lokalny serwer REST API, który udostêpnia funkcjonalnoœæ Core poprzez HTTP. Odpowiada za:
-- Udostêpnianie endpointów do zarz¹dzania Teams
-- Obs³ugê WebSockets do powiadomieñ w czasie rzeczywistym
-- Komunikacjê z innymi instancjami aplikacji
-- Uwierzytelnianie i autoryzacjê zapytañ
+Lokalny serwer REST API, ktÃ³ry udostÄ™pnia funkcjonalnoÅ›Ä‡ Core poprzez HTTP. Odpowiada za:
+- UdostÄ™pnianie endpointÃ³w do zarzÄ…dzania Teams
+- ObsÅ‚ugÄ™ WebSockets do powiadomieÅ„ w czasie rzeczywistym
+- KomunikacjÄ™ z innymi instancjami aplikacji
+- Uwierzytelnianie i autoryzacjÄ™ zapytaÅ„
 
 Kluczowe komponenty:
 - Kontrolery API (TeamsController, UsersController, TemplatesController)
-- Hub SignalR dla powiadomieñ w czasie rzeczywistym
+- Hub SignalR dla powiadomieÅ„ w czasie rzeczywistym
 - Middleware do uwierzytelniania
-- Serwisy hostuj¹ce d³ugotrwa³e operacje
+- Serwisy hostujÄ…ce dÅ‚ugotrwaÅ‚e operacje
 
 #### TeamsManager.UI
 
-Aplikacja WPF stanowi¹ca interfejs u¿ytkownika. Odpowiada za:
-- Prezentacjê danych i formularzy do zarz¹dzania Teams
-- Komunikacjê z API
-- Odbieranie powiadomieñ w czasie rzeczywistym
-- Prezentacjê postêpu d³ugotrwa³ych operacji
+Aplikacja WPF stanowiÄ…ca interfejs uÅ¼ytkownika. Odpowiada za:
+- PrezentacjÄ™ danych i formularzy do zarzÄ…dzania Teams
+- KomunikacjÄ™ z API
+- Odbieranie powiadomieÅ„ w czasie rzeczywistym
+- PrezentacjÄ™ postÄ™pu dÅ‚ugotrwaÅ‚ych operacji
 
 Kluczowe elementy:
-- G³ówne okno aplikacji z nawigacj¹
-- Widoki dla zarz¹dzania zespo³ami, kana³ami i u¿ytkownikami
+- GÅ‚Ã³wne okno aplikacji z nawigacjÄ…
+- Widoki dla zarzÄ…dzania zespoÅ‚ami, kanaÅ‚ami i uÅ¼ytkownikami
 - Formularze do wprowadzania danych
-- Komponenty do wyœwietlania powiadomieñ i postêpu
+- Komponenty do wyÅ›wietlania powiadomieÅ„ i postÄ™pu
 
 #### TeamsManager.Data
 
-Biblioteka do zarz¹dzania dostêpem do danych. Odpowiada za:
-- Przechowywanie szablonów zespo³ów
+Biblioteka do zarzÄ…dzania dostÄ™pem do danych. Odpowiada za:
+- Przechowywanie szablonÃ³w zespoÅ‚Ã³w
 - Logowanie historii operacji
-- Przechowywanie konfiguracji u¿ytkownika
-- Obs³ugê lokalnej bazy danych SQLite
+- Przechowywanie konfiguracji uÅ¼ytkownika
+- ObsÅ‚ugÄ™ lokalnej bazy danych SQLite
 
 Kluczowe elementy:
 - DbContext dla Entity Framework Core
 - Modele danych (TeamTemplate, OperationHistory)
-- Repozytoria do obs³ugi operacji na danych
+- Repozytoria do obsÅ‚ugi operacji na danych
 - Migracje bazy danych
 
 ### Diagramy i schematy
 
-#### Diagram przep³ywu danych
+#### Diagram przepÅ‚ywu danych
 
 ```
 +----------------+       +----------------+
@@ -98,7 +104,7 @@ Kluczowe elementy:
 +----------------+
 ```
 
-#### Diagram komunikacji miêdzy komponentami
+#### Diagram komunikacji miÄ™dzy komponentami
 
 ```
 +--------------------------------------------------+
@@ -134,151 +140,151 @@ Kluczowe elementy:
 
 ## 2. Elementy sieciowe aplikacji
 
-Aplikacja TeamsManager zawiera nastêpuj¹ce elementy sieciowe:
+Aplikacja TeamsManager zawiera nastÄ™pujÄ…ce elementy sieciowe:
 
 ### 1. REST API
 
-Lokalny serwer obs³uguj¹cy zapytania HTTP, umo¿liwiaj¹cy:
-- Zarz¹dzanie zespo³ami Teams (CRUD)
-- Zarz¹dzanie u¿ytkownikami
-- Wysy³anie wiadomoœci
-- Dostêp do historii operacji
+Lokalny serwer obsÅ‚ugujÄ…cy zapytania HTTP, umoÅ¼liwiajÄ…cy:
+- ZarzÄ…dzanie zespoÅ‚ami Teams (CRUD)
+- ZarzÄ…dzanie uÅ¼ytkownikami
+- WysyÅ‚anie wiadomoÅ›ci
+- DostÄ™p do historii operacji
 
-Przyk³adowe endpointy:
-- `GET /api/teams` - pobieranie listy zespo³ów
-- `POST /api/teams` - tworzenie nowego zespo³u
-- `PUT /api/teams/{id}` - aktualizacja zespo³u
-- `POST /api/teams/{id}/members` - dodawanie cz³onków do zespo³u
-- `POST /api/teams/{id}/channels` - tworzenie kana³u w zespole
-- `POST /api/teams/{id}/archive` - archiwizacja zespo³u
-- `POST /api/messages` - wysy³anie wiadomoœci do zespo³u
+PrzykÅ‚adowe endpointy:
+- `GET /api/teams` - pobieranie listy zespoÅ‚Ã³w
+- `POST /api/teams` - tworzenie nowego zespoÅ‚u
+- `PUT /api/teams/{id}` - aktualizacja zespoÅ‚u
+- `POST /api/teams/{id}/members` - dodawanie czÅ‚onkÃ³w do zespoÅ‚u
+- `POST /api/teams/{id}/channels` - tworzenie kanaÅ‚u w zespole
+- `POST /api/teams/{id}/archive` - archiwizacja zespoÅ‚u
+- `POST /api/messages` - wysyÅ‚anie wiadomoÅ›ci do zespoÅ‚u
 
 ### 2. WebSockets
 
-System powiadomieñ w czasie rzeczywistym realizowany za pomoc¹ SignalR:
-- Informowanie o statusie d³ugotrwa³ych operacji
-- Powiadomienia o zakoñczonych zadaniach
-- Aktualizacja interfejsu u¿ytkownika w czasie rzeczywistym
+System powiadomieÅ„ w czasie rzeczywistym realizowany za pomocÄ… SignalR:
+- Informowanie o statusie dÅ‚ugotrwaÅ‚ych operacji
+- Powiadomienia o zakoÅ„czonych zadaniach
+- Aktualizacja interfejsu uÅ¼ytkownika w czasie rzeczywistym
 
-Przyk³adowe metody Huba:
-- `OperationStarted(operationId, operationType)` - powiadomienie o rozpoczêciu operacji
-- `OperationProgress(operationId, progressPercentage)` - aktualizacja postêpu operacji
-- `OperationCompleted(operationId, result)` - powiadomienie o zakoñczeniu operacji
-- `TeamCreated(teamId, teamName)` - powiadomienie o utworzeniu nowego zespo³u
-- `MembersAdded(teamId, count)` - powiadomienie o dodaniu nowych cz³onków
+PrzykÅ‚adowe metody Huba:
+- `OperationStarted(operationId, operationType)` - powiadomienie o rozpoczÄ™ciu operacji
+- `OperationProgress(operationId, progressPercentage)` - aktualizacja postÄ™pu operacji
+- `OperationCompleted(operationId, result)` - powiadomienie o zakoÅ„czeniu operacji
+- `TeamCreated(teamId, teamName)` - powiadomienie o utworzeniu nowego zespoÅ‚u
+- `MembersAdded(teamId, count)` - powiadomienie o dodaniu nowych czÅ‚onkÃ³w
 
-### 3. Synchronizacja miêdzy instancjami
+### 3. Synchronizacja miÄ™dzy instancjami
 
-Mechanizm komunikacji TCP/IP umo¿liwiaj¹cy:
-- Synchronizacjê stanu miêdzy ró¿nymi instancjami aplikacji
-- Wymianê informacji o wykonywanych operacjach
-- Zapobieganie konfliktom przy równoleg³ych operacjach
+Mechanizm komunikacji TCP/IP umoÅ¼liwiajÄ…cy:
+- SynchronizacjÄ™ stanu miÄ™dzy rÃ³Å¼nymi instancjami aplikacji
+- WymianÄ™ informacji o wykonywanych operacjach
+- Zapobieganie konfliktom przy rÃ³wnolegÅ‚ych operacjach
 
 Implementacja:
-- Protokó³ TCP/IP do komunikacji miêdzy instancjami
-- Serwer nas³uchuj¹cy na okreœlonym porcie
-- Klient do ³¹czenia siê z innymi instancjami
-- Mechanizm serializacji i deserializacji komunikatów
-- System rozpoznawania i rozwi¹zywania konfliktów
+- ProtokÃ³Å‚ TCP/IP do komunikacji miÄ™dzy instancjami
+- Serwer nasÅ‚uchujÄ…cy na okreÅ›lonym porcie
+- Klient do Å‚Ä…czenia siÄ™ z innymi instancjami
+- Mechanizm serializacji i deserializacji komunikatÃ³w
+- System rozpoznawania i rozwiÄ…zywania konfliktÃ³w
 
 ## 3. Wykorzystane technologie
 
-Aplikacja TeamsManager wykorzystuje nastêpuj¹ce technologie:
+Aplikacja TeamsManager wykorzystuje nastÄ™pujÄ…ce technologie:
 
-### Framework i jêzyk programowania
+### Framework i jÄ™zyk programowania
 - **.NET 8.0** - nowoczesna, cross-platformowa platforma programistyczna
-- **C#** - jêzyk programowania u¿ywany we wszystkich projektach
+- **C#** - jÄ™zyk programowania uÅ¼ywany we wszystkich projektach
 
-### Interfejs u¿ytkownika
+### Interfejs uÅ¼ytkownika
 - **WPF (Windows Presentation Foundation)** - framework do tworzenia aplikacji desktopowych
-- **MaterialDesignThemes** - biblioteka komponentów UI z ciemnym motywem
+- **MaterialDesignThemes** - biblioteka komponentÃ³w UI z ciemnym motywem
 - **MVVM (Model-View-ViewModel)** - wzorzec projektowy do organizacji kodu interfejsu
 
 ### API i komunikacja sieciowa
 - **ASP.NET Core** - framework do tworzenia API i aplikacji webowych
 - **SignalR** - biblioteka do komunikacji w czasie rzeczywistym (WebSockets)
-- **REST** - styl architektury u¿ywany w API
-- **JSON** - format danych u¿ywany w komunikacji
+- **REST** - styl architektury uÅ¼ywany w API
+- **JSON** - format danych uÅ¼ywany w komunikacji
 
-### Dostêp do danych
-- **Entity Framework Core** - ORM do pracy z baz¹ danych
+### DostÄ™p do danych
+- **Entity Framework Core** - ORM do pracy z bazÄ… danych
 - **SQLite** - lekka, plikowa baza danych
-- **Repository Pattern** - wzorzec dostêpu do danych
+- **Repository Pattern** - wzorzec dostÄ™pu do danych
 
 ### Integracja z PowerShell
 - **System.Management.Automation** - biblioteka do integracji z PowerShell
-- **Microsoft Teams PowerShell Module** - modu³ PowerShell do zarz¹dzania Teams
-- **Exchange Online PowerShell V2** - modu³ do zarz¹dzania us³ugami Exchange Online
+- **Microsoft Teams PowerShell Module** - moduÅ‚ PowerShell do zarzÄ…dzania Teams
+- **Exchange Online PowerShell V2** - moduÅ‚ do zarzÄ…dzania usÅ‚ugami Exchange Online
 
 ### Testowanie
-- **xUnit** - framework do testów jednostkowych
-- **Moq** - biblioteka do mockowania obiektów w testach
+- **xUnit** - framework do testÃ³w jednostkowych
+- **Moq** - biblioteka do mockowania obiektÃ³w w testach
 - **FluentAssertions** - biblioteka do asercji w testach
 
-### Narzêdzia
-- **Visual Studio** - zintegrowane œrodowisko programistyczne
+### NarzÄ™dzia
+- **Visual Studio** - zintegrowane Å›rodowisko programistyczne
 - **Git** - system kontroli wersji
-- **NuGet** - mened¿er pakietów
+- **NuGet** - menedÅ¼er pakietÃ³w
 
 ### Pakiety NuGet
 
 #### TeamsManager.Core
-- **System.Management.Automation** - integracja z PowerShell i wykonywanie skryptów
-- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zale¿noœci
+- **System.Management.Automation** - integracja z PowerShell i wykonywanie skryptÃ³w
+- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zaleÅ¼noÅ›ci
 - **Microsoft.Extensions.Logging** - system logowania
 
 #### TeamsManager.Api
 - **Microsoft.AspNetCore.SignalR** - komunikacja w czasie rzeczywistym (WebSockets)
 - **Swashbuckle.AspNetCore** - dokumentacja API (Swagger/OpenAPI)
-- **Microsoft.EntityFrameworkCore** - dostêp do danych (ORM)
+- **Microsoft.EntityFrameworkCore** - dostÄ™p do danych (ORM)
 - **Microsoft.EntityFrameworkCore.Sqlite** - provider bazy danych SQLite
 
 #### TeamsManager.Data
-- **Microsoft.EntityFrameworkCore** - g³ówny pakiet Entity Framework Core
-- **Microsoft.EntityFrameworkCore.Sqlite** - obs³uga bazy danych SQLite
-- **Microsoft.EntityFrameworkCore.Tools** - narzêdzia CLI do migracji
-- **Microsoft.EntityFrameworkCore.Design** - narzêdzia projektowe dla EF Core
+- **Microsoft.EntityFrameworkCore** - gÅ‚Ã³wny pakiet Entity Framework Core
+- **Microsoft.EntityFrameworkCore.Sqlite** - obsÅ‚uga bazy danych SQLite
+- **Microsoft.EntityFrameworkCore.Tools** - narzÄ™dzia CLI do migracji
+- **Microsoft.EntityFrameworkCore.Design** - narzÄ™dzia projektowe dla EF Core
 
 #### TeamsManager.UI
-- **MaterialDesignThemes** - nowoczesny interfejs u¿ytkownika z ciemnym motywem
-- **Microsoft.AspNetCore.SignalR.Client** - klient SignalR dla powiadomieñ
+- **MaterialDesignThemes** - nowoczesny interfejs uÅ¼ytkownika z ciemnym motywem
+- **Microsoft.AspNetCore.SignalR.Client** - klient SignalR dla powiadomieÅ„
 - **System.Net.Http.Json** - uproszczona komunikacja HTTP z JSON
-- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zale¿noœci w WPF
+- **Microsoft.Extensions.DependencyInjection** - wstrzykiwanie zaleÅ¼noÅ›ci w WPF
 
 ## 4. Harmonogram i realizacja projektu
 
 ### Harmonogram
 
-#### Tydzieñ 1 (pocz¹tek maja)
-- Konfiguracja projektu i repozytoriów
+#### TydzieÅ„ 1 (poczÄ…tek maja)
+- Konfiguracja projektu i repozytoriÃ³w
 - Implementacja podstawowej integracji z PowerShell
-- Szkielet interfejsu u¿ytkownika
+- Szkielet interfejsu uÅ¼ytkownika
 
-#### Tydzieñ 2
+#### TydzieÅ„ 2
 - Implementacja lokalnego REST API
 - Podstawowe operacje na Teams
 - Integracja UI z API
 
-#### Tydzieñ 3
-- WebSockets dla powiadomieñ
+#### TydzieÅ„ 3
+- WebSockets dla powiadomieÅ„
 - System synchronizacji
-- Rozbudowa funkcji zarz¹dzania Teams
+- Rozbudowa funkcji zarzÄ…dzania Teams
 
-#### Tydzieñ 4
+#### TydzieÅ„ 4
 - Szablony i historia operacji
-- Testowanie ca³oœci systemu
+- Testowanie caÅ‚oÅ›ci systemu
 - Przygotowanie dokumentacji
 
-### Wymagania wstêpne
-- Modu³y PowerShell: Microsoft Teams PowerShell Module, Exchange Online PowerShell V2
+### Wymagania wstÄ™pne
+- ModuÅ‚y PowerShell: Microsoft Teams PowerShell Module, Exchange Online PowerShell V2
 - Uprawnienia administratora do Teams
-- Œrodowisko deweloperskie .NET
+- Åšrodowisko deweloperskie .NET
 
-### Korzyœci projektu
-- Darmowe rozwi¹zanie (bez dodatkowych licencji)
-- Pe³na customizacja interfejsu i funkcji
-- Automatyzacja procesów zarz¹dzania Teams
-- Lokalne dzia³anie bez publicznych punktów koñcowych API
+### KorzyÅ›ci projektu
+- Darmowe rozwiÄ…zanie (bez dodatkowych licencji)
+- PeÅ‚na customizacja interfejsu i funkcji
+- Automatyzacja procesÃ³w zarzÄ…dzania Teams
+- Lokalne dziaÅ‚anie bez publicznych punktÃ³w koÅ„cowych API
 - Zaliczenie przedmiotu "Programowanie aplikacji sieciowych"
 
 ## Instrukcja instalacji i uruchomienia
@@ -287,30 +293,90 @@ Aplikacja TeamsManager wykorzystuje nastêpuj¹ce technologie:
 - Windows 10/11
 - .NET 8.0 Runtime
 - PowerShell 7.0 lub nowszy
-- Zainstalowane modu³y:
+- Zainstalowane moduÅ‚y:
   - Microsoft Teams PowerShell Module
   - Exchange Online PowerShell V2
 
-### Instalacja modu³ów PowerShell
+### Instalacja moduÅ‚Ã³w PowerShell
 ```powershell
 Install-Module -Name MicrosoftTeams
 Install-Module -Name ExchangeOnlineManagement
 ```
 
 ### Uruchomienie aplikacji
-1. Pobierz najnowsz¹ wersjê aplikacji
+1. Pobierz najnowszÄ… wersjÄ™ aplikacji
 2. Rozpakuj archiwum do wybranego katalogu
 3. Uruchom plik TeamsManager.UI.exe
 4. W oknie logowania podaj dane administratora Teams
-5. Po pomyœlnym logowaniu interfejs aplikacji bêdzie gotowy do u¿ycia
+5. Po pomyÅ›lnym logowaniu interfejs aplikacji bÄ™dzie gotowy do uÅ¼ycia
 
-## Dokumentacja u¿ytkowa
+## Dokumentacja uÅ¼ytkowa
 
-*Ta sekcja zostanie uzupe³niona w miarê rozwijania interfejsu u¿ytkownika.*
+*Ta sekcja zostanie uzupeÅ‚niona w miarÄ™ rozwijania interfejsu uÅ¼ytkownika.*
 
 ## Historia zmian i dziennik rozwoju
 
-*Ta sekcja bêdzie aktualizowana w trakcie rozwoju projektu.*
+## Aktualny status implementacji 2025-05-28 godz. 12.00
+
+### âœ… Zrealizowano
+- Podstawowa struktura rozwiÄ…zania (4 projekty)
+- Konfiguracja pakietÃ³w NuGet dla wszystkich projektÃ³w
+- **PowerShellService** - gÅ‚Ã³wna klasa do integracji z PowerShell:
+  - PoÅ‚Ä…czenie z Microsoft Teams
+  - Tworzenie nowych zespoÅ‚Ã³w
+  - ZarzÄ…dzanie sesjÄ… PowerShell Runspace
+  - ObsÅ‚uga bÅ‚Ä™dÃ³w i logowanie
+
+### ðŸ”„ W trakcie realizacji
+- Modele danych dla zespoÅ‚Ã³w i uÅ¼ytkownikÃ³w
+- REST API endpoints
+- Interfejs uÅ¼ytkownika WPF
+
+### ðŸ“‹ Do zrealizowania
+- WebSockets dla powiadomieÅ„ w czasie rzeczywistym
+- Baza danych SQLite i operacje CRUD
+- Kompletny interfejs uÅ¼ytkownika
+- Testy i finalna dokumentacja
+
+## Aktualny status implementacji (aktualizacja po Bloku 1) 2025-05-28 godz. 14.30
+
+### âœ… Zrealizowano - Modele domenowe i testy (Blok 1)
+- **Podstawowa struktura rozwiÄ…zania** (4 projekty + projekt testowy)
+- **Konfiguracja pakietÃ³w NuGet** z kompatybilnoÅ›ciÄ… .NET 8.0
+- **PowerShellService** - integracja z PowerShell i Microsoft Teams
+- **Modele domenowe** (Domain-Driven Design):
+  - `Team` - zespÃ³Å‚ Microsoft Teams z czÅ‚onkami i kanaÅ‚ami
+  - `TeamMember` - czÅ‚onek zespoÅ‚u z rolÄ… (Owner/Member)
+  - `Channel` - kanaÅ‚ w zespole
+  - `TeamMemberRole` - enum z rolami uÅ¼ytkownikÃ³w
+- **Kompleksowe testy jednostkowe** (21 testÃ³w):
+  - Testy modeli podstawowych (Team, TeamMember, Channel)
+  - Testy enum z konwersjami i walidacjÄ…
+  - Testy integracyjne relacji miÄ™dzy obiektami
+  - Pattern AAA (Arrange-Act-Assert)
+  - FluentAssertions dla czytelnych asercji
+  - Testy parametryczne z Theory/InlineData
+  - **Pokrycie testowe: 100% modeli domenowych**
+
+### ðŸ”„ W trakcie realizacji - Warstwa danych (Blok 2)
+- Entity Framework Core DbContext
+- Migracje bazy danych SQLite
+- Repository Pattern dla dostÄ™pu do danych
+
+### ðŸ“‹ NastÄ™pne bloki do realizacji
+- REST API z kontrolerami (Blok 3)
+- WebSockets i SignalR (Blok 4)
+- Interfejs uÅ¼ytkownika WPF (Blok 5)
+- Zaawansowane funkcje i synchronizacja (Bloki 6-7)
+
+### ðŸ§ª Strategia testowania
+- **Test-Driven Development (TDD)** - testy przed implementacjÄ…
+- **Poziomy testowania**:
+  - Unit tests - pojedyncze klasy i metody
+  - Integration tests - relacje miÄ™dzy komponentami
+  - End-to-end tests - peÅ‚ne scenariusze (planowane)
+- **NarzÄ™dzia**: xUnit, FluentAssertions, Moq
+- **Wyniki**: 21/21 testÃ³w przechodzi (100% success rate)
 
 ## Autorzy i licencja
 

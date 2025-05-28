@@ -3,13 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34728.123
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsManager.Core", "TeamsManager.Core\TeamsManager.Core.csproj", "{E103164E-3E39-4673-964E-254181F4E81A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeamsManager.Core", "TeamsManager.Core\TeamsManager.Core.csproj", "{E103164E-3E39-4673-964E-254181F4E81A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsManager.Api", "TeamsManager.Api\TeamsManager.Api.csproj", "{73356DE1-B3D2-46F2-AE6B-C4A6271BB2FD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeamsManager.Api", "TeamsManager.Api\TeamsManager.Api.csproj", "{73356DE1-B3D2-46F2-AE6B-C4A6271BB2FD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsManager.UI", "TeamsManager.UI\TeamsManager.UI.csproj", "{753648D8-D25F-49CD-BE38-6D849CDFAE64}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeamsManager.UI", "TeamsManager.UI\TeamsManager.UI.csproj", "{753648D8-D25F-49CD-BE38-6D849CDFAE64}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsManager.Data", "TeamsManager.Data\TeamsManager.Data.csproj", "{3E1053AE-FA40-4E63-AA63-68D5F0DD8C50}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeamsManager.Data", "TeamsManager.Data\TeamsManager.Data.csproj", "{3E1053AE-FA40-4E63-AA63-68D5F0DD8C50}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "Elementy rozwiązania", "{C240ECCA-E643-4BE9-B608-4664AEE3E617}"
 	ProjectSection(SolutionItems) = preProject
@@ -18,6 +18,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "El
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{4E214CA4-8EA9-4DF9-89F1-9F0F69283F3F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsManager.Tests", "TeamsManager.Tests\TeamsManager.Tests.csproj", "{794BB9B6-6AF6-41C4-8058-AFE58A1067A9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,6 +43,10 @@ Global
 		{3E1053AE-FA40-4E63-AA63-68D5F0DD8C50}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E1053AE-FA40-4E63-AA63-68D5F0DD8C50}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3E1053AE-FA40-4E63-AA63-68D5F0DD8C50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{794BB9B6-6AF6-41C4-8058-AFE58A1067A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{794BB9B6-6AF6-41C4-8058-AFE58A1067A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{794BB9B6-6AF6-41C4-8058-AFE58A1067A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{794BB9B6-6AF6-41C4-8058-AFE58A1067A9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
