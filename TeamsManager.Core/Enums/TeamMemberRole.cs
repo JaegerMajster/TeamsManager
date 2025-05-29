@@ -1,4 +1,4 @@
-﻿namespace TeamsManager.Core.Models
+﻿namespace TeamsManager.Core.Enums
 {
     public enum TeamMemberRole
     {

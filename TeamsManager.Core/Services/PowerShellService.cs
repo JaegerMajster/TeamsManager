@@ -44,7 +44,7 @@ namespace TeamsManager.Core.Services
                 {
                     ps.Runspace = _runspace;
 
-                    ps.AddScript("Import-Module MicrosoftTeams");
+                    ps.AddScript("Import-Module MicrosoftTeams"); // Operacja idempotentna - ponowne wykonanie powoduje taki sam efekt
                     ps.AddScript($"$securePassword = ConvertTo-SecureString '{password}' -AsPlainText -Force");
                     ps.AddScript($"$credential = New-Object System.Management.Automation.PSCredential ('{username}', $securePassword)");
                     ps.AddScript("Connect-MicrosoftTeams -Credential $credential");

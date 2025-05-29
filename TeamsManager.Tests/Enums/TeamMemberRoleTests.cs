@@ -1,7 +1,7 @@
 ﻿using FluentAssertions;
-using TeamsManager.Core.Models;
+using TeamsManager.Core.Enums;
 
-namespace TeamsManager.Tests.Models
+namespace TeamsManager.Tests.Enums
 {
     public class TeamMemberRoleTests
     {
