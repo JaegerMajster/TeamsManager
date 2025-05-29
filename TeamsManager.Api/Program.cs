@@ -1,15 +1,25 @@
+using Microsoft.EntityFrameworkCore;
+using TeamsManager.Data;
+using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Services.UserContext;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
+// Dodanie serwisów do kontenera
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var app = builder.Build();
+// Rejestracja DbContext
+builder.Services.AddDbContext<TeamsManagerDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure the HTTP request pipeline.
+// Tymczasowa rejestracja ICurrentUserService
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+var app = builder.Build(); // Linia budowania aplikacji
+
+// Konfiguracja HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -17,9 +27,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

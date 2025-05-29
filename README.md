@@ -378,6 +378,8 @@ erDiagram
 | OperationHistory | 1 : N | OperationHistory | - | OperationHistory.SubOperations (planowane), OperationHistory.ParentOperation | Operacja może mieć wiele podoperacji. |
 | SchoolType | 1 : N | Subject | - | (brak bezpośredniej kolekcji w SchoolType), Subject.DefaultSchoolType | Jeden typ szkoły może być domyślnym dla wielu przedmiotów. |
 
+**Uwaga**: Tabela UserSchoolTypeSupervision dla relacji M:N User <-> SchoolType (dla nadzoru) jest obsługiwana przez EF Core "niejawnie" poprzez konfigurację .UsingEntity() w DbContext.
+
 ### 3.4. Logika Domenowa w Modelach
 
 Modele zostały zaprojektowane jako "bogate modele domenowe" (Rich Domain Models), co oznacza, że zawierają nie tylko dane, ale również logikę biznesową bezpośrednio w encjach. Przykłady:
@@ -409,29 +411,29 @@ Modele zostały zaprojektowane jako "bogate modele domenowe" (Rich Domain Models
 
 ### 4.2. Kluczowe Pakiety NuGet
 
-**TeamsManager.Core**
+**TeamsManager.Core**:
 - System.Management.Automation: Integracja z PowerShell.
 - Microsoft.Extensions.DependencyInjection.Abstractions: Podstawa dla wstrzykiwania zależności.
 - Microsoft.Extensions.Logging.Abstractions: Podstawa dla systemu logowania.
 
-**TeamsManager.Data**
+**TeamsManager.Data**:
 - Microsoft.EntityFrameworkCore: Główny pakiet Entity Framework Core.
 - Microsoft.EntityFrameworkCore.Sqlite: Dostawca bazy danych SQLite dla EF Core.
 - Microsoft.EntityFrameworkCore.Tools: Narzędzia wiersza poleceń dla EF Core (np. do migracji).
 - Microsoft.EntityFrameworkCore.Design: Narzędzia czasu projektowania dla EF Core.
 
-**TeamsManager.Api**
+**TeamsManager.Api**:
 - Microsoft.AspNetCore.SignalR: Implementacja WebSockets w ASP.NET Core.
 - Swashbuckle.AspNetCore: Automatyczne generowanie dokumentacji API (Swagger/OpenAPI).
-- Microsoft.EntityFrameworkCore.Sqlite: (pośrednio przez TeamsManager.Data lub do konfiguracji DbContext w DI).
+- Microsoft.EntityFrameworkCore.Sqlite: (do konfiguracji DbContext w DI).
 
-**TeamsManager.UI**
+**TeamsManager.UI**:
 - MaterialDesignThemes: Biblioteka kontrolek i stylów Material Design dla WPF.
 - Microsoft.AspNetCore.SignalR.Client: Klient SignalR do komunikacji WebSocket z API.
 - System.Net.Http.Json: Ułatwienia do pracy z JSON przez HTTP.
 - Microsoft.Extensions.DependencyInjection: Implementacja wstrzykiwania zależności w aplikacjach WPF.
 
-**TeamsManager.Tests**
+**TeamsManager.Tests**:
 - xUnit: Popularny framework do testów jednostkowych.
 - FluentAssertions: Biblioteka do tworzenia bardziej czytelnych i ekspresyjnych asercji w testach.
 - Moq: Biblioteka do tworzenia obiektów mock (zaślepek) na potrzeby testów jednostkowych.
@@ -443,13 +445,13 @@ Projekt kładzie duży nacisk na jakość kodu poprzez rozbudowaną strategię t
 
 **Testy Jednostkowe (Unit Tests)**: Dla wszystkich klas modeli (weryfikacja wartości domyślnych, logiki właściwości, metod pomocniczych), wszystkich enumów oraz kluczowych komponentów logiki biznesowej (serwisów) w izolacji.
 
-**Testy Integracyjne (Integration Tests)**: Sprawdzają poprawność współpracy między różnymi modułami, np. interakcję modeli z DbContext i bazą danych (przy użyciu InMemory lub TestContainers), działanie relacji, współpracę serwisów z repozytoriami. TeamIntegrationTests.cs jest przykładem.
+**Testy Integracyjne (Integration Tests)**: Sprawdzają poprawność współpracy między różnymi modułami, np. interakcję modeli z DbContext i bazą danych (przy użyciu InMemory lub TestContainers), działanie relacji, współpracę serwisów z repozytoriami. TeamIntegrationTests.cs jest przykładem testowania złożonych interakcji między modelami.
 
 **Pokrycie Kodu**: Dążenie do jak najwyższego pokrycia kodu testami. Obecnie modele domenowe i ich wewnętrzna logika są w pełni pokryte.
 
-**Narzędzia**: xUnit jako framework testowy, FluentAssertions dla czytelnych i ekspresyjnych asercji, Moq do mockowania zależności w testach jednostkowych serwisów.
+**Narzędzia**: xUnit jako główny framework testowy, FluentAssertions dla czytelnych i ekspresyjnych asercji, Moq do mockowania zależności w testach jednostkowych serwisów.
 
-**Aktualny status testów**: Wszystkie zaimplementowane testy jednostkowe i integracyjne dla modeli danych (ponad 100 metody testowe, w tym wiele parametryzowanych) przechodzą pomyślnie (100% sukcesu).
+**Aktualny status testów**: Wszystkie zaimplementowane testy jednostkowe i integracyjne dla modeli danych (ponad 100 metod testowych, w tym wiele parametryzowanych) przechodzą pomyślnie (100% sukcesu).
 
 ## 6. Aktualny Status Implementacji i Plan Dalszych Prac
 
@@ -466,16 +468,20 @@ Projekt kładzie duży nacisk na jakość kodu poprzez rozbudowaną strategię t
 - Implementacja kluczowych testów integracyjnych weryfikujących współpracę między modelami.
 - Ustalenie szczegółowego planu dalszych prac, strategii testowania i zasad dokumentacji.
 - Wszystkie testy dla modeli przechodzą pomyślnie.
+- Konfiguracja projektu TeamsManager.Api (Program.cs, appsettings.json) do obsługi EF Core.
+- Dodanie ICurrentUserService i jego podstawowej implementacji CurrentUserService do TeamsManager.Core.
+- Poprawna rejestracja DbContext i ICurrentUserService w kontenerze DI projektu API.
+- Pomyślne wygenerowanie pierwszej migracji bazy danych (InitialCreate).
+- Pomyślne zastosowanie migracji i utworzenie schematu bazy danych SQLite (teamsmanager.db).
 
 ### 🔄 W Trakcie Realizacji / Następne Kroki
 
-**Faza 2**: Warstwa Danych i Pierwsze Operacje
+**Faza 2**: Warstwa Danych i Pierwsze Operacje (Kontynuacja)
 
-- Utworzenie pierwszej migracji bazy danych na podstawie finalnego modelu i DbContext.
-- Implementacja mechanizmu ICurrentUserService i jego wstrzykiwania do DbContext w celu poprawnego zapisu pól audytu CreatedBy i ModifiedBy (wymaga konfiguracji Dependency Injection w projektach startowych).
+- Implementacja pełnej logiki ICurrentUserService i integracja z mechanizmem logowania w WPF.
 - Implementacja wzorca Repository dla wszystkich encji w TeamsManager.Data.
 - Stworzenie pierwszych Serwisów Aplikacyjnych w TeamsManager.Core (np. TeamService, UserService) implementujących podstawowe operacje CRUD i logikę biznesową, wykorzystujących repozytoria oraz PowerShellService.
-- Rozbudowa PowerShellService o kolejne metody do zarządzania Teams.
+- Rozbudowa PowerShellService o kolejne metody do zarządzania Teams (np. dodawanie członków, archiwizacja).
 - Testy jednostkowe dla repozytoriów i serwisów.
 
 **Faza 3**: API i Komunikacja
@@ -520,9 +526,9 @@ gantt
     Definicja i Implementacja Modeli Domenowych :done, des1, 2025-05-27, 2d
     Testy Jednostkowe i Integracyjne Modeli   :done, des2, after des1, 2d
     
-    section Faza 2: Warstwa Danych i Podst. Logika (Rozpoczęta)
-    Migracje Bazy Danych                     :crit, active, db_mig, 2025-05-29, 1d
-    ICurrentUserService i DI                 :crit, di_ius, after db_mig, 1d
+    section Faza 2: Warstwa Danych i Podst. Logika (W Trakcie)
+    Migracje Bazy Danych                     :done, db_mig, 2025-05-29, 1d
+    ICurrentUserService i DI                 :crit, active, di_ius, after db_mig, 1d
     Repozytoria                              :repo, after di_ius, 1d
     Podstawowe Serwisy Aplikacyjne (CRUD)    :services_crud, after repo, 2d
     Rozbudowa PowerShellService              :ps_enh, after services_crud, 1d
