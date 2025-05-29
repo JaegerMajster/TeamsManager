@@ -2,10 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using TeamsManager.Data;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Services.UserContext;
+using TeamsManager.Core.Abstractions.Data;
+using TeamsManager.Data.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Dodanie serwisów do kontenera
+// ----- POCZ¥TEK SEKCJI REJESTRACJI SERWISÓW -----
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -14,12 +16,23 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<TeamsManagerDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Tymczasowa rejestracja ICurrentUserService
+// Rejestracja ICurrentUserService
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-var app = builder.Build(); // Linia budowania aplikacji
+// ===== REJESTRACJA REPOZYTORIÓW =====
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ITeamRepository, TeamRepository>();
+builder.Services.AddScoped<ITeamTemplateRepository, TeamTemplateRepository>();
+builder.Services.AddScoped<ISchoolYearRepository, SchoolYearRepository>();
+builder.Services.AddScoped<IOperationHistoryRepository, OperationHistoryRepository>();
+builder.Services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();
 
-// Konfiguracja HTTP request pipeline.
+// ----- KONIEC SEKCJI REJESTRACJI SERWISÓW -----
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -27,7 +40,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseAuthorization();
+app.UseAuthorization(); // Jeœli bêdziesz u¿ywaæ autoryzacji
 app.MapControllers();
 
 app.Run();

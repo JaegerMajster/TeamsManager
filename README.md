@@ -473,13 +473,13 @@ Projekt kładzie duży nacisk na jakość kodu poprzez rozbudowaną strategię t
 - Poprawna rejestracja DbContext i ICurrentUserService w kontenerze DI projektu API.
 - Pomyślne wygenerowanie pierwszej migracji bazy danych (InitialCreate).
 - Pomyślne zastosowanie migracji i utworzenie schematu bazy danych SQLite (teamsmanager.db).
+- Implementacja pełnej logiki ICurrentUserService i integracja z mechanizmem logowania w WPF.
+- Implementacja wzorca Repository dla wszystkich encji w TeamsManager.Data.
 
 ### 🔄 W Trakcie Realizacji / Następne Kroki
 
 **Faza 2**: Warstwa Danych i Pierwsze Operacje (Kontynuacja)
 
-- Implementacja pełnej logiki ICurrentUserService i integracja z mechanizmem logowania w WPF.
-- Implementacja wzorca Repository dla wszystkich encji w TeamsManager.Data.
 - Stworzenie pierwszych Serwisów Aplikacyjnych w TeamsManager.Core (np. TeamService, UserService) implementujących podstawowe operacje CRUD i logikę biznesową, wykorzystujących repozytoria oraz PowerShellService.
 - Rozbudowa PowerShellService o kolejne metody do zarządzania Teams (np. dodawanie członków, archiwizacja).
 - Testy jednostkowe dla repozytoriów i serwisów.
