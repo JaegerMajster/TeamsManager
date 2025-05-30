@@ -5,6 +5,7 @@ using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Services
 {
@@ -157,7 +158,7 @@ namespace TeamsManager.Core.Services
             return await Task.FromResult<Collection<PSObject>?>(null); // Placeholder
         }
 
-        public async Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, string visibility = "Private", string? template = null)
+        public async Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, TeamVisibility visibility = TeamVisibility.Private, string? template = null)
         {
             if (!_isConnected)
             {

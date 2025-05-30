@@ -53,6 +53,7 @@ namespace TeamsManager.Core.Services
             string displayName,
             string description,
             string ownerUpn,
+            TeamVisibility visibility,
             string? teamTemplateId = null,
             string? schoolTypeId = null,
             string? schoolYearId = null,
@@ -82,8 +83,8 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                var ownerUser = await _userRepository.GetByIdAsync(ownerUpn); // Zmienione na GetByIdAsync, zakładając, że ownerUpn to ID użytkownika
-                                                                              // Jeśli ownerUpn to UPN, użyj _userRepository.GetUserByUpnAsync(ownerUpn);
+                var ownerUser = await _userRepository.GetUserByUpnAsync(ownerUpn); 
+
                 if (ownerUser == null || !ownerUser.IsActive)
                 {
                     operation.MarkAsFailed($"Użytkownik właściciela '{ownerUpn}' nie istnieje lub jest nieaktywny.");
@@ -123,12 +124,30 @@ namespace TeamsManager.Core.Services
 
                 // TODO: PowerShellService call - Rzeczywiste utworzenie zespołu w Microsoft Teams
                 // string? externalTeamId = await _powerShellService.CreateTeam(finalDisplayName, description, ownerUser.UPN); // ownerUser.UPN zamiast ownerUpn
-                string? externalTeamId = $"sim_ext_{Guid.NewGuid()}"; // Symulacja
-                bool psSuccess = !string.IsNullOrEmpty(externalTeamId);
+                string? externalTeamIdFromPS = await _powerShellService.CreateTeamAsync(
+                    finalDisplayName,
+                    description,
+                    ownerUser.UPN,
+                    visibility, // Użyj przekazanego parametru visibility
+                    template?.Id // Lub template?.Template jeśli to ma być URL/ścieżka szablonu dla PS
+                );
+                bool psSuccess = !string.IsNullOrEmpty(externalTeamIdFromPS);
 
                 if (psSuccess)
                 {
-                    _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony w Microsoft Teams (symulacja). External ID: {ExternalTeamId}", finalDisplayName, externalTeamId);
+                    _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony w Microsoft Teams. External ID: {ExternalTeamId}", finalDisplayName, externalTeamIdFromPS);
+                    var newTeam = new Team
+                    {
+                        // ...
+                        ExternalId = externalTeamIdFromPS, // Użyj wartości zwróconej z serwisu PowerShell
+                                                           // ...
+                    };
+                    // ...
+                }
+
+                if (psSuccess)
+                {
+                    _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony w Microsoft Teams (symulacja). External ID: {externalTeamIdFromPS}", finalDisplayName, externalTeamIdFromPS);
                     var newTeam = new Team
                     {
                         Id = Guid.NewGuid().ToString(),
@@ -136,10 +155,11 @@ namespace TeamsManager.Core.Services
                         Description = description,
                         Owner = ownerUser.UPN, // Używamy UPN z obiektu ownerUser
                         Status = TeamStatus.Active,
+                        Visibility = visibility,
                         TemplateId = template?.Id,
                         SchoolTypeId = schoolTypeId,
                         SchoolYearId = schoolYearId,
-                        ExternalId = externalTeamId,
+                        ExternalId = externalTeamIdFromPS,
                         CreatedBy = currentUserUpn,
                         IsActive = true
                     };
@@ -164,7 +184,7 @@ namespace TeamsManager.Core.Services
                     await _teamRepository.AddAsync(newTeam);
 
                     operation.TargetEntityId = newTeam.Id;
-                    operation.MarkAsCompleted($"Zespół ID: {newTeam.Id}, External ID: {externalTeamId}");
+                    operation.MarkAsCompleted($"Zespół ID: {newTeam.Id}, External ID: {externalTeamIdFromPS}");
                     _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony i zapisany lokalnie. ID: {TeamId}", finalDisplayName, newTeam.Id);
                     await SaveOperationHistoryAsync(operation); // Przeniesione do metody pomocniczej
                     return newTeam;

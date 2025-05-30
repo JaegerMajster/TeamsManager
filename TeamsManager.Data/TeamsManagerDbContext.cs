@@ -224,6 +224,7 @@ namespace TeamsManager.Data
                 entity.Property(t => t.DisplayName).IsRequired().HasMaxLength(200); // Pozostaje lub dostosuj MaxLength
                 entity.Property(t => t.Description).HasMaxLength(1000); // Pozostaje lub dostosuj MaxLength
                 entity.Property(t => t.Owner).IsRequired().HasMaxLength(100); // Pozostaje
+                entity.Property(t => t.Visibility).HasConversion<int>();
 
                 // Status i pola związane ze zmianą statusu
                 entity.Property(t => t.Status).HasConversion<int>().IsRequired(); // Upewnij się, że jest IsRequired

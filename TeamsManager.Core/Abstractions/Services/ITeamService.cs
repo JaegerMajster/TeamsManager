@@ -27,6 +27,7 @@ namespace TeamsManager.Core.Abstractions.Services
             string displayName,
             string description,
             string ownerUpn,
+            TeamVisibility visibility,
             string? teamTemplateId = null,
             string? schoolTypeId = null,
             string? schoolYearId = null,

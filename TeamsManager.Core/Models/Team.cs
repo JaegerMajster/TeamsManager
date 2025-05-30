@@ -126,7 +126,7 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Określa, czy zespół powinien być widoczny np. w publicznym katalogu zespołów.
         /// </summary>
-        public bool IsVisible { get; set; } = true;
+        public TeamVisibility Visibility { get; set; } = TeamVisibility.Private; // Domyślnie Private
 
         /// <summary>
         /// Określa, czy dołączenie do zespołu wymaga zatwierdzenia przez właściciela.

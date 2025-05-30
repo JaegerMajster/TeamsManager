@@ -72,7 +72,7 @@ namespace TeamsManager.Tests.Models
             team.Language.Should().Be("Polski");
             team.Tags.Should().BeNullOrEmpty();
             team.Notes.Should().BeNullOrEmpty();
-            team.IsVisible.Should().BeTrue();
+            team.Visibility.Should().Be(TeamVisibility.Private);
             team.RequiresApproval.Should().BeTrue();
             team.LastActivityDate.Should().BeNull();
 
@@ -143,7 +143,7 @@ namespace TeamsManager.Tests.Models
             team.Language = "Angielski";
             team.Tags = "programowanie, csharp";
             team.Notes = "Ważne notatki";
-            team.IsVisible = false;
+            team.Visibility.Should().Be(TeamVisibility.Private);
             team.RequiresApproval = false;
             team.LastActivityDate = now.AddDays(-1);
             team.IsActive = false; // Ustawienie BaseEntity.IsActive
@@ -172,7 +172,7 @@ namespace TeamsManager.Tests.Models
             team.Language.Should().Be("Angielski");
             team.Tags.Should().Be("programowanie, csharp");
             team.Notes.Should().Be("Ważne notatki");
-            team.IsVisible.Should().BeFalse();
+            team.Visibility.Should().Be(TeamVisibility.Private);
             team.RequiresApproval.Should().BeFalse();
             team.LastActivityDate.Should().Be(now.AddDays(-1));
             team.StatusChangeDate.Should().Be(now.AddMinutes(-5));

@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel; // Dla PSObject
 using System.Management.Automation;    // Dla PSObject
 using System.Threading.Tasks;
+using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Abstractions.Services
 {
@@ -37,7 +38,7 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="visibility">Widoczność zespołu (np. "Private", "Public"). Domyślnie "Private".</param>
         /// <param name="template">Opcjonalny szablon Microsoft Teams do użycia (np. "EDU_Class").</param>
         /// <returns>Zewnętrzny identyfikator (GroupId) utworzonego zespołu lub null w przypadku błędu.</returns>
-        Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, string visibility = "Private", string? template = null);
+        Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, TeamVisibility visibility = TeamVisibility.Private, string? template = null);
         // string CreateTeam(string displayName, string description, string owner); // Jeśli synchroniczna wersja jest w PowerShellService
 
         /// <summary>
