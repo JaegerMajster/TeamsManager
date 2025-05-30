@@ -253,7 +253,14 @@ namespace TeamsManager.Core.Services
         public async Task<bool> AssignViceDirectorToSchoolTypeAsync(string viceDirectorUserId, string schoolTypeId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_assign_vd";
-            var operation = new OperationHistory { /* ... Pełna inicjalizacja ... */ };
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserAssignedToSchoolType,
+                TargetEntityType = "UserSchoolTypeSupervision",
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
             operation.MarkAsStarted();
 
             try
@@ -334,7 +341,14 @@ namespace TeamsManager.Core.Services
         public async Task<bool> RemoveViceDirectorFromSchoolTypeAsync(string viceDirectorUserId, string schoolTypeId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_vd";
-            var operation = new OperationHistory { /* ... Pełna inicjalizacja ... */ };
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserRemovedFromSchoolType,
+                TargetEntityType = "UserSchoolTypeSupervision",
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
             operation.MarkAsStarted();
             try
             {

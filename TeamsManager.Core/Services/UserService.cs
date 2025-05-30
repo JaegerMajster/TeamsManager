@@ -93,7 +93,7 @@ namespace TeamsManager.Core.Services
                 if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(upn))
                 {
                     operation.MarkAsFailed("Imię, nazwisko i UPN są wymagane.");
-                    await SaveOperationHistoryAsync(operation); // SaveChanges będzie na wyższym poziomie
+                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć użytkownika: Imię, nazwisko lub UPN są puste.");
                     return null;
                 }
@@ -168,25 +168,59 @@ namespace TeamsManager.Core.Services
         public async Task<bool> UpdateUserAsync(User userToUpdate)
         {
             if (userToUpdate == null) throw new ArgumentNullException(nameof(userToUpdate));
+            
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory { /* ... inicjalizacja ... */ };
-            // ... (logika jak w poprzedniej wersji, ale bez SaveChanges) ...
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserUpdated,
+                TargetEntityType = nameof(User),
+                TargetEntityId = userToUpdate.Id,
+                TargetEntityName = $"{userToUpdate.FirstName} {userToUpdate.LastName} ({userToUpdate.UPN})",
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
-                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id);
-                if (existingUser == null) { /* ... obsługa błędu ... */ return false; }
+                _logger.LogInformation("Rozpoczynanie aktualizacji użytkownika ID: {UserId} przez {User}", userToUpdate.Id, currentUserUpn);
 
-                // Mapowanie właściwości (bez zmiany UPN na razie)
+                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id);
+                if (existingUser == null)
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userToUpdate.Id);
+                    return false;
+                }
+
+                // Sprawdź czy próbuje się zmienić UPN i czy nowy UPN już istnieje
+                if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
+                {
+                    var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN);
+                    if (userWithSameUpn != null && userWithSameUpn.Id != userToUpdate.Id)
+                    {
+                        operation.MarkAsFailed($"UPN '{userToUpdate.UPN}' już istnieje w systemie.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie można zaktualizować użytkownika: UPN {UPN} już istnieje.", userToUpdate.UPN);
+                        return false;
+                    }
+                }
+
+                // Mapowanie właściwości
                 existingUser.FirstName = userToUpdate.FirstName;
                 existingUser.LastName = userToUpdate.LastName;
+                existingUser.UPN = userToUpdate.UPN; // Teraz można bezpiecznie aktualizować UPN
                 existingUser.Role = userToUpdate.Role;
                 existingUser.DepartmentId = userToUpdate.DepartmentId;
-                // ... itd.
                 existingUser.MarkAsModified(currentUserUpn);
+                
                 _userRepository.Update(existingUser);
-                // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                
                 operation.MarkAsCompleted("Użytkownik przygotowany do aktualizacji.");
                 await SaveOperationHistoryAsync(operation);
+                _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);
                 return true;
             }
             catch (Exception ex)
@@ -201,26 +235,58 @@ namespace TeamsManager.Core.Services
         public async Task<bool> DeactivateUserAsync(string userId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_deactivate";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserDeactivated,
+                TargetEntityType = nameof(User),
+                TargetEntityId = userId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
+                _logger.LogInformation("Rozpoczynanie dezaktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
+
                 var user = await _userRepository.GetByIdAsync(userId);
-                if (user == null || !user.IsActive) { /* ... obsługa ... */ return false; }
+                if (user == null)
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
+                    return false;
+                }
+
+                if (!user.IsActive)
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' jest już nieaktywny.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId);
+                    return false;
+                }
 
                 // TODO: PowerShellService call - Disable M365 account if needed
                 bool psSuccess = true; // Symulacja
 
                 if (psSuccess)
                 {
-                    user.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
+                    user.MarkAsDeleted(currentUserUpn);
                     _userRepository.Update(user);
-                    // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                    
                     operation.MarkAsCompleted("Użytkownik zdezaktywowany.");
                     await SaveOperationHistoryAsync(operation);
+                    _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zdezaktywowany.", userId);
                     return true;
                 }
-                // ... obsługa błędu psSuccess ...
-                return false;
+                else
+                {
+                    operation.MarkAsFailed("Nie udało się zdezaktywować użytkownika w systemie zewnętrznym.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Błąd dezaktywacji użytkownika ID: {UserId} w systemie zewnętrznym.", userId);
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -234,28 +300,60 @@ namespace TeamsManager.Core.Services
         public async Task<bool> ActivateUserAsync(string userId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_activate";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserActivated,
+                TargetEntityType = nameof(User),
+                TargetEntityId = userId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
+                _logger.LogInformation("Rozpoczynanie aktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
+
                 var user = await _userRepository.GetByIdAsync(userId);
-                if (user == null) { /* ... */ return false; }
-                if (user.IsActive) { /* już aktywny */ operation.MarkAsCompleted("Użytkownik był już aktywny."); await SaveOperationHistoryAsync(operation); return true; }
+                if (user == null)
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można aktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
+                    return false;
+                }
+
+                if (user.IsActive)
+                {
+                    operation.MarkAsCompleted("Użytkownik był już aktywny.");
+                    operation.OperationDetails = "Użytkownik był już aktywny";
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogInformation("Użytkownik o ID {UserId} był już aktywny.", userId);
+                    return true;
+                }
 
                 // TODO: PowerShellService call - Enable M365 account if needed
                 bool psSuccess = true;
 
                 if (psSuccess)
                 {
-                    user.IsActive = true; // Aktywacja
+                    user.IsActive = true;
                     user.MarkAsModified(currentUserUpn);
                     _userRepository.Update(user);
-                    // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                    
                     operation.MarkAsCompleted("Użytkownik aktywowany.");
                     await SaveOperationHistoryAsync(operation);
+                    _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie aktywowany.", userId);
                     return true;
                 }
-                // ...
-                return false;
+                else
+                {
+                    operation.MarkAsFailed("Nie udało się aktywować użytkownika w systemie zewnętrznym.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Błąd aktywacji użytkownika ID: {UserId} w systemie zewnętrznym.", userId);
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -269,14 +367,38 @@ namespace TeamsManager.Core.Services
         public async Task<UserSchoolType?> AssignUserToSchoolTypeAsync(string userId, string schoolTypeId, DateTime assignedDate, DateTime? endDate = null, decimal? workloadPercentage = null, string? notes = null)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_assign_ust";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserSchoolTypeAssigned,
+                TargetEntityType = nameof(UserSchoolType),
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
+                _logger.LogInformation("Rozpoczynanie przypisania użytkownika {UserId} do typu szkoły {SchoolTypeId} przez {User}", userId, schoolTypeId, currentUserUpn);
+
                 var user = await _userRepository.GetByIdAsync(userId);
                 var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
 
-                if (user == null || !user.IsActive) { /* ... obsługa, log ... */ return null; }
-                if (schoolType == null || !schoolType.IsActive) { /* ... obsługa, log ... */ return null; }
+                if (user == null || !user.IsActive)
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony lub jest nieaktywny.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można przypisać użytkownika do typu szkoły: Użytkownik o ID {UserId} nie istnieje lub jest nieaktywny.", userId);
+                    return null;
+                }
+
+                if (schoolType == null || !schoolType.IsActive)
+                {
+                    operation.MarkAsFailed($"Typ szkoły o ID '{schoolTypeId}' nie został znaleziony lub jest nieaktywny.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można przypisać użytkownika do typu szkoły: Typ szkoły o ID {SchoolTypeId} nie istnieje lub jest nieaktywny.", schoolTypeId);
+                    return null;
+                }
 
                 // Sprawdź, czy takie przypisanie już nie istnieje (aktywne)
                 var existingAssignment = await _userSchoolTypeRepository.FindAsync(ust => ust.UserId == userId && ust.SchoolTypeId == schoolTypeId && ust.IsActive && ust.IsCurrentlyActive);
@@ -284,29 +406,33 @@ namespace TeamsManager.Core.Services
                 {
                     _logger.LogWarning("Użytkownik {UserId} jest już aktywnie przypisany do typu szkoły {SchoolTypeId}.", userId, schoolTypeId);
                     operation.MarkAsFailed("Użytkownik już aktywnie przypisany.");
+                    operation.ErrorMessage = "Użytkownik już aktywnie przypisany do tego typu szkoły.";
                     await SaveOperationHistoryAsync(operation);
-                    return existingAssignment.First(); // Zwróć istniejące
+                    return existingAssignment.First();
                 }
 
                 var newUserSchoolType = new UserSchoolType
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = userId,
-                    User = user, // Dla EF Core
+                    User = user,
                     SchoolTypeId = schoolTypeId,
-                    SchoolType = schoolType, // Dla EF Core
+                    SchoolType = schoolType,
                     AssignedDate = assignedDate,
                     EndDate = endDate,
                     WorkloadPercentage = workloadPercentage,
                     Notes = notes,
-                    IsCurrentlyActive = true, // Domyślnie nowe przypisanie jest bieżąco aktywne
+                    IsCurrentlyActive = true,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
+                
                 await _userSchoolTypeRepository.AddAsync(newUserSchoolType);
-                // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                
+                operation.TargetEntityId = newUserSchoolType.Id;
                 operation.MarkAsCompleted($"Przypisano użytkownika {userId} do typu szkoły {schoolTypeId}.");
                 await SaveOperationHistoryAsync(operation);
+                _logger.LogInformation("Użytkownik {UserId} pomyślnie przypisany do typu szkoły {SchoolTypeId}.", userId, schoolTypeId);
                 return newUserSchoolType;
             }
             catch (Exception ex)
@@ -321,18 +447,36 @@ namespace TeamsManager.Core.Services
         public async Task<bool> RemoveUserFromSchoolTypeAsync(string userSchoolTypeId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_ust";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserSchoolTypeRemoved,
+                TargetEntityType = nameof(UserSchoolType),
+                TargetEntityId = userSchoolTypeId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
-                var assignment = await _userSchoolTypeRepository.GetByIdAsync(userSchoolTypeId);
-                if (assignment == null) { /* ... */ return false; }
+                _logger.LogInformation("Rozpoczynanie usuwania przypisania UserSchoolType ID: {UserSchoolTypeId} przez {User}", userSchoolTypeId, currentUserUpn);
 
-                // Soft delete przypisania
-                assignment.MarkAsDeleted(currentUserUpn); // IsActive = false
+                var assignment = await _userSchoolTypeRepository.GetByIdAsync(userSchoolTypeId);
+                if (assignment == null)
+                {
+                    operation.MarkAsFailed($"Przypisanie o ID '{userSchoolTypeId}' nie zostało znalezione.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można usunąć przypisania: Przypisanie o ID {UserSchoolTypeId} nie istnieje.", userSchoolTypeId);
+                    return false;
+                }
+
+                assignment.MarkAsDeleted(currentUserUpn);
                 _userSchoolTypeRepository.Update(assignment);
-                // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                
                 operation.MarkAsCompleted($"Usunięto przypisanie UserSchoolType ID: {userSchoolTypeId}.");
                 await SaveOperationHistoryAsync(operation);
+                _logger.LogInformation("Przypisanie UserSchoolType ID: {UserSchoolTypeId} pomyślnie usunięte.", userSchoolTypeId);
                 return true;
             }
             catch (Exception ex)
@@ -347,21 +491,45 @@ namespace TeamsManager.Core.Services
         public async Task<UserSubject?> AssignTeacherToSubjectAsync(string teacherId, string subjectId, DateTime assignedDate, string? notes = null)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_assign_usubj";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserSubjectAssigned,
+                TargetEntityType = nameof(UserSubject),
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
+                _logger.LogInformation("Rozpoczynanie przypisania nauczyciela {TeacherId} do przedmiotu {SubjectId} przez {User}", teacherId, subjectId, currentUserUpn);
+
                 var teacher = await _userRepository.GetByIdAsync(teacherId);
                 var subject = await _subjectRepository.GetByIdAsync(subjectId);
 
                 if (teacher == null || !teacher.IsActive || (teacher.Role != UserRole.Nauczyciel && teacher.Role != UserRole.Wicedyrektor && teacher.Role != UserRole.Dyrektor))
-                { /* ... obsługa, log, nauczyciel musi istnieć i być aktywny i mieć odpowiednią rolę ... */ return null; }
-                if (subject == null || !subject.IsActive) { /* ... obsługa, log ... */ return null; }
+                {
+                    operation.MarkAsFailed($"Użytkownik o ID '{teacherId}' nie został znaleziony, jest nieaktywny lub nie ma uprawnień do nauczania.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można przypisać nauczyciela do przedmiotu: Użytkownik o ID {TeacherId} nie istnieje, jest nieaktywny lub nie ma odpowiedniej roli.", teacherId);
+                    return null;
+                }
+
+                if (subject == null || !subject.IsActive)
+                {
+                    operation.MarkAsFailed($"Przedmiot o ID '{subjectId}' nie został znaleziony lub jest nieaktywny.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można przypisać nauczyciela do przedmiotu: Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny.", subjectId);
+                    return null;
+                }
 
                 var existingAssignment = await _userSubjectRepository.FindAsync(us => us.UserId == teacherId && us.SubjectId == subjectId && us.IsActive);
                 if (existingAssignment.Any())
                 {
                     _logger.LogWarning("Nauczyciel {TeacherId} jest już przypisany do przedmiotu {SubjectId}.", teacherId, subjectId);
                     operation.MarkAsFailed("Nauczyciel już przypisany do przedmiotu.");
+                    operation.ErrorMessage = "Nauczyciel już przypisany do tego przedmiotu.";
                     await SaveOperationHistoryAsync(operation);
                     return existingAssignment.First();
                 }
@@ -378,10 +546,13 @@ namespace TeamsManager.Core.Services
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
+                
                 await _userSubjectRepository.AddAsync(newUserSubject);
-                // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                
+                operation.TargetEntityId = newUserSubject.Id;
                 operation.MarkAsCompleted($"Przypisano nauczyciela {teacherId} do przedmiotu {subjectId}.");
                 await SaveOperationHistoryAsync(operation);
+                _logger.LogInformation("Nauczyciel {TeacherId} pomyślnie przypisany do przedmiotu {SubjectId}.", teacherId, subjectId);
                 return newUserSubject;
             }
             catch (Exception ex)
@@ -396,17 +567,36 @@ namespace TeamsManager.Core.Services
         public async Task<bool> RemoveTeacherFromSubjectAsync(string userSubjectId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_usubj";
-            var operation = new OperationHistory { /* ... */};
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.UserSubjectRemoved,
+                TargetEntityType = nameof(UserSubject),
+                TargetEntityId = userSubjectId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
             try
             {
+                _logger.LogInformation("Rozpoczynanie usuwania przypisania UserSubject ID: {UserSubjectId} przez {User}", userSubjectId, currentUserUpn);
+
                 var assignment = await _userSubjectRepository.GetByIdAsync(userSubjectId);
-                if (assignment == null) { /* ... */ return false; }
+                if (assignment == null)
+                {
+                    operation.MarkAsFailed($"Przypisanie o ID '{userSubjectId}' nie zostało znalezione.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można usunąć przypisania: Przypisanie o ID {UserSubjectId} nie istnieje.", userSubjectId);
+                    return false;
+                }
 
                 assignment.MarkAsDeleted(currentUserUpn);
                 _userSubjectRepository.Update(assignment);
-                // USUNIĘTO: await _dbContext.SaveChangesAsync();
+                
                 operation.MarkAsCompleted($"Usunięto przypisanie UserSubject ID: {userSubjectId}.");
                 await SaveOperationHistoryAsync(operation);
+                _logger.LogInformation("Przypisanie UserSubject ID: {UserSubjectId} pomyślnie usunięte.", userSubjectId);
                 return true;
             }
             catch (Exception ex)
@@ -426,11 +616,6 @@ namespace TeamsManager.Core.Services
                 operation.Id = Guid.NewGuid().ToString();
             }
 
-            // Sprawdzamy czy repozytorium już śledzi ten obiekt, jeśli tak, Update
-            // Jeśli nie, sprawdzamy czy istnieje w bazie, jeśli tak, Update
-            // Jeśli nie istnieje w bazie, AddAsync
-            // To jest uproszczenie, pełna logika śledzenia może być bardziej złożona.
-            // Na razie zakładamy, że jeśli ID jest i go nie ma, to dodajemy, inaczej Update.
             var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
             if (existingLog == null)
             {
@@ -438,9 +623,6 @@ namespace TeamsManager.Core.Services
             }
             else
             {
-                // Jeśli aktualizujemy, trzeba by przepisać właściwości z 'operation' do 'existingLog'
-                // lub upewnić się, że _operationHistoryRepository.Update poprawnie obsługuje odłączone encje.
-                // Dla uproszczenia:
                 existingLog.Status = operation.Status;
                 existingLog.CompletedAt = operation.CompletedAt;
                 existingLog.Duration = operation.Duration;
@@ -452,7 +634,7 @@ namespace TeamsManager.Core.Services
                 existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
                 _operationHistoryRepository.Update(existingLog);
             }
-            // USUNIĘTO: await _dbContext.SaveChangesAsync(); // Zapis logu będzie na wyższym poziomie
         }
     }
 }
+

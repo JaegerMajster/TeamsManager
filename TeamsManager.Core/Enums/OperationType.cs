@@ -78,6 +78,12 @@
         ApplicationSettingCreated = 111,  // Utworzenie ustawienia aplikacji
         ApplicationSettingDeleted = 112,  // Usunięcie ustawienia aplikacji
 
+        // Dodatkowe operacje na użytkownikach i przypisaniach
+        UserSchoolTypeAssigned = 120,   // Przypisanie użytkownika do typu szkoły (alternatywna nazwa)
+        UserSchoolTypeRemoved = 121,    // Usunięcie przypisania użytkownika z typu szkoły (alternatywna nazwa)
+        UserSubjectAssigned = 122,      // Przypisanie użytkownika do przedmiotu (alternatywna nazwa)
+        UserSubjectRemoved = 123,       // Usunięcie przypisania użytkownika z przedmiotu (alternatywna nazwa)
+
         // Generyczne/Inne
         GenericCreated = 200,           // Generyczne utworzenie (jeśli brak specyficznego typu)
         GenericUpdated = 201,           // Generyczna aktualizacja

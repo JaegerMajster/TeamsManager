@@ -38,25 +38,23 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie działu o ID: {DepartmentId}. Dołączanie poddziałów: {IncludeSubDepartments}, Dołączanie użytkowników: {IncludeUsers}",
                                 departmentId, includeSubDepartments, includeUsers);
 
-            // GenericRepository.GetByIdAsync nie obsługuje Include.
-            // Aby dołączyć powiązane encje, potrzebujemy bardziej specyficznych metod w repozytorium
-            // lub użycia DbContext bezpośrednio (czego unikamy w serwisie) lub implementacji specyfikacji.
-            // Na razie zwrócimy podstawowy obiekt. Rozbudujemy to później, jeśli będzie potrzeba.
             var department = await _departmentRepository.GetByIdAsync(departmentId);
 
             if (department != null)
             {
                 if (includeSubDepartments)
                 {
-                    // TODO: Załadować _departmentRepository.FindAsync(d => d.ParentDepartmentId == departmentId)
-                    // lub rozbudować DepartmentRepository o metodę GetByIdWithSubDepartmentsAsync
-                    _logger.LogWarning("Dołączanie SubDepartments nie jest jeszcze w pełni zaimplementowane w GetDepartmentByIdAsync.");
+                    // Ładujemy poddziały poprzez dodatkowe zapytanie
+                    var subDepartments = await GetSubDepartmentsAsync(departmentId);
+                    department.SubDepartments = subDepartments.ToList();
+                    _logger.LogInformation("Załadowano {Count} poddziałów dla działu {DepartmentId}", subDepartments.Count(), departmentId);
                 }
                 if (includeUsers)
                 {
-                    // TODO: Załadować _userRepository.FindAsync(u => u.DepartmentId == departmentId)
-                    // lub rozbudować DepartmentRepository o metodę GetByIdWithUsersAsync
-                    _logger.LogWarning("Dołączanie Users nie jest jeszcze w pełni zaimplementowane w GetDepartmentByIdAsync.");
+                    // Ładujemy użytkowników poprzez dodatkowe zapytanie
+                    var users = await GetUsersInDepartmentAsync(departmentId);
+                    department.Users = users.ToList();
+                    _logger.LogInformation("Załadowano {Count} użytkowników dla działu {DepartmentId}", users.Count(), departmentId);
                 }
             }
             return department;
@@ -82,7 +80,7 @@ namespace TeamsManager.Core.Services
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
-                Type = OperationType.GenericCreated, // TODO: Dodać OperationType.DepartmentCreated
+                Type = OperationType.DepartmentCreated,
                 TargetEntityType = nameof(Department),
                 TargetEntityName = name,
                 CreatedBy = currentUserUpn,
@@ -156,7 +154,16 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(departmentToUpdate), "Obiekt działu lub jego ID nie może być null/pusty.");
 
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory { /* ... Inicjalizacja ... */ };
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.DepartmentUpdated,
+                TargetEntityType = nameof(Department),
+                TargetEntityId = departmentToUpdate.Id,
+                TargetEntityName = departmentToUpdate.Name,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
             operation.MarkAsStarted();
             _logger.LogInformation("Aktualizowanie działu ID: {DepartmentId}", departmentToUpdate.Id);
 
@@ -170,7 +177,33 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                // TODO: Walidacja (np. unikalność nazwy/kodu, czy ParentDepartmentId jest poprawny)
+                // Walidacja - sprawdzenie czy nie próbuje się ustawić siebie jako rodzica (cykliczna zależność)
+                if (!string.IsNullOrEmpty(departmentToUpdate.ParentDepartmentId))
+                {
+                    if (departmentToUpdate.ParentDepartmentId == departmentToUpdate.Id)
+                    {
+                        operation.MarkAsFailed("Dział nie może być swoim własnym rodzicem.");
+                        _logger.LogWarning("Próba ustawienia działu {DepartmentId} jako swojego własnego rodzica.", departmentToUpdate.Id);
+                        return false;
+                    }
+
+                    var parentDepartment = await _departmentRepository.GetByIdAsync(departmentToUpdate.ParentDepartmentId);
+                    if (parentDepartment == null || !parentDepartment.IsActive)
+                    {
+                        operation.MarkAsFailed($"Dział nadrzędny o ID '{departmentToUpdate.ParentDepartmentId}' nie istnieje lub jest nieaktywny.");
+                        _logger.LogWarning("Dział nadrzędny {ParentDepartmentId} nie istnieje lub jest nieaktywny.", departmentToUpdate.ParentDepartmentId);
+                        return false;
+                    }
+
+                    // Sprawdzenie cyklicznej zależności - czy parent nie jest potomkiem tego działu
+                    if (await IsDescendantAsync(departmentToUpdate.ParentDepartmentId, departmentToUpdate.Id))
+                    {
+                        operation.MarkAsFailed("Nie można ustawić działu jako rodzica, ponieważ spowodowałoby to cykliczną zależność.");
+                        _logger.LogWarning("Próba utworzenia cyklicznej zależności między działami {DepartmentId} i {ParentDepartmentId}.", 
+                            departmentToUpdate.Id, departmentToUpdate.ParentDepartmentId);
+                        return false;
+                    }
+                }
 
                 existingDepartment.Name = departmentToUpdate.Name;
                 existingDepartment.Description = departmentToUpdate.Description;
@@ -183,7 +216,6 @@ namespace TeamsManager.Core.Services
                 existingDepartment.MarkAsModified(currentUserUpn);
 
                 _departmentRepository.Update(existingDepartment);
-                // SaveChangesAsync na wyższym poziomie
                 operation.MarkAsCompleted("Dział przygotowany do aktualizacji.");
                 return true;
             }
@@ -202,7 +234,15 @@ namespace TeamsManager.Core.Services
         public async Task<bool> DeleteDepartmentAsync(string departmentId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory { /* ... Inicjalizacja ... */ };
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.DepartmentDeleted,
+                TargetEntityType = nameof(Department),
+                TargetEntityId = departmentId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
             operation.MarkAsStarted();
             _logger.LogInformation("Usuwanie działu ID: {DepartmentId}", departmentId);
 
@@ -299,6 +339,21 @@ namespace TeamsManager.Core.Services
                 }
             }
             // SaveChangesAsync będzie na wyższym poziomie
+        }
+
+        // Metoda pomocnicza do sprawdzenia cyklicznej zależności
+        private async Task<bool> IsDescendantAsync(string potentialAncestorId, string departmentId)
+        {
+            var subDepartments = await GetSubDepartmentsAsync(departmentId);
+            foreach (var subDept in subDepartments)
+            {
+                if (subDept.Id == potentialAncestorId)
+                    return true;
+                
+                if (await IsDescendantAsync(potentialAncestorId, subDept.Id))
+                    return true;
+            }
+            return false;
         }
     }
 }
