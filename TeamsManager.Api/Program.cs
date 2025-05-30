@@ -4,6 +4,9 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Services.UserContext;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Data.Repositories;
+using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Services;
+using TeamsManager.Core.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +22,7 @@ builder.Services.AddDbContext<TeamsManagerDbContext>(options =>
 // Rejestracja ICurrentUserService
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-// ===== REJESTRACJA REPOZYTORIÓW =====
+// Rejestracja Repozytoriów
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ITeamRepository, TeamRepository>();
@@ -27,6 +30,26 @@ builder.Services.AddScoped<ITeamTemplateRepository, TeamTemplateRepository>();
 builder.Services.AddScoped<ISchoolYearRepository, SchoolYearRepository>();
 builder.Services.AddScoped<IOperationHistoryRepository, OperationHistoryRepository>();
 builder.Services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();
+
+// Dodatkowe generyczne repozytoria
+builder.Services.AddScoped<IGenericRepository<SchoolType>, GenericRepository<SchoolType>>();
+builder.Services.AddScoped<IGenericRepository<Subject>, GenericRepository<Subject>>();
+builder.Services.AddScoped<IGenericRepository<Department>, GenericRepository<Department>>(); // Dla UserService
+builder.Services.AddScoped<IGenericRepository<UserSchoolType>, GenericRepository<UserSchoolType>>(); // Dla UserService
+builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<UserSubject>>();   // Dla UserService
+
+// ===== REJESTRACJA SERWISU APLIKACYJNEGO =====
+builder.Services.AddScoped<IPowerShellService, PowerShellService>();
+builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<ISchoolTypeService, SchoolTypeService>();
+builder.Services.AddScoped<ISchoolYearService, SchoolYearService>();
+builder.Services.AddScoped<ISubjectService, SubjectService>();
+builder.Services.AddScoped<ITeamTemplateService, TeamTemplateService>();
+builder.Services.AddScoped<IOperationHistoryService, OperationHistoryService>();
+builder.Services.AddScoped<IApplicationSettingService, ApplicationSettingService>();
+
 
 // ----- KONIEC SEKCJI REJESTRACJI SERWISÓW -----
 

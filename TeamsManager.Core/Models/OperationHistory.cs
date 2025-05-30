@@ -187,11 +187,21 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Oznacza operację jako zakończoną sukcesem
         /// </summary>
-        public void MarkAsCompleted()
+        public void MarkAsCompleted(string? details = null)
         {
-            Status = OperationStatus.Completed;
-            CompletedAt = DateTime.UtcNow;
-            Duration = CompletedAt - StartedAt;
+            if (Status == OperationStatus.InProgress || Status == OperationStatus.Pending)
+            {
+                Status = OperationStatus.Completed;
+                CompletedAt = DateTime.UtcNow;
+                if (StartedAt != default(DateTime) && CompletedAt.HasValue)
+                {
+                    Duration = CompletedAt.Value - StartedAt;
+                }
+                if (!string.IsNullOrWhiteSpace(details))
+                {
+                    OperationDetails = details; // Użycie przekazanego argumentu
+                }
+            }
         }
 
         /// <summary>

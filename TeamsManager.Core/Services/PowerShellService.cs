@@ -1,12 +1,14 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Abstractions.Services;
 
 namespace TeamsManager.Core.Services
 {
-    public class PowerShellService : IDisposable
+    public class PowerShellService : IPowerShellService
     {
         private readonly ILogger<PowerShellService> _logger;
         private Runspace _runspace = null!;
@@ -34,80 +36,179 @@ namespace TeamsManager.Core.Services
             }
         }
 
-        public bool ConnectToTeams(string username, string password)
+        public async Task<bool> ConnectToTeamsAsync(string username, string password)
         {
-            try
+            // Możesz opakować istniejącą logikę synchroniczną w Task.Run,
+            // ale idealnie byłoby przepisać logikę z użyciem ps.InvokeAsync(), jeśli to możliwe.
+            // Na razie proste opakowanie:
+            return await Task.Run(() =>
             {
-                _logger.LogInformation("Próbuję połączyć się z Microsoft Teams");
-
-                using (var ps = PowerShell.Create())
+                try
                 {
-                    ps.Runspace = _runspace;
-
-                    ps.AddScript("Import-Module MicrosoftTeams"); // Operacja idempotentna - ponowne wykonanie powoduje taki sam efekt
-                    ps.AddScript($"$securePassword = ConvertTo-SecureString '{password}' -AsPlainText -Force");
-                    ps.AddScript($"$credential = New-Object System.Management.Automation.PSCredential ('{username}', $securePassword)");
-                    ps.AddScript("Connect-MicrosoftTeams -Credential $credential");
-
-                    var results = ps.Invoke();
-
-                    if (ps.HadErrors)
+                    _logger.LogInformation("Próbuję połączyć się z Microsoft Teams (async wrapper)");
+                    // ... (Twoja obecna logika z Import-Module, ConvertTo-SecureString, New-Object PSCredential, Connect-MicrosoftTeams) ...
+                    // Upewnij się, że poprawnie zwracasz true/false
+                    // Przykład z Twojego kodu:
+                    using (var ps = PowerShell.Create())
                     {
-                        foreach (var error in ps.Streams.Error)
-                        {
-                            _logger.LogError("Błąd Powershella: {Error}", error.ToString());
-                        }
-                        return false;
-                    }
+                        ps.Runspace = _runspace;
+                        // ... (skrypty) ...
+                        ps.AddScript("Import-Module MicrosoftTeams -ErrorAction Stop"); // Dodaj ErrorAction Stop
+                        ps.AddScript($"$securePassword = ConvertTo-SecureString '{password}' -AsPlainText -Force");
+                        ps.AddScript($"$credential = New-Object System.Management.Automation.PSCredential ('{username}', $securePassword)");
+                        ps.AddScript("Connect-MicrosoftTeams -Credential $credential -ErrorAction Stop"); // Dodaj ErrorAction Stop
 
-                    _isConnected = true;
-                    _logger.LogInformation("Udało sie połączyć z Microsoft Teams");
-                    return true;
+                        var results = ps.Invoke(); // Invoke jest synchroniczne
+
+                        if (ps.HadErrors)
+                        {
+                            foreach (var error in ps.Streams.Error)
+                            {
+                                _logger.LogError("Błąd Powershella podczas ConnectToTeamsAsync: {Error}", error.ToString());
+                            }
+                            _isConnected = false;
+                            return false;
+                        }
+                        _isConnected = true;
+                        _logger.LogInformation("Udało się połączyć z Microsoft Teams (async wrapper)");
+                        return true;
+                    }
                 }
-            }
-            catch (Exception ex)
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Nie udało się połączyć z Microsoft Teams (async wrapper)");
+                    _isConnected = false;
+                    return false;
+                }
+            });
+        }
+
+        public async Task<bool> ArchiveTeamAsync(string teamId)
+        {
+            if (!_isConnected)
             {
-                _logger.LogError(ex, "Nie udało się połączyć z Microsoft Teams");
+                _logger.LogError("Nie można zarchiwizować zespołu: Nie połączono z Teams. TeamID: {TeamId}", teamId);
+                return false;
+            }
+            if (string.IsNullOrEmpty(teamId))
+            {
+                _logger.LogError("Nie można zarchiwizować zespołu: TeamID nie może być puste.");
+                return false;
+            }
+
+            _logger.LogInformation("Rozpoczynanie archiwizacji zespołu o ID: {TeamId} w Microsoft Teams.", teamId);
+
+            // Symulacja wywołania PowerShell
+            // W rzeczywistości tutaj byłby kod podobny do CreateTeamAsync,
+            // używający using (var ps = PowerShell.Create()) { ... }
+            // i skryptu: Set-TeamArchivedState -GroupId $teamId -Archived $true
+            await Task.Delay(100); // Symulacja operacji asynchronicznej
+            bool success = true;   // Załóżmy na razie sukces
+
+            if (success)
+            {
+                _logger.LogInformation("Zespół o ID: {TeamId} pomyślnie zarchiwizowany w Microsoft Teams (symulacja).", teamId);
+                return true;
+            }
+            else
+            {
+                _logger.LogError("Nie udało się zarchiwizować zespołu o ID: {TeamId} w Microsoft Teams (symulacja).", teamId);
                 return false;
             }
         }
 
-        public string CreateTeam(string displayName, string description, string owner)
+        public async Task<bool> UnarchiveTeamAsync(string teamId)
+        {
+            _logger.LogWarning("Metoda UnarchiveTeamAsync nie została jeszcze zaimplementowana.");
+            // TODO: Implementacja z Set-TeamArchivedState -GroupId $teamId -Archived $false
+            await Task.Delay(10); // Symulacja
+            return await Task.FromResult(false); // Placeholder
+        }
+
+        public async Task<bool> DeleteTeamAsync(string teamId)
+        {
+            _logger.LogWarning("Metoda DeleteTeamAsync nie została jeszcze zaimplementowana.");
+            // TODO: Implementacja z Remove-Team -GroupId $teamId
+            await Task.Delay(10);
+            return await Task.FromResult(false); // Placeholder
+        }
+
+        public async Task<bool> AddUserToTeamAsync(string teamId, string userUpn, string role)
+        {
+            _logger.LogWarning("Metoda AddUserToTeamAsync nie została jeszcze zaimplementowana.");
+            // TODO: Implementacja z Add-TeamUser -GroupId $teamId -User $userUpn -Role $role
+            await Task.Delay(10);
+            return await Task.FromResult(false); // Placeholder
+        }
+
+        public async Task<bool> RemoveUserFromTeamAsync(string teamId, string userUpn)
+        {
+            _logger.LogWarning("Metoda RemoveUserFromTeamAsync nie została jeszcze zaimplementowana.");
+            // TODO: Implementacja z Remove-TeamUser -GroupId $teamId -User $userUpn
+            await Task.Delay(10);
+            return await Task.FromResult(false); // Placeholder
+        }
+
+        public async Task<Collection<PSObject>?> ExecuteScriptAsync(string script, Dictionary<string, object>? parameters = null)
+        {
+            _logger.LogWarning("Metoda ExecuteScriptAsync nie została jeszcze w pełni zaimplementowana.");
+            // TODO: Implementacja ogólnego wykonywania skryptów
+            await Task.Delay(10);
+            return await Task.FromResult<Collection<PSObject>?>(null); // Placeholder
+        }
+
+        public async Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, string visibility = "Private", string? template = null)
         {
             if (!_isConnected)
-                throw new InvalidOperationException("Nie połączono z TEAMS. Wywołaj ConnectToTeams najpierw.");
-
-            try
             {
-                _logger.LogInformation("Tworzenie zespołu: {TeamName}", displayName);
+                _logger.LogError("Nie można utworzyć zespołu: Nie połączono z Teams.");
+                // Można rzucić InvalidOperationException lub zwrócić null
+                return null;
+            }
 
-                using (var ps = PowerShell.Create())
+            return await Task.Run(() =>
+            {
+                try
                 {
-                    ps.Runspace = _runspace;
-                    ps.AddScript($"New-Team -DisplayName '{displayName}' -Description '{description}' -Owner '{owner}'");
-
-                    var results = ps.Invoke();
-
-                    if (ps.HadErrors)
+                    _logger.LogInformation("Tworzenie zespołu (async wrapper): {TeamName}, Właściciel: {OwnerUpn}", displayName, ownerUpn);
+                    using (var ps = PowerShell.Create())
                     {
-                        foreach (var error in ps.Streams.Error)
+                        ps.Runspace = _runspace;
+                        // Zbuduj skrypt dynamicznie
+                        var script = $"New-Team -DisplayName '{displayName}' -Description '{description}' -Owner '{ownerUpn}' -Visibility '{visibility}'";
+                        if (!string.IsNullOrEmpty(template))
                         {
-                            _logger.LogError("Błąd Powershella: {Error}", error.ToString());
+                            script += $" -Template '{template}'";
                         }
-                        throw new Exception("Nie udało się utworzyć zespołu.");
+                        ps.AddScript(script + " -ErrorAction Stop");
+
+                        var results = ps.Invoke();
+
+                        if (ps.HadErrors)
+                        {
+                            foreach (var error in ps.Streams.Error)
+                            {
+                                _logger.LogError("Błąd Powershella podczas CreateTeamAsync: {Error}", error.ToString());
+                            }
+                            return null;
+                        }
+
+                        var teamId = results.FirstOrDefault()?.Properties["GroupId"]?.Value?.ToString();
+                        if (string.IsNullOrEmpty(teamId))
+                        {
+                            _logger.LogError("Nie udało się uzyskać GroupId dla nowo utworzonego zespołu: {DisplayName}", displayName);
+                            return null;
+                        }
+                        _logger.LogInformation("Utworzono zespół o ID: {TeamId}", teamId);
+                        return teamId;
                     }
-
-                    var teamId = results.FirstOrDefault()?.Properties["GroupId"]?.Value?.ToString();
-                    _logger.LogInformation("Utworzono zespół o ID: {TeamId}", teamId);
-
-                    return teamId ?? string.Empty;
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Tworzenie zespołu się nie powiodło: {TeamName}", displayName);
-                throw;
-            }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Tworzenie zespołu (async wrapper) się nie powiodło: {TeamName}", displayName);
+                    return null;
+                }
+            });
         }
 
         public bool IsConnected => _isConnected;
