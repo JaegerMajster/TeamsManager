@@ -1,12 +1,24 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Abstractions;
 
 namespace TeamsManager.Data
 {
     public class TeamsManagerDbContext : DbContext
     {
+        private readonly ICurrentUserService? _currentUserService;
+
+        // Konstruktor dla produkcji - z ICurrentUserService
+        public TeamsManagerDbContext(
+            DbContextOptions<TeamsManagerDbContext> options,
+            ICurrentUserService currentUserService)
+            : base(options)
+        {
+            _currentUserService = currentUserService;
+        }
         public TeamsManagerDbContext(DbContextOptions<TeamsManagerDbContext> options) : base(options)
         {
+            _currentUserService = null;
         }
 
         // ===== DEFINICJA TABEL =====
@@ -572,7 +584,11 @@ namespace TeamsManager.Data
                     case EntityState.Added:
                         entry.Entity.CreatedDate = currentTime;
                         entry.Entity.CreatedBy = currentUser;
-                        entry.Entity.IsActive = true;
+                        // Tylko ustaw IsActive = true jeśli nie zostało explicite ustawione na false
+                        if (entry.Entity.IsActive != false)
+                        {
+                            entry.Entity.IsActive = true;
+                        }
                         break;
 
                     case EntityState.Modified:
@@ -588,13 +604,9 @@ namespace TeamsManager.Data
         /// TODO: Implementuj pobieranie z kontekstu HTTP lub innego źródła
         /// </summary>
         /// <returns>UPN aktualnego użytkownika</returns>
-        private string GetCurrentUser()
+        protected virtual string GetCurrentUser()
         {
-            // TODO: Zaimplementuj pobieranie aktualnego użytkownika z:
-            // - HttpContext.User (dla aplikacji webowych)
-            // - Thread.CurrentPrincipal (dla aplikacji desktopowych)
-            // - Innego źródła uwierzytelniania
-            return "system@teamsmanager.local"; // Tymczasowa wartość
+            return _currentUserService?.GetCurrentUserUpn() ?? "system@teamsmanager.local";
         }
     }
 }

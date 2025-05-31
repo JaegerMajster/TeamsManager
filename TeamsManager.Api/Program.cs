@@ -35,10 +35,10 @@ builder.Services.AddScoped<ITeamTemplateRepository, TeamTemplateRepository>();
 builder.Services.AddScoped<ISchoolYearRepository, SchoolYearRepository>();
 builder.Services.AddScoped<IOperationHistoryRepository, OperationHistoryRepository>();
 builder.Services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();
+builder.Services.AddScoped<ISubjectRepository, SubjectRepository>();
 
 // Dodatkowe generyczne repozytoria
 builder.Services.AddScoped<IGenericRepository<SchoolType>, GenericRepository<SchoolType>>();
-builder.Services.AddScoped<IGenericRepository<Subject>, GenericRepository<Subject>>();
 builder.Services.AddScoped<IGenericRepository<Department>, GenericRepository<Department>>(); // Dla UserService
 builder.Services.AddScoped<IGenericRepository<UserSchoolType>, GenericRepository<UserSchoolType>>(); // Dla UserService
 builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<UserSubject>>();   // Dla UserService

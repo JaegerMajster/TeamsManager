@@ -17,5 +17,10 @@
         /// </summary>
         /// <param name="upn">UPN zalogowanego użytkownika.</param>
         void SetCurrentUserUpn(string? upn);
+
+        /// <summary>
+        /// Sprawdza czy użytkownik jest zalogowany
+        /// </summary>
+        bool IsAuthenticated => !string.IsNullOrWhiteSpace(GetCurrentUserUpn());
     }
 }

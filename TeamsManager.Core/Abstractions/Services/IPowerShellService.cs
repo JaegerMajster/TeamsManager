@@ -130,5 +130,48 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="parameters">Opcjonalne parametry dla skryptu.</param>
         /// <returns>Kolekcja obiektów PSObject zwróconych przez skrypt lub null w przypadku błędu.</returns>
         Task<Collection<PSObject>?> ExecuteScriptAsync(string script, Dictionary<string, object>? parameters = null);
+
+        /// <summary>
+        /// Asynchronicznie pobiera konkretny kanał zespołu na podstawie jego nazwy wyświetlanej.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <param name="channelDisplayName">Nazwa wyświetlana kanału.</param>
+        /// <returns>Obiekt PSObject reprezentujący kanał lub null, jeśli nie znaleziono lub w przypadku błędu.</returns>
+        Task<PSObject?> GetTeamChannelAsync(string teamId, string channelDisplayName);
+
+        /// <summary>
+        /// Asynchronicznie tworzy nowy kanał w zespole.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <param name="displayName">Nazwa wyświetlana nowego kanału.</param>
+        /// <param name="isPrivate">Czy kanał ma być prywatny (domyślnie false - standardowy).</param>
+        /// <param name="description">Opcjonalny opis kanału.</param>
+        /// <returns>Obiekt PSObject reprezentujący utworzony kanał lub null w przypadku błędu.</returns>
+        Task<PSObject?> CreateTeamChannelAsync(string teamId, string displayName, bool isPrivate = false, string? description = null);
+
+        /// <summary>
+        /// Asynchronicznie aktualizuje właściwości istniejącego kanału w zespole.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <param name="currentDisplayName">Bieżąca nazwa wyświetlana kanału, który ma być zaktualizowany.</param>
+        /// <param name="newDisplayName">Nowa nazwa wyświetlana kanału (opcjonalna).</param>
+        /// <param name="newDescription">Nowy opis kanału (opcjonalny).</param>
+        /// <returns>True, jeśli operacja się powiodła; w przeciwnym razie false.</returns>
+        Task<bool> UpdateTeamChannelAsync(string teamId, string currentDisplayName, string? newDisplayName = null, string? newDescription = null);
+
+        /// <summary>
+        /// Asynchronicznie usuwa kanał z zespołu.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <param name="channelDisplayName">Nazwa wyświetlana kanału do usunięcia.</param>
+        /// <returns>True, jeśli operacja się powiodła; w przeciwnym razie false.</returns>
+        Task<bool> RemoveTeamChannelAsync(string teamId, string channelDisplayName);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie kanały dla określonego zespołu.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <returns>Kolekcja obiektów PSObject reprezentujących kanały lub null w przypadku błędu.</returns>
+        Task<Collection<PSObject>?> GetTeamChannelsAsync(string teamId);
     }
 }
