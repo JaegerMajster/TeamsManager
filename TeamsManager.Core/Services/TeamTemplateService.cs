@@ -21,13 +21,13 @@ namespace TeamsManager.Core.Services
     public class TeamTemplateService : ITeamTemplateService
     {
         private readonly ITeamTemplateRepository _teamTemplateRepository;
-        private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
+        private readonly IGenericRepository<SchoolType> _schoolTypeRepository; // Potrzebne do walidacji i dociągania SchoolType
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamTemplateService> _logger;
         private readonly IMemoryCache _cache;
 
-        // Klucze cache
+        // Definicje kluczy cache
         private const string AllTeamTemplatesCacheKey = "TeamTemplates_AllActive";
         private const string UniversalTeamTemplatesCacheKey = "TeamTemplates_UniversalActive";
         private const string TeamTemplatesBySchoolTypeIdCacheKeyPrefix = "TeamTemplates_BySchoolType_Id_";
@@ -65,6 +65,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<TeamTemplate?> GetTemplateByIdAsync(string templateId, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie szablonu zespołu o ID: {TemplateId}. Wymuszenie odświeżenia: {ForceRefresh}", templateId, forceRefresh);
@@ -79,6 +80,7 @@ namespace TeamsManager.Core.Services
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out TeamTemplate? cachedTemplate))
             {
                 _logger.LogDebug("Szablon ID: {TemplateId} znaleziony w cache.", templateId);
+                // Dociągnięcie SchoolType, jeśli nie było załadowane, a jest potrzebne
                 if (cachedTemplate != null && !cachedTemplate.IsUniversal && !string.IsNullOrEmpty(cachedTemplate.SchoolTypeId) && cachedTemplate.SchoolType == null)
                 {
                     _logger.LogDebug("Dociąganie SchoolType dla szablonu {TemplateId} z cache.", templateId);
@@ -88,9 +90,11 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Szablon ID: {TemplateId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", templateId);
-            var templateFromDb = await _teamTemplateRepository.GetByIdAsync(templateId);
+            // Repozytorium powinno załadować SchoolType, jeśli jest to część domyślnego zapytania GetByIdAsync dla TeamTemplate
+            // lub jeśli mamy dedykowaną metodę GetByIdWithDetailsAsync w ITeamTemplateRepository
+            var templateFromDb = await _teamTemplateRepository.GetByIdAsync(templateId); // Zakładamy, że to ładuje SchoolType lub jest OK
 
-            if (templateFromDb != null)
+            if (templateFromDb != null && templateFromDb.IsActive) // Cache'ujemy tylko aktywne szablony
             {
                 if (!templateFromDb.IsUniversal && !string.IsNullOrEmpty(templateFromDb.SchoolTypeId) && templateFromDb.SchoolType == null)
                 {
@@ -102,11 +106,17 @@ namespace TeamsManager.Core.Services
             else
             {
                 _cache.Remove(cacheKey);
+                if (templateFromDb != null && !templateFromDb.IsActive)
+                {
+                    _logger.LogDebug("Szablon ID: {TemplateId} jest nieaktywny, nie zostanie zcache'owany po ID.", templateId);
+                    return null;
+                }
             }
             return templateFromDb;
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<TeamTemplate>> GetAllActiveTemplatesAsync(bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych szablonów zespołów. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
@@ -131,6 +141,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<TeamTemplate>> GetUniversalTemplatesAsync(bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie aktywnych szablonów uniwersalnych. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
@@ -142,7 +153,7 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Uniwersalne szablony nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
-            var templatesFromDb = await _teamTemplateRepository.GetUniversalTemplatesAsync(); // Metoda repozytorium już filtruje po IsActive
+            var templatesFromDb = await _teamTemplateRepository.GetUniversalTemplatesAsync(); // Metoda repozytorium już filtruje po IsActive i IsUniversal
 
             _cache.Set(UniversalTeamTemplatesCacheKey, templatesFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Uniwersalne szablony dodane do cache.");
@@ -150,6 +161,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<TeamTemplate>> GetTemplatesBySchoolTypeAsync(string schoolTypeId, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie aktywnych szablonów dla typu szkoły ID: {SchoolTypeId}. Wymuszenie odświeżenia: {ForceRefresh}", schoolTypeId, forceRefresh);
@@ -167,9 +179,7 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Szablony dla typu szkoły ID: {SchoolTypeId} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", schoolTypeId);
-            var templatesFromDb = await _teamTemplateRepository.GetTemplatesBySchoolTypeAsync(schoolTypeId); // Metoda repozytorium już filtruje po IsActive
-
-            // SchoolType powinien być już załadowany przez metodę repozytorium GetTemplatesBySchoolTypeAsync
+            var templatesFromDb = await _teamTemplateRepository.GetTemplatesBySchoolTypeAsync(schoolTypeId); // Metoda repozytorium już filtruje po IsActive i SchoolTypeId
 
             _cache.Set(cacheKey, templatesFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Szablony dla typu szkoły ID: {SchoolTypeId} dodane do cache.", schoolTypeId);
@@ -177,6 +187,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<TeamTemplate?> GetDefaultTemplateForSchoolTypeAsync(string schoolTypeId, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie domyślnego szablonu dla typu szkoły ID: {SchoolTypeId}. Wymuszenie odświeżenia: {ForceRefresh}", schoolTypeId, forceRefresh);
@@ -187,18 +198,16 @@ namespace TeamsManager.Core.Services
             }
 
             string cacheKey = DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId;
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out TeamTemplate? cachedTemplate)) // Może być null jeśli nie ma domyślnego
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out TeamTemplate? cachedTemplate))
             {
                 _logger.LogDebug("Domyślny szablon dla typu szkoły ID: {SchoolTypeId} (lub jego brak) znaleziony w cache.", schoolTypeId);
                 return cachedTemplate;
             }
 
             _logger.LogDebug("Domyślny szablon dla typu szkoły ID: {SchoolTypeId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", schoolTypeId);
-            var templateFromDb = await _teamTemplateRepository.GetDefaultTemplateForSchoolTypeAsync(schoolTypeId); // Metoda repozytorium już filtruje po IsActive
+            var templateFromDb = await _teamTemplateRepository.GetDefaultTemplateForSchoolTypeAsync(schoolTypeId);
 
-            // SchoolType powinien być już załadowany przez metodę repozytorium GetDefaultTemplateForSchoolTypeAsync
-
-            _cache.Set(cacheKey, templateFromDb, GetDefaultCacheEntryOptions()); // Cache'ujemy również null
+            _cache.Set(cacheKey, templateFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Domyślny szablon dla typu szkoły ID: {SchoolTypeId} (lub jego brak) dodany do cache.", schoolTypeId);
             return templateFromDb;
         }
@@ -255,7 +264,7 @@ namespace TeamsManager.Core.Services
                 }
                 else if (isUniversal)
                 {
-                    schoolTypeId = null; // Upewniamy się, że jest null dla uniwersalnego
+                    schoolTypeId = null;
                 }
 
                 var tempTemplateForValidation = new TeamTemplate { Template = templateContent };
@@ -274,24 +283,25 @@ namespace TeamsManager.Core.Services
                     Name = name,
                     Template = templateContent,
                     Description = description,
-                    IsDefault = false,
+                    IsDefault = false, // Nowo tworzone szablony nie są domyślne
                     IsUniversal = isUniversal,
-                    SchoolTypeId = schoolTypeId, // Używamy wyczyszczonego schoolTypeId
-                    SchoolType = schoolType,     // I obiektu schoolType
+                    SchoolTypeId = schoolTypeId,
+                    SchoolType = schoolType,
                     Category = category,
-                    Language = "Polski",
-                    Separator = " - ",
+                    Language = "Polski", // Można by to uczynić konfigurowalnym
+                    Separator = " - ",   // Domyślny separator
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _teamTemplateRepository.AddAsync(newTemplate);
+                // SaveChangesAsync() na wyższym poziomie
 
                 operation.TargetEntityId = newTemplate.Id;
                 operation.MarkAsCompleted($"Szablon zespołu ID: {newTemplate.Id} ('{newTemplate.Name}') przygotowany do utworzenia.");
                 _logger.LogInformation("Szablon zespołu '{TemplateName}' pomyślnie przygotowany do zapisu. ID: {TemplateId}", name, newTemplate.Id);
 
-                InvalidateCache(templateId: newTemplate.Id, schoolTypeId: newTemplate.SchoolTypeId, isUniversalOrAllAffected: true, isDefaultPotentiallyAffected: newTemplate.IsDefault, forSchoolTypeId: newTemplate.SchoolTypeId);
+                InvalidateCache(templateId: newTemplate.Id, schoolTypeId: newTemplate.SchoolTypeId, isUniversal: newTemplate.IsUniversal, isDefault: newTemplate.IsDefault, invalidateAll: true);
                 return newTemplate;
             }
             catch (Exception ex)
@@ -315,7 +325,6 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(templateToUpdate), "Obiekt szablonu lub jego ID nie może być null/pusty.");
             }
 
-
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
             var operation = new OperationHistory
             {
@@ -335,18 +344,17 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                var existingTemplate = await _teamTemplateRepository.GetByIdAsync(templateToUpdate.Id);
+                var existingTemplate = await _teamTemplateRepository.GetByIdAsync(templateToUpdate.Id); // GetByIdAsync powinien załadować SchoolType, jeśli jest
                 if (existingTemplate == null)
                 {
                     operation.MarkAsFailed("Szablon nie istnieje.");
                     _logger.LogWarning("Nie można zaktualizować szablonu ID {TemplateId} - nie istnieje.", templateToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingTemplate.Name;
+                operation.TargetEntityName = existingTemplate.Name; // Nazwa przed modyfikacją
                 oldSchoolTypeId = existingTemplate.SchoolTypeId;
                 oldIsDefault = existingTemplate.IsDefault;
                 oldIsUniversal = existingTemplate.IsUniversal;
-
 
                 if (string.IsNullOrWhiteSpace(templateToUpdate.Name) || string.IsNullOrWhiteSpace(templateToUpdate.Template))
                 {
@@ -360,7 +368,7 @@ namespace TeamsManager.Core.Services
                     _logger.LogError("Błąd aktualizacji szablonu {TemplateId}: Brak SchoolTypeId dla szablonu nieuniwersalnego.", templateToUpdate.Id);
                     return false;
                 }
-                var validationErrors = templateToUpdate.ValidateTemplate();
+                var validationErrors = templateToUpdate.ValidateTemplate(); // Używamy obiektu templateToUpdate do walidacji
                 if (validationErrors.Any())
                 {
                     operation.MarkAsFailed($"Błędy walidacji szablonu: {string.Join("; ", validationErrors)}");
@@ -382,17 +390,18 @@ namespace TeamsManager.Core.Services
                 else if (templateToUpdate.IsUniversal)
                 {
                     templateToUpdate.SchoolTypeId = null; // Upewnijmy się, że jest null dla uniwersalnego
+                    schoolType = null;
                 }
 
-
-                if (templateToUpdate.IsDefault && !existingTemplate.IsDefault)
+                // Logika obsługi zmiany flagi IsDefault
+                if (templateToUpdate.IsDefault && !existingTemplate.IsDefault) // Jeśli ustawiamy ten szablon jako domyślny
                 {
                     if (!templateToUpdate.IsUniversal && !string.IsNullOrEmpty(templateToUpdate.SchoolTypeId))
                     {
                         var otherDefaultTemplates = await _teamTemplateRepository.FindAsync(t =>
                             t.SchoolTypeId == templateToUpdate.SchoolTypeId &&
                             t.IsDefault &&
-                            t.Id != templateToUpdate.Id &&
+                            t.Id != templateToUpdate.Id && // Nie odznaczaj samego siebie
                             t.IsActive);
 
                         foreach (var oldDefault in otherDefaultTemplates)
@@ -401,9 +410,11 @@ namespace TeamsManager.Core.Services
                             oldDefault.MarkAsModified(currentUserUpn);
                             _teamTemplateRepository.Update(oldDefault);
                             _logger.LogInformation("Odznaczono szablon ID: {OldDefaultTemplateId} jako domyślny dla typu szkoły ID: {SchoolTypeId}.", oldDefault.Id, templateToUpdate.SchoolTypeId);
-                            InvalidateCache(oldDefault.Id, oldDefault.SchoolTypeId, isDefaultPotentiallyAffected: true, forSchoolTypeId: oldDefault.SchoolTypeId);
+                            InvalidateCache(templateId: oldDefault.Id, schoolTypeId: oldDefault.SchoolTypeId, isDefault: false, invalidateAll: false);
                         }
                     }
+                    // Jeśli szablon uniwersalny jest ustawiany jako domyślny - to nie ma sensu, IsDefault powinno być powiązane z SchoolTypeId.
+                    // Można by dodać walidację: if (templateToUpdate.IsUniversal && templateToUpdate.IsDefault) { throw new InvalidOperationException("Uniwersalny szablon nie może być domyślny dla typu szkoły."); }
                 }
 
                 existingTemplate.Name = templateToUpdate.Name;
@@ -411,8 +422,8 @@ namespace TeamsManager.Core.Services
                 existingTemplate.Description = templateToUpdate.Description;
                 existingTemplate.IsDefault = templateToUpdate.IsDefault;
                 existingTemplate.IsUniversal = templateToUpdate.IsUniversal;
-                existingTemplate.SchoolTypeId = templateToUpdate.SchoolTypeId; // Już poprawnie ustawione wyżej
-                existingTemplate.SchoolType = schoolType; // I powiązany obiekt
+                existingTemplate.SchoolTypeId = templateToUpdate.SchoolTypeId;
+                existingTemplate.SchoolType = schoolType;
                 existingTemplate.ExampleOutput = templateToUpdate.ExampleOutput;
                 existingTemplate.Category = templateToUpdate.Category;
                 existingTemplate.Language = templateToUpdate.Language;
@@ -426,19 +437,17 @@ namespace TeamsManager.Core.Services
                 existingTemplate.MarkAsModified(currentUserUpn);
 
                 _teamTemplateRepository.Update(existingTemplate);
-                operation.TargetEntityName = existingTemplate.Name;
+                operation.TargetEntityName = existingTemplate.Name; // Nazwa po modyfikacji
                 operation.MarkAsCompleted("Szablon przygotowany do aktualizacji.");
 
-                // Inwalidacja cache
-                InvalidateCache(existingTemplate.Id, existingTemplate.SchoolTypeId,
-                                isUniversalOrAllAffected: existingTemplate.IsUniversal != oldIsUniversal,
-                                isDefaultPotentiallyAffected: existingTemplate.IsDefault != oldIsDefault || (existingTemplate.IsDefault && existingTemplate.SchoolTypeId != oldSchoolTypeId),
-                                forSchoolTypeId: existingTemplate.SchoolTypeId);
-                if (oldSchoolTypeId != null && oldSchoolTypeId != existingTemplate.SchoolTypeId)
-                {
-                    InvalidateCache(schoolTypeId: oldSchoolTypeId, isDefaultPotentiallyAffected: oldIsDefault, forSchoolTypeId: oldSchoolTypeId);
-                }
-
+                InvalidateCache(templateId: existingTemplate.Id,
+                                schoolTypeId: existingTemplate.SchoolTypeId,
+                                isUniversal: existingTemplate.IsUniversal,
+                                isDefault: existingTemplate.IsDefault,
+                                oldSchoolTypeId: oldSchoolTypeId,
+                                oldIsUniversal: oldIsUniversal,
+                                oldIsDefault: oldIsDefault,
+                                invalidateAll: true); // Zawsze odświeżaj listy globalne przy update
                 return true;
             }
             catch (Exception ex)
@@ -471,7 +480,7 @@ namespace TeamsManager.Core.Services
             TeamTemplate? template = null;
             try
             {
-                template = await _teamTemplateRepository.GetByIdAsync(templateId);
+                template = await _teamTemplateRepository.GetByIdAsync(templateId); // Pobierz z dołączonym SchoolType jeśli repo to robi
                 if (template == null)
                 {
                     operation.MarkAsFailed($"Szablon o ID '{templateId}' nie istnieje.");
@@ -484,7 +493,7 @@ namespace TeamsManager.Core.Services
                 {
                     operation.MarkAsCompleted($"Szablon '{template.Name}' był już nieaktywny. Brak akcji.");
                     _logger.LogInformation("Szablon ID {TemplateId} był już nieaktywny. Nie wykonano żadnej akcji.", templateId);
-                    InvalidateCache(templateId, template.SchoolTypeId, template.IsUniversal, template.IsDefault, template.SchoolTypeId);
+                    InvalidateCache(templateId: templateId, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: true);
                     return true;
                 }
 
@@ -492,7 +501,7 @@ namespace TeamsManager.Core.Services
                 _teamTemplateRepository.Update(template);
                 operation.MarkAsCompleted("Szablon oznaczony jako usunięty.");
 
-                InvalidateCache(templateId, template.SchoolTypeId, template.IsUniversal, template.IsDefault, template.SchoolTypeId);
+                InvalidateCache(templateId: templateId, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: true);
                 return true;
             }
             catch (Exception ex)
@@ -511,24 +520,21 @@ namespace TeamsManager.Core.Services
         public async Task<string?> GenerateTeamNameFromTemplateAsync(string templateId, Dictionary<string, string> values)
         {
             _logger.LogInformation("Generowanie nazwy zespołu z szablonu ID: {TemplateId}", templateId);
-            // Używamy metody GetTemplateByIdAsync, która korzysta z cache'u
-            var template = await GetTemplateByIdAsync(templateId);
+            var template = await GetTemplateByIdAsync(templateId); // Używa cache
             if (template == null || !template.IsActive)
             {
                 _logger.LogWarning("Nie można wygenerować nazwy: Szablon o ID {TemplateId} nie istnieje lub jest nieaktywny.", templateId);
                 return null;
             }
-            // Metoda GenerateTeamName w modelu TeamTemplate już inkrementuje UsageCount.
-            // Jeśli chcemy, aby serwis był odpowiedzialny za utrwalenie tej zmiany,
-            // musielibyśmy tu dodać _teamTemplateRepository.Update(template); i SaveChangesAsync() na wyższym poziomie.
-            // Na razie zakładamy, że samo wywołanie GenerateTeamName jest wystarczające, a stan licznika
-            // zostanie utrwalony przy następnej pełnej aktualizacji szablonu lub explicite.
-            var generatedName = template.GenerateTeamName(values);
-            // Po wygenerowaniu nazwy (co zmodyfikowało UsageCount i LastUsedDate),
-            // powinniśmy zaktualizować obiekt w repozytorium.
+
+            var generatedName = template.GenerateTeamName(values); // To inkrementuje UsageCount i LastUsedDate
+
+            // Zapisz zmiany w szablonie (UsageCount, LastUsedDate)
             _teamTemplateRepository.Update(template);
-            // I unieważnić jego wpis w cache, aby następne pobranie odzwierciedliło zmiany.
-            InvalidateCache(templateId, template.SchoolTypeId, template.IsUniversal, template.IsDefault, template.SchoolTypeId);
+            // SaveChangesAsync na wyższym poziomie
+
+            // Unieważnij cache dla tego szablonu, aby odzwierciedlić zmiany w UsageCount/LastUsedDate
+            InvalidateCache(templateId: template.Id, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: false);
 
             return generatedName;
         }
@@ -551,8 +557,7 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                // Używamy GetTemplateByIdAsync, które może skorzystać z cache'u
-                var originalTemplate = await GetTemplateByIdAsync(originalTemplateId);
+                var originalTemplate = await GetTemplateByIdAsync(originalTemplateId); // Używa cache
                 if (originalTemplate == null)
                 {
                     operation.MarkAsFailed("Oryginalny szablon nie istnieje.");
@@ -577,16 +582,17 @@ namespace TeamsManager.Core.Services
                 }
 
                 var clonedTemplate = originalTemplate.Clone(newTemplateName);
-                clonedTemplate.CreatedBy = currentUserUpn;
-                clonedTemplate.Id = Guid.NewGuid().ToString();
+                clonedTemplate.CreatedBy = currentUserUpn; // Ustaw CreatedBy dla nowego obiektu
+                clonedTemplate.Id = Guid.NewGuid().ToString(); // Nadaj nowe ID
 
                 await _teamTemplateRepository.AddAsync(clonedTemplate);
+                // SaveChangesAsync na wyższym poziomie
 
-                operation.OperationDetails = $"Szablon ID: {originalTemplateId} ('{originalTemplate.Name}') sklonowany do nowego szablonu ID: {clonedTemplate.Id} ('{clonedTemplate.Name}').";
+                operation.OperationDetails = $"Szablon ID: {originalTemplate.Id} ('{originalTemplate.Name}') sklonowany do nowego szablonu ID: {clonedTemplate.Id} ('{clonedTemplate.Name}').";
                 operation.MarkAsCompleted(operation.OperationDetails);
                 _logger.LogInformation("Szablon '{OriginalName}' pomyślnie sklonowany do '{NewName}'. Nowe ID: {NewId}", originalTemplate.Name, newTemplateName, clonedTemplate.Id);
 
-                InvalidateCache(templateId: clonedTemplate.Id, schoolTypeId: clonedTemplate.SchoolTypeId, isUniversalOrAllAffected: true, isDefaultPotentiallyAffected: clonedTemplate.IsDefault, forSchoolTypeId: clonedTemplate.SchoolTypeId);
+                InvalidateCache(templateId: clonedTemplate.Id, schoolTypeId: clonedTemplate.SchoolTypeId, isUniversal: clonedTemplate.IsUniversal, isDefault: clonedTemplate.IsDefault, invalidateAll: true);
                 return clonedTemplate;
             }
             catch (Exception ex)
@@ -602,6 +608,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda unieważnia globalny cache dla szablonów zespołów.</remarks>
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a szablonów zespołów.");
@@ -610,12 +617,34 @@ namespace TeamsManager.Core.Services
             return Task.CompletedTask;
         }
 
-        // Prywatna metoda do unieważniania cache.
-        private void InvalidateCache(string? templateId = null, string? schoolTypeId = null, bool isUniversalOrAllAffected = false, bool isDefaultPotentiallyAffected = false, string? forSchoolTypeId = null, bool invalidateAll = false)
+        /// <summary>
+        /// Unieważnia cache dla szablonów zespołów.
+        /// Resetuje globalny token dla szablonów, co unieważnia wszystkie zależne wpisy.
+        /// Zawsze usuwa klucze dla list wszystkich i uniwersalnych szablonów.
+        /// Opcjonalnie usuwa bardziej specyficzne klucze cache na podstawie podanych parametrów.
+        /// </summary>
+        /// <param name="templateId">ID szablonu, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
+        /// <param name="schoolTypeId">ID typu szkoły, którego cache szablonów (filtrowanych i domyślnego) ma być usunięty (opcjonalnie).</param>
+        /// <param name="isUniversal">Czy operacja dotyczyła szablonu uniwersalnego (opcjonalnie).</param>
+        /// <param name="isDefault">Czy operacja dotyczyła szablonu domyślnego (opcjonalnie).</param>
+        /// <param name="oldSchoolTypeId">Poprzedni ID typu szkoły, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="oldIsUniversal">Poprzedni stan flagi IsUniversal, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="oldIsDefault">Poprzedni stan flagi IsDefault, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z szablonami (opcjonalnie, domyślnie false).</param>
+        private void InvalidateCache(
+            string? templateId = null,
+            string? schoolTypeId = null,
+            bool? isUniversal = null,
+            bool? isDefault = null,
+            string? oldSchoolTypeId = null,
+            bool? oldIsUniversal = null,
+            bool? oldIsDefault = null,
+            bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u szablonów. templateId: {TemplateId}, schoolTypeId: {SchoolTypeId}, isUniversalOrAllAffected: {IsUniversalOrAllAffected}, isDefaultPotentiallyAffected: {IsDefaultPotentiallyAffected}, forSchoolTypeId: {ForSchoolTypeId}, invalidateAll: {InvalidateAll}",
-                templateId, schoolTypeId, isUniversalOrAllAffected, isDefaultPotentiallyAffected, forSchoolTypeId, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u szablonów. templateId: {TemplateId}, schoolTypeId: {SchoolTypeId}, isUniversal: {IsUniversal}, isDefault: {IsDefault}, oldSchoolTypeId: {OldSchoolTypeId}, oldIsUniversal: {OldIsUniversal}, oldIsDefault: {OldIsDefault}, invalidateAll: {InvalidateAll}",
+                templateId, schoolTypeId, isUniversal, isDefault, oldSchoolTypeId, oldIsUniversal, oldIsDefault, invalidateAll);
 
+            // 1. Zresetuj CancellationTokenSource
             var oldTokenSource = Interlocked.Exchange(ref _teamTemplatesCacheTokenSource, new CancellationTokenSource());
             if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
             {
@@ -624,43 +653,55 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Token cache'u dla szablonów zespołów został zresetowany.");
 
+            // 2. Zawsze usuń globalne klucze dla list, ponieważ każda modyfikacja może na nie wpłynąć.
+            _cache.Remove(AllTeamTemplatesCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllTeamTemplatesCacheKey);
+            _cache.Remove(UniversalTeamTemplatesCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", UniversalTeamTemplatesCacheKey);
 
-            // Granularne usuwanie jest mniej istotne przy użyciu CancellationTokenSource,
-            // ale może być przydatne dla natychmiastowego usunięcia konkretnych kluczy, jeśli są znane.
-            // Token zajmie się resztą przy następnym wygaśnięciu lub odwołaniu.
+            // 3. Jeśli invalidateAll jest true, reszta nie jest konieczna, ale dla pewności można zostawić.
             if (invalidateAll)
             {
-                _cache.Remove(AllTeamTemplatesCacheKey);
-                _cache.Remove(UniversalTeamTemplatesCacheKey);
-                _logger.LogDebug("Usunięto z cache klucze dla wszystkich szablonów i szablonów uniwersalnych.");
-                // W przypadku `invalidateAll`, nie ma potrzeby usuwać bardziej specyficznych kluczy poniżej,
-                // bo token i tak unieważni wszystko. Można by je tu pominąć.
+                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u szablonów.");
+                // Można by rozważyć usunięcie WSZYSTKICH kluczy z prefiksami, ale token powinien to załatwić.
             }
 
+            // 4. Usuń klucz dla konkretnego szablonu, jeśli podano ID
             if (!string.IsNullOrWhiteSpace(templateId))
             {
                 _cache.Remove(TeamTemplateByIdCacheKeyPrefix + templateId);
-                _logger.LogDebug("Usunięto z cache szablon o ID: {TemplateId}", templateId);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", TeamTemplateByIdCacheKeyPrefix, templateId);
             }
+
+            // 5. Usuń klucze związane z typem szkoły, jeśli podano schoolTypeId
             if (!string.IsNullOrWhiteSpace(schoolTypeId))
             {
                 _cache.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId);
-                _logger.LogDebug("Usunięto z cache szablony dla typu szkoły ID: {SchoolTypeId}", schoolTypeId);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", TeamTemplatesBySchoolTypeIdCacheKeyPrefix, schoolTypeId);
+                _cache.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix, schoolTypeId);
             }
-            if (isDefaultPotentiallyAffected && !string.IsNullOrWhiteSpace(forSchoolTypeId))
+
+            // 6. Jeśli typ szkoły się zmienił, usuń cache także dla starego typu szkoły
+            if (!string.IsNullOrWhiteSpace(oldSchoolTypeId) && oldSchoolTypeId != schoolTypeId)
             {
-                _cache.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + forSchoolTypeId);
-                _logger.LogDebug("Usunięto z cache domyślny szablon dla typu szkoły ID: {ForSchoolTypeId}", forSchoolTypeId);
+                _cache.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + oldSchoolTypeId);
+                _logger.LogDebug("Usunięto z cache klucz dla starego typu szkoły: {CacheKey}{Id}", TeamTemplatesBySchoolTypeIdCacheKeyPrefix, oldSchoolTypeId);
+                _cache.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + oldSchoolTypeId);
+                _logger.LogDebug("Usunięto z cache klucz domyślnego szablonu dla starego typu szkoły: {CacheKey}{Id}", DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix, oldSchoolTypeId);
             }
-            if (isUniversalOrAllAffected && !invalidateAll) // Jeśli nie było już globalnej inwalidacji
+
+            // Dodatkowe logi dla zmian flag IsUniversal i IsDefault, jeśli potrzeba bardziej szczegółowego debugowania
+            if (isUniversal.HasValue && oldIsUniversal.HasValue && isUniversal != oldIsUniversal)
             {
-                _cache.Remove(AllTeamTemplatesCacheKey);
-                _cache.Remove(UniversalTeamTemplatesCacheKey);
-                _logger.LogDebug("Usunięto z cache klucze dla wszystkich szablonów i szablonów uniwersalnych z powodu flagi isUniversalOrAllAffected.");
+                _logger.LogDebug("Flaga IsUniversal zmieniła się z {Old} na {New} dla szablonu (ID: {TemplateId}). Klucze globalne (All, Universal) zostały już usunięte.", oldIsUniversal, isUniversal, templateId ?? "nieznane");
+            }
+            if (isDefault.HasValue && oldIsDefault.HasValue && isDefault != oldIsDefault)
+            {
+                _logger.LogDebug("Flaga IsDefault zmieniła się z {Old} na {New} dla szablonu (ID: {TemplateId}) dla typu szkoły (ID: {SchoolTypeId}). Odpowiednie klucze domyślne zostały usunięte.", oldIsDefault, isDefault, templateId ?? "nieznane", schoolTypeId ?? "nieznany");
             }
         }
 
-        // Metoda pomocnicza do zapisu OperationHistory
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
-using TeamsManager.Core.Abstractions.Services; // Dodano dla ISubjectService
+using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -30,15 +30,16 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<UserService> _logger;
         private readonly IMemoryCache _cache;
-        private readonly ISubjectService _subjectService; // NOWA ZALEŻNOŚĆ
+        private readonly ISubjectService _subjectService;
 
-        // Klucze cache
+        // Definicje kluczy cache
         private const string AllActiveUsersCacheKey = "Users_AllActive";
         private const string UserByIdCacheKeyPrefix = "User_Id_";
         private const string UserByUpnCacheKeyPrefix = "User_Upn_";
         private const string UsersByRoleCacheKeyPrefix = "Users_Role_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
+        // Token do zarządzania unieważnianiem wpisów cache dla użytkowników
         private static CancellationTokenSource _usersCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
@@ -50,12 +51,12 @@ namespace TeamsManager.Core.Services
             IGenericRepository<UserSchoolType> userSchoolTypeRepository,
             IGenericRepository<SchoolType> schoolTypeRepository,
             IGenericRepository<UserSubject> userSubjectRepository,
-            IGenericRepository<Subject> subjectRepository, // Zachowujemy, jeśli jest używane gdzie indziej
+            IGenericRepository<Subject> subjectRepository,
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
             ILogger<UserService> logger,
             IMemoryCache memoryCache,
-            ISubjectService subjectService) // NOWY PARAMETR
+            ISubjectService subjectService)
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -67,26 +68,22 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService)); // NOWE PRZYPISANIE
+            _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
         }
 
-        /// <summary>
-        /// Zwraca domyślne opcje konfiguracyjne dla wpisów cache'a.
-        /// Ustawia czas wygaśnięcia i token anulowania do globalnej inwalidacji.
-        /// </summary>
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
             return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration) // Użyj SetAbsoluteExpiration lub SetSlidingExpiration
+                .SetAbsoluteExpiration(_defaultCacheDuration)
                 .AddExpirationToken(new CancellationChangeToken(_usersCacheTokenSource.Token));
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkownika o ID: {UserId}. Wymuszenie odświeżenia: {ForceRefresh}", userId, forceRefresh);
 
-            // Walidacja parametrów wejściowych
             if (string.IsNullOrWhiteSpace(userId))
             {
                 _logger.LogWarning("Próba pobrania użytkownika z pustym ID.");
@@ -95,47 +92,46 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = UserByIdCacheKeyPrefix + userId;
 
-            // Sprawdź cache, jeśli nie wymuszono odświeżenia
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik ID: {UserId} znaleziony w cache.", userId);
                 return cachedUser;
             }
 
-            // Pobierz z bazy danych
             _logger.LogDebug("Użytkownik ID: {UserId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", userId);
-            var userFromDb = await _userRepository.GetByIdAsync(userId);
+            var userFromDb = await _userRepository.GetByIdAsync(userId); // Metoda repozytorium powinna dołączać zależności
 
-            if (userFromDb != null)
+            if (userFromDb != null && userFromDb.IsActive) // Cache'ujemy tylko aktywnych użytkowników
             {
-                // Zapisz do cache pod kluczem ID
                 var cacheEntryOptions = GetDefaultCacheEntryOptions();
                 _cache.Set(cacheKey, userFromDb, cacheEntryOptions);
+                _logger.LogDebug("Użytkownik ID: {UserId} dodany/zaktualizowany w cache po ID.", userId);
 
-                // Dodatkowo zapisz do cache pod kluczem UPN, jeśli UPN istnieje
                 if (!string.IsNullOrWhiteSpace(userFromDb.UPN))
                 {
                     string upnCacheKey = UserByUpnCacheKeyPrefix + userFromDb.UPN;
                     _cache.Set(upnCacheKey, userFromDb, cacheEntryOptions);
-                    _logger.LogDebug("Użytkownik (ID: {UserId}, UPN: {UPN}) zaktualizowany/dodany w cache po UPN (z GetUserByIdAsync).", userId, userFromDb.UPN);
+                    _logger.LogDebug("Użytkownik (ID: {UserId}, UPN: {UPN}) zaktualizowany/dodany w cache po UPN.", userId, userFromDb.UPN);
                 }
-                _logger.LogDebug("Użytkownik ID: {UserId} dodany/zaktualizowany w cache po ID.", userId);
             }
             else
             {
-                // Usuń z cache, jeśli użytkownik nie istnieje
                 _cache.Remove(cacheKey);
+                if (userFromDb != null && !userFromDb.IsActive)
+                {
+                    _logger.LogDebug("Użytkownik ID: {UserId} jest nieaktywny, nie zostanie zcache'owany po ID.", userId);
+                    return null;
+                }
             }
-
             return userFromDb;
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkownika o UPN: {UPN}. Wymuszenie odświeżenia: {ForceRefresh}", upn, forceRefresh);
 
-            // Walidacja parametrów wejściowych
             if (string.IsNullOrWhiteSpace(upn))
             {
                 _logger.LogWarning("Próba pobrania użytkownika z pustym UPN.");
@@ -144,49 +140,46 @@ namespace TeamsManager.Core.Services
 
             string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
 
-            // Sprawdź cache, jeśli nie wymuszono odświeżenia
             if (!forceRefresh && _cache.TryGetValue(upnCacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik UPN: {UPN} znaleziony w cache.", upn);
                 return cachedUser;
             }
 
-            // Pobierz podstawowe dane z bazy danych
             _logger.LogDebug("Użytkownik UPN: {UPN} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", upn);
-            var userFromDbBase = await _userRepository.GetUserByUpnAsync(upn);
+            var userFromDbBase = await _userRepository.GetUserByUpnAsync(upn); // Pobiera tylko podstawowe dane
 
             if (userFromDbBase == null)
             {
                 _logger.LogInformation("Nie znaleziono użytkownika o UPN: {UPN} w repozytorium.", upn);
-                // Cache'uj brak wyniku na krótko, aby uniknąć częstych zapytań do bazy
-                _cache.Set(upnCacheKey, (User?)null, TimeSpan.FromMinutes(1));
+                _cache.Set(upnCacheKey, (User?)null, TimeSpan.FromMinutes(1)); // Cache'uj brak wyniku na krótko
                 return null;
             }
 
             // Pobierz pełny obiekt przez ID, aby mieć spójne dane w cache (z zależnościami)
             // GetUserByIdAsync zajmie się cachowaniem (również po UPN)
+            // Jeśli userFromDbBase jest nieaktywny, GetUserByIdAsync zwróci null i usunie z cache
             var userFromDbFull = await GetUserByIdAsync(userFromDbBase.Id, forceRefresh: true);
 
+            // Nie ma potrzeby dodatkowego cachowania po UPN tutaj, bo GetUserByIdAsync już to robi.
             return userFromDbFull;
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych użytkowników. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
-            // Sprawdź cache, jeśli nie wymuszono odświeżenia
             if (!forceRefresh && _cache.TryGetValue(AllActiveUsersCacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Wszyscy aktywni użytkownicy znalezieni w cache.");
                 return cachedUsers;
             }
 
-            // Pobierz z bazy danych
             _logger.LogDebug("Wszyscy aktywni użytkownicy nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
             var usersFromDb = await _userRepository.FindAsync(u => u.IsActive);
 
-            // Zapisz do cache
             _cache.Set(AllActiveUsersCacheKey, usersFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Wszyscy aktywni użytkownicy dodani do cache.");
 
@@ -194,23 +187,21 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkowników o roli: {Role}. Wymuszenie odświeżenia: {ForceRefresh}", role, forceRefresh);
             string cacheKey = UsersByRoleCacheKeyPrefix + role.ToString();
 
-            // Sprawdź cache, jeśli nie wymuszono odświeżenia
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Użytkownicy o roli {Role} znalezieni w cache.", role);
                 return cachedUsers;
             }
 
-            // Pobierz z bazy danych
             _logger.LogDebug("Użytkownicy o roli {Role} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", role);
-            var usersFromDb = await _userRepository.GetUsersByRoleAsync(role);
+            var usersFromDb = await _userRepository.GetUsersByRoleAsync(role); // Metoda repozytorium filtruje też po IsActive
 
-            // Zapisz do cache
             _cache.Set(cacheKey, usersFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Użytkownicy o roli {Role} dodani do cache.", role);
 
@@ -227,8 +218,6 @@ namespace TeamsManager.Core.Services
             bool sendWelcomeEmail = false)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -244,7 +233,6 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie tworzenia użytkownika: {FirstName} {LastName} ({UPN}) przez {User}", firstName, lastName, upn, currentUserUpn);
 
-                // Walidacja podstawowych danych
                 if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(upn))
                 {
                     operation.MarkAsFailed("Imię, nazwisko i UPN są wymagane.");
@@ -253,9 +241,8 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // Sprawdź czy użytkownik o podanym UPN już istnieje
                 var existingUser = await _userRepository.GetUserByUpnAsync(upn);
-                if (existingUser != null)
+                if (existingUser != null) // Nie sprawdzamy IsActive, bo UPN musi być unikalny globalnie
                 {
                     operation.MarkAsFailed($"Użytkownik o UPN '{upn}' już istnieje.");
                     await SaveOperationHistoryAsync(operation);
@@ -263,7 +250,6 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // Sprawdź czy dział istnieje i jest aktywny
                 var department = await _departmentRepository.GetByIdAsync(departmentId);
                 if (department == null || !department.IsActive)
                 {
@@ -273,7 +259,6 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // Utworzenie nowego użytkownika
                 var newUser = new User
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -282,24 +267,20 @@ namespace TeamsManager.Core.Services
                     UPN = upn,
                     Role = role,
                     DepartmentId = departmentId,
-                    Department = department,
-                    CreatedBy = currentUserUpn,
+                    Department = department, // Dla spójności obiektu
+                    CreatedBy = currentUserUpn, // Ustawiane też przez DbContext
                     IsActive = true
                 };
 
                 await _userRepository.AddAsync(newUser);
-                // SaveChangesAsync() będzie wołane na wyższym poziomie (np. UnitOfWork)
+                // SaveChangesAsync() na wyższym poziomie
 
-                // Aktualizacja historii operacji
                 operation.TargetEntityId = newUser.Id;
                 operation.MarkAsCompleted($"Użytkownik ID: {newUser.Id} utworzony.");
                 _logger.LogInformation("Użytkownik {FirstName} {LastName} ({UPN}) pomyślnie utworzony. ID: {UserId}", firstName, lastName, upn, newUser.Id);
 
-                // Inwalidacja cache'a - nowy użytkownik wpływa na listy użytkowników
-                InvalidateCache(newUser.Id, newUser.UPN, newUser.Role, allUsersAffected: true, specificRoleAffected: true);
-                _cache.Remove(AllActiveUsersCacheKey); // Bezpośrednie usunięcie dla pewności
+                InvalidateUserCache(userId: newUser.Id, upn: newUser.UPN, role: newUser.Role, invalidateAllGlobalLists: true);
 
-                // Opcjonalne wysłanie emaila powitalnego
                 if (sendWelcomeEmail)
                 {
                     _logger.LogInformation("TODO: Wysłanie emaila powitalnego do {UPN}", upn);
@@ -311,9 +292,9 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia użytkownika {UPN}.", upn);
                 operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace);
-                return null; // Zwracamy null, bo operacja się nie powiodła
+                return null;
             }
-            finally // Zapewnij zapisanie historii nawet w przypadku wyjątku
+            finally
             {
                 await SaveOperationHistoryAsync(operation);
             }
@@ -322,7 +303,6 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> UpdateUserAsync(User userToUpdate)
         {
-            // Walidacja parametrów wejściowych
             if (userToUpdate == null || string.IsNullOrWhiteSpace(userToUpdate.Id))
             {
                 _logger.LogError("Próba aktualizacji użytkownika z nieprawidłowymi danymi (null lub brak ID).");
@@ -330,8 +310,6 @@ namespace TeamsManager.Core.Services
             }
 
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -343,33 +321,32 @@ namespace TeamsManager.Core.Services
             };
             operation.MarkAsStarted();
 
-            // Przechowywanie starych wartości do porównania i inwalidacji cache
             string? oldUpn = null;
             UserRole? oldRole = null;
+            bool oldIsActive = false;
 
             try
             {
                 _logger.LogInformation("Rozpoczynanie aktualizacji użytkownika ID: {UserId} przez {User}", userToUpdate.Id, currentUserUpn);
 
-                // Pobierz istniejącego użytkownika
-                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id);
-                if (existingUser == null)
+                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id); // Pobiera z zależnościami
+                if (existingUser == null) // GetByIdAsync z UserRepository może zwracać null jeśli nieaktywny lub nie znaleziony
                 {
-                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony.");
+                    // Jeśli chcemy aktualizować także nieaktywnych, musimy użyć innego sposobu pobrania, np. FindAsync bez filtra IsActive
+                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony (lub jest nieaktywny i nie można go pobrać przez GetByIdAsync).");
                     await SaveOperationHistoryAsync(operation);
-                    _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userToUpdate.Id);
+                    _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje lub nie można go załadować.", userToUpdate.Id);
                     return false;
                 }
 
-                // Zapisz stare wartości i ustaw nazwę encji dla historii
                 operation.TargetEntityName = $"{existingUser.FirstName} {existingUser.LastName} ({existingUser.UPN})";
                 oldUpn = existingUser.UPN;
                 oldRole = existingUser.Role;
+                oldIsActive = existingUser.IsActive;
 
-                // Sprawdź unikalność UPN, jeśli się zmienił
                 if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
                 {
-                    var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN);
+                    var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN); // Sprawdza globalnie
                     if (userWithSameUpn != null && userWithSameUpn.Id != userToUpdate.Id)
                     {
                         operation.MarkAsFailed($"UPN '{userToUpdate.UPN}' już istnieje w systemie.");
@@ -379,7 +356,6 @@ namespace TeamsManager.Core.Services
                     }
                 }
 
-                // Sprawdź czy nowy dział istnieje i jest aktywny
                 var department = await _departmentRepository.GetByIdAsync(userToUpdate.DepartmentId);
                 if (department == null || !department.IsActive)
                 {
@@ -389,13 +365,12 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                // Aktualizacja wszystkich pól użytkownika
                 existingUser.FirstName = userToUpdate.FirstName;
                 existingUser.LastName = userToUpdate.LastName;
                 existingUser.UPN = userToUpdate.UPN;
                 existingUser.Role = userToUpdate.Role;
                 existingUser.DepartmentId = userToUpdate.DepartmentId;
-                existingUser.Department = department;
+                existingUser.Department = department; // Aktualizacja obiektu nawigacyjnego
                 existingUser.Phone = userToUpdate.Phone;
                 existingUser.AlternateEmail = userToUpdate.AlternateEmail;
                 existingUser.ExternalId = userToUpdate.ExternalId;
@@ -404,59 +379,23 @@ namespace TeamsManager.Core.Services
                 existingUser.Position = userToUpdate.Position;
                 existingUser.Notes = userToUpdate.Notes;
                 existingUser.IsSystemAdmin = userToUpdate.IsSystemAdmin;
-                existingUser.IsActive = userToUpdate.IsActive;
+                existingUser.IsActive = userToUpdate.IsActive; // Zmiana IsActive jest dozwolona
 
                 existingUser.MarkAsModified(currentUserUpn);
                 _userRepository.Update(existingUser);
                 // SaveChangesAsync na wyższym poziomie
 
-                // Aktualizacja historii operacji
                 operation.TargetEntityName = $"{existingUser.FirstName} {existingUser.LastName} ({existingUser.UPN})";
                 operation.MarkAsCompleted("Użytkownik zaktualizowany.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);
 
-                // TUTAJ JEST INWALIDACJA CACHE'A - DODAJMY LOGI DEBUG
-                _logger.LogDebug("Rozpoczynanie inwalidacji cache'a dla użytkownika ID: {UserId}, UPN: {UPN}, stara rola: {OldRole}",
-                    existingUser.Id, oldUpn, oldRole);
-
-                // ** BEZPOŚREDNIE WYWOŁANIE Remove BEZ PRZECHODZENIA PRZEZ InvalidateCache **
-                // To jest debugging - sprawdźmy czy problem jest w metodzie InvalidateCache
-                var userCacheKey = UserByIdCacheKeyPrefix + existingUser.Id;
-                _cache.Remove(userCacheKey);
-                _logger.LogDebug("Bezpośrednio usunięto z cache klucz: {CacheKey}", userCacheKey);
-
-                // Usuń też inne klucze bezpośrednio
-                _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Bezpośrednio usunięto AllActiveUsersCacheKey");
-
-                if (!string.IsNullOrWhiteSpace(oldUpn))
-                {
-                    var oldUpnCacheKey = UserByUpnCacheKeyPrefix + oldUpn;
-                    _cache.Remove(oldUpnCacheKey);
-                    _logger.LogDebug("Bezpośrednio usunięto z cache stary UPN klucz: {CacheKey}", oldUpnCacheKey);
-                }
-
-                if (!string.IsNullOrWhiteSpace(existingUser.UPN) && !string.Equals(oldUpn, existingUser.UPN, StringComparison.OrdinalIgnoreCase))
-                {
-                    var newUpnCacheKey = UserByUpnCacheKeyPrefix + existingUser.UPN;
-                    _cache.Remove(newUpnCacheKey);
-                    _logger.LogDebug("Bezpośrednio usunięto z cache nowy UPN klucz: {CacheKey}", newUpnCacheKey);
-                }
-
-                if (oldRole.HasValue)
-                {
-                    var oldRoleCacheKey = UsersByRoleCacheKeyPrefix + oldRole.Value.ToString();
-                    _cache.Remove(oldRoleCacheKey);
-                    _logger.LogDebug("Bezpośrednio usunięto z cache starą rolę klucz: {CacheKey}", oldRoleCacheKey);
-                }
-
-                if (oldRole.HasValue && oldRole.Value != existingUser.Role)
-                {
-                    var newRoleCacheKey = UsersByRoleCacheKeyPrefix + existingUser.Role.ToString();
-                    _cache.Remove(newRoleCacheKey);
-                    _logger.LogDebug("Bezpośrednio usunięto z cache nową rolę klucz: {CacheKey}", newRoleCacheKey);
-                }
-
+                InvalidateUserCache(userId: existingUser.Id,
+                                    upn: existingUser.UPN,
+                                    role: existingUser.Role,
+                                    oldUpnIfChanged: oldUpn,
+                                    oldRoleIfChanged: oldRole,
+                                    isActiveChanged: oldIsActive != existingUser.IsActive,
+                                    invalidateAllGlobalLists: true);
                 return true;
             }
             catch (Exception ex)
@@ -475,8 +414,6 @@ namespace TeamsManager.Core.Services
         public async Task<bool> DeactivateUserAsync(string userId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_deactivate";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -487,51 +424,45 @@ namespace TeamsManager.Core.Services
                 IsActive = true
             };
             operation.MarkAsStarted();
-
             User? user = null;
             try
             {
                 _logger.LogInformation("Rozpoczynanie dezaktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
 
-                // Pobierz użytkownika
-                user = await _userRepository.GetByIdAsync(userId);
-                if (user == null)
+                user = await _userRepository.GetByIdAsync(userId); // Potrzebujemy obiektu do modyfikacji, nawet jeśli już nieaktywny
+                if (user == null) // Jeśli GetByIdAsync zwraca null dla nieaktywnych, to nie zadziała tak
                 {
-                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
-                    await SaveOperationHistoryAsync(operation);
-                    _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
-                    return false;
+                    // Spróbujmy pobrać go inaczej, jeśli GetByIdAsync filtruje po IsActive
+                    var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
+                    user = foundUsers.FirstOrDefault();
+                    if (user == null)
+                    {
+                        operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
+                        return false;
+                    }
                 }
                 operation.TargetEntityName = user.FullName;
 
-                // Sprawdź czy użytkownik nie jest już nieaktywny
                 if (!user.IsActive)
                 {
                     operation.MarkAsCompleted($"Użytkownik o ID '{userId}' był już nieaktywny.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId);
-
-                    // Mimo wszystko odśwież cache, bo testy mogą tego oczekiwać
-                    InvalidateCache(user.Id, user.UPN, user.Role, allUsersAffected: true, specificRoleAffected: true);
-                    _cache.Remove(AllActiveUsersCacheKey);
-                    _logger.LogDebug("Jawnie usunięto AllActiveUsersCacheKey, użytkownik był już nieaktywny.");
-                    return true; // Operacja "udana", bo stan docelowy osiągnięty
+                    // Mimo wszystko odśwież cache, bo inne dane mogły być w cache
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true);
+                    return true;
                 }
 
-                // Dezaktywuj użytkownika
-                user.MarkAsDeleted(currentUserUpn);
+                user.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
                 _userRepository.Update(user);
                 // SaveChangesAsync na wyższym poziomie
 
-                // Aktualizacja historii operacji
                 operation.MarkAsCompleted("Użytkownik zdezaktywowany.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zdezaktywowany.", userId);
 
-                // Inwalidacja cache'a - użytkownik został zdezaktywowany
-                InvalidateCache(user.Id, user.UPN, user.Role, allUsersAffected: true, specificRoleAffected: true);
-                _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Jawnie usunięto AllActiveUsersCacheKey po dezaktywacji użytkownika.");
-
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
                 return true;
             }
             catch (Exception ex)
@@ -550,8 +481,6 @@ namespace TeamsManager.Core.Services
         public async Task<bool> ActivateUserAsync(string userId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_activate";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -562,14 +491,13 @@ namespace TeamsManager.Core.Services
                 IsActive = true
             };
             operation.MarkAsStarted();
-
             User? user = null;
             try
             {
                 _logger.LogInformation("Rozpoczynanie aktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
 
-                // Pobierz użytkownika
-                user = await _userRepository.GetByIdAsync(userId);
+                var foundUsers = await _userRepository.FindAsync(u => u.Id == userId); // Pobierz niezależnie od IsActive
+                user = foundUsers.FirstOrDefault();
                 if (user == null)
                 {
                     operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
@@ -579,33 +507,24 @@ namespace TeamsManager.Core.Services
                 }
                 operation.TargetEntityName = user.FullName;
 
-                // Sprawdź czy użytkownik nie jest już aktywny
                 if (user.IsActive)
                 {
                     operation.MarkAsCompleted("Użytkownik był już aktywny.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogInformation("Użytkownik o ID {UserId} był już aktywny.", userId);
-
-                    // Inwalidacja cache'a dla spójności
-                    InvalidateCache(user.Id, user.UPN, user.Role, allUsersAffected: true, specificRoleAffected: true);
-                    _cache.Remove(AllActiveUsersCacheKey); // Dla spójności z DeactivateUserAsync
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true);
                     return true;
                 }
 
-                // Aktywuj użytkownika
                 user.IsActive = true;
                 user.MarkAsModified(currentUserUpn);
                 _userRepository.Update(user);
                 // SaveChangesAsync na wyższym poziomie
 
-                // Aktualizacja historii operacji
                 operation.MarkAsCompleted("Użytkownik aktywowany.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie aktywowany.", userId);
 
-                // Inwalidacja cache'a - użytkownik został aktywowany
-                InvalidateCache(user.Id, user.UPN, user.Role, allUsersAffected: true, specificRoleAffected: true);
-                _cache.Remove(AllActiveUsersCacheKey); // Dla spójności z DeactivateUserAsync
-
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
                 return true;
             }
             catch (Exception ex)
@@ -624,8 +543,6 @@ namespace TeamsManager.Core.Services
         public async Task<UserSchoolType?> AssignUserToSchoolTypeAsync(string userId, string schoolTypeId, DateTime assignedDate, DateTime? endDate = null, decimal? workloadPercentage = null, string? notes = null)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_assign_ust";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -635,14 +552,12 @@ namespace TeamsManager.Core.Services
                 IsActive = true
             };
             operation.MarkAsStarted();
-
             User? user = null;
             try
             {
                 _logger.LogInformation("Rozpoczynanie przypisania użytkownika {UserId} do typu szkoły {SchoolTypeId} przez {User}", userId, schoolTypeId, currentUserUpn);
 
-                // Pobierz i zwaliduj użytkownika oraz typ szkoły
-                user = await _userRepository.GetByIdAsync(userId);
+                user = await _userRepository.GetByIdAsync(userId); // Powinno załadować SchoolTypeAssignments
                 var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
 
                 if (user == null || !user.IsActive)
@@ -661,7 +576,6 @@ namespace TeamsManager.Core.Services
                 }
                 operation.TargetEntityName = $"Przypisanie {user.UPN} do {schoolType.ShortName}";
 
-                // Sprawdź czy przypisanie już istnieje
                 var existingAssignment = user.SchoolTypeAssignments.FirstOrDefault(ust => ust.SchoolTypeId == schoolTypeId && ust.IsActive && ust.IsCurrentlyActive);
                 if (existingAssignment != null)
                 {
@@ -671,7 +585,6 @@ namespace TeamsManager.Core.Services
                     return existingAssignment;
                 }
 
-                // Utworzenie nowego przypisania
                 var newUserSchoolType = new UserSchoolType
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -683,22 +596,21 @@ namespace TeamsManager.Core.Services
                     EndDate = endDate,
                     WorkloadPercentage = workloadPercentage,
                     Notes = notes,
-                    IsCurrentlyActive = true,
+                    IsCurrentlyActive = true, // Nowe przypisanie jest domyślnie bieżąco aktywne
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _userSchoolTypeRepository.AddAsync(newUserSchoolType);
                 // SaveChangesAsync() na wyższym poziomie
+                // user.SchoolTypeAssignments.Add(newUserSchoolType); // Jeśli 'user' jest śledzony
 
-                // Aktualizacja historii operacji
                 operation.TargetEntityId = newUserSchoolType.Id;
                 operation.MarkAsCompleted($"Przypisano użytkownika {userId} do typu szkoły {schoolTypeId}.");
                 _logger.LogInformation("Użytkownik {UserId} pomyślnie przypisany do typu szkoły {SchoolTypeId}.", userId, schoolTypeId);
 
-                // Inwalidacja cache'a użytkownika (jego przypisania się zmieniły)
-                InvalidateCache(userId, user.UPN);
-
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false); // Niekoniecznie wpływa na globalne listy, tylko na tego użytkownika
+                // TODO: Rozważyć inwalidację cache dla SchoolTypeService, jeśli cache'uje listę nauczycieli.
                 return newUserSchoolType;
             }
             catch (Exception ex)
@@ -717,8 +629,6 @@ namespace TeamsManager.Core.Services
         public async Task<bool> RemoveUserFromSchoolTypeAsync(string userSchoolTypeId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_ust";
-
-            // Przygotowanie obiektu historii operacji
             var operation = new OperationHistory
             {
                 Id = Guid.NewGuid().ToString(),
@@ -729,15 +639,13 @@ namespace TeamsManager.Core.Services
                 IsActive = true
             };
             operation.MarkAsStarted();
-
             UserSchoolType? assignment = null;
             try
             {
                 _logger.LogInformation("Rozpoczynanie usuwania przypisania UserSchoolType ID: {UserSchoolTypeId} przez {User}", userSchoolTypeId, currentUserUpn);
 
-                // Pobierz przypisanie
                 assignment = await _userSchoolTypeRepository.GetByIdAsync(userSchoolTypeId);
-                if (assignment == null)
+                if (assignment == null) // Nie sprawdzamy IsActive, bo możemy chcieć "naprawić" usunięcie
                 {
                     operation.MarkAsFailed($"Przypisanie o ID '{userSchoolTypeId}' nie zostało znalezione.");
                     await SaveOperationHistoryAsync(operation);
@@ -746,24 +654,32 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Pobierz powiązane obiekty dla celów logowania i cache'a
-                var user = await _userRepository.GetByIdAsync(assignment.UserId);
-                var schoolType = await _schoolTypeRepository.GetByIdAsync(assignment.SchoolTypeId);
+                var user = await _userRepository.GetByIdAsync(assignment.UserId); // Potrzebujemy UPN
+                var schoolType = await _schoolTypeRepository.GetByIdAsync(assignment.SchoolTypeId); // Potrzebujemy ShortName
                 operation.TargetEntityName = $"Przypisanie {user?.UPN ?? assignment.UserId} do {schoolType?.ShortName ?? assignment.SchoolTypeId}";
 
-                // Oznacz przypisanie jako usunięte
-                assignment.MarkAsDeleted(currentUserUpn);
+                if (!assignment.IsActive)
+                {
+                    operation.MarkAsCompleted($"Przypisanie {user?.UPN} do {schoolType?.ShortName} było już nieaktywne.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogInformation("Przypisanie UserSchoolType ID {UserSchoolTypeId} było już nieaktywne.", userSchoolTypeId);
+                    if (user != null) InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
+                    return true;
+                }
+
+
+                assignment.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
                 _userSchoolTypeRepository.Update(assignment);
                 // SaveChangesAsync na wyższym poziomie
 
-                // Aktualizacja historii operacji
                 operation.MarkAsCompleted($"Usunięto przypisanie UserSchoolType ID: {userSchoolTypeId}.");
-                _logger.LogInformation("Przypisanie UserSchoolType ID: {UserSchoolTypeId} pomyślnie usunięte.", userSchoolTypeId);
+                _logger.LogInformation("Przypisanie UserSchoolType ID: {UserSchoolTypeId} pomyślnie usunięte (oznaczone jako nieaktywne).", userSchoolTypeId);
 
-                // Inwalidacja cache'a użytkownika (jego przypisania się zmieniły)
                 if (user != null)
                 {
-                    InvalidateCache(user.Id, user.UPN);
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
                 }
+                // TODO: Rozważyć inwalidację cache dla SchoolTypeService.
 
                 return true;
             }
@@ -796,8 +712,8 @@ namespace TeamsManager.Core.Services
             try
             {
                 _logger.LogInformation("Rozpoczynanie przypisania nauczyciela {TeacherId} do przedmiotu {SubjectId} przez {User}", teacherId, subjectId, currentUserUpn);
-                teacher = await _userRepository.GetByIdAsync(teacherId);
-                var subject = await _subjectRepository.GetByIdAsync(subjectId);
+                teacher = await _userRepository.GetByIdAsync(teacherId); // GetByIdAsync ładuje TaughtSubjects
+                var subject = await _subjectRepository.GetByIdAsync(subjectId); // Zwykłe GetByIdAsync bez szczegółów
 
                 if (teacher == null || !teacher.IsActive || (teacher.Role != UserRole.Nauczyciel && teacher.Role != UserRole.Wicedyrektor && teacher.Role != UserRole.Dyrektor))
                 {
@@ -818,8 +734,8 @@ namespace TeamsManager.Core.Services
                 var existingAssignment = teacher.TaughtSubjects.FirstOrDefault(us => us.SubjectId == subjectId && us.IsActive);
                 if (existingAssignment != null)
                 {
-                    _logger.LogWarning("Nauczyciel {TeacherId} jest już przypisany do przedmiotu {SubjectId}.", teacherId, subjectId);
-                    operation.MarkAsFailed("Nauczyciel już przypisany do tego przedmiotu.");
+                    _logger.LogWarning("Nauczyciel {TeacherId} jest już aktywnie przypisany do przedmiotu {SubjectId}.", teacherId, subjectId);
+                    operation.MarkAsFailed("Nauczyciel już aktywnie przypisany do tego przedmiotu.");
                     await SaveOperationHistoryAsync(operation);
                     return existingAssignment;
                 }
@@ -828,24 +744,23 @@ namespace TeamsManager.Core.Services
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = teacherId,
-                    User = teacher,
+                    User = teacher, // Dla spójności obiektu
                     SubjectId = subjectId,
-                    Subject = subject,
+                    Subject = subject, // Dla spójności obiektu
                     AssignedDate = assignedDate,
                     Notes = notes,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
                 await _userSubjectRepository.AddAsync(newUserSubject);
+                // teacher.TaughtSubjects.Add(newUserSubject); // Jeśli 'teacher' jest śledzony
 
                 operation.TargetEntityId = newUserSubject.Id;
                 operation.MarkAsCompleted($"Przypisano nauczyciela {teacherId} do przedmiotu {subjectId}.");
                 _logger.LogInformation("Nauczyciel {TeacherId} pomyślnie przypisany do przedmiotu {SubjectId}.", teacherId, subjectId);
 
-                InvalidateCache(teacherId, teacher.UPN);
-                // NOWE: Inwalidacja cache dla listy nauczycieli tego przedmiotu
+                InvalidateUserCache(userId: teacher.Id, upn: teacher.UPN, invalidateAllGlobalLists: false);
                 await _subjectService.InvalidateTeachersCacheForSubjectAsync(subjectId);
-                _logger.LogDebug("Zainicjowano inwalidację cache listy nauczycieli dla przedmiotu ID: {SubjectId} po przypisaniu nauczyciela.", subjectId);
 
                 return newUserSubject;
             }
@@ -892,21 +807,29 @@ namespace TeamsManager.Core.Services
                 var subject = await _subjectRepository.GetByIdAsync(assignment.SubjectId);
                 operation.TargetEntityName = $"Przypisanie {user?.UPN ?? assignment.UserId} do {subject?.Name ?? assignment.SubjectId}";
 
-                var subjectIdToInvalidate = assignment.SubjectId; // Zapisz ID przedmiotu przed usunięciem przypisania
+                if (!assignment.IsActive)
+                {
+                    operation.MarkAsCompleted($"Przypisanie {user?.UPN} do {subject?.Name} było już nieaktywne.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogInformation("Przypisanie UserSubject ID {UserSubjectId} było już nieaktywne.", userSubjectId);
+                    if (user != null) InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
+                    await _subjectService.InvalidateTeachersCacheForSubjectAsync(assignment.SubjectId);
+                    return true;
+                }
+
+                var subjectIdToInvalidate = assignment.SubjectId;
 
                 assignment.MarkAsDeleted(currentUserUpn);
                 _userSubjectRepository.Update(assignment);
 
                 operation.MarkAsCompleted($"Usunięto przypisanie UserSubject ID: {userSubjectId}.");
-                _logger.LogInformation("Przypisanie UserSubject ID: {UserSubjectId} pomyślnie usunięte.", userSubjectId);
+                _logger.LogInformation("Przypisanie UserSubject ID: {UserSubjectId} pomyślnie usunięte (oznaczone jako nieaktywne).", userSubjectId);
 
                 if (user != null)
                 {
-                    InvalidateCache(user.Id, user.UPN);
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
                 }
-                // NOWE: Inwalidacja cache dla listy nauczycieli tego przedmiotu
                 await _subjectService.InvalidateTeachersCacheForSubjectAsync(subjectIdToInvalidate);
-                _logger.LogDebug("Zainicjowano inwalidację cache listy nauczycieli dla przedmiotu ID: {SubjectId} po usunięciu przypisania nauczyciela.", subjectIdToInvalidate);
 
                 return true;
             }
@@ -923,19 +846,43 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda unieważnia globalny cache dla użytkowników.</remarks>
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a użytkowników.");
-            InvalidateCache(invalidateAll: true);
+            InvalidateUserCache(invalidateAll: true);
             _logger.LogInformation("Cache użytkowników został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;
         }
 
-        private void InvalidateCache(string? userId = null, string? upn = null, UserRole? role = null, bool allUsersAffected = false, bool specificRoleAffected = false, bool invalidateAll = false)
+        /// <summary>
+        /// Unieważnia cache dla użytkowników.
+        /// Resetuje globalny token dla użytkowników, co unieważnia wszystkie zależne wpisy.
+        /// Dodatkowo, jawnie usuwa klucze cache'a na podstawie podanych parametrów dla natychmiastowego efektu
+        /// oraz globalne klucze list użytkowników.
+        /// </summary>
+        /// <param name="userId">ID użytkownika, którego specyficzny cache (po ID) ma być usunięty (opcjonalnie).</param>
+        /// <param name="upn">UPN użytkownika, którego specyficzny cache (po UPN) ma być usunięty (opcjonalnie).</param>
+        /// <param name="role">Rola użytkownika, dla której cache listy użytkowników (filtrowanej po roli) ma być usunięty (opcjonalnie).</param>
+        /// <param name="oldUpnIfChanged">Poprzedni UPN użytkownika, jeśli uległ zmianie, do usunięcia starego klucza cache (opcjonalnie).</param>
+        /// <param name="oldRoleIfChanged">Poprzednia rola użytkownika, jeśli uległa zmianie, do usunięcia starego klucza cache dla roli (opcjonalnie).</param>
+        /// <param name="isActiveChanged">Czy status IsActive użytkownika uległ zmianie (wpływa na globalne listy).</param>
+        /// <param name="invalidateAllGlobalLists">Czy jawnie unieważnić wszystkie globalne listy użytkowników (np. AllActiveUsersCacheKey, UsersByRoleCacheKeyPrefix dla wszystkich ról). Jeśli true, ignoruje `role` i `oldRoleIfChanged` dla list ról.</param>
+        /// <param name="invalidateAll">Czy unieważnić absolutnie wszystkie klucze związane z użytkownikami (opcjonalnie, domyślnie false). Jeśli true, ma pierwszeństwo.</param>
+        private void InvalidateUserCache(
+            string? userId = null,
+            string? upn = null,
+            UserRole? role = null,
+            string? oldUpnIfChanged = null,
+            UserRole? oldRoleIfChanged = null,
+            bool isActiveChanged = false,
+            bool invalidateAllGlobalLists = false,
+            bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u użytkowników. userId: {UserId}, upn: {UPN}, role: {Role}, allUsersAffected: {AllUsersAffected}, specificRoleAffected: {SpecificRoleAffected}, invalidateAll: {InvalidateAll}",
-                userId, upn, role, allUsersAffected, specificRoleAffected, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u użytkowników. userId: {UserId}, upn: {UPN}, role: {Role}, oldUpn: {OldUpn}, oldRole: {OldRole}, isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists}, invalidateAll: {InvalidateAll}",
+                userId, upn, role, oldUpnIfChanged, oldRoleIfChanged, isActiveChanged, invalidateAllGlobalLists, invalidateAll);
 
+            // 1. Zresetuj CancellationTokenSource
             var oldTokenSource = Interlocked.Exchange(ref _usersCacheTokenSource, new CancellationTokenSource());
             if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
             {
@@ -944,46 +891,68 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Token cache'u dla użytkowników został zresetowany.");
 
+            // 2. Jeśli invalidateAll, usuń wszystko co się da i zakończ.
             if (invalidateAll)
             {
                 _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz dla wszystkich aktywnych użytkowników.");
-
-                if (!string.IsNullOrWhiteSpace(userId)) _cache.Remove(UserByIdCacheKeyPrefix + userId);
-                if (!string.IsNullOrWhiteSpace(upn)) _cache.Remove(UserByUpnCacheKeyPrefix + upn);
-                if (role.HasValue) _cache.Remove(UsersByRoleCacheKeyPrefix + role.Value.ToString());
-                return;
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllActiveUsersCacheKey);
+                foreach (UserRole enumRole in Enum.GetValues(typeof(UserRole)))
+                {
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString());
+                }
+                _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAll=true).");
+                // Można by też iterować po prefiksach UserByIdCacheKeyPrefix i UserByUpnCacheKeyPrefix,
+                // ale to byłoby bardzo kosztowne i token powinien to załatwić.
+                // Usunięcie konkretnych kluczy ID/UPN poniżej, jeśli są znane, jest wystarczające przy invalidateAll.
             }
 
+            // 3. Jawne usuwanie specyficznych kluczy ID i UPN
             if (!string.IsNullOrWhiteSpace(userId))
             {
                 _cache.Remove(UserByIdCacheKeyPrefix + userId);
-                _logger.LogDebug("Usunięto z cache użytkownika o ID: {UserId}", userId);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", UserByIdCacheKeyPrefix, userId);
             }
-
-            if (!string.IsNullOrWhiteSpace(upn))
+            if (!string.IsNullOrWhiteSpace(upn)) // Nowy UPN
             {
                 _cache.Remove(UserByUpnCacheKeyPrefix + upn);
-                _logger.LogDebug("Usunięto z cache użytkownika o UPN: {UPN}", upn);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Upn}", UserByUpnCacheKeyPrefix, upn);
             }
-
-            if (specificRoleAffected && role.HasValue)
+            if (!string.IsNullOrWhiteSpace(oldUpnIfChanged) && oldUpnIfChanged != upn) // Stary UPN, jeśli się zmienił
             {
-                _cache.Remove(UsersByRoleCacheKeyPrefix + role.Value.ToString());
-                _logger.LogDebug("Usunięto z cache użytkowników dla roli: {Role}", role.Value);
+                _cache.Remove(UserByUpnCacheKeyPrefix + oldUpnIfChanged);
+                _logger.LogDebug("Usunięto z cache klucz dla starego UPN: {CacheKey}{OldUpn}", UserByUpnCacheKeyPrefix, oldUpnIfChanged);
             }
 
-            if (allUsersAffected)
+            // 4. Jawne usuwanie kluczy dla list globalnych i po rolach
+            if (invalidateAllGlobalLists || isActiveChanged) // Jeśli zmienił się status aktywności lub wymuszono dla wszystkich list
             {
                 _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz dla wszystkich aktywnych użytkowników z powodu flagi allUsersAffected.");
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey} (z powodu invalidateAllGlobalLists lub isActiveChanged).", AllActiveUsersCacheKey);
+                // Jeśli wszystkie listy są unieważniane, to również listy po rolach
+                foreach (UserRole enumRole in Enum.GetValues(typeof(UserRole)))
+                {
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString());
+                }
+                _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAllGlobalLists lub isActiveChanged).");
+            }
+            else // Jeśli nie unieważniamy wszystkich list globalnie, zajmijmy się rolami
+            {
+                if (role.HasValue) // Nowa rola
+                {
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + role.Value.ToString());
+                    _logger.LogDebug("Usunięto z cache klucz dla roli: {CacheKey}{Role}", UsersByRoleCacheKeyPrefix, role.Value);
+                }
+                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role) // Stara rola, jeśli się zmieniła
+                {
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + oldRoleIfChanged.Value.ToString());
+                    _logger.LogDebug("Usunięto z cache klucz dla starej roli: {CacheKey}{OldRole}", UsersByRoleCacheKeyPrefix, oldRoleIfChanged.Value);
+                }
             }
         }
 
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
-            if (string.IsNullOrEmpty(operation.Id))
-                operation.Id = Guid.NewGuid().ToString();
+            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
             if (string.IsNullOrEmpty(operation.CreatedBy))
                 operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
 

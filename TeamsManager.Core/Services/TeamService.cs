@@ -32,9 +32,9 @@ namespace TeamsManager.Core.Services
         private readonly ISchoolYearRepository _schoolYearRepository;
         private readonly IMemoryCache _cache;
 
-        // Klucze cache
-        private const string AllActiveTeamsCacheKey = "Teams_AllActive"; // Klucz dla GetAllTeamsAsync (które zwraca aktywne)
-        private const string ActiveTeamsSpecificCacheKey = "Teams_Active"; // Dedykowany klucz dla GetActiveTeamsAsync
+        // Definicje kluczy cache
+        private const string AllActiveTeamsCacheKey = "Teams_AllActive"; // Dla GetAllTeamsAsync
+        private const string ActiveTeamsSpecificCacheKey = "Teams_Active"; // Dla GetActiveTeamsAsync
         private const string ArchivedTeamsCacheKey = "Teams_Archived";
         private const string TeamsByOwnerCacheKeyPrefix = "Teams_ByOwner_";
         private const string TeamByIdCacheKeyPrefix = "Team_Id_";
@@ -80,6 +80,151 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
+        public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}. Dołączanie członków: {IncludeMembers}, Dołączanie kanałów: {IncludeChannels}, Wymuszenie odświeżenia: {ForceRefresh}", teamId, includeMembers, includeChannels, forceRefresh);
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogWarning("Próba pobrania zespołu z pustym ID.");
+                return null;
+            }
+
+            string cacheKey = TeamByIdCacheKeyPrefix + teamId;
+            Team? team;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out team) && team != null)
+            {
+                _logger.LogDebug("Zespół ID: {TeamId} znaleziony w cache.", teamId);
+                // Logika dołączania członków/kanałów, jeśli nie są częścią cache'owanego obiektu
+                // Obecnie GetByIdAsync z TeamRepository domyślnie dołącza Members.User i Channels.
+                // Jeśli `includeMembers` lub `includeChannels` jest true, a cache'owany obiekt ich nie ma (lub niekompletne),
+                // można by wymusić odświeżenie lub dociągnąć te dane osobno.
+                // Na potrzeby tej implementacji zakładamy, że obiekt w cache jest kompletny, jeśli został tam umieszczony przez tę metodę.
+                // Aby to zagwarantować, cache'ujemy tylko po pełnym pobraniu z repozytorium.
+                // Jeśli `includeMembers` lub `includeChannels` wymuszałyby różne zapytania do repozytorium,
+                // klucz cache musiałby to odzwierciedlać, np. `Team_Id_{teamId}_Members_Channels`.
+                // Aktualnie TeamRepository.GetByIdAsync ładuje te zależności, więc nie ma potrzeby komplikować klucza.
+            }
+            else
+            {
+                _logger.LogDebug("Zespół ID: {TeamId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", teamId);
+                team = await _teamRepository.GetByIdAsync(teamId); // TeamRepository.GetByIdAsync domyślnie dołącza zależności
+
+                if (team != null && team.IsActive) // Cache'ujemy tylko aktywne zespoły po ID
+                {
+                    _cache.Set(cacheKey, team, GetDefaultCacheEntryOptions());
+                    _logger.LogDebug("Zespół ID: {TeamId} dodany do cache.", teamId);
+                }
+                else
+                {
+                    _cache.Remove(cacheKey);
+                    if (team != null && !team.IsActive)
+                    {
+                        _logger.LogDebug("Zespół ID: {TeamId} jest nieaktywny, nie zostanie zcache'owany po ID.", teamId);
+                        return null; // Zgodnie z logiką, że GetTeamByIdAsync ma zwracać aktywne zespoły, jeśli nie zaznaczono inaczej
+                    }
+                }
+            }
+
+            // Jeśli `includeMembers` i `includeChannels` miałyby wpływać na to, co jest zwracane
+            // a niekoniecznie na to, co jest w cache (bo w cache jest "pełny" obiekt),
+            // tutaj można by filtrować zwracany obiekt.
+            // Jednakże, jeśli GetByIdAsync z repozytorium zawsze ładuje wszystko, to nie ma potrzeby.
+            return team;
+        }
+
+
+        /// <inheritdoc />
+        /// <remarks>Ta metoda zwraca listę aktywnych zespołów (BaseEntity.IsActive = true). Wykorzystuje cache.</remarks>
+        public async Task<IEnumerable<Team>> GetAllTeamsAsync(bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie wszystkich aktywnych zespołów. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
+            string cacheKey = AllActiveTeamsCacheKey;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Wszystkie aktywne zespoły znalezione w cache.");
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Wszystkie aktywne zespoły nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            var teamsFromDb = await _teamRepository.FindAsync(t => t.IsActive);
+
+            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _logger.LogDebug("Wszystkie aktywne zespoły dodane do cache.");
+            return teamsFromDb;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>Ta metoda zwraca listę zespołów o statusie domenowym 'Active' (Team.Status == TeamStatus.Active) oraz IsActive=true. Wykorzystuje cache.</remarks>
+        public async Task<IEnumerable<Team>> GetActiveTeamsAsync(bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie zespołów o statusie 'Active'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
+            string cacheKey = ActiveTeamsSpecificCacheKey;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache.");
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Zespoły o statusie 'Active' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            var teamsFromDb = await _teamRepository.GetActiveTeamsAsync(); // Metoda z repozytorium, która filtruje po TeamStatus.Active i IsActive
+
+            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache.");
+            return teamsFromDb;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>Ta metoda zwraca listę zespołów o statusie domenowym 'Archived' (Team.Status == TeamStatus.Archived) oraz IsActive=true. Wykorzystuje cache.</remarks>
+        public async Task<IEnumerable<Team>> GetArchivedTeamsAsync(bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie zespołów o statusie 'Archived'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
+            string cacheKey = ArchivedTeamsCacheKey;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache.");
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Zespoły o statusie 'Archived' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync(); // Metoda z repozytorium
+
+            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache.");
+            return teamsFromDb;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>Ta metoda zwraca listę aktywnych zespołów (BaseEntity.IsActive = true) dla danego właściciela. Wykorzystuje cache.</remarks>
+        public async Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn, bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}. Wymuszenie odświeżenia: {ForceRefresh}", ownerUpn, forceRefresh);
+            if (string.IsNullOrWhiteSpace(ownerUpn))
+            {
+                _logger.LogWarning("Próba pobrania zespołów dla pustego UPN właściciela.");
+                return Enumerable.Empty<Team>();
+            }
+            string cacheKey = TeamsByOwnerCacheKeyPrefix + ownerUpn;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} znalezione w cache.", ownerUpn);
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", ownerUpn);
+            var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn); // Metoda z repozytorium powinna zwracać tylko IsActive=true
+
+            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} dodane do cache.", ownerUpn);
+            return teamsFromDb;
+        }
+
+        /// <inheritdoc />
         public async Task<Team?> CreateTeamAsync(
             string displayName,
             string description,
@@ -96,7 +241,7 @@ namespace TeamsManager.Core.Services
                 Id = Guid.NewGuid().ToString(),
                 Type = OperationType.TeamCreated,
                 TargetEntityType = nameof(Team),
-                TargetEntityName = displayName, // Początkowa nazwa, może ulec zmianie przez szablon
+                TargetEntityName = displayName,
                 CreatedBy = currentUserUpn,
                 IsActive = true
             };
@@ -145,8 +290,7 @@ namespace TeamsManager.Core.Services
                         if (schoolYear != null && !valuesForTemplate.ContainsKey("RokSzkolny") && template.Placeholders.Contains("RokSzkolny")) valuesForTemplate["RokSzkolny"] = schoolYear.Name;
 
                         finalDisplayName = template.GenerateTeamName(valuesForTemplate);
-                        // Aktualizacja szablonu w repozytorium, aby zapisać UsageCount i LastUsedDate
-                        _teamTemplateRepository.Update(template);
+                        _teamTemplateRepository.Update(template); // Aby zapisać UsageCount, LastUsedDate
                         _logger.LogInformation("Nazwa zespołu wygenerowana z szablonu '{TemplateName}': {FinalDisplayName}", template.Name, finalDisplayName);
                     }
                     else
@@ -161,7 +305,7 @@ namespace TeamsManager.Core.Services
                     description,
                     ownerUser.UPN,
                     visibility,
-                    template?.Id // Lub inna właściwość szablonu, jeśli PowerShell tego wymaga
+                    template?.Id
                 );
                 bool psSuccess = !string.IsNullOrEmpty(externalTeamIdFromPS);
 
@@ -180,11 +324,11 @@ namespace TeamsManager.Core.Services
                         SchoolTypeId = schoolTypeId,
                         SchoolYearId = schoolYearId,
                         ExternalId = externalTeamIdFromPS,
-                        CreatedBy = currentUserUpn,
+                        CreatedBy = currentUserUpn, // Ustawiane też przez DbContext
                         IsActive = true,
-                        SchoolType = schoolType, // Dla spójności obiektu
-                        SchoolYear = schoolYear, // Dla spójności obiektu
-                        Template = template      // Dla spójności obiektu
+                        SchoolType = schoolType,
+                        SchoolYear = schoolYear,
+                        Template = template
                     };
                     if (schoolYear != null) newTeam.AcademicYear = schoolYear.Name;
 
@@ -197,20 +341,21 @@ namespace TeamsManager.Core.Services
                         AddedDate = DateTime.UtcNow,
                         AddedBy = currentUserUpn,
                         IsActive = true,
-                        IsApproved = true,
-                        CreatedBy = currentUserUpn,
+                        IsApproved = true, // Właściciel jest automatycznie zatwierdzony
+                        CreatedBy = currentUserUpn, // Ustawiane też przez DbContext
                         User = ownerUser,
                         Team = newTeam
                     };
                     newTeam.Members.Add(ownerMembership);
 
-                    await _teamRepository.AddAsync(newTeam);
+                    await _teamRepository.AddAsync(newTeam); // Dodaje zespół i powiązane członkostwa (jeśli kaskada)
+                                                             // Lub await _teamMemberRepository.AddAsync(ownerMembership) osobno
 
                     operation.TargetEntityId = newTeam.Id;
                     operation.MarkAsCompleted($"Zespół ID: {newTeam.Id}, External ID: {externalTeamIdFromPS}");
                     _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony i zapisany lokalnie. ID: {TeamId}", finalDisplayName, newTeam.Id);
 
-                    InvalidateCache(newTeam.Id, newTeam.Owner, newStatus: newTeam.Status, allTeamsAffected: true);
+                    InvalidateCache(teamId: newTeam.Id, ownerUpn: newTeam.Owner, newStatus: newTeam.Status, invalidateAll: true);
                     return newTeam;
                 }
                 else
@@ -233,131 +378,6 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<IEnumerable<Team>> GetAllTeamsAsync(bool forceRefresh = false)
-        {
-            _logger.LogInformation("Pobieranie wszystkich aktywnych zespołów. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
-            // Obecna implementacja _teamRepository.FindAsync(t => t.IsActive) zwraca tylko aktywne.
-            // Jeśli "GetAllTeamsAsync" ma oznaczać *wszystkie* (nie tylko aktywne rekordy), predykat powinien być inny
-            // lub metoda w repozytorium powinna być dedykowana. Na razie trzymamy się logiki "aktywne rekordy".
-            string cacheKey = AllActiveTeamsCacheKey;
-
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
-            {
-                _logger.LogDebug("Wszystkie aktywne zespoły znalezione w cache.");
-                return cachedTeams;
-            }
-
-            _logger.LogDebug("Wszystkie aktywne zespoły nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
-            var teamsFromDb = await _teamRepository.FindAsync(t => t.IsActive); // Filtruje po BaseEntity.IsActive
-
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Wszystkie aktywne zespoły dodane do cache.");
-            return teamsFromDb;
-        }
-
-        /// <inheritdoc />
-        public async Task<IEnumerable<Team>> GetActiveTeamsAsync(bool forceRefresh = false)
-        {
-            _logger.LogInformation("Pobieranie zespołów o statusie 'Active'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
-            string cacheKey = ActiveTeamsSpecificCacheKey;
-
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
-            {
-                _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache.");
-                return cachedTeams;
-            }
-
-            _logger.LogDebug("Zespoły o statusie 'Active' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
-            var teamsFromDb = await _teamRepository.GetActiveTeamsAsync(); // Metoda z repozytorium
-
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache.");
-            return teamsFromDb;
-        }
-
-        /// <inheritdoc />
-        public async Task<IEnumerable<Team>> GetArchivedTeamsAsync(bool forceRefresh = false)
-        {
-            _logger.LogInformation("Pobieranie zespołów o statusie 'Archived'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
-            string cacheKey = ArchivedTeamsCacheKey;
-
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
-            {
-                _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache.");
-                return cachedTeams;
-            }
-
-            _logger.LogDebug("Zespoły o statusie 'Archived' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
-            var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync(); // Metoda z repozytorium
-
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache.");
-            return teamsFromDb;
-        }
-
-        /// <inheritdoc />
-        public async Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn, bool forceRefresh = false)
-        {
-            _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}. Wymuszenie odświeżenia: {ForceRefresh}", ownerUpn, forceRefresh);
-            if (string.IsNullOrWhiteSpace(ownerUpn))
-            {
-                _logger.LogWarning("Próba pobrania zespołów dla pustego UPN właściciela.");
-                return Enumerable.Empty<Team>();
-            }
-            string cacheKey = TeamsByOwnerCacheKeyPrefix + ownerUpn;
-
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
-            {
-                _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} znalezione w cache.", ownerUpn);
-                return cachedTeams;
-            }
-
-            _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", ownerUpn);
-            var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn);
-
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Zespoły dla właściciela {OwnerUpn} dodane do cache.", ownerUpn);
-            return teamsFromDb;
-        }
-
-        /// <inheritdoc />
-        public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false)
-        {
-            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}. Dołączanie członków: {IncludeMembers}, Dołączanie kanałów: {IncludeChannels}, Wymuszenie odświeżenia: {ForceRefresh}", teamId, includeMembers, includeChannels, forceRefresh);
-            if (string.IsNullOrWhiteSpace(teamId))
-            {
-                _logger.LogWarning("Próba pobrania zespołu z pustym ID.");
-                return null;
-            }
-
-            // Klucz cache będzie zawsze ten sam dla danego ID, niezależnie od flag include*.
-            // Repozytorium TeamRepository.GetByIdAsync domyślnie dołącza Members.User i Channels.
-            string cacheKey = TeamByIdCacheKeyPrefix + teamId;
-
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out Team? cachedTeam))
-            {
-                _logger.LogDebug("Zespół ID: {TeamId} znaleziony w cache.", teamId);
-                // Jeśli cache'owany obiekt nie zawierałby domyślnie Members/Channels, tutaj byłaby logika ich dociągania.
-                // Ale TeamRepository.GetByIdAsync je dołącza, więc obiekt w cache powinien być kompletny.
-                return cachedTeam;
-            }
-
-            _logger.LogDebug("Zespół ID: {TeamId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", teamId);
-            var teamFromDb = await _teamRepository.GetByIdAsync(teamId);
-
-            if (teamFromDb != null)
-            {
-                _cache.Set(cacheKey, teamFromDb, GetDefaultCacheEntryOptions());
-                _logger.LogDebug("Zespół ID: {TeamId} dodany do cache.", teamId);
-            }
-            else
-            {
-                _cache.Remove(cacheKey);
-            }
-            return teamFromDb;
-        }
-
-        /// <inheritdoc />
         public async Task<bool> UpdateTeamAsync(Team teamToUpdate)
         {
             if (teamToUpdate == null || string.IsNullOrWhiteSpace(teamToUpdate.Id))
@@ -365,7 +385,6 @@ namespace TeamsManager.Core.Services
                 _logger.LogError("Próba aktualizacji zespołu z nieprawidłowymi danymi (null lub brak ID).");
                 throw new ArgumentNullException(nameof(teamToUpdate));
             }
-
 
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
             var operation = new OperationHistory
@@ -386,45 +405,55 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                existingTeam = await _teamRepository.GetByIdAsync(teamToUpdate.Id);
-                if (existingTeam == null || !existingTeam.IsActive) // Sprawdzamy też IsActive rekordu
+                existingTeam = await _teamRepository.GetByIdAsync(teamToUpdate.Id); // Powinien załadować powiązania
+                if (existingTeam == null || !existingTeam.IsActive)
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamToUpdate.Id}' nie istnieje lub jest nieaktywny (rekord).");
                     _logger.LogWarning("Nie można zaktualizować zespołu ID {TeamId} - nie istnieje lub jest nieaktywny (rekord).", teamToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingTeam.DisplayName; // Nazwa przed aktualizacją
+                operation.TargetEntityName = existingTeam.DisplayName;
                 oldOwnerUpn = existingTeam.Owner;
                 oldStatus = existingTeam.Status;
 
-                // TODO: PowerShellService call - Aktualizacja w Microsoft Teams
-                // bool psSuccess = await _powerShellService.UpdateTeamPropertiesAsync(existingTeam.ExternalId, teamToUpdate.DisplayName, teamToUpdate.Description);
-                bool psSuccess = true;
+                // Walidacja nowego właściciela, jeśli się zmienił
+                if (existingTeam.Owner != teamToUpdate.Owner)
+                {
+                    var newOwnerUser = await _userRepository.GetUserByUpnAsync(teamToUpdate.Owner);
+                    if (newOwnerUser == null || !newOwnerUser.IsActive)
+                    {
+                        operation.MarkAsFailed($"Nowy właściciel '{teamToUpdate.Owner}' nie istnieje lub jest nieaktywny.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie można zaktualizować zespołu: Nowy właściciel '{NewOwnerUPN}' nie istnieje lub jest nieaktywny.", teamToUpdate.Owner);
+                        return false;
+                    }
+                }
+
+                bool psSuccess = await _powerShellService.UpdateTeamPropertiesAsync(existingTeam.ExternalId ?? teamToUpdate.Id, teamToUpdate.DisplayName, teamToUpdate.Description, teamToUpdate.Visibility);
 
                 if (psSuccess)
                 {
                     existingTeam.DisplayName = teamToUpdate.DisplayName;
                     existingTeam.Description = teamToUpdate.Description;
                     existingTeam.Owner = teamToUpdate.Owner;
+                    existingTeam.Visibility = teamToUpdate.Visibility;
+                    existingTeam.RequiresApproval = teamToUpdate.RequiresApproval;
+                    existingTeam.MaxMembers = teamToUpdate.MaxMembers;
+                    // Pamiętaj o aktualizacji SchoolTypeId, SchoolYearId, TemplateId, AcademicYear, Semester, itd. jeśli mają być edytowalne
                     existingTeam.SchoolTypeId = teamToUpdate.SchoolTypeId;
                     existingTeam.SchoolYearId = teamToUpdate.SchoolYearId;
                     existingTeam.TemplateId = teamToUpdate.TemplateId;
-                    existingTeam.Visibility = teamToUpdate.Visibility;
-                    existingTeam.RequiresApproval = teamToUpdate.RequiresApproval;
-                    // Należy zaktualizować inne potrzebne właściwości
+                    existingTeam.AcademicYear = teamToUpdate.AcademicYear;
+                    existingTeam.Semester = teamToUpdate.Semester;
                     existingTeam.MarkAsModified(currentUserUpn);
 
                     _teamRepository.Update(existingTeam);
 
-                    operation.TargetEntityName = existingTeam.DisplayName; // Nazwa po aktualizacji
+                    operation.TargetEntityName = existingTeam.DisplayName;
                     operation.MarkAsCompleted($"Zespół ID: {existingTeam.Id} zaktualizowany.");
                     _logger.LogInformation("Zespół ID: {TeamId} pomyślnie zaktualizowany.", existingTeam.Id);
 
-                    InvalidateCache(existingTeam.Id, existingTeam.Owner, oldStatus, existingTeam.Status, allTeamsAffected: true);
-                    if (oldOwnerUpn != null && oldOwnerUpn != existingTeam.Owner)
-                    {
-                        InvalidateCache(ownerUpn: oldOwnerUpn, allTeamsAffected: true); // Inwaliduj też dla starego właściciela
-                    }
+                    InvalidateCache(teamId: existingTeam.Id, ownerUpn: existingTeam.Owner, oldStatus: oldStatus, newStatus: existingTeam.Status, oldOwnerUpnIfChanged: oldOwnerUpn, invalidateAll: true);
                     return true;
                 }
                 else
@@ -464,37 +493,37 @@ namespace TeamsManager.Core.Services
             try
             {
                 team = await _teamRepository.GetByIdAsync(teamId);
-                if (team == null)
+                if (team == null) // Nie sprawdzamy IsActive, bo możemy chcieć "naprawić" archiwizację nieaktywnego rekordu
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje.");
                     _logger.LogWarning("Nie można zarchiwizować zespołu ID {TeamId} - nie istnieje.", teamId);
                     return false;
                 }
-                operation.TargetEntityName = team.DisplayName;
+                operation.TargetEntityName = team.DisplayName; // Nazwa przed potencjalną zmianą przez Archive()
 
-                if (team.Status == TeamStatus.Archived)
+                if (team.Status == TeamStatus.Archived && !team.IsActive)
                 {
-                    operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {team.Id}) był już zarchiwizowany.");
-                    _logger.LogInformation("Zespół ID {TeamId} był już zarchiwizowany.", teamId);
-                    InvalidateCache(teamId, team.Owner, oldStatus: TeamStatus.Archived, newStatus: TeamStatus.Archived, allTeamsAffected: true);
+                    operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {team.Id}) był już zarchiwizowany i nieaktywny.");
+                    _logger.LogInformation("Zespół ID {TeamId} był już zarchiwizowany i nieaktywny.", teamId);
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: TeamStatus.Archived, newStatus: TeamStatus.Archived, invalidateAll: true);
                     return true;
                 }
 
-                // TODO: PowerShellService call - Archiwizacja w Microsoft Teams
                 bool psSuccess = await _powerShellService.ArchiveTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
-                    var oldDisplayName = team.DisplayName; // Zapisz starą nazwę przed modyfikacją
-                    team.Archive(reason, currentUserUpn);
+                    var oldDisplayName = team.DisplayName;
+                    var oldStatus = team.Status;
+                    team.Archive(reason, currentUserUpn); // Metoda modelu aktualizuje Status, IsActive i DisplayName
                     _teamRepository.Update(team);
 
-                    operation.TargetEntityName = oldDisplayName; // Logujemy oryginalną nazwę
+                    operation.TargetEntityName = oldDisplayName;
                     operation.OperationDetails = $"Zespół '{oldDisplayName}' zarchiwizowany jako '{team.DisplayName}'. Powód: {reason}";
                     operation.MarkAsCompleted(operation.OperationDetails);
                     _logger.LogInformation("Zespół ID {TeamId} pomyślnie zarchiwizowany.", teamId);
 
-                    InvalidateCache(teamId, team.Owner, oldStatus: TeamStatus.Active, newStatus: TeamStatus.Archived, allTeamsAffected: true);
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: oldStatus, newStatus: team.Status, invalidateAll: true);
                     return true;
                 }
                 else
@@ -533,7 +562,7 @@ namespace TeamsManager.Core.Services
             Team? team = null;
             try
             {
-                team = await _teamRepository.GetByIdAsync(teamId);
+                team = await _teamRepository.GetByIdAsync(teamId); // GetByIdAsync zwraca obiekt niezależnie od IsActive
                 if (team == null)
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje.");
@@ -541,33 +570,32 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                string originalNameBeforeArchiveAttempt = team.DisplayName.StartsWith("ARCHIWALNY - ")
+                string nameForLog = team.DisplayName.StartsWith("ARCHIWALNY - ")
                     ? team.DisplayName.Substring("ARCHIWALNY - ".Length)
                     : team.DisplayName;
-                operation.TargetEntityName = originalNameBeforeArchiveAttempt;
+                operation.TargetEntityName = nameForLog;
 
-
-                if (team.Status == TeamStatus.Active)
+                if (team.Status == TeamStatus.Active && team.IsActive)
                 {
                     operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {team.Id}) był już aktywny.");
                     _logger.LogInformation("Zespół ID {TeamId} był już aktywny.", teamId);
-                    InvalidateCache(teamId, team.Owner, oldStatus: TeamStatus.Active, newStatus: TeamStatus.Active, allTeamsAffected: true);
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: TeamStatus.Active, newStatus: TeamStatus.Active, invalidateAll: true);
                     return true;
                 }
 
-                // TODO: PowerShellService call - Przywrócenie w Microsoft Teams
                 bool psSuccess = await _powerShellService.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
-                    team.Restore(currentUserUpn);
+                    var oldStatus = team.Status;
+                    team.Restore(currentUserUpn); // Metoda modelu aktualizuje Status, IsActive i DisplayName
                     _teamRepository.Update(team);
 
                     operation.TargetEntityName = team.DisplayName; // Nazwa po przywróceniu
                     operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {team.Id}) przywrócony.");
                     _logger.LogInformation("Zespół ID {TeamId} pomyślnie przywrócony.", teamId);
 
-                    InvalidateCache(teamId, team.Owner, oldStatus: TeamStatus.Archived, newStatus: TeamStatus.Active, allTeamsAffected: true);
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: oldStatus, newStatus: team.Status, invalidateAll: true);
                     return true;
                 }
                 else
@@ -616,18 +644,18 @@ namespace TeamsManager.Core.Services
                 }
                 operation.TargetEntityName = team.DisplayName;
 
-                // TODO: PowerShellService call - Usunięcie zespołu w Microsoft Teams
                 bool psSuccess = await _powerShellService.DeleteTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
-                    var oldStatus = team.Status;
-                    team.MarkAsDeleted(currentUserUpn);
+                    var oldStatus = team.Status; // Zapisz stary status na potrzeby inwalidacji cache
+                    team.MarkAsDeleted(currentUserUpn); // To ustawi IsActive = false
+                                                        // Można rozważyć dodatkowe ustawienie Statusu, np. na "Deleted" jeśli taki istnieje
                     _teamRepository.Update(team);
 
                     operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {teamId}) oznaczony jako usunięty.");
                     _logger.LogInformation("Zespół ID {TeamId} pomyślnie oznaczony jako usunięty.", teamId);
-                    InvalidateCache(teamId, team.Owner, oldStatus: oldStatus, allTeamsAffected: true);
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: oldStatus, newStatus: team.Status, invalidateAll: true);
                     return true;
                 }
                 else
@@ -669,11 +697,17 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Dodawanie użytkownika {UserUPN} do zespołu ID {TeamId} z rolą {Role} przez {CurrentUser}", userUpn, teamId, role, currentUserUpn);
 
-                team = await _teamRepository.GetByIdAsync(teamId); // Powinno dołączyć Members
-                if (team == null || !team.IsActive)
+                team = await _teamRepository.GetByIdAsync(teamId);
+                if (team == null || !team.IsActive) // Sprawdzamy IsActive rekordu Team
                 {
-                    operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub jest nieaktywny.");
-                    _logger.LogWarning("Nie można dodać członka: Zespół o ID {TeamId} nie istnieje lub jest nieaktywny.", teamId);
+                    operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub jest nieaktywny (rekord).");
+                    _logger.LogWarning("Nie można dodać członka: Zespół o ID {TeamId} nie istnieje lub jest nieaktywny (rekord).", teamId);
+                    return null;
+                }
+                if (team.Status != TeamStatus.Active) // Sprawdzamy status domenowy
+                {
+                    operation.MarkAsFailed($"Zespół o ID '{teamId}' nie jest aktywny (status: {team.Status}).");
+                    _logger.LogWarning("Nie można dodać członka: Zespół o ID {TeamId} nie jest aktywny (status: {TeamStatus}).", teamId, team.Status);
                     return null;
                 }
                 operation.TargetEntityName = $"Członek {userUpn} do zespołu {team.DisplayName}";
@@ -686,11 +720,11 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                if (team.HasMember(user.Id))
+                if (team.HasMember(user.Id)) // Metoda HasMember sprawdza aktywne członkostwa aktywnych użytkowników
                 {
-                    operation.MarkAsFailed($"Użytkownik '{userUpn}' jest już członkiem zespołu '{team.DisplayName}'.");
-                    _logger.LogWarning("Nie można dodać członka: Użytkownik {UserUPN} jest już członkiem zespołu {TeamDisplayName}.", userUpn, team.DisplayName);
-                    return team.GetMembership(user.Id);
+                    operation.MarkAsFailed($"Użytkownik '{userUpn}' jest już aktywnym członkiem zespołu '{team.DisplayName}'.");
+                    _logger.LogWarning("Nie można dodać członka: Użytkownik {UserUPN} jest już aktywnym członkiem zespołu {TeamDisplayName}.", userUpn, team.DisplayName);
+                    return team.GetMembership(user.Id); // Zwróć istniejące członkostwo
                 }
 
                 if (!team.CanAddMoreMembers())
@@ -700,7 +734,6 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // TODO: PowerShellService call - Dodanie członka w Microsoft Teams
                 bool psSuccess = await _powerShellService.AddUserToTeamAsync(team.ExternalId ?? team.Id, user.UPN, role.ToString());
 
                 if (psSuccess)
@@ -718,24 +751,20 @@ namespace TeamsManager.Core.Services
                         ApprovedDate = !team.RequiresApproval ? DateTime.UtcNow : null,
                         ApprovedBy = !team.RequiresApproval ? currentUserUpn : null,
                         CreatedBy = currentUserUpn,
-                        User = user,
-                        Team = team
+                        User = user, // Dla spójności obiektu, jeśli nie jest automatycznie ładowany
+                        Team = team   // Dla spójności obiektu
                     };
 
-                    // Dodanie do kolekcji i zapis przez repozytorium TeamMember
-                    // lub przez aktualizację Team, jeśli kaskada jest skonfigurowana.
-                    // Bezpieczniej jest dodać przez dedykowane repozytorium TeamMember.
                     await _teamMemberRepository.AddAsync(newMember);
-                    // Jeśli _teamMemberRepository.AddAsync nie robi SaveChanges,
-                    // to Team.Members może nie być zaktualizowane w obiekcie team pobranym z repozytorium.
-                    // Dla spójności obiektu 'team' można go dodać do kolekcji, jeśli nie jest śledzony przez kontekst w inny sposób.
-                    // team.Members.Add(newMember); // Opcjonalne, jeśli Team jest śledzony i zmiana kolekcji zostanie wykryta.
+                    // SaveChangesAsync na wyższym poziomie
+                    // Jeśli obiekt 'team' jest śledzony, można dodać do jego kolekcji
+                    // team.Members.Add(newMember);
 
                     operation.TargetEntityId = newMember.Id;
                     operation.MarkAsCompleted($"Użytkownik '{userUpn}' dodany do zespołu '{team.DisplayName}' jako {role}.");
                     _logger.LogInformation("Użytkownik {UserUPN} pomyślnie dodany do zespołu {TeamDisplayName}.", userUpn, team.DisplayName);
 
-                    InvalidateCache(teamId, team.Owner); // Inwaliduj cache dla tego zespołu
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, invalidateAll: false); // Niekoniecznie allTeamsAffected, tylko ten konkretny zespół
                     return newMember;
                 }
                 else
@@ -770,21 +799,30 @@ namespace TeamsManager.Core.Services
                 IsActive = true
             };
             operation.MarkAsStarted();
-            Team? team = null;
+            Team? team = null; // Zadeklaruj poza blokiem try, aby użyć w finally
 
             try
             {
                 _logger.LogInformation("Usuwanie użytkownika ID {UserId} z zespołu ID {TeamId} przez {CurrentUser}", userId, teamId, currentUserUpn);
 
-                team = await _teamRepository.GetByIdAsync(teamId); // GetByIdAsync repozytorium dołącza Members
+                team = await _teamRepository.GetByIdAsync(teamId);
                 if (team == null || !team.IsActive)
                 {
-                    operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub jest nieaktywny.");
-                    _logger.LogWarning("Nie można usunąć członka: Zespół o ID {TeamId} nie istnieje lub jest nieaktywny.", teamId);
+                    operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub jest nieaktywny (rekord).");
+                    _logger.LogWarning("Nie można usunąć członka: Zespół o ID {TeamId} nie istnieje lub jest nieaktywny (rekord).", teamId);
                     return false;
                 }
 
-                var memberToRemove = team.GetMembership(userId);
+                // Sprawdzenie statusu domenowego
+                if (team.Status != TeamStatus.Active)
+                {
+                    operation.MarkAsFailed($"Nie można modyfikować członków zespołu '{team.DisplayName}', który nie jest aktywny (status: {team.Status}).");
+                    _logger.LogWarning("Nie można usunąć członka: Zespół '{TeamDisplayName}' nie jest aktywny (status: {TeamStatus}).", team.DisplayName, team.Status);
+                    return false;
+                }
+
+
+                var memberToRemove = team.GetMembership(userId); // Metoda GetMembership powinna zwrócić aktywne członkostwo aktywnego użytkownika
                 if (memberToRemove == null)
                 {
                     operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie jest (aktywnym) członkiem zespołu '{team.DisplayName}'.");
@@ -801,20 +839,18 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                // TODO: PowerShellService call - Usunięcie członka w Microsoft Teams
-                bool psSuccess = await _powerShellService.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN); // Zakładamy, że User nie jest null
+                bool psSuccess = await _powerShellService.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN); // Zakładamy, że User nie jest null (sprawdzone przez GetMembership)
 
                 if (psSuccess)
                 {
-                    memberToRemove.RemoveFromTeam("Usunięty przez serwis", currentUserUpn);
-                    _teamMemberRepository.Update(memberToRemove);
-                    // team.Members.Remove(memberToRemove); // Usunięcie z kolekcji, jeśli EF Core nie robi tego automatycznie
-                    // _teamRepository.Update(team); // Oznacz zespół jako zmodyfikowany
+                    memberToRemove.RemoveFromTeam("Usunięty przez serwis", currentUserUpn); // To ustawia RemovedDate i ModifiedBy
+                    _teamMemberRepository.Update(memberToRemove); // Oznacz do aktualizacji
+                    // Zmiany zostaną zapisane na wyższym poziomie.
 
                     operation.MarkAsCompleted($"Użytkownik '{memberToRemove.User?.UPN}' usunięty z zespołu '{team.DisplayName}'.");
                     _logger.LogInformation("Użytkownik ID {UserId} pomyślnie usunięty z zespołu {TeamDisplayName}.", userId, team.DisplayName);
 
-                    InvalidateCache(teamId, team.Owner); // Inwaliduj cache dla tego zespołu
+                    InvalidateCache(teamId: teamId, ownerUpn: team.Owner, invalidateAll: false); // Wystarczy unieważnić ten zespół
                     return true;
                 }
                 else
@@ -837,6 +873,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
+        /// <remarks>Ta metoda unieważnia globalny cache dla zespołów.</remarks>
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a zespołów.");
@@ -845,12 +882,24 @@ namespace TeamsManager.Core.Services
             return Task.CompletedTask;
         }
 
-        // Prywatna metoda do unieważniania cache.
-        private void InvalidateCache(string? teamId = null, string? ownerUpn = null, TeamStatus? oldStatus = null, TeamStatus? newStatus = null, bool allTeamsAffected = false, bool invalidateAll = false)
+        /// <summary>
+        /// Unieważnia cache dla zespołów.
+        /// Resetuje globalny token dla zespołów, co unieważnia wszystkie zależne wpisy.
+        /// Jawnie usuwa klucze cache'a na podstawie podanych parametrów dla natychmiastowego efektu
+        /// oraz globalne klucze list zespołów.
+        /// </summary>
+        /// <param name="teamId">ID zespołu, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
+        /// <param name="ownerUpn">UPN właściciela, którego cache zespołów (filtrowanych po właścicielu) ma być usunięty (opcjonalnie).</param>
+        /// <param name="oldStatus">Poprzedni status zespołu, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="newStatus">Nowy status zespołu, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="oldOwnerUpnIfChanged">Poprzedni UPN właściciela, jeśli uległ zmianie (opcjonalnie).</param>
+        /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z zespołami (opcjonalnie, domyślnie false).</param>
+        private void InvalidateCache(string? teamId = null, string? ownerUpn = null, TeamStatus? oldStatus = null, TeamStatus? newStatus = null, string? oldOwnerUpnIfChanged = null, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u zespołów. teamId: {TeamId}, ownerUpn: {OwnerUpn}, oldStatus: {OldStatus}, newStatus: {NewStatus}, allTeamsAffected: {AllTeamsAffected}, invalidateAll: {InvalidateAll}",
-                teamId, ownerUpn, oldStatus, newStatus, allTeamsAffected, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u zespołów. teamId: {TeamId}, ownerUpn: {OwnerUpn}, oldStatus: {OldStatus}, newStatus: {NewStatus}, oldOwnerUpnIfChanged: {OldOwner}, invalidateAll: {InvalidateAll}",
+                teamId, ownerUpn, oldStatus, newStatus, oldOwnerUpnIfChanged, invalidateAll);
 
+            // 1. Zresetuj CancellationTokenSource
             var oldTokenSource = Interlocked.Exchange(ref _teamsCacheTokenSource, new CancellationTokenSource());
             if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
             {
@@ -859,48 +908,47 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Token cache'u dla zespołów został zresetowany.");
 
-            // Reset tokenu powinien unieważnić wszystkie powiązane wpisy.
-            // Poniższe jawne usuwanie jest dla pewności i natychmiastowego efektu,
-            // jeśli token działa z opóźnieniem lub chcemy być bardzo precyzyjni.
+            // 2. Zawsze usuń globalne klucze list
+            _cache.Remove(AllActiveTeamsCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllActiveTeamsCacheKey);
+            _cache.Remove(ActiveTeamsSpecificCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", ActiveTeamsSpecificCacheKey);
+            _cache.Remove(ArchivedTeamsCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", ArchivedTeamsCacheKey);
 
-            if (invalidateAll) // Używane przy Create, Delete, lub globalnym Refresh
+            // 3. Jeśli invalidateAll jest true, to wystarczy, bo token załatwi resztę
+            if (invalidateAll)
             {
-                _cache.Remove(AllActiveTeamsCacheKey);
-                _cache.Remove(ActiveTeamsSpecificCacheKey);
-                _cache.Remove(ArchivedTeamsCacheKey);
-                // Nie usuwamy kluczy per-właściciel globalnie, bo to byłoby zbyt kosztowne,
-                // chyba że mamy mechanizm śledzenia wszystkich użytych kluczy ownerUpn.
-                // Token powinien sobie z tym poradzić.
-                _logger.LogDebug("Usunięto z cache klucze dla list zespołów (AllActive, Active, Archived).");
+                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u zespołów.");
+                // Można by tu również iterować i usuwać wszystkie klucze z prefiksami, ale token jest bardziej efektywny globalnie.
             }
 
+            // 4. Usuń klucz dla konkretnego zespołu, jeśli podano ID
             if (!string.IsNullOrWhiteSpace(teamId))
             {
                 _cache.Remove(TeamByIdCacheKeyPrefix + teamId);
-                _logger.LogDebug("Usunięto z cache zespół o ID: {TeamId}", teamId);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", TeamByIdCacheKeyPrefix, teamId);
             }
 
+            // 5. Usuń klucz dla zespołów danego właściciela, jeśli podano UPN
             if (!string.IsNullOrWhiteSpace(ownerUpn))
             {
                 _cache.Remove(TeamsByOwnerCacheKeyPrefix + ownerUpn);
-                _logger.LogDebug("Usunięto z cache zespoły dla właściciela: {OwnerUpn}", ownerUpn);
+                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, ownerUpn);
             }
 
-            // Jeśli status się zmienił, co wpływa na listy Active/Archived
-            if (oldStatus.HasValue && newStatus.HasValue && oldStatus != newStatus || allTeamsAffected && !invalidateAll)
+            // 6. Jeśli właściciel się zmienił, usuń cache także dla starego właściciela
+            if (!string.IsNullOrWhiteSpace(oldOwnerUpnIfChanged) && oldOwnerUpnIfChanged != ownerUpn)
             {
-                _cache.Remove(ActiveTeamsSpecificCacheKey);
-                _cache.Remove(ArchivedTeamsCacheKey);
-                _cache.Remove(AllActiveTeamsCacheKey); // Ogólna lista też może być dotknięta (jeśli filtruje po statusie niejawnie)
-                _logger.LogDebug("Usunięto z cache klucze dla list aktywnych i zarchiwizowanych zespołów z powodu zmiany statusu lub flagi allTeamsAffected.");
+                _cache.Remove(TeamsByOwnerCacheKeyPrefix + oldOwnerUpnIfChanged);
+                _logger.LogDebug("Usunięto z cache klucz dla starego właściciela: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, oldOwnerUpnIfChanged);
             }
-            // Uwaga: Zmiany w kanałach lub członkach (poza dodaniem/usunięciem członka bezpośrednio przez TeamService)
-            // które modyfikują obiekt Team w cache (jeśli GetTeamByIdAsync cache'uje z tymi zależnościami),
-            // powinny również prowadzić do inwalidacji TeamByIdCacheKeyPrefix + teamId.
-            // To wymagałoby komunikacji między serwisami lub bardziej zaawansowanego mechanizmu inwalidacji.
+
+            // Globalne klucze list (AllActiveTeamsCacheKey, ActiveTeamsSpecificCacheKey, ArchivedTeamsCacheKey)
+            // są już usuwane na początku, więc nie ma potrzeby ich ponownego usuwania tutaj,
+            // nawet jeśli status się zmienił. Reset tokenu i jawne usunięcie globalnych list powinno wystarczyć.
         }
 
-        // Metoda pomocnicza do zapisu OperationHistory
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
