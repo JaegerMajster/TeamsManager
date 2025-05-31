@@ -15,15 +15,17 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="departmentId">Identyfikator działu.</param>
         /// <param name="includeSubDepartments">Czy dołączyć poddziały.</param>
         /// <param name="includeUsers">Czy dołączyć użytkowników przypisanych do działu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt Department lub null, jeśli nie znaleziono.</returns>
-        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments = false, bool includeUsers = false);
+        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments = false, bool includeUsers = false, bool forceRefresh = false);
 
         /// <summary>
-        /// Asynchronicznie pobiera wszystkie działy (tylko najwyższy poziom lub wszystkie, w zależności od implementacji).
+        /// Asynchronicznie pobiera wszystkie aktywne działy.
         /// </summary>
         /// <param name="onlyRootDepartments">Czy pobrać tylko działy najwyższego poziomu (bez rodzica).</param>
-        /// <returns>Kolekcja wszystkich (lub głównych) działów.</returns>
-        Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments = false);
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja wszystkich (lub głównych) aktywnych działów.</returns>
+        Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments = false, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie tworzy nowy dział.
@@ -47,25 +49,31 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> UpdateDepartmentAsync(Department departmentToUpdate);
 
         /// <summary>
-        /// Asynchronicznie usuwa dział (logicznie lub fizycznie).
-        /// Należy uwzględnić logikę OnDelete.Restrict dla użytkowników i poddziałów.
+        /// Asynchronicznie usuwa dział (logicznie).
         /// </summary>
         /// <param name="departmentId">Identyfikator działu do usunięcia.</param>
-        /// <returns>True, jeśli usunięcie się powiodło.</returns>
+        /// <returns>True, jeśli usunięcie (dezaktywacja) się powiodło.</returns>
         Task<bool> DeleteDepartmentAsync(string departmentId);
 
         /// <summary>
-        /// Asynchronicznie pobiera wszystkie poddziały dla danego działu nadrzędnego.
+        /// Asynchronicznie pobiera wszystkie aktywne poddziały dla danego działu nadrzędnego.
         /// </summary>
         /// <param name="parentDepartmentId">Identyfikator działu nadrzędnego.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja poddziałów.</returns>
-        Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId);
+        Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich aktywnych użytkowników przypisanych bezpośrednio do danego działu.
         /// </summary>
         /// <param name="departmentId">Identyfikator działu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja użytkowników.</returns>
-        Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId);
+        Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId, bool forceRefresh = false);
+
+        /// <summary>
+        /// Odświeża cache działów (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

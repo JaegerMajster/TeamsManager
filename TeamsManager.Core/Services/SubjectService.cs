@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
@@ -11,16 +14,34 @@ using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Services
 {
+    /// <summary>
+    /// Serwis odpowiedzialny za logikę biznesową przedmiotów.
+    /// Implementuje cache'owanie dla często odpytywanych danych.
+    /// </summary>
     public class SubjectService : ISubjectService
     {
         private readonly IGenericRepository<Subject> _subjectRepository;
-        private readonly IGenericRepository<SchoolType> _schoolTypeRepository; // Do walidacji DefaultSchoolTypeId
-        private readonly IGenericRepository<UserSubject> _userSubjectRepository; // Do GetTeachersForSubjectAsync
-        private readonly IUserRepository _userRepository; // Do GetTeachersForSubjectAsync
+        private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
+        private readonly IGenericRepository<UserSubject> _userSubjectRepository;
+        private readonly IUserRepository _userRepository;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SubjectService> _logger;
+        private readonly IMemoryCache _cache;
 
+        // Klucze cache
+        private const string AllSubjectsCacheKey = "Subjects_AllActive";
+        private const string SubjectByIdCacheKeyPrefix = "Subject_Id_";
+        private const string TeachersForSubjectCacheKeyPrefix = "Subject_Teachers_Id_";
+        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(30);
+        private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5); // Dla list nauczycieli
+
+        // Token do unieważniania cache'u dla przedmiotów
+        private static CancellationTokenSource _subjectsCacheTokenSource = new CancellationTokenSource();
+
+        /// <summary>
+        /// Konstruktor serwisu przedmiotów.
+        /// </summary>
         public SubjectService(
             IGenericRepository<Subject> subjectRepository,
             IGenericRepository<SchoolType> schoolTypeRepository,
@@ -28,7 +49,8 @@ namespace TeamsManager.Core.Services
             IUserRepository userRepository,
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
-            ILogger<SubjectService> logger)
+            ILogger<SubjectService> logger,
+            IMemoryCache memoryCache)
         {
             _subjectRepository = subjectRepository ?? throw new ArgumentNullException(nameof(subjectRepository));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
@@ -37,25 +59,93 @@ namespace TeamsManager.Core.Services
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
         }
 
-        public async Task<Subject?> GetSubjectByIdAsync(string subjectId)
+        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions(TimeSpan? duration = null)
         {
-            _logger.LogInformation("Pobieranie przedmiotu o ID: {SubjectId}", subjectId);
-            var subject = await _subjectRepository.GetByIdAsync(subjectId);
-            if (subject != null && !string.IsNullOrEmpty(subject.DefaultSchoolTypeId) && subject.DefaultSchoolType == null)
+            return new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(duration ?? _defaultCacheDuration)
+                .AddExpirationToken(new CancellationChangeToken(_subjectsCacheTokenSource.Token));
+        }
+
+        /// <inheritdoc />
+        public async Task<Subject?> GetSubjectByIdAsync(string subjectId, bool forceRefresh = false)
+        {
+            _logger.LogInformation("Pobieranie przedmiotu o ID: {SubjectId}. Wymuszenie odświeżenia: {ForceRefresh}", subjectId, forceRefresh);
+            if (string.IsNullOrWhiteSpace(subjectId))
             {
-                subject.DefaultSchoolType = await _schoolTypeRepository.GetByIdAsync(subject.DefaultSchoolTypeId);
+                _logger.LogWarning("Próba pobrania przedmiotu z pustym ID.");
+                return null;
             }
-            return subject;
+
+            string cacheKey = SubjectByIdCacheKeyPrefix + subjectId;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out Subject? cachedSubject))
+            {
+                _logger.LogDebug("Przedmiot ID: {SubjectId} znaleziony w cache.", subjectId);
+                // Jeśli DefaultSchoolType nie jest załadowany w obiekcie z cache (np. z powodu wcześniejszego zapisu bez niego)
+                // a jest potrzebny, można go tu dociągnąć. Jednakże, GetByIdAsync repozytorium powinno dbać o spójność.
+                // Dla uproszczenia zakładamy, że obiekt w cache jest kompletny lub repozytorium dostarcza co trzeba.
+                // Alternatywnie, można by cache'ować tylko ID i kluczowe pola, a resztę dociągać zawsze.
+                if (cachedSubject != null && !string.IsNullOrEmpty(cachedSubject.DefaultSchoolTypeId) && cachedSubject.DefaultSchoolType == null)
+                {
+                    _logger.LogDebug("Dociąganie DefaultSchoolType dla przedmiotu {SubjectId} z cache.", subjectId);
+                    cachedSubject.DefaultSchoolType = await _schoolTypeRepository.GetByIdAsync(cachedSubject.DefaultSchoolTypeId);
+                }
+                return cachedSubject;
+            }
+
+            _logger.LogDebug("Przedmiot ID: {SubjectId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", subjectId);
+            var subjectFromDb = await _subjectRepository.GetByIdAsync(subjectId);
+
+            if (subjectFromDb != null)
+            {
+                if (!string.IsNullOrEmpty(subjectFromDb.DefaultSchoolTypeId) && subjectFromDb.DefaultSchoolType == null)
+                {
+                    subjectFromDb.DefaultSchoolType = await _schoolTypeRepository.GetByIdAsync(subjectFromDb.DefaultSchoolTypeId);
+                }
+                _cache.Set(cacheKey, subjectFromDb, GetDefaultCacheEntryOptions());
+                _logger.LogDebug("Przedmiot ID: {SubjectId} dodany do cache.", subjectId);
+            }
+            else
+            {
+                _cache.Remove(cacheKey);
+            }
+
+            return subjectFromDb;
         }
 
-        public async Task<IEnumerable<Subject>> GetAllActiveSubjectsAsync()
+        /// <inheritdoc />
+        public async Task<IEnumerable<Subject>> GetAllActiveSubjectsAsync(bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie wszystkich aktywnych przedmiotów.");
-            return await _subjectRepository.FindAsync(s => s.IsActive);
+            _logger.LogInformation("Pobieranie wszystkich aktywnych przedmiotów. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
+
+            if (!forceRefresh && _cache.TryGetValue(AllSubjectsCacheKey, out IEnumerable<Subject>? cachedSubjects) && cachedSubjects != null)
+            {
+                _logger.LogDebug("Wszystkie aktywne przedmioty znalezione w cache.");
+                return cachedSubjects;
+            }
+
+            _logger.LogDebug("Wszystkie aktywne przedmioty nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            var subjectsFromDb = await _subjectRepository.FindAsync(s => s.IsActive);
+
+            // Opcjonalne załadowanie DefaultSchoolType dla każdego przedmiotu, jeśli nie jest ładowane domyślnie przez FindAsync
+            foreach (var subject in subjectsFromDb)
+            {
+                if (!string.IsNullOrEmpty(subject.DefaultSchoolTypeId) && subject.DefaultSchoolType == null)
+                {
+                    subject.DefaultSchoolType = await _schoolTypeRepository.GetByIdAsync(subject.DefaultSchoolTypeId);
+                }
+            }
+
+            _cache.Set(AllSubjectsCacheKey, subjectsFromDb, GetDefaultCacheEntryOptions());
+            _logger.LogDebug("Wszystkie aktywne przedmioty dodane do cache.");
+
+            return subjectsFromDb;
         }
 
+        /// <inheritdoc />
         public async Task<Subject?> CreateSubjectAsync(
             string name,
             string? code = null,
@@ -105,7 +195,7 @@ namespace TeamsManager.Core.Services
                     if (defaultSchoolType == null || !defaultSchoolType.IsActive)
                     {
                         _logger.LogWarning("Podany domyślny typ szkoły (ID: {DefaultSchoolTypeId}) dla przedmiotu '{SubjectName}' nie istnieje lub jest nieaktywny. Pole zostanie zignorowane.", defaultSchoolTypeId, name);
-                        defaultSchoolTypeId = null;
+                        defaultSchoolTypeId = null; // Zerujemy, jeśli nie znaleziono lub nieaktywny
                         defaultSchoolType = null;
                     }
                 }
@@ -129,6 +219,8 @@ namespace TeamsManager.Core.Services
                 operation.TargetEntityId = newSubject.Id;
                 operation.MarkAsCompleted($"Przedmiot ID: {newSubject.Id} ('{newSubject.Name}') przygotowany do utworzenia.");
                 _logger.LogInformation("Przedmiot '{SubjectName}' pomyślnie przygotowany do zapisu. ID: {SubjectId}", name, newSubject.Id);
+
+                InvalidateCache(newSubject.Id);
                 return newSubject;
             }
             catch (Exception ex)
@@ -143,10 +235,15 @@ namespace TeamsManager.Core.Services
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> UpdateSubjectAsync(Subject subjectToUpdate)
         {
             if (subjectToUpdate == null || string.IsNullOrEmpty(subjectToUpdate.Id))
+            {
+                _logger.LogError("Próba aktualizacji przedmiotu z nieprawidłowymi danymi (null lub brak ID).");
                 throw new ArgumentNullException(nameof(subjectToUpdate), "Obiekt przedmiotu lub jego ID nie może być null/pusty.");
+            }
+
 
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
             var operation = new OperationHistory
@@ -158,10 +255,10 @@ namespace TeamsManager.Core.Services
                 CreatedBy = currentUserUpn,
                 IsActive = true
             };
-            // TargetEntityName zostanie ustawiony po pobraniu istniejącego obiektu
-
             operation.MarkAsStarted();
             _logger.LogInformation("Rozpoczynanie aktualizacji przedmiotu ID: {SubjectId} przez {User}", subjectToUpdate.Id, currentUserUpn);
+
+            string? oldDefaultSchoolTypeId = null;
 
             try
             {
@@ -172,12 +269,14 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Nie można zaktualizować przedmiotu ID {SubjectId} - nie istnieje.", subjectToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingSubject.Name; // Ustawienie nazwy encji docelowej (przed zmianą)
+                operation.TargetEntityName = existingSubject.Name;
+                oldDefaultSchoolTypeId = existingSubject.DefaultSchoolTypeId;
+
 
                 if (string.IsNullOrWhiteSpace(subjectToUpdate.Name))
                 {
                     operation.MarkAsFailed("Nazwa przedmiotu nie może być pusta.");
-                    _logger.LogError("Błąd walidacji przy aktualizacji przedmiotu: Nazwa pusta.");
+                    _logger.LogError("Błąd walidacji przy aktualizacji przedmiotu {SubjectId}: Nazwa pusta.", subjectToUpdate.Id);
                     return false;
                 }
 
@@ -203,11 +302,12 @@ namespace TeamsManager.Core.Services
                     else
                     {
                         _logger.LogWarning("Podany domyślny typ szkoły (ID: {DefaultSchoolTypeId}) dla przedmiotu '{SubjectName}' nie istnieje lub jest nieaktywny. Powiązanie z typem szkoły nie zostanie zmienione.", subjectToUpdate.DefaultSchoolTypeId, subjectToUpdate.Name);
-                        // Nie zmieniamy existingSubject.DefaultSchoolTypeId ani existingSubject.DefaultSchoolType,
-                        // zachowując poprzednią wartość.
+                        // Zachowujemy poprzednią wartość DefaultSchoolTypeId, jeśli nowa jest nieprawidłowa
+                        subjectToUpdate.DefaultSchoolTypeId = existingSubject.DefaultSchoolTypeId;
+                        subjectToUpdate.DefaultSchoolType = existingSubject.DefaultSchoolType;
                     }
                 }
-                else
+                else // Jeśli przekazano null lub pusty string dla DefaultSchoolTypeId
                 {
                     existingSubject.DefaultSchoolTypeId = null;
                     existingSubject.DefaultSchoolType = null;
@@ -217,7 +317,6 @@ namespace TeamsManager.Core.Services
                 existingSubject.Code = subjectToUpdate.Code;
                 existingSubject.Description = subjectToUpdate.Description;
                 existingSubject.Hours = subjectToUpdate.Hours;
-                // DefaultSchoolTypeId i DefaultSchoolType są już obsłużone powyżej
                 existingSubject.Category = subjectToUpdate.Category;
                 existingSubject.IsActive = subjectToUpdate.IsActive;
                 existingSubject.MarkAsModified(currentUserUpn);
@@ -227,6 +326,9 @@ namespace TeamsManager.Core.Services
                 operation.TargetEntityName = existingSubject.Name;
                 operation.MarkAsCompleted($"Przedmiot ID: {existingSubject.Id} przygotowany do aktualizacji.");
                 _logger.LogInformation("Przedmiot ID: {SubjectId} pomyślnie przygotowany do aktualizacji.", existingSubject.Id);
+
+                InvalidateCache(existingSubject.Id);
+                // Jeśli DefaultSchoolTypeId się zmieniło, potencjalnie trzeba by unieważnić cache powiązanych SchoolType, ale to poza zakresem tego serwisu.
                 return true;
             }
             catch (Exception ex)
@@ -241,6 +343,7 @@ namespace TeamsManager.Core.Services
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> DeleteSubjectAsync(string subjectId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
@@ -255,19 +358,27 @@ namespace TeamsManager.Core.Services
             };
             operation.MarkAsStarted();
             _logger.LogInformation("Usuwanie (dezaktywacja) przedmiotu ID: {SubjectId}", subjectId);
+            Subject? subject = null;
             try
             {
-                var subject = await _subjectRepository.GetByIdAsync(subjectId);
+                subject = await _subjectRepository.GetByIdAsync(subjectId);
                 if (subject == null)
                 {
-                    // --- POCZĄTEK SUGEROWANEJ POPRAWKI ---
                     operation.MarkAsFailed($"Przedmiot o ID '{subjectId}' nie istnieje.");
-                    // --- KONIEC SUGEROWANEJ POPRAWKI ---
                     _logger.LogWarning("Nie można usunąć przedmiotu ID {SubjectId} - nie istnieje.", subjectId);
                     return false;
                 }
                 operation.TargetEntityName = subject.Name;
 
+                if (!subject.IsActive)
+                {
+                    operation.MarkAsCompleted($"Przedmiot '{subject.Name}' był już nieaktywny.");
+                    _logger.LogInformation("Przedmiot ID {SubjectId} był już nieaktywny.", subjectId);
+                    InvalidateCache(subjectId, true); // Mimo wszystko inwalidujemy, na wypadek zmiany
+                    return true;
+                }
+
+                // Dezaktywacja powiązanych UserSubject (przypisań nauczycieli)
                 var assignments = await _userSubjectRepository.FindAsync(us => us.SubjectId == subjectId && us.IsActive);
                 if (assignments.Any())
                 {
@@ -282,6 +393,8 @@ namespace TeamsManager.Core.Services
                 subject.MarkAsDeleted(currentUserUpn);
                 _subjectRepository.Update(subject);
                 operation.MarkAsCompleted("Przedmiot oznaczony jako usunięty wraz z przypisaniami.");
+
+                InvalidateCache(subjectId, true); // true, bo usunięcie przedmiotu wpływa na listę nauczycieli
                 return true;
             }
             catch (Exception ex)
@@ -296,25 +409,93 @@ namespace TeamsManager.Core.Services
             }
         }
 
-        public async Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId)
+        /// <inheritdoc />
+        public async Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
+            _logger.LogInformation("Pobieranie nauczycieli dla przedmiotu ID: {SubjectId}. Wymuszenie odświeżenia: {ForceRefresh}", subjectId, forceRefresh);
+            if (string.IsNullOrWhiteSpace(subjectId))
+            {
+                _logger.LogWarning("Próba pobrania nauczycieli dla pustego ID przedmiotu.");
+                return Enumerable.Empty<User>();
+            }
+
+            string cacheKey = TeachersForSubjectCacheKeyPrefix + subjectId;
+
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<User>? cachedTeachers) && cachedTeachers != null)
+            {
+                _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} znalezieni w cache.", subjectId);
+                return cachedTeachers;
+            }
+
+            _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", subjectId);
             var subject = await _subjectRepository.GetByIdAsync(subjectId);
             if (subject == null || !subject.IsActive)
             {
-                _logger.LogWarning("Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny.", subjectId);
+                _logger.LogWarning("Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny podczas pobierania nauczycieli.", subjectId);
+                _cache.Set(cacheKey, Enumerable.Empty<User>(), GetDefaultCacheEntryOptions(_shortCacheDuration)); // Cache'ujemy pustą listę
                 return Enumerable.Empty<User>();
             }
 
             var assignments = await _userSubjectRepository.FindAsync(us =>
                 us.SubjectId == subjectId &&
                 us.IsActive &&
-                us.User != null &&
+                us.User != null && // Upewniamy się, że User jest załadowany/istnieje
                 us.User.IsActive);
 
-            return assignments.Select(us => us.User).Where(u => u != null).Distinct().ToList()!;
+            var teachersFromDb = assignments.Select(us => us.User).Where(u => u != null).Distinct().ToList()!;
+
+            _cache.Set(cacheKey, teachersFromDb, GetDefaultCacheEntryOptions(_shortCacheDuration));
+            _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} dodani do cache.", subjectId);
+
+            return teachersFromDb;
         }
 
+        /// <inheritdoc />
+        public Task RefreshCacheAsync()
+        {
+            _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a przedmiotów.");
+            InvalidateCache(invalidateAll: true);
+            _logger.LogInformation("Cache przedmiotów został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
+            return Task.CompletedTask;
+        }
+
+        // Prywatna metoda do unieważniania cache.
+        private void InvalidateCache(string? subjectId = null, bool invalidateTeachersList = false, bool invalidateAll = false)
+        {
+            _logger.LogDebug("Inwalidacja cache'u przedmiotów. subjectId: {SubjectId}, invalidateTeachersList: {InvalidateTeachersList}, invalidateAll: {InvalidateAll}",
+                subjectId, invalidateTeachersList, invalidateAll);
+
+            var oldTokenSource = Interlocked.Exchange(ref _subjectsCacheTokenSource, new CancellationTokenSource());
+            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            {
+                oldTokenSource.Cancel();
+                oldTokenSource.Dispose();
+            }
+            _logger.LogDebug("Token cache'u dla przedmiotów został zresetowany.");
+
+            if (invalidateAll)
+            {
+                _cache.Remove(AllSubjectsCacheKey);
+                _logger.LogDebug("Usunięto z cache klucz dla wszystkich przedmiotów.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(subjectId))
+            {
+                _cache.Remove(SubjectByIdCacheKeyPrefix + subjectId);
+                _logger.LogDebug("Usunięto z cache przedmiot o ID: {SubjectId}", subjectId);
+                if (invalidateTeachersList)
+                {
+                    _cache.Remove(TeachersForSubjectCacheKeyPrefix + subjectId);
+                    _logger.LogDebug("Usunięto z cache listę nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
+                }
+            }
+            // Należy pamiętać, że jeśli modyfikacje w UserSubject (np. w UserService) mają wpływ na
+            // listę nauczycieli dla przedmiotu, cache dla TeachersForSubjectCacheKeyPrefix + subjectId
+            // powinien być również unieważniony z tamtego miejsca, lub SubjectService powinien
+            // udostępnić publiczną metodę do inwalidacji tego konkretnego klucza.
+        }
+
+        // Metoda pomocnicza do zapisu OperationHistory
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
@@ -336,7 +517,7 @@ namespace TeamsManager.Core.Services
                 existingLog.OperationDetails = operation.OperationDetails;
                 existingLog.TargetEntityName = operation.TargetEntityName;
                 existingLog.TargetEntityId = operation.TargetEntityId;
-                existingLog.Type = operation.Type;
+                existingLog.Type = operation.Type; // Upewnij się, że typ jest aktualizowany, jeśli jest ustawiany dynamicznie
                 existingLog.ProcessedItems = operation.ProcessedItems;
                 existingLog.FailedItems = operation.FailedItems;
                 existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");

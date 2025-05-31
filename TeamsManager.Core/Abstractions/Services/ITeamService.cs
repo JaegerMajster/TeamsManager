@@ -1,5 +1,5 @@
 ﻿using TeamsManager.Core.Models;
-using TeamsManager.Core.Enums; // Dla TeamMemberRole
+using TeamsManager.Core.Enums;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -11,13 +11,12 @@ namespace TeamsManager.Core.Abstractions.Services
     public interface ITeamService
     {
         /// <summary>
-        /// Asynchronicznie tworzy nowy zespół na podstawie podanych parametrów,
-        /// wykonuje operację w Microsoft Teams oraz zapisuje encję w lokalnej bazie danych.
-        /// Loguje operację w historii.
+        /// Asynchronicznie tworzy nowy zespół.
         /// </summary>
         /// <param name="displayName">Nazwa wyświetlana nowego zespołu.</param>
         /// <param name="description">Opis zespołu.</param>
         /// <param name="ownerUpn">UPN użytkownika, który zostanie właścicielem zespołu.</param>
+        /// <param name="visibility">Widoczność zespołu.</param>
         /// <param name="teamTemplateId">Opcjonalny identyfikator szablonu zespołu do użycia.</param>
         /// <param name="schoolTypeId">Opcjonalny identyfikator typu szkoły.</param>
         /// <param name="schoolYearId">Opcjonalny identyfikator roku szkolnego.</param>
@@ -34,10 +33,33 @@ namespace TeamsManager.Core.Abstractions.Services
             Dictionary<string, string>? additionalTemplateValues = null);
 
         /// <summary>
-        /// Asynchronicznie pobiera wszystkie zespoły.
+        /// Asynchronicznie pobiera wszystkie aktywne zespoły.
         /// </summary>
-        /// <returns>Kolekcja wszystkich zespołów.</returns>
-        Task<IEnumerable<Team>> GetAllTeamsAsync();
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja wszystkich aktywnych zespołów.</returns>
+        Task<IEnumerable<Team>> GetAllTeamsAsync(bool forceRefresh = false); // Nazwa sugeruje wszystkie, implementacja repozytorium może filtrować aktywne
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie zespoły o statusie Aktywny.
+        /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja aktywnych zespołów.</returns>
+        Task<IEnumerable<Team>> GetActiveTeamsAsync(bool forceRefresh = false);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie zespoły o statusie Zarchiwizowany.
+        /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja zarchiwizowanych zespołów.</returns>
+        Task<IEnumerable<Team>> GetArchivedTeamsAsync(bool forceRefresh = false);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie zespoły, których właścicielem jest użytkownik o podanym UPN.
+        /// </summary>
+        /// <param name="ownerUpn">UPN właściciela.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja zespołów należących do danego właściciela.</returns>
+        Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera zespół na podstawie jego ID, opcjonalnie dołączając powiązane encje.
@@ -45,20 +67,19 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="teamId">Identyfikator zespołu.</param>
         /// <param name="includeMembers">Czy dołączyć członków zespołu.</param>
         /// <param name="includeChannels">Czy dołączyć kanały zespołu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt Team lub null, jeśli nie znaleziono.</returns>
-        Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false);
+        Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false);
 
         /// <summary>
-        /// Asynchronicznie aktualizuje dane zespołu w Microsoft Teams i w lokalnej bazie danych.
-        /// Loguje operację w historii.
+        /// Asynchronicznie aktualizuje dane zespołu.
         /// </summary>
         /// <param name="team">Obiekt Team z zaktualizowanymi danymi.</param>
         /// <returns>True, jeśli aktualizacja się powiodła.</returns>
         Task<bool> UpdateTeamAsync(Team team);
 
         /// <summary>
-        /// Asynchronicznie archiwizuje zespół w Microsoft Teams i w lokalnej bazie danych.
-        /// Loguje operację w historii.
+        /// Asynchronicznie archiwizuje zespół.
         /// </summary>
         /// <param name="teamId">Identyfikator zespołu do archiwizacji.</param>
         /// <param name="reason">Powód archiwizacji.</param>
@@ -66,24 +87,21 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> ArchiveTeamAsync(string teamId, string reason);
 
         /// <summary>
-        /// Asynchronicznie przywraca zarchiwizowany zespół w Microsoft Teams i w lokalnej bazie danych.
-        /// Loguje operację w historii.
+        /// Asynchronicznie przywraca zarchiwizowany zespół.
         /// </summary>
         /// <param name="teamId">Identyfikator zespołu do przywrócenia.</param>
         /// <returns>True, jeśli przywrócenie się powiodło.</returns>
         Task<bool> RestoreTeamAsync(string teamId);
 
         /// <summary>
-        /// Asynchronicznie usuwa zespół (logicznie lub fizycznie, w zależności od konfiguracji)
-        /// w Microsoft Teams i w lokalnej bazie danych. Loguje operację w historii.
+        /// Asynchronicznie usuwa zespół (logicznie).
         /// </summary>
         /// <param name="teamId">Identyfikator zespołu do usunięcia.</param>
         /// <returns>True, jeśli usunięcie się powiodło.</returns>
-        Task<bool> DeleteTeamAsync(string teamId); // Na razie może być to "soft delete"
+        Task<bool> DeleteTeamAsync(string teamId);
 
         /// <summary>
         /// Asynchronicznie dodaje użytkownika jako członka do zespołu.
-        /// Loguje operację w historii.
         /// </summary>
         /// <param name="teamId">Identyfikator zespołu.</param>
         /// <param name="userUpn">UPN użytkownika do dodania.</param>
@@ -93,14 +111,15 @@ namespace TeamsManager.Core.Abstractions.Services
 
         /// <summary>
         /// Asynchronicznie usuwa członka z zespołu.
-        /// Loguje operację w historii.
         /// </summary>
         /// <param name="teamId">Identyfikator zespołu.</param>
         /// <param name="userId">Identyfikator użytkownika do usunięcia.</param>
         /// <returns>True, jeśli usunięcie członka się powiodło.</returns>
         Task<bool> RemoveMemberAsync(string teamId, string userId);
 
-        // Można dodać więcej metod, np. do zarządzania kanałami,
-        // choć zarządzanie kanałami może też trafić do dedykowanego IChannelService.
+        /// <summary>
+        /// Odświeża cache zespołów (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

@@ -2,6 +2,7 @@
 using TeamsManager.Core.Enums;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System; // Dla DateTime w AssignUserToSchoolTypeAsync i AssignTeacherToSubjectAsync
 
 namespace TeamsManager.Core.Abstractions.Services
 {
@@ -14,21 +15,32 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie pobiera użytkownika na podstawie jego ID.
         /// </summary>
         /// <param name="userId">Identyfikator użytkownika.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt User lub null, jeśli nie znaleziono.</returns>
-        Task<User?> GetUserByIdAsync(string userId);
+        Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera użytkownika na podstawie jego User Principal Name (UPN).
         /// </summary>
         /// <param name="upn">UPN użytkownika.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt User lub null, jeśli nie znaleziono.</returns>
-        Task<User?> GetUserByUpnAsync(string upn);
+        Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich aktywnych użytkowników.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich aktywnych użytkowników.</returns>
-        Task<IEnumerable<User>> GetAllActiveUsersAsync();
+        Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkich aktywnych użytkowników o określonej roli.
+        /// </summary>
+        /// <param name="role">Rola użytkowników do pobrania.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <returns>Kolekcja użytkowników o podanej roli.</returns>
+        Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie tworzy nowego użytkownika.
@@ -38,7 +50,7 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="upn">UPN użytkownika.</param>
         /// <param name="role">Rola systemowa użytkownika.</param>
         /// <param name="departmentId">Identyfikator działu, do którego użytkownik ma być przypisany.</param>
-        /// <param name="sendWelcomeEmail">Opcjonalnie, czy wysłać email powitalny (logika do implementacji).</param>
+        /// <param name="sendWelcomeEmail">Opcjonalnie, czy wysłać email powitalny.</param>
         /// <returns>Utworzony obiekt User lub null, jeśli operacja się nie powiodła.</returns>
         Task<User?> CreateUserAsync(
             string firstName,
@@ -115,7 +127,9 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <returns>True, jeśli usunięcie się powiodło.</returns>
         Task<bool> RemoveTeacherFromSubjectAsync(string userSubjectId);
 
-        // TODO: Rozważyć metody do importu użytkowników z CSV
-        // Task<IEnumerable<User>> ImportUsersFromCsvAsync(string filePath);
+        /// <summary>
+        /// Odświeża cache użytkowników (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

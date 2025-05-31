@@ -13,14 +13,16 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie pobiera przedmiot na podstawie jego ID.
         /// </summary>
         /// <param name="subjectId">Identyfikator przedmiotu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt Subject lub null, jeśli nie znaleziono.</returns>
-        Task<Subject?> GetSubjectByIdAsync(string subjectId);
+        Task<Subject?> GetSubjectByIdAsync(string subjectId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne przedmioty.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich aktywnych przedmiotów.</returns>
-        Task<IEnumerable<Subject>> GetAllActiveSubjectsAsync();
+        Task<IEnumerable<Subject>> GetAllActiveSubjectsAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie tworzy nowy przedmiot.
@@ -49,17 +51,23 @@ namespace TeamsManager.Core.Abstractions.Services
 
         /// <summary>
         /// Asynchronicznie usuwa (logicznie) przedmiot.
-        /// Należy rozważyć, co z powiązaniami UserSubject (nauczyciele przypisani do przedmiotu).
+        /// Usuwa również powiązane przypisania nauczycieli do tego przedmiotu (UserSubject).
         /// </summary>
         /// <param name="subjectId">Identyfikator przedmiotu do usunięcia.</param>
         /// <returns>True, jeśli usunięcie (dezaktywacja) się powiodło.</returns>
         Task<bool> DeleteSubjectAsync(string subjectId);
 
         /// <summary>
-        /// Asynchronicznie pobiera wszystkich nauczycieli przypisanych do danego przedmiotu.
+        /// Asynchronicznie pobiera wszystkich aktywnych nauczycieli przypisanych do danego przedmiotu.
         /// </summary>
         /// <param name="subjectId">Identyfikator przedmiotu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja użytkowników (nauczycieli) przypisanych do przedmiotu.</returns>
-        Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId);
+        Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId, bool forceRefresh = false);
+
+        /// <summary>
+        /// Odświeża cache przedmiotów (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

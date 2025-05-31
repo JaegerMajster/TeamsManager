@@ -13,34 +13,39 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie pobiera szablon na podstawie jego ID.
         /// </summary>
         /// <param name="templateId">Identyfikator szablonu.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt TeamTemplate lub null, jeśli nie znaleziono.</returns>
-        Task<TeamTemplate?> GetTemplateByIdAsync(string templateId);
+        Task<TeamTemplate?> GetTemplateByIdAsync(string templateId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne szablony.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich aktywnych szablonów.</returns>
-        Task<IEnumerable<TeamTemplate>> GetAllActiveTemplatesAsync();
+        Task<IEnumerable<TeamTemplate>> GetAllActiveTemplatesAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie szablony uniwersalne.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja aktywnych szablonów uniwersalnych.</returns>
-        Task<IEnumerable<TeamTemplate>> GetUniversalTemplatesAsync();
+        Task<IEnumerable<TeamTemplate>> GetUniversalTemplatesAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie szablony przypisane do konkretnego typu szkoły.
         /// </summary>
         /// <param name="schoolTypeId">Identyfikator typu szkoły.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja aktywnych szablonów dla danego typu szkoły.</returns>
-        Task<IEnumerable<TeamTemplate>> GetTemplatesBySchoolTypeAsync(string schoolTypeId);
+        Task<IEnumerable<TeamTemplate>> GetTemplatesBySchoolTypeAsync(string schoolTypeId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera domyślny szablon dla danego typu szkoły.
         /// </summary>
         /// <param name="schoolTypeId">Identyfikator typu szkoły.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt TeamTemplate lub null.</returns>
-        Task<TeamTemplate?> GetDefaultTemplateForSchoolTypeAsync(string schoolTypeId);
+        Task<TeamTemplate?> GetDefaultTemplateForSchoolTypeAsync(string schoolTypeId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie tworzy nowy szablon zespołu.
@@ -76,6 +81,7 @@ namespace TeamsManager.Core.Abstractions.Services
 
         /// <summary>
         /// Asynchronicznie generuje przykładową nazwę zespołu na podstawie szablonu i dostarczonych wartości.
+        /// Metoda ta może korzystać z cache'owanego obiektu TeamTemplate (przez GetTemplateByIdAsync).
         /// </summary>
         /// <param name="templateId">Identyfikator szablonu.</param>
         /// <param name="values">Słownik wartości dla placeholderów.</param>
@@ -89,5 +95,10 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="newTemplateName">Nowa nazwa dla sklonowanego szablonu.</param>
         /// <returns>Sklonowany obiekt TeamTemplate lub null, jeśli operacja się nie powiodła.</returns>
         Task<TeamTemplate?> CloneTemplateAsync(string originalTemplateId, string newTemplateName);
+
+        /// <summary>
+        /// Odświeża cache szablonów zespołów (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

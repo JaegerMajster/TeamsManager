@@ -1,21 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Text.Json;
-using System.Threading; // Dodano dla CancellationTokenSource
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
-using Microsoft.Extensions.Primitives;
 
 namespace TeamsManager.Core.Services
 {
+    /// <summary>
+    /// Serwis odpowiedzialny za zarządzanie ustawieniami aplikacji.
+    /// Implementuje mechanizm cache'owania dla poprawy wydajności.
+    /// </summary>
     public class ApplicationSettingService : IApplicationSettingService
     {
         private readonly IApplicationSettingRepository _settingsRepository;
@@ -25,7 +28,7 @@ namespace TeamsManager.Core.Services
         private readonly IMemoryCache _cache;
 
         // Definicje kluczy cache
-        private const string AllSettingsCacheKey = "ApplicationSettings_All";
+        private const string AllSettingsCacheKey = "ApplicationSettings_AllActive"; // Zmieniono nazwę dla spójności
         private const string SettingsByCategoryCacheKeyPrefix = "ApplicationSettings_Category_";
         private const string SettingByKeyCacheKeyPrefix = "ApplicationSetting_Key_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
@@ -33,6 +36,9 @@ namespace TeamsManager.Core.Services
         // Token do zarządzania unieważnianiem wpisów cache dla ustawień
         private static CancellationTokenSource _settingsCacheTokenSource = new CancellationTokenSource();
 
+        /// <summary>
+        /// Konstruktor serwisu ustawień aplikacji.
+        /// </summary>
         public ApplicationSettingService(
             IApplicationSettingRepository settingsRepository,
             IOperationHistoryRepository operationHistoryRepository,
@@ -47,6 +53,7 @@ namespace TeamsManager.Core.Services
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
         }
 
+        // Generuje domyślne opcje dla wpisu w pamięci podręcznej.
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
             return new MemoryCacheEntryOptions()
@@ -54,9 +61,10 @@ namespace TeamsManager.Core.Services
                 .AddExpirationToken(new CancellationChangeToken(_settingsCacheTokenSource.Token));
         }
 
-        public async Task<ApplicationSetting?> GetSettingByKeyAsync(string key)
+        /// <inheritdoc />
+        public async Task<ApplicationSetting?> GetSettingByKeyAsync(string key, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie ustawienia aplikacji o kluczu: {Key}", key);
+            _logger.LogInformation("Pobieranie ustawienia aplikacji o kluczu: {Key}. Wymuszenie odświeżenia: {ForceRefresh}", key, forceRefresh);
             if (string.IsNullOrWhiteSpace(key))
             {
                 _logger.LogWarning("Próba pobrania ustawienia z pustym kluczem.");
@@ -65,24 +73,29 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingByKeyCacheKeyPrefix + key;
 
-            if (_cache.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
             {
                 _logger.LogDebug("Ustawienie '{Key}' znalezione w cache.", key);
                 return cachedSetting;
             }
 
-            _logger.LogDebug("Ustawienie '{Key}' nie znalezione w cache. Pobieranie z repozytorium.", key);
-            var settingFromDb = await _settingsRepository.GetSettingByKeyAsync(key);
+            _logger.LogDebug("Ustawienie '{Key}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", key);
+            var settingFromDb = await _settingsRepository.GetSettingByKeyAsync(key); // Zakładamy, że repozytorium zwraca aktywne
 
             if (settingFromDb != null)
             {
                 _cache.Set(cacheKey, settingFromDb, GetDefaultCacheEntryOptions());
                 _logger.LogDebug("Ustawienie '{Key}' dodane do cache.", key);
             }
+            else
+            {
+                _cache.Remove(cacheKey); // Jeśli nie znaleziono, usuń stary wpis z cache
+            }
 
             return settingFromDb;
         }
 
+        /// <inheritdoc />
         public async Task<T?> GetSettingValueAsync<T>(string key, T? defaultValue = default)
         {
             _logger.LogDebug("Pobieranie wartości ustawienia o kluczu: {Key} jako typ {TypeName}", key, typeof(T).Name);
@@ -96,80 +109,31 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                switch (setting.Type)
+                // Pobierz typ bazowy dla nullable types
+                var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+
+                // Konwersja typów jest wykonywana przez metody w modelu ApplicationSetting
+                return setting.Type switch
                 {
-                    case SettingType.String:
-                        if (typeof(T) == typeof(string))
-                            return (T)(object)setting.GetStringValue();
-                        _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType} (String).", key, typeof(T).Name, setting.Type);
-                        return defaultValue;
-
-                    case SettingType.Integer:
-                        if (typeof(T) == typeof(int) || typeof(T) == typeof(int?))
-                            return (T)(object)setting.GetIntValue();
-                        _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType} (Integer).", key, typeof(T).Name, setting.Type);
-                        return defaultValue;
-
-                    case SettingType.Boolean:
-                        if (typeof(T) == typeof(bool) || typeof(T) == typeof(bool?))
-                            return (T)(object)setting.GetBoolValue();
-                        _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType} (Boolean).", key, typeof(T).Name, setting.Type);
-                        return defaultValue;
-
-                    case SettingType.DateTime:
-                        DateTime? parsedDateTime = setting.GetDateTimeValue();
-                        if (parsedDateTime.HasValue)
-                        {
-                            if (typeof(T) == typeof(DateTime) || typeof(T) == typeof(DateTime?))
-                            {
-                                return (T)(object)parsedDateTime.Value;
-                            }
-                        }
-                        else
-                        {
-                            if (typeof(T) == typeof(DateTime?) || defaultValue != null)
-                            {
-                                return defaultValue;
-                            }
-                            _logger.LogWarning("Nie można przekonwertować wartości null z GetDateTimeValue() na nienullowalny typ {TypeName} dla klucza '{Key}'. Zwracanie DateTime.MinValue.", typeof(T).Name, key);
-                            return default(T);
-                        }
-                        _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType} (DateTime).", key, typeof(T).Name, setting.Type);
-                        return defaultValue;
-
-                    case SettingType.Decimal:
-                        if (typeof(T) == typeof(decimal) || typeof(T) == typeof(decimal?))
-                            return (T)(object)setting.GetDecimalValue();
-                        _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType} (Decimal).", key, typeof(T).Name, setting.Type);
-                        return defaultValue;
-
-                    case SettingType.Json:
-                        if (typeof(T).IsClass)
-                        {
-                            try
-                            {
-                                return JsonSerializer.Deserialize<T>(setting.Value, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            }
-                            catch (JsonException jsonEx)
-                            {
-                                _logger.LogWarning(jsonEx, "Błąd deserializacji JSON dla ustawienia '{Key}' do typu {ExpectedType}. Wartość JSON: '{JsonValue}'", key, typeof(T).Name, setting.Value);
-                                return defaultValue;
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Nie można zdeserializować JSON do typu wartościowego '{ExpectedType}' dla ustawienia '{Key}'.", typeof(T).Name, key);
-                            return defaultValue;
-                        }
-                    default:
-                        _logger.LogWarning("Nieznany SettingType '{ActualType}' dla ustawienia '{Key}'.", setting.Type, key);
-                        return defaultValue;
-                }
+                    SettingType.String when targetType == typeof(string) => (T)(object)setting.GetStringValue(),
+                    SettingType.Integer when targetType == typeof(int) => (T)(object)setting.GetIntValue(),
+                    SettingType.Boolean when targetType == typeof(bool) => (T)(object)setting.GetBoolValue(),
+                    SettingType.DateTime when targetType == typeof(DateTime) => (T?)(object?)setting.GetDateTimeValue() ?? defaultValue,
+                    SettingType.Decimal when targetType == typeof(decimal) => (T)(object)setting.GetDecimalValue(),
+                    SettingType.Json when !string.IsNullOrWhiteSpace(setting.Value) =>
+                        JsonSerializer.Deserialize<T>(setting.Value),
+                    _ => LogTypeMismatchAndReturnDefault(key, setting.Type, defaultValue)
+                };
             }
             catch (InvalidCastException ex)
             {
                 _logger.LogError(ex, "Błąd rzutowania typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}. Wartość: '{Value}'",
                                  key, typeof(T).Name, setting.Type, setting.Value);
+                return defaultValue;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Błąd deserializacji JSON dla ustawienia '{Key}'. Wartość: '{Value}'", key, setting.Value);
                 return defaultValue;
             }
             catch (Exception ex)
@@ -179,33 +143,37 @@ namespace TeamsManager.Core.Services
             }
         }
 
+        // Metoda pomocnicza do logowania i zwracania wartości domyślnej przy niezgodności typów
+        private T? LogTypeMismatchAndReturnDefault<T>(string key, SettingType actualType, T? defaultValue)
+        {
+            _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}.", key, typeof(T).Name, actualType);
+            return defaultValue;
+        }
+
+        /// <inheritdoc />
         public async Task<IEnumerable<ApplicationSetting>> GetAllSettingsAsync(bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuś odświeżenie: {ForceRefresh}", forceRefresh);
+            _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
-            if (forceRefresh)
+            if (!forceRefresh && _cache.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
-                _logger.LogDebug("Wymuszono odświeżenie dla wszystkich ustawień. Usuwanie z cache.");
-                _cache.Remove(AllSettingsCacheKey); // Usuwamy stary wpis, jeśli istniał
-            }
-            else if (_cache.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
-            {
-                _logger.LogDebug("Wszystkie ustawienia znalezione w cache.");
+                _logger.LogDebug("Wszystkie aktywne ustawienia znalezione w cache.");
                 return cachedSettings;
             }
 
-            _logger.LogDebug("Wszystkie ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            _logger.LogDebug("Wszystkie aktywne ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
             var settingsFromDb = await _settingsRepository.FindAsync(s => s.IsActive);
 
             _cache.Set(AllSettingsCacheKey, settingsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Wszystkie ustawienia dodane do cache.");
+            _logger.LogDebug("Wszystkie aktywne ustawienia dodane do cache.");
 
             return settingsFromDb;
         }
 
+        /// <inheritdoc />
         public async Task<IEnumerable<ApplicationSetting>> GetSettingsByCategoryAsync(string category, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie aktywnych ustawień aplikacji dla kategorii: {Category}. Wymuś odświeżenie: {ForceRefresh}", category, forceRefresh);
+            _logger.LogInformation("Pobieranie aktywnych ustawień aplikacji dla kategorii: {Category}. Wymuszenie odświeżenia: {ForceRefresh}", category, forceRefresh);
             if (string.IsNullOrWhiteSpace(category))
             {
                 _logger.LogWarning("Próba pobrania ustawień dla pustej kategorii.");
@@ -214,19 +182,14 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingsByCategoryCacheKeyPrefix + category;
 
-            if (forceRefresh)
-            {
-                _logger.LogDebug("Wymuszono odświeżenie dla kategorii '{Category}'. Usuwanie z cache.", category);
-                _cache.Remove(cacheKey);
-            }
-            else if (_cache.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
                 _logger.LogDebug("Ustawienia dla kategorii '{Category}' znalezione w cache.", category);
                 return cachedSettings;
             }
 
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", category);
-            var settingsFromDb = await _settingsRepository.GetSettingsByCategoryAsync(category);
+            var settingsFromDb = await _settingsRepository.GetSettingsByCategoryAsync(category); // Repozytorium powinno filtrować po IsActive
 
             _cache.Set(cacheKey, settingsFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' dodane do cache.", category);
@@ -234,6 +197,7 @@ namespace TeamsManager.Core.Services
             return settingsFromDb;
         }
 
+        /// <inheritdoc />
         public async Task<bool> SaveSettingAsync(string key, string value, SettingType type, string? description = null, string? category = null)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_save_setting";
@@ -241,18 +205,19 @@ namespace TeamsManager.Core.Services
             {
                 Id = Guid.NewGuid().ToString(),
                 TargetEntityType = nameof(ApplicationSetting),
-                TargetEntityId = key,
+                TargetEntityId = key, // Klucz jako tymczasowe ID, jeśli ustawienie jest nowe
                 TargetEntityName = key,
                 CreatedBy = currentUserUpn,
                 IsActive = true
             };
-
+            // Typ operacji zostanie ustawiony poniżej
             _logger.LogInformation("Zapisywanie ustawienia: Klucz={Key}, Wartość='{Value}', Typ={Type} przez {User}", key, value, type, currentUserUpn);
 
             if (string.IsNullOrWhiteSpace(key))
             {
                 _logger.LogError("Nie można zapisać ustawienia: Klucz nie może być pusty.");
-                operation.Type = OperationType.ApplicationSettingUpdated;
+                // Ustawiamy typ przed oznaczeniem jako nieudane
+                operation.Type = OperationType.ApplicationSettingUpdated; // Lub Created, zależnie od intencji
                 operation.MarkAsFailed("Klucz ustawienia nie może być pusty.");
                 await SaveOperationHistoryAsync(operation);
                 return false;
@@ -262,22 +227,24 @@ namespace TeamsManager.Core.Services
             var existingSetting = await _settingsRepository.GetSettingByKeyAsync(key);
             bool success = false;
             string? oldCategory = existingSetting?.Category;
+            string? actualSettingId = existingSetting?.Id;
 
             try
             {
                 if (existingSetting != null)
                 {
                     operation.Type = OperationType.ApplicationSettingUpdated;
-                    operation.TargetEntityId = existingSetting.Id;
+                    operation.TargetEntityId = existingSetting.Id; // Użyj rzeczywistego ID
                     _logger.LogInformation("Aktualizowanie istniejącego ustawienia: {Key}", key);
 
                     existingSetting.Value = value;
                     existingSetting.Type = type;
                     if (description != null) existingSetting.Description = description;
-                    if (category != null) existingSetting.Category = category;
+                    if (category != null) existingSetting.Category = category; // Aktualizacja kategorii
                     existingSetting.MarkAsModified(currentUserUpn);
                     _settingsRepository.Update(existingSetting);
                     operation.MarkAsCompleted($"Ustawienie '{key}' zaktualizowane.");
+                    actualSettingId = existingSetting.Id;
                 }
                 else
                 {
@@ -291,26 +258,28 @@ namespace TeamsManager.Core.Services
                         Type = type,
                         Description = description ?? string.Empty,
                         Category = category ?? "General",
-                        IsRequired = false,
-                        IsVisible = true,
-                        CreatedBy = currentUserUpn,
+                        IsRequired = false, // Domyślne wartości
+                        IsVisible = true,   // Domyślne wartości
+                        CreatedBy = currentUserUpn, // Ustawiane też przez DbContext.SetAuditFields
                         IsActive = true
                     };
                     await _settingsRepository.AddAsync(newSetting);
-                    operation.TargetEntityId = newSetting.Id;
+                    operation.TargetEntityId = newSetting.Id; // Użyj rzeczywistego ID
                     operation.MarkAsCompleted($"Ustawienie '{key}' utworzone.");
-                    existingSetting = newSetting;
+                    actualSettingId = newSetting.Id;
+                    // Dla nowego ustawienia nie ma 'starej' kategorii, więc oldCategory pozostaje null (lub kategorią nowego, jeśli chcemy inwalidować też nową)
+                    oldCategory = null; // Lub newSetting.Category, jeśli tak ma działać inwalidacja
                 }
                 success = true;
                 _logger.LogInformation("Ustawienie '{Key}' pomyślnie przygotowane do zapisu.", key);
 
-                InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory);
-
+                // Inwalidacja cache po udanej operacji
+                InvalidateSettingCache(key, category ?? existingSetting?.Category, oldCategory);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas zapisywania ustawienia {Key}. Wiadomość: {ErrorMessage}", key, ex.Message);
-                if (operation.Type == default(OperationType))
+                if (operation.Type == default(OperationType)) // Upewnij się, że typ jest ustawiony przed MarkAsFailed
                 {
                     operation.Type = existingSetting != null ? OperationType.ApplicationSettingUpdated : OperationType.ApplicationSettingCreated;
                 }
@@ -319,15 +288,23 @@ namespace TeamsManager.Core.Services
             }
             finally
             {
+                if (!string.IsNullOrWhiteSpace(actualSettingId) && operation.TargetEntityId != actualSettingId)
+                {
+                    operation.TargetEntityId = actualSettingId; // Upewnij się, że ID jest poprawne dla historii
+                }
                 await SaveOperationHistoryAsync(operation);
             }
             return success;
         }
 
+        /// <inheritdoc />
         public async Task<bool> UpdateSettingAsync(ApplicationSetting settingToUpdate)
         {
             if (settingToUpdate == null || string.IsNullOrEmpty(settingToUpdate.Id) || string.IsNullOrEmpty(settingToUpdate.Key))
+            {
+                _logger.LogError("Próba aktualizacji ustawienia aplikacji z nieprawidłowymi danymi (null, brak ID lub Klucza).");
                 throw new ArgumentNullException(nameof(settingToUpdate), "Obiekt ustawienia, jego ID lub Klucz nie może być null/pusty.");
+            }
 
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
             var operation = new OperationHistory
@@ -354,14 +331,15 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Nie można zaktualizować ustawienia ID {SettingId} - nie istnieje.", settingToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingSetting.Key;
+                operation.TargetEntityName = existingSetting.Key; // Nazwa przed modyfikacją
                 oldKey = existingSetting.Key;
                 oldCategory = existingSetting.Category;
 
+                // Sprawdzenie unikalności nowego klucza, jeśli został zmieniony
                 if (existingSetting.Key != settingToUpdate.Key)
                 {
                     var conflicting = await _settingsRepository.GetSettingByKeyAsync(settingToUpdate.Key);
-                    if (conflicting != null && conflicting.Id != existingSetting.Id)
+                    if (conflicting != null && conflicting.Id != existingSetting.Id) // Upewnij się, że konflikt nie jest z samym sobą
                     {
                         operation.MarkAsFailed($"Ustawienie o kluczu '{settingToUpdate.Key}' już istnieje.");
                         _logger.LogError("Nie można zaktualizować ustawienia: Klucz '{Key}' już istnieje.", settingToUpdate.Key);
@@ -369,6 +347,7 @@ namespace TeamsManager.Core.Services
                     }
                 }
 
+                // Mapowanie właściwości
                 existingSetting.Key = settingToUpdate.Key;
                 existingSetting.Value = settingToUpdate.Value;
                 existingSetting.Description = settingToUpdate.Description;
@@ -380,15 +359,15 @@ namespace TeamsManager.Core.Services
                 existingSetting.ValidationPattern = settingToUpdate.ValidationPattern;
                 existingSetting.ValidationMessage = settingToUpdate.ValidationMessage;
                 existingSetting.DisplayOrder = settingToUpdate.DisplayOrder;
-                existingSetting.IsActive = settingToUpdate.IsActive;
+                existingSetting.IsActive = settingToUpdate.IsActive; // Pozwalamy na zmianę IsActive
                 existingSetting.MarkAsModified(currentUserUpn);
 
                 _settingsRepository.Update(existingSetting);
-                operation.TargetEntityName = existingSetting.Key;
+                operation.TargetEntityName = existingSetting.Key; // Nazwa po modyfikacji
                 operation.MarkAsCompleted("Ustawienie aplikacji przygotowane do aktualizacji.");
 
                 InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory);
-                if (oldKey != null && oldKey != existingSetting.Key)
+                if (oldKey != null && oldKey != existingSetting.Key) // Jeśli klucz się zmienił, trzeba też usunąć stary klucz z cache
                 {
                     _cache.Remove(SettingByKeyCacheKeyPrefix + oldKey);
                 }
@@ -407,6 +386,7 @@ namespace TeamsManager.Core.Services
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> DeleteSettingAsync(string key)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete_setting";
@@ -415,19 +395,18 @@ namespace TeamsManager.Core.Services
                 Id = Guid.NewGuid().ToString(),
                 Type = OperationType.ApplicationSettingDeleted,
                 TargetEntityType = nameof(ApplicationSetting),
-                TargetEntityId = key,
+                TargetEntityId = key, // Używamy klucza jako tymczasowego ID, jeśli obiekt nie zostanie znaleziony
                 TargetEntityName = key,
                 CreatedBy = currentUserUpn,
                 IsActive = true
             };
             operation.MarkAsStarted();
             _logger.LogInformation("Usuwanie ustawienia o kluczu: {Key}", key);
-            string? categoryOfDeletedSetting = null;
-            string? idOfDeletedSetting = null;
+            ApplicationSetting? setting = null;
 
             try
             {
-                var setting = await _settingsRepository.GetSettingByKeyAsync(key);
+                setting = await _settingsRepository.GetSettingByKeyAsync(key);
                 if (setting == null)
                 {
                     operation.MarkAsFailed($"Ustawienie o kluczu '{key}' nie zostało znalezione.");
@@ -435,86 +414,91 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                operation.TargetEntityId = setting.Id;
-                categoryOfDeletedSetting = setting.Category;
-                idOfDeletedSetting = setting.Id;
-
+                operation.TargetEntityId = setting.Id; // Używamy rzeczywistego ID encji dla historii
 
                 if (!setting.IsActive)
                 {
                     operation.MarkAsCompleted($"Ustawienie '{key}' było już nieaktywne. Brak akcji.");
                     _logger.LogInformation("Ustawienie o kluczu {Key} było już nieaktywne.", key);
-                    InvalidateSettingCache(key, categoryOfDeletedSetting);
+                    InvalidateSettingCache(key, setting.Category); // Mimo wszystko odświeżamy cache
                     return true;
                 }
 
-                setting.MarkAsDeleted(currentUserUpn);
+                setting.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
                 _settingsRepository.Update(setting);
                 operation.MarkAsCompleted("Ustawienie aplikacji oznaczone jako usunięte.");
 
-                InvalidateSettingCache(key, categoryOfDeletedSetting);
-
+                InvalidateSettingCache(key, setting.Category);
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania ustawienia aplikacji o kluczu {Key}. Wiadomość: {ErrorMessage}", key, ex.Message);
-                if (operation != null)
-                {
-                    operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
-                }
+                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
                 return false;
             }
             finally
             {
-                if (operation != null)
-                {
-                    await SaveOperationHistoryAsync(operation);
-                }
+                await SaveOperationHistoryAsync(operation);
             }
         }
 
+        /// <inheritdoc />
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a ustawień aplikacji.");
-
-            // Anuluj stary token, co spowoduje unieważnienie wszystkich powiązanych wpisów
-            var oldTokenSource = Interlocked.Exchange(ref _settingsCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
-            {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose(); // Zwolnij zasoby starego tokenu
-                _logger.LogInformation("Stary CancellationTokenSource dla cache'a ustawień został anulowany i usunięty.");
-            }
-            else
-            {
-                _logger.LogDebug("Nie było aktywnego CancellationTokenSource do anulowania lub był już anulowany.");
-            }
-
+            InvalidateSettingCache(invalidateAll: true);
             _logger.LogInformation("Cache ustawień aplikacji został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;
         }
 
-        private void InvalidateSettingCache(string key, string? category, string? oldCategory = null)
+        // Prywatna metoda do unieważniania cache.
+        private void InvalidateSettingCache(string? key = null, string? category = null, string? oldCategory = null, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache dla klucza: {Key}, kategoria: {Category}, stara kategoria: {OldCategory}", key, category, oldCategory);
-            _cache.Remove(SettingByKeyCacheKeyPrefix + key);
+            _logger.LogDebug("Inwalidacja cache'u ustawień. Klucz: {Key}, Kategoria: {Category}, Stara kategoria: {OldCategory}, Inwaliduj wszystko: {InvalidateAll}",
+                             key, category, oldCategory, invalidateAll);
+
+            // Główny mechanizm inwalidacji poprzez CancellationToken
+            var oldTokenSource = Interlocked.Exchange(ref _settingsCacheTokenSource, new CancellationTokenSource());
+            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            {
+                oldTokenSource.Cancel();
+                oldTokenSource.Dispose();
+            }
+            _logger.LogDebug("Token cache'u dla ustawień aplikacji został zresetowany.");
+
+            // Dodatkowe, bardziej granularne usuwanie kluczy dla natychmiastowego efektu, jeśli jest to pożądane.
+            // Reset tokenu powinien docelowo unieważnić wszystkie zależne wpisy.
+            if (invalidateAll)
+            {
+                _cache.Remove(AllSettingsCacheKey); // Jawne usunięcie klucza listy wszystkich
+                _logger.LogDebug("Usunięto z cache klucz dla wszystkich ustawień aplikacji.");
+                // Można by iterować po znanych kategoriach i usuwać ich klucze, ale token jest bardziej globalny.
+            }
+
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                _cache.Remove(SettingByKeyCacheKeyPrefix + key);
+                _logger.LogDebug("Usunięto z cache ustawienie o kluczu: {Key}", key);
+            }
             if (!string.IsNullOrWhiteSpace(category))
             {
                 _cache.Remove(SettingsByCategoryCacheKeyPrefix + category);
+                _logger.LogDebug("Usunięto z cache ustawienia dla kategorii: {Category}", category);
             }
             if (!string.IsNullOrWhiteSpace(oldCategory) && oldCategory != category)
             {
                 _cache.Remove(SettingsByCategoryCacheKeyPrefix + oldCategory);
+                _logger.LogDebug("Usunięto z cache ustawienia dla starej kategorii: {OldCategory}", oldCategory);
             }
-            _cache.Remove(AllSettingsCacheKey);
-            _logger.LogInformation("Cache dla ustawienia '{Key}' i powiązanych kategorii został zinvalidowany.", key);
-            // Nie ma potrzeby wywoływania _settingsCacheTokenSource.Cancel() tutaj,
-            // ponieważ to unieważniłoby *wszystkie* ustawienia, a chcemy tylko te konkretne.
-            // RefreshCacheAsync() służy do globalnego resetu.
+            if (!invalidateAll) // Jeśli nie było globalnej inwalidacji, a coś się zmieniło, warto też AllSettings usunąć
+            {
+                _cache.Remove(AllSettingsCacheKey);
+                _logger.LogDebug("Usunięto z cache klucz dla wszystkich ustawień aplikacji (prewencyjnie).");
+            }
         }
 
-
+        // Metoda pomocnicza do zapisu OperationHistory
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
@@ -524,6 +508,7 @@ namespace TeamsManager.Core.Services
             var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
             if (existingLog == null)
             {
+                // Ustawienie StartedAt, jeśli operacja jest rozpoczynana i nie ma jeszcze tej daty
                 if (operation.StartedAt == default(DateTime) && (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending))
                 {
                     operation.StartedAt = DateTime.UtcNow;
@@ -532,17 +517,19 @@ namespace TeamsManager.Core.Services
             }
             else
             {
+                // Aktualizacja istniejącego logu
                 existingLog.Status = operation.Status;
                 existingLog.CompletedAt = operation.CompletedAt;
                 existingLog.Duration = operation.Duration;
                 existingLog.ErrorMessage = operation.ErrorMessage;
                 existingLog.ErrorStackTrace = operation.ErrorStackTrace;
                 existingLog.OperationDetails = operation.OperationDetails;
-                existingLog.TargetEntityName = operation.TargetEntityName;
-                existingLog.TargetEntityId = operation.TargetEntityId;
-                existingLog.Type = operation.Type;
+                existingLog.TargetEntityName = operation.TargetEntityName; // Aktualizuj na wypadek zmiany nazwy
+                existingLog.TargetEntityId = operation.TargetEntityId;     // Aktualizuj na wypadek zmiany (chociaż rzadkie)
+                existingLog.Type = operation.Type;                         // Aktualizuj na wypadek zmiany
                 existingLog.ProcessedItems = operation.ProcessedItems;
                 existingLog.FailedItems = operation.FailedItems;
+                // Pozostałe pola, które mogą być aktualizowane
                 existingLog.ParentOperationId = operation.ParentOperationId;
                 existingLog.SequenceNumber = operation.SequenceNumber;
                 existingLog.TotalItems = operation.TotalItems;
@@ -550,6 +537,7 @@ namespace TeamsManager.Core.Services
                 existingLog.UserAgent = operation.UserAgent;
                 existingLog.SessionId = operation.SessionId;
                 existingLog.Tags = operation.Tags;
+
                 existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
                 _operationHistoryRepository.Update(existingLog);
             }

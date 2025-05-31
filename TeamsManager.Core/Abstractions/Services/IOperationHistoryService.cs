@@ -12,14 +12,14 @@ namespace TeamsManager.Core.Abstractions.Services
     public interface IOperationHistoryService
     {
         /// <summary>
-        /// Asynchronicznie loguje nową operację lub aktualizuje istniejącą.
+        /// Asynchronicznie loguje nową operację lub aktualizuje istniejącą, jeśli ID operacji jest już znane.
         /// Tworzy nowy wpis w historii operacji.
         /// </summary>
         /// <param name="type">Typ operacji.</param>
         /// <param name="status">Początkowy status operacji.</param>
         /// <param name="targetEntityType">Typ encji, której dotyczy operacja.</param>
-        /// <param name="targetEntityId">ID encji, której dotyczy operacja.</param>
-        /// <param name="targetEntityName">Nazwa lub opis encji docelowej.</param>
+        /// <param name="targetEntityId">ID encji, której dotyczy operacja (opcjonalne).</param>
+        /// <param name="targetEntityName">Nazwa lub opis encji docelowej (opcjonalne).</param>
         /// <param name="details">Opcjonalne szczegóły operacji (np. w formacie JSON).</param>
         /// <param name="parentOperationId">Opcjonalne ID operacji nadrzędnej.</param>
         /// <returns>Utworzony lub zaktualizowany obiekt OperationHistory.</returns>
@@ -86,12 +86,15 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<IEnumerable<OperationHistory>> GetHistoryByUserAsync(string userUpn, int? count = null);
 
         /// <summary>
-        /// Asynchronicznie pobiera historię operacji w danym zakresie dat i opcjonalnie według typu/statusu.
+        /// Asynchronicznie pobiera historię operacji na podstawie filtrów.
         /// </summary>
-        /// <param name="startDate">Początkowa data zakresu.</param>
-        /// <param name="endDate">Końcowa data zakresu.</param>
+        /// <param name="startDate">Początkowa data zakresu (opcjonalna).</param>
+        /// <param name="endDate">Końcowa data zakresu (opcjonalna).</param>
         /// <param name="operationType">Opcjonalny typ operacji.</param>
         /// <param name="operationStatus">Opcjonalny status operacji.</param>
+        /// <param name="createdBy">Opcjonalny UPN użytkownika, który wykonał operacje.</param>
+        /// <param name="page">Numer strony (dla paginacji).</param>
+        /// <param name="pageSize">Rozmiar strony (dla paginacji).</param>
         /// <returns>Kolekcja pasujących wpisów historii operacji.</returns>
         Task<IEnumerable<OperationHistory>> GetHistoryByFilterAsync(
             DateTime? startDate = null,

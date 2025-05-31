@@ -14,20 +14,23 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie pobiera rok szkolny na podstawie jego ID.
         /// </summary>
         /// <param name="schoolYearId">Identyfikator roku szkolnego.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt SchoolYear lub null, jeśli nie znaleziono.</returns>
-        Task<SchoolYear?> GetSchoolYearByIdAsync(string schoolYearId);
+        Task<SchoolYear?> GetSchoolYearByIdAsync(string schoolYearId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne lata szkolne.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich aktywnych lat szkolnych.</returns>
-        Task<IEnumerable<SchoolYear>> GetAllActiveSchoolYearsAsync();
+        Task<IEnumerable<SchoolYear>> GetAllActiveSchoolYearsAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera bieżący rok szkolny (oznaczony jako IsCurrent = true).
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt SchoolYear lub null, jeśli żaden rok nie jest ustawiony jako bieżący.</returns>
-        Task<SchoolYear?> GetCurrentSchoolYearAsync();
+        Task<SchoolYear?> GetCurrentSchoolYearAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie ustawia dany rok szkolny jako bieżący.
@@ -68,10 +71,14 @@ namespace TeamsManager.Core.Abstractions.Services
 
         /// <summary>
         /// Asynchronicznie usuwa (logicznie) rok szkolny.
-        /// Uwaga: Należy rozważyć, co z zespołami przypisanymi do tego roku.
         /// </summary>
         /// <param name="schoolYearId">Identyfikator roku szkolnego do usunięcia.</param>
         /// <returns>True, jeśli usunięcie (dezaktywacja) się powiodło.</returns>
         Task<bool> DeleteSchoolYearAsync(string schoolYearId);
+
+        /// <summary>
+        /// Odświeża cache lat szkolnych (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

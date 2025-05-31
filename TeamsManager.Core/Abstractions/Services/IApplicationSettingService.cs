@@ -27,8 +27,9 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Może korzystać z cache'a.
         /// </summary>
         /// <param name="key">Klucz ustawienia.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt ApplicationSetting lub null, jeśli nie znaleziono.</returns>
-        Task<ApplicationSetting?> GetSettingByKeyAsync(string key);
+        Task<ApplicationSetting?> GetSettingByKeyAsync(string key, bool forceRefresh = false); // Dodano forceRefresh dla spójności
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne ustawienia aplikacji.

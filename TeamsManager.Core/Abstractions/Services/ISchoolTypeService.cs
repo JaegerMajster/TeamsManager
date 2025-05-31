@@ -13,14 +13,16 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie pobiera typ szkoły na podstawie jego ID.
         /// </summary>
         /// <param name="schoolTypeId">Identyfikator typu szkoły.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt SchoolType lub null, jeśli nie znaleziono.</returns>
-        Task<SchoolType?> GetSchoolTypeByIdAsync(string schoolTypeId);
+        Task<SchoolType?> GetSchoolTypeByIdAsync(string schoolTypeId, bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne typy szkół.
         /// </summary>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich aktywnych typów szkół.</returns>
-        Task<IEnumerable<SchoolType>> GetAllActiveSchoolTypesAsync();
+        Task<IEnumerable<SchoolType>> GetAllActiveSchoolTypesAsync(bool forceRefresh = false);
 
         /// <summary>
         /// Asynchronicznie tworzy nowy typ szkoły.
@@ -47,7 +49,6 @@ namespace TeamsManager.Core.Abstractions.Services
 
         /// <summary>
         /// Asynchronicznie usuwa (logicznie) typ szkoły.
-        /// Uwaga: Należy rozważyć, co z powiązanymi zespołami, szablonami, przypisaniami nauczycieli.
         /// </summary>
         /// <param name="schoolTypeId">Identyfikator typu szkoły do usunięcia.</param>
         /// <returns>True, jeśli usunięcie (dezaktywacja) się powiodło.</returns>
@@ -68,5 +69,10 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="schoolTypeId">ID typu szkoły.</param>
         /// <returns>True, jeśli usunięcie przypisania się powiodło.</returns>
         Task<bool> RemoveViceDirectorFromSchoolTypeAsync(string viceDirectorUserId, string schoolTypeId);
+
+        /// <summary>
+        /// Odświeża cache typów szkół (jeśli jest używany).
+        /// </summary>
+        Task RefreshCacheAsync();
     }
 }

@@ -1,13 +1,14 @@
-﻿using System.Collections.ObjectModel; // Dla PSObject
-using System.Management.Automation;    // Dla PSObject
+﻿using System.Collections.ObjectModel;
+using System.Management.Automation;
 using System.Threading.Tasks;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models; // Dla potencjalnych parametrów User
 
 namespace TeamsManager.Core.Abstractions.Services
 {
     /// <summary>
     /// Interfejs serwisu odpowiedzialnego za wykonywanie operacji PowerShell,
-    /// w szczególności związanych z Microsoft Teams.
+    /// w szczególności związanych z Microsoft Teams i zarządzaniem użytkownikami M365.
     /// </summary>
     public interface IPowerShellService : IDisposable
     {
@@ -24,22 +25,26 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <returns>True, jeśli połączenie zostało pomyślnie nawiązane; w przeciwnym razie false.</returns>
         Task<bool> ConnectToTeamsAsync(string username, string password);
 
-        // Na razie niech ConnectToTeams będzie synchroniczne, jeśli implementacja PowerShellService jest synchroniczna.
-        // Możemy później dodać wersje Async.
-        // bool ConnectToTeams(string username, string password);
-
-
         /// <summary>
         /// Asynchronicznie tworzy nowy zespół w Microsoft Teams.
         /// </summary>
         /// <param name="displayName">Nazwa wyświetlana zespołu.</param>
         /// <param name="description">Opis zespołu.</param>
         /// <param name="ownerUpn">UPN właściciela zespołu.</param>
-        /// <param name="visibility">Widoczność zespołu (np. "Private", "Public"). Domyślnie "Private".</param>
-        /// <param name="template">Opcjonalny szablon Microsoft Teams do użycia (np. "EDU_Class").</param>
+        /// <param name="visibility">Widoczność zespołu.</param>
+        /// <param name="template">Opcjonalny szablon Microsoft Teams do użycia (np. "EDU_Class", lub ID szablonu z Teams Admin Center).</param>
         /// <returns>Zewnętrzny identyfikator (GroupId) utworzonego zespołu lub null w przypadku błędu.</returns>
         Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, TeamVisibility visibility = TeamVisibility.Private, string? template = null);
-        // string CreateTeam(string displayName, string description, string owner); // Jeśli synchroniczna wersja jest w PowerShellService
+
+        /// <summary>
+        /// Asynchronicznie aktualizuje właściwości istniejącego zespołu w Microsoft Teams.
+        /// </summary>
+        /// <param name="teamId">Identyfikator (GroupId) zespołu.</param>
+        /// <param name="newDisplayName">Nowa nazwa wyświetlana zespołu (opcjonalna).</param>
+        /// <param name="newDescription">Nowy opis zespołu (opcjonalny).</param>
+        /// <param name="newVisibility">Nowa widoczność zespołu (opcjonalna).</param>
+        /// <returns>True, jeśli operacja się powiodła; w przeciwnym razie false.</returns>
+        Task<bool> UpdateTeamPropertiesAsync(string teamId, string? newDisplayName = null, string? newDescription = null, TeamVisibility? newVisibility = null);
 
         /// <summary>
         /// Asynchronicznie archiwizuje istniejący zespół w Microsoft Teams.
@@ -53,7 +58,7 @@ namespace TeamsManager.Core.Abstractions.Services
         /// </summary>
         /// <param name="teamId">Identyfikator (GroupId) zespołu do przywrócenia.</param>
         /// <returns>True, jeśli operacja się powiodła; w przeciwnym razie false.</returns>
-        Task<bool> UnarchiveTeamAsync(string teamId); // Zmieniono nazwę na Unarchive dla spójności z cmdletem
+        Task<bool> UnarchiveTeamAsync(string teamId);
 
         /// <summary>
         /// Asynchronicznie usuwa zespół w Microsoft Teams.
@@ -80,13 +85,50 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> RemoveUserFromTeamAsync(string teamId, string userUpn);
 
         /// <summary>
+        /// Asynchronicznie tworzy nowego użytkownika w Microsoft 365.
+        /// </summary>
+        /// <param name="displayName">Nazwa wyświetlana użytkownika.</param>
+        /// <param name="userPrincipalName">UPN nowego użytkownika.</param>
+        /// <param name="password">Hasło dla nowego użytkownika (zostanie przekonwertowane na SecureString).</param>
+        /// <param name="usageLocation">Lokalizacja użycia (np. "PL").</param>
+        /// <param name="licenseSkuIds">Lista ID SKU licencji do przypisania (opcjonalna).</param>
+        /// <param name="accountEnabled">Czy konto ma być od razu włączone.</param>
+        /// <returns>Zewnętrzny identyfikator (ObjectId) utworzonego użytkownika lub null w przypadku błędu.</returns>
+        Task<string?> CreateM365UserAsync(string displayName, string userPrincipalName, string password, string usageLocation = "PL", List<string>? licenseSkuIds = null, bool accountEnabled = true);
+
+        /// <summary>
+        /// Asynchronicznie zmienia stan konta użytkownika w Microsoft 365 (włączone/wyłączone).
+        /// </summary>
+        /// <param name="userPrincipalName">UPN użytkownika.</param>
+        /// <param name="isEnabled">True, aby włączyć konto; false, aby wyłączyć.</param>
+        /// <returns>True, jeśli operacja się powiodła.</returns>
+        Task<bool> SetM365UserAccountStateAsync(string userPrincipalName, bool isEnabled);
+
+        /// <summary>
+        /// Asynchronicznie aktualizuje User Principal Name (UPN) użytkownika w Microsoft 365.
+        /// </summary>
+        /// <param name="currentUpn">Bieżący UPN użytkownika.</param>
+        /// <param name="newUpn">Nowy UPN dla użytkownika.</param>
+        /// <returns>True, jeśli operacja się powiodła.</returns>
+        Task<bool> UpdateM365UserPrincipalNameAsync(string currentUpn, string newUpn);
+
+        /// <summary>
+        /// Asynchronicznie aktualizuje wybrane właściwości użytkownika w Microsoft 365.
+        /// </summary>
+        /// <param name="userUpn">UPN użytkownika do aktualizacji.</param>
+        /// <param name="department">Nowy dział (opcjonalnie).</param>
+        /// <param name="jobTitle">Nowe stanowisko (opcjonalnie).</param>
+        /// <param name="firstName">Nowe imię (opcjonalnie).</param>
+        /// <param name="lastName">Nowe nazwisko (opcjonalnie).</param>
+        /// <returns>True, jeśli operacja się powiodła.</returns>
+        Task<bool> UpdateM365UserPropertiesAsync(string userUpn, string? department = null, string? jobTitle = null, string? firstName = null, string? lastName = null);
+
+        /// <summary>
         /// Asynchronicznie wykonuje dowolny skrypt PowerShell i zwraca wyniki.
         /// </summary>
         /// <param name="script">Skrypt do wykonania.</param>
         /// <param name="parameters">Opcjonalne parametry dla skryptu.</param>
         /// <returns>Kolekcja obiektów PSObject zwróconych przez skrypt lub null w przypadku błędu.</returns>
         Task<Collection<PSObject>?> ExecuteScriptAsync(string script, Dictionary<string, object>? parameters = null);
-
-        // Można dodać inne metody, np. do zarządzania kanałami, aktualizacji właściwości zespołu itp.
     }
 }
