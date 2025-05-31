@@ -275,17 +275,55 @@ namespace TeamsManager.Tests.Services
         {
             ResetCapturedOperationHistory();
             var schoolYearId = "sy-update-was-current";
-            var existingSchoolYear = new SchoolYear { Id = schoolYearId, Name = "Old Current Name", IsActive = true, IsCurrent = true };
-            var updatedData = new SchoolYear { Id = schoolYearId, Name = "New Name For Was Current", IsActive = true, IsCurrent = true }; // Serwis ignoruje zmianę IsCurrent w tej metodzie
+            var existingSchoolYear = new SchoolYear
+            {
+                Id = schoolYearId,
+                Name = "Old Current Name",
+                StartDate = new DateTime(2023, 9, 1),
+                EndDate = new DateTime(2024, 6, 30),
+                IsActive = true,
+                IsCurrent = true
+            };
 
-            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(existingSchoolYear);
-            _mockSchoolYearRepository.Setup(r => r.GetSchoolYearByNameAsync(updatedData.Name)).ReturnsAsync((SchoolYear?)null);
+            var updatedData = new SchoolYear
+            {
+                Id = schoolYearId,
+                Name = "New Name For Was Current",
+                StartDate = new DateTime(2023, 9, 1),
+                EndDate = new DateTime(2024, 6, 30),
+                IsActive = true,
+                IsCurrent = true // Serwis ignoruje zmianę IsCurrent w tej metodzie
+            };
 
-            await _schoolYearService.UpdateSchoolYearAsync(updatedData);
+            // Setup wszystkich wymaganych mocków - KLUCZOWE
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId))
+                                    .ReturnsAsync(existingSchoolYear);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllSchoolYearsCacheKey), Times.Once, "AllSchoolYearsCacheKey powinien zostać usunięty.");
-            _mockMemoryCache.Verify(m => m.Remove(SchoolYearByIdCacheKeyPrefix + schoolYearId), Times.Once, $"Klucz dla ID {schoolYearId} powinien zostać usunięty.");
-            _mockMemoryCache.Verify(m => m.Remove(CurrentSchoolYearCacheKey), Times.Once, "CurrentSchoolYearCacheKey powinien zostać usunięty, gdy rok był bieżący.");
+            _mockSchoolYearRepository.Setup(r => r.GetSchoolYearByNameAsync(updatedData.Name))
+                                    .ReturnsAsync((SchoolYear?)null); // Brak konfliktu nazwy
+
+            _mockSchoolYearRepository.Setup(r => r.Update(It.IsAny<SchoolYear>()));
+
+            // Setup dla SaveOperationHistoryAsync - BARDZO WAŻNE
+            _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>()))
+                                          .ReturnsAsync((OperationHistory?)null);
+
+            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
+                                          .Returns(Task.CompletedTask);
+
+            // Act
+            var result = await _schoolYearService.UpdateSchoolYearAsync(updatedData);
+
+            // Assert
+            result.Should().BeTrue();
+
+            // Verify że cache został inwalidowany
+            _mockMemoryCache.Verify(m => m.Remove(AllSchoolYearsCacheKey), Times.Once,
+                "AllSchoolYearsCacheKey powinien zostać usunięty.");
+            _mockMemoryCache.Verify(m => m.Remove(SchoolYearByIdCacheKeyPrefix + schoolYearId), Times.Once,
+                $"Klucz dla ID {schoolYearId} powinien zostać usunięty.");
+            _mockMemoryCache.Verify(m => m.Remove(CurrentSchoolYearCacheKey), Times.Once,
+                "CurrentSchoolYearCacheKey powinien zostać usunięty, gdy rok był bieżący.");
         }
 
         [Fact]

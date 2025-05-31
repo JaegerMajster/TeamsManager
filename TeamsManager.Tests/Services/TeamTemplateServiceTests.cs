@@ -368,11 +368,24 @@ namespace TeamsManager.Tests.Services
             ResetCapturedOperationHistory();
             var originalId = "tpl-original-clone";
             var schoolTypeId = "st-clone";
-            var originalTemplate = new TeamTemplate { Id = originalId, Name = "Oryginał", SchoolTypeId = schoolTypeId, IsUniversal = false, Template = "content", IsDefault = false };
-            _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(originalId)).ReturnsAsync(originalTemplate);
+            var originalTemplate = new TeamTemplate
+            {
+                Id = originalId,
+                Name = "Oryginał",
+                SchoolTypeId = schoolTypeId,
+                IsUniversal = false,
+                Template = "content",
+                IsDefault = false
+            };
+
+            // Setup cache dla oryginalnego szablonu - żeby GetTemplateByIdAsync nie wywoływał CreateEntry
+            string originalCacheKey = TeamTemplateByIdCacheKeyPrefix + originalId;
+            SetupCacheTryGetValue(originalCacheKey, originalTemplate, true); // Znajdzie w cache
+
+            // Setup repository calls
             _mockTeamTemplateRepository.Setup(r => r.AddAsync(It.IsAny<TeamTemplate>())).Returns(Task.CompletedTask);
             _mockTeamTemplateRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()))
-                                   .ReturnsAsync(new List<TeamTemplate>());
+                                       .ReturnsAsync(new List<TeamTemplate>());
 
             var cloned = await _teamTemplateService.CloneTemplateAsync(originalId, "Nowy Sklonowany");
 
@@ -380,16 +393,22 @@ namespace TeamsManager.Tests.Services
             var clonedId = cloned!.Id;
             var clonedSchoolTypeId = cloned.SchoolTypeId; // Powinien być taki sam jak oryginału
 
-            // Logika InvalidateCache dla klonowania jest taka sama jak dla Create
+            // Weryfikacja inwalidacji cache - logika InvalidateCache dla klonowania jest taka sama jak dla Create
             _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + clonedId), Times.Once);
+
             if (!string.IsNullOrWhiteSpace(clonedSchoolTypeId))
             {
                 _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.Once);
                 _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.Never); // Klon nie jest domyślny
             }
-            _mockMemoryCache.Verify(m => m.CreateEntry(It.IsAny<object>()), Times.Never);
+
+            // CreateEntry może być wywołane raz dla pobrania oryginalnego szablonu (jeśli nie był w cache)
+            // ale ponieważ setupujemy cache dla oryginalnego szablonu, CreateEntry nie powinno być wywołane dla nowych operacji
+            // Sprawdźmy czy CreateEntry było wywołane tylko dla oczekiwanych operacji lub wcale
+            _mockMemoryCache.Verify(m => m.CreateEntry(It.IsAny<object>()), Times.Never,
+                "CreateEntry nie powinno być wywołane podczas klonowania, ponieważ oryginalny szablon jest w cache");
         }
 
         [Fact]
