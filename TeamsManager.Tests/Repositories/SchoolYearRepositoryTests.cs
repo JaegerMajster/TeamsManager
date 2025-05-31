@@ -11,7 +11,7 @@ using Xunit;
 namespace TeamsManager.Tests.Repositories
 {
     [Collection("Sequential")]
-        public class SchoolYearRepositoryTests : RepositoryTestBase
+    public class SchoolYearRepositoryTests : RepositoryTestBase
     {
         private readonly SchoolYearRepository _repository;
 
@@ -23,7 +23,7 @@ namespace TeamsManager.Tests.Repositories
         [Fact]
         public async Task AddAsync_ShouldAddSchoolYearToDatabase()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYear = new SchoolYear
             {
@@ -37,27 +37,31 @@ namespace TeamsManager.Tests.Repositories
                 FirstSemesterEnd = new DateTime(2025, 1, 31),
                 SecondSemesterStart = new DateTime(2025, 2, 1),
                 SecondSemesterEnd = new DateTime(2025, 6, 30),
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = true
             };
 
-            // Act
+            // Działanie
             await _repository.AddAsync(schoolYear);
             await SaveChangesAsync();
 
-            // Assert
+            // Weryfikacja
             var savedSchoolYear = await Context.SchoolYears.FirstOrDefaultAsync(sy => sy.Id == schoolYear.Id);
             savedSchoolYear.Should().NotBeNull();
             savedSchoolYear!.Name.Should().Be("2024/2025");
             savedSchoolYear.StartDate.Should().Be(new DateTime(2024, 9, 1));
             savedSchoolYear.EndDate.Should().Be(new DateTime(2025, 6, 30));
             savedSchoolYear.IsCurrent.Should().BeTrue();
+            savedSchoolYear.CreatedBy.Should().Be("test_user");
+            savedSchoolYear.CreatedDate.Should().NotBe(default(DateTime));
+            savedSchoolYear.ModifiedBy.Should().BeNull();
+            savedSchoolYear.ModifiedDate.Should().BeNull();
         }
 
         [Fact]
         public async Task GetByIdAsync_ShouldReturnCorrectSchoolYear()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYear = new SchoolYear
             {
@@ -67,25 +71,26 @@ namespace TeamsManager.Tests.Repositories
                 EndDate = new DateTime(2024, 6, 30),
                 IsCurrent = false,
                 Description = "Poprzedni rok szkolny",
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = true
             };
             await Context.SchoolYears.AddAsync(schoolYear);
-            await Context.SaveChangesAsync();
+            await Context.SaveChangesAsync(); // Zapis z audytem
 
-            // Act
+            // Działanie
             var result = await _repository.GetByIdAsync(schoolYear.Id);
 
-            // Assert
+            // Weryfikacja
             result.Should().NotBeNull();
             result!.Name.Should().Be("2023/2024");
             result.IsCurrent.Should().BeFalse();
+            result.CreatedBy.Should().Be("test_user");
         }
 
         [Fact]
         public async Task GetCurrentSchoolYearAsync_ShouldReturnCurrentYear()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYears = new List<SchoolYear>
             {
@@ -97,22 +102,23 @@ namespace TeamsManager.Tests.Repositories
             };
 
             await Context.SchoolYears.AddRangeAsync(schoolYears);
-            await Context.SaveChangesAsync();
+            await Context.SaveChangesAsync(); // Zapis z audytem
 
-            // Act
+            // Działanie
             var result = await _repository.GetCurrentSchoolYearAsync();
 
-            // Assert
+            // Weryfikacja
             result.Should().NotBeNull();
             result!.Name.Should().Be("2024/2025");
             result.IsCurrent.Should().BeTrue();
             result.IsActive.Should().BeTrue();
+            result.CreatedBy.Should().Be("test_user");
         }
 
         [Fact]
         public async Task GetCurrentSchoolYearAsync_ShouldReturnNull_WhenNoCurrentYear()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYears = new List<SchoolYear>
             {
@@ -123,17 +129,17 @@ namespace TeamsManager.Tests.Repositories
             await Context.SchoolYears.AddRangeAsync(schoolYears);
             await Context.SaveChangesAsync();
 
-            // Act
+            // Działanie
             var result = await _repository.GetCurrentSchoolYearAsync();
 
-            // Assert
+            // Weryfikacja
             result.Should().BeNull();
         }
 
         [Fact]
         public async Task GetSchoolYearByNameAsync_ShouldReturnCorrectYear()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var targetName = "2024/2025";
             var schoolYears = new List<SchoolYear>
@@ -145,47 +151,48 @@ namespace TeamsManager.Tests.Repositories
             };
 
             await Context.SchoolYears.AddRangeAsync(schoolYears);
-            await Context.SaveChangesAsync();
+            await Context.SaveChangesAsync(); // Zapis z audytem
 
-            // Act
+            // Działanie
             var result = await _repository.GetSchoolYearByNameAsync(targetName);
 
-            // Assert
+            // Weryfikacja
             result.Should().NotBeNull();
             result!.Name.Should().Be(targetName);
             result.IsActive.Should().BeTrue();
-            result.IsCurrent.Should().BeTrue(); // pierwszy aktywny z tą nazwą jest bieżący
+            result.IsCurrent.Should().BeTrue();
+            result.CreatedBy.Should().Be("test_user");
         }
 
         [Theory]
-        [InlineData("2024-10-15", 1, "2024/2025")] // środek roku szkolnego
-        [InlineData("2024-09-01", 1, "2024/2025")] // początek roku
-        [InlineData("2025-06-30", 1, "2024/2025")] // koniec roku
-        [InlineData("2024-08-31", 0, null)]        // przed rokiem
-        [InlineData("2025-07-01", 0, null)]        // po roku
-        [InlineData("2024-01-15", 2, null)]        // data w dwóch latach (przecinające się)
-        public async Task GetSchoolYearsActiveOnDateAsync_ShouldReturnCorrectYears(string dateString, int expectedCount, string expectedYearName)
+        [InlineData("2024-10-15", 1, "2024/2025")]
+        [InlineData("2024-09-01", 1, "2024/2025")]
+        [InlineData("2025-06-30", 1, "2024/2025")]
+        [InlineData("2024-08-31", 0, null)]
+        [InlineData("2025-07-01", 0, null)]
+        [InlineData("2024-01-15", 2, null)]
+        public async Task GetSchoolYearsActiveOnDateAsync_ShouldReturnCorrectYears(string dateString, int expectedCount, string? expectedYearName)
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var testDate = DateTime.Parse(dateString);
-            
+
             var schoolYears = new List<SchoolYear>
             {
                 CreateSchoolYear("2023/2024", new DateTime(2023, 9, 1), new DateTime(2024, 6, 30), false, true),
                 CreateSchoolYear("2024/2025", new DateTime(2024, 9, 1), new DateTime(2025, 6, 30), true, true),
                 CreateSchoolYear("2025/2026", new DateTime(2025, 9, 1), new DateTime(2026, 6, 30), false, true),
-                CreateSchoolYear("2023/2024 zimowy", new DateTime(2023, 10, 1), new DateTime(2024, 2, 28), false, true), // kurs zimowy
+                CreateSchoolYear("2023/2024 zimowy", new DateTime(2023, 10, 1), new DateTime(2024, 2, 28), false, true),
                 CreateSchoolYear("2024/2025", new DateTime(2024, 9, 1), new DateTime(2025, 6, 30), false, false), // nieaktywny
             };
 
             await Context.SchoolYears.AddRangeAsync(schoolYears);
-            await Context.SaveChangesAsync();
+            await Context.SaveChangesAsync(); // Zapis z audytem
 
-            // Act
+            // Działanie
             var result = await _repository.GetSchoolYearsActiveOnDateAsync(testDate);
 
-            // Assert
+            // Weryfikacja
             result.Should().HaveCount(expectedCount);
             if (expectedCount > 0 && expectedYearName != null)
             {
@@ -197,7 +204,7 @@ namespace TeamsManager.Tests.Repositories
         [Fact]
         public async Task Update_ShouldModifySchoolYearData()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYear = new SchoolYear
             {
@@ -207,25 +214,31 @@ namespace TeamsManager.Tests.Repositories
                 EndDate = new DateTime(2025, 6, 30),
                 IsCurrent = false,
                 Description = "Original description",
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = true
             };
             await Context.SchoolYears.AddAsync(schoolYear);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem dla CreatedBy
 
-            // Act
-            schoolYear.IsCurrent = true;
-            schoolYear.Description = "Updated description - now current year";
-            schoolYear.FirstSemesterStart = new DateTime(2024, 9, 1);
-            schoolYear.FirstSemesterEnd = new DateTime(2025, 1, 31);
-            schoolYear.SecondSemesterStart = new DateTime(2025, 2, 1);
-            schoolYear.SecondSemesterEnd = new DateTime(2025, 6, 30);
-            schoolYear.MarkAsModified("updater");
+            var initialCreatedBy = schoolYear.CreatedBy;
+            var initialCreatedDate = schoolYear.CreatedDate;
+            var currentUser = "year_updater";
+            SetTestUser(currentUser);
 
-            _repository.Update(schoolYear);
-            await SaveChangesAsync();
+            // Działanie
+            var schoolYearToUpdate = await _repository.GetByIdAsync(schoolYear.Id);
+            schoolYearToUpdate!.IsCurrent = true;
+            schoolYearToUpdate.Description = "Updated description - now current year";
+            schoolYearToUpdate.FirstSemesterStart = new DateTime(2024, 9, 1);
+            schoolYearToUpdate.FirstSemesterEnd = new DateTime(2025, 1, 31);
+            schoolYearToUpdate.SecondSemesterStart = new DateTime(2025, 2, 1);
+            schoolYearToUpdate.SecondSemesterEnd = new DateTime(2025, 6, 30);
+            // schoolYearToUpdate.MarkAsModified(currentUser); // Niepotrzebne, TestDbContext to obsłuży
 
-            // Assert
+            _repository.Update(schoolYearToUpdate);
+            await SaveChangesAsync(); // TestDbContext ustawi ModifiedBy na `currentUser`
+
+            // Weryfikacja
             var updatedYear = await Context.SchoolYears.FirstOrDefaultAsync(sy => sy.Id == schoolYear.Id);
             updatedYear.Should().NotBeNull();
             updatedYear!.IsCurrent.Should().BeTrue();
@@ -234,34 +247,49 @@ namespace TeamsManager.Tests.Repositories
             updatedYear.FirstSemesterEnd.Should().Be(new DateTime(2025, 1, 31));
             updatedYear.SecondSemesterStart.Should().Be(new DateTime(2025, 2, 1));
             updatedYear.SecondSemesterEnd.Should().Be(new DateTime(2025, 6, 30));
-            updatedYear.ModifiedBy.Should().Be("updater");
+            updatedYear.CreatedBy.Should().Be(initialCreatedBy);
+            updatedYear.CreatedDate.Should().Be(initialCreatedDate);
+            updatedYear.ModifiedBy.Should().Be(currentUser);
             updatedYear.ModifiedDate.Should().NotBeNull();
+
+            ResetTestUser();
         }
 
         [Fact]
         public async Task Delete_ShouldMarkSchoolYearAsInactive()
         {
-            // Arrange
+            // Przygotowanie
             await CleanDatabaseAsync();
             var schoolYear = CreateSchoolYear("2023/2024", new DateTime(2023, 9, 1), new DateTime(2024, 6, 30), false, true);
             await Context.SchoolYears.AddAsync(schoolYear);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem dla CreatedBy
 
-            // Act
-            schoolYear.MarkAsDeleted("deleter");
-            _repository.Update(schoolYear);
-            await SaveChangesAsync();
+            var initialCreatedBy = schoolYear.CreatedBy;
+            var initialCreatedDate = schoolYear.CreatedDate;
+            var currentUser = "year_deleter";
+            SetTestUser(currentUser);
 
-            // Assert
-            var deletedYear = await Context.SchoolYears.FirstOrDefaultAsync(sy => sy.Id == schoolYear.Id);
+            // Działanie
+            var schoolYearToUpdate = await _repository.GetByIdAsync(schoolYear.Id);
+            schoolYearToUpdate!.MarkAsDeleted(currentUser); // Ta wartość `deletedBy` zostanie nadpisana przez TestDbContext
+            _repository.Update(schoolYearToUpdate);
+            await SaveChangesAsync(); // TestDbContext ustawi ModifiedBy
+
+            // Weryfikacja
+            var deletedYear = await Context.SchoolYears.AsNoTracking().FirstOrDefaultAsync(sy => sy.Id == schoolYear.Id);
             deletedYear.Should().NotBeNull();
             deletedYear!.IsActive.Should().BeFalse();
-            deletedYear.ModifiedBy.Should().Be("system@teamsmanager.local");
+            deletedYear.CreatedBy.Should().Be(initialCreatedBy);
+            deletedYear.CreatedDate.Should().Be(initialCreatedDate);
+            deletedYear.ModifiedBy.Should().Be(currentUser);
             deletedYear.ModifiedDate.Should().NotBeNull();
+
+            ResetTestUser();
         }
 
         #region Helper Methods
 
+        // Zmodyfikowana metoda pomocnicza - usunięto parametr createdBy
         private SchoolYear CreateSchoolYear(string name, DateTime startDate, DateTime endDate, bool isCurrent, bool isActive)
         {
             return new SchoolYear
@@ -272,11 +300,11 @@ namespace TeamsManager.Tests.Repositories
                 EndDate = endDate,
                 IsCurrent = isCurrent,
                 Description = $"Rok szkolny {name}",
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = isActive
             };
         }
 
         #endregion
     }
-} 
+}

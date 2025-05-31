@@ -39,7 +39,7 @@ namespace TeamsManager.Tests.Repositories
                 DefaultValue = "Default Test Value",
                 ValidationPattern = null,
                 DisplayOrder = 1,
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = true
             };
 
@@ -54,6 +54,11 @@ namespace TeamsManager.Tests.Repositories
             savedSetting.Value.Should().Be("Test Value");
             savedSetting.Category.Should().Be("Testing");
             savedSetting.Type.Should().Be(SettingType.String);
+            // Dodane asercje dla pól audytu
+            savedSetting.CreatedBy.Should().Be("test_user"); // Domyślna wartość z TestDbContext
+            savedSetting.CreatedDate.Should().NotBe(default(DateTime));
+            savedSetting.ModifiedBy.Should().BeNull(); // Przy tworzeniu ModifiedBy powinno być null
+            savedSetting.ModifiedDate.Should().BeNull();
         }
 
         [Fact]
@@ -62,8 +67,9 @@ namespace TeamsManager.Tests.Repositories
             // Arrange
             await CleanDatabaseAsync();
             var setting = CreateSetting("app.name", "TeamsManager", SettingType.String, "General");
+            // CreatedBy zostanie ustawione przez TestDbContext podczas Add/SaveChangesAsync
             await Context.ApplicationSettings.AddAsync(setting);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem
 
             // Act
             var result = await _repository.GetByIdAsync(setting.Id);
@@ -72,6 +78,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().NotBeNull();
             result!.Key.Should().Be("app.name");
             result.Value.Should().Be("TeamsManager");
+            result.CreatedBy.Should().Be("test_user"); // Sprawdzenie CreatedBy
         }
 
         [Fact]
@@ -89,7 +96,7 @@ namespace TeamsManager.Tests.Repositories
             };
 
             await Context.ApplicationSettings.AddRangeAsync(settings);
-            await Context.SaveChangesAsync();
+            await Context.SaveChangesAsync(); // Zapis z audytem
 
             // Act
             var result = await _repository.GetSettingByKeyAsync(targetKey);
@@ -99,6 +106,7 @@ namespace TeamsManager.Tests.Repositories
             result!.Key.Should().Be(targetKey);
             result.Value.Should().Be("30"); // aktywne ustawienie
             result.IsActive.Should().BeTrue();
+            result.CreatedBy.Should().Be("test_user");
         }
 
         [Fact]
@@ -197,23 +205,28 @@ namespace TeamsManager.Tests.Repositories
                 Key = "TestSetting",
                 Value = "Original Value",
                 Category = "Test",
-                Type = SettingType.String,  // Zmieniono z SettingType.Text na SettingType.String
+                Type = SettingType.String,
                 Description = "Original description",
                 IsRequired = false,
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = true
             };
             await Context.ApplicationSettings.AddAsync(setting);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem dla CreatedBy
+
+            var initialCreatedBy = setting.CreatedBy;
+            var initialCreatedDate = setting.CreatedDate;
 
             // Act
             setting.Value = "Updated Value";
             setting.Description = "Updated description";
             setting.IsRequired = true;
-            setting.MarkAsModified("updater");
+            // Wywołanie MarkAsModified nie jest potrzebne, jeśli polegamy na automatycznym audycie TestDbContext
+            // Jeśli jednak chcemy przetestować samo MarkAsModified przed audytem, patrz plan.
+            // setting.MarkAsModified("updater"); // Ta wartość zostanie nadpisana
 
             _repository.Update(setting);
-            await SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem dla ModifiedBy
 
             // Assert
             var updatedSetting = await Context.ApplicationSettings.FirstOrDefaultAsync(s => s.Id == setting.Id);
@@ -221,8 +234,45 @@ namespace TeamsManager.Tests.Repositories
             updatedSetting!.Value.Should().Be("Updated Value");
             updatedSetting.Description.Should().Be("Updated description");
             updatedSetting.IsRequired.Should().BeTrue();
-            updatedSetting.ModifiedBy.Should().Be("system@teamsmanager.local");
+            // Sprawdzenie pól audytu
+            updatedSetting.CreatedBy.Should().Be(initialCreatedBy); // Nie powinno się zmienić
+            updatedSetting.CreatedDate.Should().Be(initialCreatedDate); // Nie powinno się zmienić
+            updatedSetting.ModifiedBy.Should().Be("test_user"); // Oczekiwana wartość z TestDbContext
             updatedSetting.ModifiedDate.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task Update_ShouldModifySettingData_WithSpecificUser()
+        {
+            // Arrange
+            await CleanDatabaseAsync();
+            var setting = new ApplicationSetting
+            {
+                Id = Guid.NewGuid().ToString(),
+                Key = "UserSpecificSetting",
+                Value = "Original Value",
+                CreatedBy = "initial_creator_ignored", // Zostanie nadpisane przez TestDbContext
+                IsActive = true
+            };
+            await Context.ApplicationSettings.AddAsync(setting);
+            await SaveChangesAsync(); // Zapis z domyślnym "test_user" jako CreatedBy
+
+            var currentUser = "specific_test_user_for_update";
+            SetTestUser(currentUser); // Ustawiamy użytkownika dla tej operacji
+
+            // Act
+            var settingToUpdate = await _repository.GetByIdAsync(setting.Id);
+            settingToUpdate!.Value = "Updated by Specific User";
+            // settingToUpdate.MarkAsModified(currentUser); // Niepotrzebne, jeśli polegamy na TestDbContext
+            _repository.Update(settingToUpdate);
+            await SaveChangesAsync(); // Zapis z audytem, użyje `currentUser`
+
+            // Assert
+            var updatedSetting = await Context.ApplicationSettings.FirstOrDefaultAsync(s => s.Id == setting.Id);
+            updatedSetting.Should().NotBeNull();
+            updatedSetting!.Value.Should().Be("Updated by Specific User");
+            updatedSetting.ModifiedBy.Should().Be(currentUser); // Oczekujemy użytkownika ustawionego przez SetTestUser
+            updatedSetting.CreatedBy.Should().Be("test_user"); // CreatedBy z pierwszego zapisu
         }
 
         [Fact]
@@ -231,19 +281,29 @@ namespace TeamsManager.Tests.Repositories
             // Arrange
             await CleanDatabaseAsync();
             var setting = CreateSetting("deprecated.setting", "old value", SettingType.String, "Deprecated");
+            // CreatedBy zostanie ustawione przez TestDbContext
             await Context.ApplicationSettings.AddAsync(setting);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync(); // Zapis z audytem dla CreatedBy
+
+            var initialCreatedBy = setting.CreatedBy;
+            var initialCreatedDate = setting.CreatedDate;
+            var userPerformingDelete = "deleter_user_test";
+            SetTestUser(userPerformingDelete); // Ustawiamy użytkownika dla operacji Delete
 
             // Act
-            setting.MarkAsDeleted("deleter");
-            _repository.Update(setting);
-            await SaveChangesAsync();
+            // MarkAsDeleted ustawi IsActive = false i wywoła MarkAsModified
+            // TestDbContext następnie ustawi ModifiedBy na _currentTestUser (czyli userPerformingDelete)
+            setting.MarkAsDeleted(userPerformingDelete); // Ta wartość `deletedBy` w MarkAsDeleted jest wewnętrzna dla encji, ale zostanie nadpisana przez DbContext
+            _repository.Update(setting); // Repozytorium tylko oznacza stan jako Modified
+            await SaveChangesAsync(); // TestDbContext ustawi ModifiedBy
 
             // Assert
-            var deletedSetting = await Context.ApplicationSettings.FirstOrDefaultAsync(s => s.Id == setting.Id);
+            var deletedSetting = await Context.ApplicationSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Id == setting.Id); // AsNoTracking, aby pobrać świeże dane
             deletedSetting.Should().NotBeNull();
             deletedSetting!.IsActive.Should().BeFalse();
-            deletedSetting.ModifiedBy.Should().Be("deleter");
+            deletedSetting.CreatedBy.Should().Be(initialCreatedBy);
+            deletedSetting.CreatedDate.Should().Be(initialCreatedDate);
+            deletedSetting.ModifiedBy.Should().Be(userPerformingDelete); // Oczekiwana wartość z TestDbContext po SetTestUser
             deletedSetting.ModifiedDate.Should().NotBeNull();
         }
 
@@ -270,8 +330,8 @@ namespace TeamsManager.Tests.Repositories
                 savedSetting!.ValidationPattern.Should().NotBeNullOrEmpty();
                 savedSetting.ValidationMessage.Should().NotBeNullOrEmpty();
 
-                // W rzeczywistej aplikacji walidacja byłaby wykonywana przez metodę w modelu
-                // Tu tylko sprawdzamy, czy dane są poprawnie zapisane
+                // W rzeczywistej aplikacji walidacja byĹ‚aby wykonywana przez metodÄ™ w modelu
+                // Tu tylko sprawdzamy, czy dane sÄ… poprawnie zapisane
                 savedSetting.IsValid().Should().BeTrue();
             }
         }
@@ -291,7 +351,7 @@ namespace TeamsManager.Tests.Repositories
                 IsRequired = false,
                 IsVisible = true,
                 DisplayOrder = 1,
-                CreatedBy = "test_user",
+                // CreatedBy zostanie ustawione przez TestDbContext
                 IsActive = isActive
             };
         }
@@ -306,6 +366,4 @@ namespace TeamsManager.Tests.Repositories
 
         #endregion
     }
-
-
 }

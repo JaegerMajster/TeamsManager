@@ -59,7 +59,7 @@ Aplikacja będzie wykorzystywać lokalną komunikację sieciową między swoimi 
 - `/api/subjects` (GET, POST, PUT, DELETE)
 - `/api/teamtemplates` (GET, POST, PUT, DELETE)
 - `/api/settings` (GET, PUT)
-- `/api/departments` (GET, POST, PUT, DELETE) - NOWY ENDPOINT
+- `/api/departments` (GET, POST, PUT, DELETE)
 
 **WebSockets (SignalR):** TeamsManager.Api wykorzysta SignalR do wysyłania powiadomień w czasie rzeczywistym do klienta TeamsManager.UI o statusie długotrwałych operacji (np. masowe tworzenie zespołów, import użytkowników), zakończonych zadaniach lub innych ważnych zdarzeniach systemowych, co zapewni dynamiczne odświeżanie interfejsu użytkownika.
 
