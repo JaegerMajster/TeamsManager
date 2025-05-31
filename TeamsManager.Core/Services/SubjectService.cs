@@ -42,13 +42,9 @@ namespace TeamsManager.Core.Services
         public async Task<Subject?> GetSubjectByIdAsync(string subjectId)
         {
             _logger.LogInformation("Pobieranie przedmiotu o ID: {SubjectId}", subjectId);
-            // GetByIdAsync z GenericRepository nie dołącza DefaultSchoolType domyślnie.
-            // Jeśli potrzebne, musielibyśmy stworzyć ISubjectRepository z dedykowaną metodą
-            // lub załadować jawnie na wyższym poziomie.
             var subject = await _subjectRepository.GetByIdAsync(subjectId);
             if (subject != null && !string.IsNullOrEmpty(subject.DefaultSchoolTypeId) && subject.DefaultSchoolType == null)
             {
-                // Próba doładowania, jeśli DefaultSchoolTypeId jest, a DefaultSchoolType nie (choć repo powinno to robić)
                 subject.DefaultSchoolType = await _schoolTypeRepository.GetByIdAsync(subject.DefaultSchoolTypeId);
             }
             return subject;
@@ -57,8 +53,6 @@ namespace TeamsManager.Core.Services
         public async Task<IEnumerable<Subject>> GetAllActiveSubjectsAsync()
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych przedmiotów.");
-            // Można rozważyć dołączenie DefaultSchoolType, jeśli jest często potrzebne
-            // return await _subjectRepository.FindAsync(s => s.IsActive, q => q.Include(s => s.DefaultSchoolType));
             return await _subjectRepository.FindAsync(s => s.IsActive);
         }
 
@@ -90,10 +84,9 @@ namespace TeamsManager.Core.Services
                 {
                     operation.MarkAsFailed("Nazwa przedmiotu nie może być pusta.");
                     _logger.LogError("Nie można utworzyć przedmiotu: Nazwa jest pusta.");
-                    return null; // Zapis OperationHistory w bloku finally
+                    return null;
                 }
 
-                // Opcjonalna walidacja unikalności nazwy lub kodu
                 if (!string.IsNullOrWhiteSpace(code))
                 {
                     var existingByCode = (await _subjectRepository.FindAsync(s => s.Code == code && s.IsActive)).FirstOrDefault();
@@ -112,7 +105,7 @@ namespace TeamsManager.Core.Services
                     if (defaultSchoolType == null || !defaultSchoolType.IsActive)
                     {
                         _logger.LogWarning("Podany domyślny typ szkoły (ID: {DefaultSchoolTypeId}) dla przedmiotu '{SubjectName}' nie istnieje lub jest nieaktywny. Pole zostanie zignorowane.", defaultSchoolTypeId, name);
-                        defaultSchoolTypeId = null; // Zignoruj niepoprawne ID
+                        defaultSchoolTypeId = null;
                         defaultSchoolType = null;
                     }
                 }
@@ -125,14 +118,13 @@ namespace TeamsManager.Core.Services
                     Description = description,
                     Hours = hours,
                     DefaultSchoolTypeId = defaultSchoolTypeId,
-                    DefaultSchoolType = defaultSchoolType, // Dla EF Core
+                    DefaultSchoolType = defaultSchoolType,
                     Category = category,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _subjectRepository.AddAsync(newSubject);
-                // SaveChangesAsync na wyższym poziomie
 
                 operation.TargetEntityId = newSubject.Id;
                 operation.MarkAsCompleted($"Przedmiot ID: {newSubject.Id} ('{newSubject.Name}') przygotowany do utworzenia.");
@@ -163,10 +155,11 @@ namespace TeamsManager.Core.Services
                 Type = OperationType.SubjectUpdated,
                 TargetEntityType = nameof(Subject),
                 TargetEntityId = subjectToUpdate.Id,
-                TargetEntityName = subjectToUpdate.Name,
                 CreatedBy = currentUserUpn,
                 IsActive = true
             };
+            // TargetEntityName zostanie ustawiony po pobraniu istniejącego obiektu
+
             operation.MarkAsStarted();
             _logger.LogInformation("Rozpoczynanie aktualizacji przedmiotu ID: {SubjectId} przez {User}", subjectToUpdate.Id, currentUserUpn);
 
@@ -179,7 +172,7 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Nie można zaktualizować przedmiotu ID {SubjectId} - nie istnieje.", subjectToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingSubject.Name; // Rzeczywista nazwa przed zmianą
+                operation.TargetEntityName = existingSubject.Name; // Ustawienie nazwy encji docelowej (przed zmianą)
 
                 if (string.IsNullOrWhiteSpace(subjectToUpdate.Name))
                 {
@@ -199,38 +192,39 @@ namespace TeamsManager.Core.Services
                     }
                 }
 
-                SchoolType? defaultSchoolType = null;
                 if (!string.IsNullOrEmpty(subjectToUpdate.DefaultSchoolTypeId))
                 {
-                    defaultSchoolType = await _schoolTypeRepository.GetByIdAsync(subjectToUpdate.DefaultSchoolTypeId);
-                    if (defaultSchoolType == null || !defaultSchoolType.IsActive)
+                    var schoolType = await _schoolTypeRepository.GetByIdAsync(subjectToUpdate.DefaultSchoolTypeId);
+                    if (schoolType != null && schoolType.IsActive)
                     {
-                        _logger.LogWarning("Podany domyślny typ szkoły (ID: {DefaultSchoolTypeId}) dla przedmiotu '{SubjectName}' nie istnieje lub jest nieaktywny. Zmiana nie zostanie zastosowana dla DefaultSchoolTypeId.", subjectToUpdate.DefaultSchoolTypeId, subjectToUpdate.Name);
-                        subjectToUpdate.DefaultSchoolTypeId = existingSubject.DefaultSchoolTypeId; // Przywróć stare ID
-                        subjectToUpdate.DefaultSchoolType = existingSubject.DefaultSchoolType; // Przywróć stary obiekt
+                        existingSubject.DefaultSchoolTypeId = schoolType.Id;
+                        existingSubject.DefaultSchoolType = schoolType;
                     }
                     else
                     {
-                        existingSubject.DefaultSchoolType = defaultSchoolType; // Ustaw nowy obiekt
+                        _logger.LogWarning("Podany domyślny typ szkoły (ID: {DefaultSchoolTypeId}) dla przedmiotu '{SubjectName}' nie istnieje lub jest nieaktywny. Powiązanie z typem szkoły nie zostanie zmienione.", subjectToUpdate.DefaultSchoolTypeId, subjectToUpdate.Name);
+                        // Nie zmieniamy existingSubject.DefaultSchoolTypeId ani existingSubject.DefaultSchoolType,
+                        // zachowując poprzednią wartość.
                     }
                 }
                 else
                 {
-                    existingSubject.DefaultSchoolType = null; // Usuń powiązanie jeśli ID jest puste
+                    existingSubject.DefaultSchoolTypeId = null;
+                    existingSubject.DefaultSchoolType = null;
                 }
 
                 existingSubject.Name = subjectToUpdate.Name;
                 existingSubject.Code = subjectToUpdate.Code;
                 existingSubject.Description = subjectToUpdate.Description;
                 existingSubject.Hours = subjectToUpdate.Hours;
-                existingSubject.DefaultSchoolTypeId = subjectToUpdate.DefaultSchoolTypeId;
+                // DefaultSchoolTypeId i DefaultSchoolType są już obsłużone powyżej
                 existingSubject.Category = subjectToUpdate.Category;
                 existingSubject.IsActive = subjectToUpdate.IsActive;
                 existingSubject.MarkAsModified(currentUserUpn);
 
                 _subjectRepository.Update(existingSubject);
-                // SaveChangesAsync na wyższym poziomie
-                operation.TargetEntityName = existingSubject.Name; // Nazwa po zmianie
+
+                operation.TargetEntityName = existingSubject.Name;
                 operation.MarkAsCompleted($"Przedmiot ID: {existingSubject.Id} przygotowany do aktualizacji.");
                 _logger.LogInformation("Przedmiot ID: {SubjectId} pomyślnie przygotowany do aktualizacji.", existingSubject.Id);
                 return true;
@@ -250,24 +244,33 @@ namespace TeamsManager.Core.Services
         public async Task<bool> DeleteSubjectAsync(string subjectId)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory { /* ... Inicjalizacja dla SubjectDeleted ... */ };
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.SubjectDeleted,
+                TargetEntityType = nameof(Subject),
+                TargetEntityId = subjectId,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
             operation.MarkAsStarted();
             _logger.LogInformation("Usuwanie (dezaktywacja) przedmiotu ID: {SubjectId}", subjectId);
             try
             {
                 var subject = await _subjectRepository.GetByIdAsync(subjectId);
-                if (subject == null) { /* ... */ return false; }
+                if (subject == null)
+                {
+                    // --- POCZĄTEK SUGEROWANEJ POPRAWKI ---
+                    operation.MarkAsFailed($"Przedmiot o ID '{subjectId}' nie istnieje.");
+                    // --- KONIEC SUGEROWANEJ POPRAWKI ---
+                    _logger.LogWarning("Nie można usunąć przedmiotu ID {SubjectId} - nie istnieje.", subjectId);
+                    return false;
+                }
                 operation.TargetEntityName = subject.Name;
 
-                // Zgodnie z DbContext, relacja UserSubject.SubjectId ma OnDelete.Cascade.
-                // "Miękkie" usunięcie Subject nie usunie automatycznie UserSubject.
-                // Jeśli chcemy usunąć przypisania nauczycieli, musimy to zrobić jawnie.
-                // Na razie tylko "soft delete" samego przedmiotu.
                 var assignments = await _userSubjectRepository.FindAsync(us => us.SubjectId == subjectId && us.IsActive);
                 if (assignments.Any())
                 {
-                    // Można zdecydować, czy dezaktywować przypisania, czy zabronić usuwania przedmiotu.
-                    // Na razie dezaktywujemy przypisania.
                     foreach (var assignment in assignments)
                     {
                         assignment.MarkAsDeleted(currentUserUpn);
@@ -287,7 +290,10 @@ namespace TeamsManager.Core.Services
                 operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
                 return false;
             }
-            finally { await SaveOperationHistoryAsync(operation); }
+            finally
+            {
+                await SaveOperationHistoryAsync(operation);
+            }
         }
 
         public async Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId)
@@ -300,24 +306,42 @@ namespace TeamsManager.Core.Services
                 return Enumerable.Empty<User>();
             }
 
-            // Pobieramy aktywne przypisania UserSubject dla danego przedmiotu
             var assignments = await _userSubjectRepository.FindAsync(us =>
                 us.SubjectId == subjectId &&
                 us.IsActive &&
-                us.User != null && // Upewniamy się, że User jest załadowany (choć repo powinno to robić)
-                us.User.IsActive); // I że sam użytkownik jest aktywny
+                us.User != null &&
+                us.User.IsActive);
 
-            // Zwracamy listę unikalnych, aktywnych użytkowników z tych przypisań
             return assignments.Select(us => us.User).Where(u => u != null).Distinct().ToList()!;
         }
 
-        // Metoda pomocnicza do zapisu OperationHistory (taka sama jak w innych serwisach)
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
+            if (string.IsNullOrEmpty(operation.CreatedBy))
+                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
+
             var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
-            if (existingLog == null) await _operationHistoryRepository.AddAsync(operation);
-            else { /* Logika aktualizacji existingLog */ _operationHistoryRepository.Update(existingLog); }
+            if (existingLog == null)
+            {
+                await _operationHistoryRepository.AddAsync(operation);
+            }
+            else
+            {
+                existingLog.Status = operation.Status;
+                existingLog.CompletedAt = operation.CompletedAt;
+                existingLog.Duration = operation.Duration;
+                existingLog.ErrorMessage = operation.ErrorMessage;
+                existingLog.ErrorStackTrace = operation.ErrorStackTrace;
+                existingLog.OperationDetails = operation.OperationDetails;
+                existingLog.TargetEntityName = operation.TargetEntityName;
+                existingLog.TargetEntityId = operation.TargetEntityId;
+                existingLog.Type = operation.Type;
+                existingLog.ProcessedItems = operation.ProcessedItems;
+                existingLog.FailedItems = operation.FailedItems;
+                existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
+                _operationHistoryRepository.Update(existingLog);
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ using TeamsManager.Data.Repositories;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Services;
 using TeamsManager.Core.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,10 @@ builder.Services.AddDbContext<TeamsManagerDbContext>(options =>
 
 // Rejestracja ICurrentUserService
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+// --- POCZ¥TEK: REJESTRACJA IMemoryCache ---
+builder.Services.AddMemoryCache(); 
+// --- KONIEC: REJESTRACJA IMemoryCache ---
 
 // Rejestracja Repozytoriów
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));

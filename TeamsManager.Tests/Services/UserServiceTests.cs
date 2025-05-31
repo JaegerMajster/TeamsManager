@@ -660,7 +660,7 @@ namespace TeamsManager.Tests.Services
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory.Type.Should().Be(OperationType.UserCreated);
             _capturedOperationHistory.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("nie został znaleziony");
+            _capturedOperationHistory.ErrorMessage.Should().Contain($"Użytkownik o UPN '{upn}' już istnieje");
 
             _mockUserRepository.Verify(r => r.GetUserByUpnAsync(upn), Times.Once);
             _mockUserRepository.Verify(r => r.AddAsync(It.IsAny<User>()), Times.Never);
@@ -852,7 +852,7 @@ namespace TeamsManager.Tests.Services
 
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("nie został znaleziony");
+            _capturedOperationHistory.ErrorMessage.Should().Be($"Użytkownik o ID '{userId}' jest już nieaktywny.");
         }
 
         [Fact]
@@ -1170,7 +1170,7 @@ namespace TeamsManager.Tests.Services
 
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("nie został znaleziony");
+            _capturedOperationHistory.ErrorMessage.Should().Be($"Przypisanie o ID '{userSchoolTypeId}' nie zostało znalezione.");
         }
 
         [Fact]
@@ -1413,7 +1413,7 @@ namespace TeamsManager.Tests.Services
 
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("nie został znaleziony");
+            _capturedOperationHistory.ErrorMessage.Should().Be($"Przypisanie o ID '{userSubjectId}' nie zostało znalezione.");
         }
 
         [Fact]
@@ -1468,7 +1468,8 @@ namespace TeamsManager.Tests.Services
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory.Type.Should().Be(OperationType.UserUpdated);
             _capturedOperationHistory.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("nie został znaleziony");
+            _capturedOperationHistory.ErrorMessage.Should().Contain($"UPN '{newUpn}' już istnieje w systemie");
+
         }
 
         // Placeholder testy dla PowerShell - do zaimplementowania gdy PowerShellService będzie dostępny

@@ -6,6 +6,7 @@ using TeamsManager.Core.Abstractions;         // Dla ICurrentUserService
 using TeamsManager.Core.Services.UserContext; // Dla CurrentUserService
 using TeamsManager.Data;                      // Dla TeamsManagerDbContext
 using Microsoft.EntityFrameworkCore;          // Dla UseSqlite i DbContextOptionsBuilder
+using Microsoft.Extensions.Caching.Memory;
 
 namespace TeamsManager.UI
 {
@@ -22,6 +23,10 @@ namespace TeamsManager.UI
 
         private void ConfigureServices(IServiceCollection services)
         {
+            // --- POCZĄTEK: REJESTRACJA IMemoryCache ---
+            services.AddMemoryCache();
+            // --- KONIEC: REJESTRACJA IMemoryCache ---
+
             // --- Konfiguracja ICurrentUserService ---
             // Rejestrujemy jako Singleton, aby ta sama instancja była dostępna 
             // w całej aplikacji UI. Pozwoli to na ustawienie użytkownika 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
@@ -16,7 +17,6 @@ namespace TeamsManager.Core.Services
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<OperationHistoryService> _logger;
-        // Brak bezpośredniej zależności od DbContext
 
         public OperationHistoryService(
             IOperationHistoryRepository operationHistoryRepository,
@@ -52,29 +52,31 @@ namespace TeamsManager.Core.Services
                 OperationDetails = details ?? string.Empty,
                 ParentOperationId = parentOperationId,
                 CreatedBy = currentUserUpn,
-                IsActive = true // Logi są zawsze aktywne przy tworzeniu
+                IsActive = true
             };
 
-            // Ustawianie StartedAt i ewentualnie CompletedAt w zależności od statusu
             if (status == OperationStatus.Pending || status == OperationStatus.InProgress)
             {
-                operation.MarkAsStarted(); // Ustawia StartedAt i zmienia Status na InProgress, jeśli Pending
+                operation.MarkAsStarted();
                 if (status == OperationStatus.Pending && operation.Status == OperationStatus.InProgress)
                 {
-                    // Jeśli MarkAsStarted zmienił status z Pending na InProgress, a my chcemy zachować Pending
                     operation.Status = OperationStatus.Pending;
                 }
             }
             else if (status == OperationStatus.Completed || status == OperationStatus.Failed || status == OperationStatus.Cancelled || status == OperationStatus.PartialSuccess)
             {
-                // Jeśli logujemy już zakończoną operację, ustawmy StartedAt i CompletedAt na ten sam czas (lub StartedAt na nieco wcześniej)
-                operation.StartedAt = DateTime.UtcNow.AddMilliseconds(-10); // Małe przesunięcie dla Duration
-                operation.MarkAsCompleted(details); // Używa MarkAsCompleted do ustawienia Status, CompletedAt, Duration
-                operation.Status = status; // Nadpisujemy status, jeśli MarkAsCompleted ustawił tylko Completed
+                if (operation.StartedAt == default(DateTime))
+                {
+                    operation.StartedAt = DateTime.UtcNow.AddMilliseconds(-10);
+                }
+                operation.CompletedAt = DateTime.UtcNow;
+                if (operation.StartedAt != default(DateTime))
+                {
+                    operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
+                }
             }
 
-            await _operationHistoryRepository.AddAsync(operation);
-            // SaveChangesAsync będzie na wyższym poziomie
+            await SaveOperationHistoryAsync(operation);
 
             _logger.LogInformation("Operacja ID: {OperationId} została zalogowana.", operation.Id);
             return operation;
@@ -83,7 +85,7 @@ namespace TeamsManager.Core.Services
         public async Task<bool> UpdateOperationStatusAsync(
             string operationId,
             OperationStatus newStatus,
-            string? message = null, // Może być errorMessage lub successMessage
+            string? message = null,
             string? stackTrace = null)
         {
             _logger.LogInformation("Aktualizowanie statusu operacji ID: {OperationId} na {NewStatus}. Wiadomość: {Message}", operationId, newStatus, message);
@@ -94,31 +96,46 @@ namespace TeamsManager.Core.Services
                 return false;
             }
 
+            var oldStatus = operation.Status;
             operation.Status = newStatus;
+
             if (!string.IsNullOrWhiteSpace(message))
             {
                 if (newStatus == OperationStatus.Failed)
+                {
                     operation.ErrorMessage = message;
+                }
                 else if (newStatus == OperationStatus.Completed || newStatus == OperationStatus.PartialSuccess)
-                    operation.OperationDetails = string.IsNullOrWhiteSpace(operation.OperationDetails) ? message : $"{operation.OperationDetails}\nStatus Update: {message}";
+                {
+                    operation.OperationDetails = string.IsNullOrWhiteSpace(operation.OperationDetails)
+                                                 ? message
+                                                 : $"{operation.OperationDetails}{Environment.NewLine}Status Update: {message}";
+                }
+                else if (newStatus != OperationStatus.Failed)
+                {
+                    operation.OperationDetails = string.IsNullOrWhiteSpace(operation.OperationDetails)
+                                                ? message
+                                                : $"{operation.OperationDetails}{Environment.NewLine}Status Update: {message}";
+                }
             }
+
             if (newStatus == OperationStatus.Failed && !string.IsNullOrWhiteSpace(stackTrace))
             {
                 operation.ErrorStackTrace = stackTrace;
             }
 
-            if (newStatus == OperationStatus.Completed || newStatus == OperationStatus.Failed || newStatus == OperationStatus.Cancelled || newStatus == OperationStatus.PartialSuccess)
+            if ((newStatus == OperationStatus.Completed || newStatus == OperationStatus.Failed || newStatus == OperationStatus.Cancelled || newStatus == OperationStatus.PartialSuccess)
+                && !operation.CompletedAt.HasValue)
             {
-                if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                if (operation.StartedAt != default && operation.CompletedAt.HasValue) // StartedAt z BaseEntity może być default(DateTime)
+                operation.CompletedAt = DateTime.UtcNow;
+                if (operation.StartedAt != default(DateTime))
                 {
                     operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
                 }
             }
 
             operation.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
-            _operationHistoryRepository.Update(operation);
-            // SaveChangesAsync na wyższym poziomie
+            await SaveOperationHistoryAsync(operation);
 
             _logger.LogInformation("Status operacji ID: {OperationId} zaktualizowany na {NewStatus}.", operationId, newStatus);
             return true;
@@ -139,16 +156,14 @@ namespace TeamsManager.Core.Services
                 return false;
             }
 
-            // Jeśli totalItems jest przekazywane i różni się od zapisanego, aktualizuj
             if (totalItems.HasValue && operation.TotalItems != totalItems.Value)
             {
                 operation.TotalItems = totalItems.Value;
             }
 
-            operation.UpdateProgress(processedItems, failedItems); // Użycie metody z modelu OperationHistory
+            operation.UpdateProgress(processedItems, failedItems);
             operation.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_progress_update");
-            _operationHistoryRepository.Update(operation);
-            // SaveChangesAsync na wyższym poziomie
+            await SaveOperationHistoryAsync(operation);
 
             _logger.LogInformation("Postęp operacji ID: {OperationId} zaktualizowany. Status: {Status}", operationId, operation.Status);
             return true;
@@ -184,58 +199,61 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie historii z filtrowaniem. Zakres dat: {StartDate}-{EndDate}, Typ: {OperationType}, Status: {OperationStatus}, Użytkownik: {CreatedBy}, Strona: {Page}, Rozmiar: {PageSize}",
                 startDate, endDate, operationType, operationStatus, createdBy, page, pageSize);
 
-            // Implementacja filtrowania i paginacji. Na razie proste delegowanie,
-            // ale repozytorium może potrzebować bardziej złożonej implementacji lub serwis musi to zrobić.
-            // Jeśli IOperationHistoryRepository nie ma metody GetHistoryByFilterAsync, trzeba ją dodać tam
-            // lub zaimplementować logikę filtrowania tutaj, używając FindAsync.
+            // Budowanie predykatu dynamicznie
+            Expression<Func<OperationHistory, bool>> predicate = PredicateBuilder.True<OperationHistory>();
 
-            // Przykład prostej implementacji filtrowania (bez paginacji na razie)
-            // jeśli IOperationHistoryRepository nie ma metody GetHistoryByFilterAsync:
-            /*
-            Expression<Func<OperationHistory, bool>> predicate = oh => 
-                (!startDate.HasValue || oh.StartedAt >= startDate.Value) &&
-                (!endDate.HasValue || oh.StartedAt <= endDate.Value) &&
-                (!operationType.HasValue || oh.Type == operationType.Value) &&
-                (!operationStatus.HasValue || oh.Status == operationStatus.Value) &&
-                (string.IsNullOrEmpty(createdBy) || oh.CreatedBy == createdBy);
-
-            var allMatching = await _operationHistoryRepository.FindAsync(predicate);
-            return allMatching.OrderByDescending(oh => oh.StartedAt)
-                              .Skip((page - 1) * pageSize)
-                              .Take(pageSize);
-            */
-
-            // Zakładając, że IOperationHistoryRepository ma metodę GetHistoryByDateRangeAsync,
-            // ale nie pełne filtrowanie jak zdefiniowane w IOperationHistoryService.
-            // Na razie oddelegujemy do tej, która istnieje, a filtrowanie rozbudujemy później.
-            if (startDate.HasValue && endDate.HasValue)
+            if (startDate.HasValue)
             {
-                return await _operationHistoryRepository.GetHistoryByDateRangeAsync(startDate.Value, endDate.Value, operationType, operationStatus);
+                predicate = predicate.And(oh => oh.StartedAt >= startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                // Aby uwzględnić cały dzień endDate, bierzemy początek następnego dnia
+                var nextDay = endDate.Value.Date.AddDays(1);
+                predicate = predicate.And(oh => oh.StartedAt < nextDay);
+            }
+            if (operationType.HasValue)
+            {
+                predicate = predicate.And(oh => oh.Type == operationType.Value);
+            }
+            if (operationStatus.HasValue)
+            {
+                predicate = predicate.And(oh => oh.Status == operationStatus.Value);
+            }
+            if (!string.IsNullOrEmpty(createdBy))
+            {
+                predicate = predicate.And(oh => oh.CreatedBy == createdBy);
             }
 
-            // Proste pobranie wszystkiego, jeśli nie ma zakresu dat (do poprawy)
-            _logger.LogWarning("GetHistoryByFilterAsync: Pobieranie wszystkich operacji z powodu braku pełnej implementacji filtrowania.");
-            var allOps = await _operationHistoryRepository.GetAllAsync();
-            if (operationType.HasValue) allOps = allOps.Where(oh => oh.Type == operationType.Value);
-            if (operationStatus.HasValue) allOps = allOps.Where(oh => oh.Status == operationStatus.Value);
-            if (!string.IsNullOrEmpty(createdBy)) allOps = allOps.Where(oh => oh.CreatedBy == createdBy);
+            // Pobranie przefiltrowanych danych z repozytorium
+            // Zakładamy, że FindAsync wykonuje filtrowanie po stronie bazy danych
+            var filteredHistory = await _operationHistoryRepository.FindAsync(predicate);
 
-            return allOps.OrderByDescending(oh => oh.StartedAt).Skip((page - 1) * pageSize).Take(pageSize);
+            // Sortowanie i paginacja w pamięci na przefiltrowanych wynikach
+            // Dla optymalizacji, sortowanie i paginacja powinny być idealnie wykonywane przez bazę danych,
+            // co wymagałoby bardziej zaawansowanego interfejsu repozytorium lub użycia IQueryable.
+            var pagedResult = filteredHistory
+                .OrderByDescending(oh => oh.StartedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return pagedResult;
         }
 
-        // Metoda pomocnicza do zapisu OperationHistory (taka sama jak w innych serwisach)
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
-            // Logika tej metody jest taka sama jak w TeamService i UserService,
-            // można by ją przenieść do jakiejś klasy bazowej dla serwisów lub wspólnego helpera.
             if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-
-            if (string.IsNullOrEmpty(operation.CreatedBy)) // Upewnij się, że CreatedBy jest ustawione
+            if (string.IsNullOrEmpty(operation.CreatedBy))
                 operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
 
             var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
             if (existingLog == null)
             {
+                if (operation.StartedAt == default(DateTime) && (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending))
+                {
+                    operation.StartedAt = DateTime.UtcNow;
+                }
                 await _operationHistoryRepository.AddAsync(operation);
             }
             else
@@ -248,12 +266,42 @@ namespace TeamsManager.Core.Services
                 existingLog.OperationDetails = operation.OperationDetails;
                 existingLog.TargetEntityName = operation.TargetEntityName;
                 existingLog.TargetEntityId = operation.TargetEntityId;
+                existingLog.Type = operation.Type;
                 existingLog.ProcessedItems = operation.ProcessedItems;
                 existingLog.FailedItems = operation.FailedItems;
+                existingLog.ParentOperationId = operation.ParentOperationId;
+                existingLog.SequenceNumber = operation.SequenceNumber;
+                existingLog.TotalItems = operation.TotalItems;
+                existingLog.UserIpAddress = operation.UserIpAddress;
+                existingLog.UserAgent = operation.UserAgent;
+                existingLog.SessionId = operation.SessionId;
+                existingLog.Tags = operation.Tags;
                 existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
                 _operationHistoryRepository.Update(existingLog);
             }
-            // SaveChangesAsync będzie na wyższym poziomie
+        }
+    }
+
+    // Klasa pomocnicza do budowania predykatów (często używana)
+    public static class PredicateBuilder
+    {
+        public static Expression<Func<T, bool>> True<T>() { return f => true; }
+        public static Expression<Func<T, bool>> False<T>() { return f => false; }
+
+        public static Expression<Func<T, bool>> Or<T>(this Expression<Func<T, bool>> expr1,
+                                                            Expression<Func<T, bool>> expr2)
+        {
+            var invokedExpr = Expression.Invoke(expr2, expr1.Parameters.Cast<Expression>());
+            return Expression.Lambda<Func<T, bool>>
+                  (Expression.OrElse(expr1.Body, invokedExpr), expr1.Parameters);
+        }
+
+        public static Expression<Func<T, bool>> And<T>(this Expression<Func<T, bool>> expr1,
+                                                             Expression<Func<T, bool>> expr2)
+        {
+            var invokedExpr = Expression.Invoke(expr2, expr1.Parameters.Cast<Expression>());
+            return Expression.Lambda<Func<T, bool>>
+                  (Expression.AndAlso(expr1.Body, invokedExpr), expr1.Parameters);
         }
     }
 }
