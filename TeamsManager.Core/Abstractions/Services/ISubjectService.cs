@@ -66,6 +66,12 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<IEnumerable<User>> GetTeachersForSubjectAsync(string subjectId, bool forceRefresh = false);
 
         /// <summary>
+        /// Unieważnia cache dla listy nauczycieli przypisanych do konkretnego przedmiotu.
+        /// </summary>
+        /// <param name="subjectId">Identyfikator przedmiotu, którego cache nauczycieli ma zostać unieważniony.</param>
+        Task InvalidateTeachersCacheForSubjectAsync(string subjectId); // NOWA METODA
+
+        /// <summary>
         /// Odświeża cache przedmiotów (jeśli jest używany).
         /// </summary>
         Task RefreshCacheAsync();

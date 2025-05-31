@@ -493,25 +493,19 @@ namespace TeamsManager.Core.Services
             if (string.IsNullOrEmpty(operation.CreatedBy))
                 operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
 
-            var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
-            if (existingLog == null)
+            if (operation.StartedAt == default(DateTime) &&
+                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
             {
-                await _operationHistoryRepository.AddAsync(operation);
+                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
+                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
+                {
+                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
+                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
+                }
             }
-            else
-            {
-                // Aktualizuj istniejący wpis, jeśli operacja była śledzona od początku
-                existingLog.Status = operation.Status;
-                existingLog.CompletedAt = operation.CompletedAt;
-                existingLog.Duration = operation.Duration;
-                existingLog.ErrorMessage = operation.ErrorMessage;
-                existingLog.ErrorStackTrace = operation.ErrorStackTrace;
-                existingLog.OperationDetails = operation.OperationDetails;
-                existingLog.TargetEntityName = operation.TargetEntityName; // Upewnij się, że nazwa jest aktualna
-                existingLog.TargetEntityId = operation.TargetEntityId;
-                existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
-                _operationHistoryRepository.Update(existingLog);
-            }
+
+            await _operationHistoryRepository.AddAsync(operation);
+            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla typu szkoły.", operation.Id);
         }
     }
 }

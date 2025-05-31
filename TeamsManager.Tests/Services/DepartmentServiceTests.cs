@@ -53,10 +53,10 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
                                          .Returns(Task.CompletedTask);
-            _mockOperationHistoryRepository.Setup(r => r.Update(It.IsAny<OperationHistory>()))
-                                        .Callback<OperationHistory>(op => _capturedOperationHistory = op!);
+            // Usunięto setup dla Update, ponieważ zakładamy, że SaveOperationHistoryAsync zawsze dodaje nowy wpis.
+            // Jeśli jakaś logika serwisu bezpośrednio wywołuje Update na _operationHistoryRepository,
+            // ten setup może być potrzebny dla konkretnych testów.
 
-            // Konfiguracja mocka IMemoryCache.CreateEntry
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
             mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
@@ -90,21 +90,34 @@ namespace TeamsManager.Tests.Services
             _capturedOperationHistory = null;
         }
 
+        private void AssertCacheInvalidationByReFetchingAllDepartments(List<Department> expectedDbDeptsAfterOperation, bool rootOnly)
+        {
+            string cacheKeyToReFetch = rootOnly ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey;
+
+            SetupCacheTryGetValue(cacheKeyToReFetch, (IEnumerable<Department>?)null, false);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+                                   .ReturnsAsync(expectedDbDeptsAfterOperation)
+                                   .Verifiable();
+
+            var resultAfterInvalidation = _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: rootOnly).Result;
+
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.Once, $"GetAllDepartmentsAsync(rootOnly:{rootOnly}) powinno odpytać repozytorium po unieważnieniu cache.");
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedDbDeptsAfterOperation);
+            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKeyToReFetch), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
+        }
+
         // --- Testy dla GetDepartmentByIdAsync ---
         [Fact]
         public async Task GetDepartmentByIdAsync_ExistingDepartment_NotInCache_ShouldReturnAndCache()
         {
-            // Arrange
             var departmentId = "dept-1";
             var expectedDepartment = new Department { Id = departmentId, Name = "IT" };
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
             SetupCacheTryGetValue(cacheKey, (Department?)null, false);
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(expectedDepartment);
 
-            // Act
             var result = await _departmentService.GetDepartmentByIdAsync(departmentId);
 
-            // Assert
             result.Should().BeEquivalentTo(expectedDepartment);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
@@ -113,16 +126,13 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetDepartmentByIdAsync_ExistingDepartment_InCache_ShouldReturnFromCache()
         {
-            // Arrange
             var departmentId = "dept-cached";
             var cachedDepartment = new Department { Id = departmentId, Name = "Cached IT" };
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
             SetupCacheTryGetValue(cacheKey, cachedDepartment, true);
 
-            // Act
             var result = await _departmentService.GetDepartmentByIdAsync(departmentId);
 
-            // Assert
             result.Should().BeEquivalentTo(cachedDepartment);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(It.IsAny<string>()), Times.Never);
         }
@@ -130,7 +140,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetDepartmentByIdAsync_WithForceRefresh_ShouldBypassCache()
         {
-            // Arrange
             var departmentId = "dept-force";
             var cachedDept = new Department { Id = departmentId, Name = "Old Data" };
             var dbDept = new Department { Id = departmentId, Name = "New Data from DB" };
@@ -138,10 +147,8 @@ namespace TeamsManager.Tests.Services
             SetupCacheTryGetValue(cacheKey, cachedDept, true);
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(dbDept);
 
-            // Act
             var result = await _departmentService.GetDepartmentByIdAsync(departmentId, forceRefresh: true);
 
-            // Assert
             result.Should().BeEquivalentTo(dbDept);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
@@ -150,7 +157,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetDepartmentByIdAsync_WithIncludes_ShouldFetchBaseFromCacheAndThenSubEntities()
         {
-            // Arrange
             var departmentId = "dept-includes";
             var baseDepartment = new Department { Id = departmentId, Name = "Base Dept" };
             var subDepts = new List<Department> { new Department { Id = "sub1", ParentDepartmentId = departmentId } };
@@ -160,47 +166,40 @@ namespace TeamsManager.Tests.Services
             string subDeptsCacheKey = SubDepartmentsByParentIdCacheKeyPrefix + departmentId;
             string usersCacheKey = UsersInDepartmentCacheKeyPrefix + departmentId;
 
-            // Krok 1: Pobranie bazowego obiektu z cache
             SetupCacheTryGetValue(baseCacheKey, baseDepartment, true);
-            // Krok 2: Pobranie poddziałów (założenie, że nie ma w cache dla GetSubDepartmentsAsync)
             SetupCacheTryGetValue(subDeptsCacheKey, (IEnumerable<Department>?)null, false);
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
                                    .ReturnsAsync(subDepts);
-            // Krok 3: Pobranie użytkowników (założenie, że nie ma w cache dla GetUsersInDepartmentAsync)
             SetupCacheTryGetValue(usersCacheKey, (IEnumerable<User>?)null, false);
             _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
                                .ReturnsAsync(users);
 
-            // Act
             var result = await _departmentService.GetDepartmentByIdAsync(departmentId, includeSubDepartments: true, includeUsers: true);
 
-            // Assert
             result.Should().NotBeNull();
             result!.Name.Should().Be("Base Dept");
             result.SubDepartments.Should().BeEquivalentTo(subDepts);
             result.Users.Should().BeEquivalentTo(users);
 
-            _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Never); // Bo bazowy obiekt był w cache
+            _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Never);
             _mockDepartmentRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))), Times.Once);
             _mockUserRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.CreateEntry(subDeptsCacheKey), Times.Once); // Sprawdzenie cache'owania poddziałów
-            _mockMemoryCache.Verify(m => m.CreateEntry(usersCacheKey), Times.Once);    // Sprawdzenie cache'owania użytkowników
+            _mockMemoryCache.Verify(m => m.CreateEntry(subDeptsCacheKey), Times.Once);
+            _mockMemoryCache.Verify(m => m.CreateEntry(usersCacheKey), Times.Once);
         }
 
         // --- Testy dla GetAllDepartmentsAsync ---
         [Fact]
         public async Task GetAllDepartmentsAsync_RootOnly_NotInCache_ShouldReturnAndCache()
         {
-            // Arrange
             var rootDepts = new List<Department> { new Department { Id = "root1", ParentDepartmentId = null } };
             SetupCacheTryGetValue(AllDepartmentsRootOnlyCacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>())).ReturnsAsync(rootDepts);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForRootDepartments(ex))))
+                                    .ReturnsAsync(rootDepts);
 
-            // Act
             var result = await _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: true);
 
-            // Assert
             result.Should().BeEquivalentTo(rootDepts);
             _mockMemoryCache.Verify(m => m.CreateEntry(AllDepartmentsRootOnlyCacheKey), Times.Once);
         }
@@ -208,15 +207,13 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetAllDepartmentsAsync_All_NotInCache_ShouldReturnAndCache()
         {
-            // Arrange
             var allDepts = new List<Department> { new Department { Id = "all1" }, new Department { Id = "all2", ParentDepartmentId = "all1" } };
             SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>())).ReturnsAsync(allDepts);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForActiveDepartments(ex))))
+                                  .ReturnsAsync(allDepts);
 
-            // Act
             var result = await _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: false);
 
-            // Assert
             result.Should().BeEquivalentTo(allDepts);
             _mockMemoryCache.Verify(m => m.CreateEntry(AllDepartmentsAllCacheKey), Times.Once);
         }
@@ -225,17 +222,15 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetSubDepartmentsAsync_NotInCache_ShouldReturnAndCache()
         {
-            // Arrange
             var parentId = "parent1";
             var subDepts = new List<Department> { new Department { Id = "sub1", ParentDepartmentId = parentId } };
             string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentId;
             SetupCacheTryGetValue(cacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>())).ReturnsAsync(subDepts);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, parentId))))
+                                    .ReturnsAsync(subDepts);
 
-            // Act
             var result = await _departmentService.GetSubDepartmentsAsync(parentId);
 
-            // Assert
             result.Should().BeEquivalentTo(subDepts);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
         }
@@ -244,17 +239,15 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task GetUsersInDepartmentAsync_NotInCache_ShouldReturnAndCache()
         {
-            // Arrange
             var departmentId = "deptWithUsers";
             var users = new List<User> { new User { Id = "user1", DepartmentId = departmentId } };
             string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId;
             SetupCacheTryGetValue(cacheKey, (IEnumerable<User>?)null, false);
-            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>())).ReturnsAsync(users);
+            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
+                                .ReturnsAsync(users);
 
-            // Act
             var result = await _departmentService.GetUsersInDepartmentAsync(departmentId);
 
-            // Assert
             result.Should().BeEquivalentTo(users);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
         }
@@ -263,110 +256,173 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task CreateDepartmentAsync_ShouldInvalidateCache()
         {
-            // Arrange
+            ResetCapturedOperationHistory();
             string departmentName = "Nowy Dział Do Inwalidacji";
             string departmentDescription = "Opis";
-            Department? addedDepartmentToRepository = null; // Zmienna do przechwycenia działu dodanego do repozytorium
+            Department addedDepartmentToRepository = null!;
 
             _mockDepartmentRepository.Setup(r => r.AddAsync(It.IsAny<Department>()))
                                     .Callback<Department>(dept =>
                                     {
+                                        dept.Id = Guid.NewGuid().ToString();
                                         addedDepartmentToRepository = dept;
                                     })
                                     .Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            // Act
             var resultDepartment = await _departmentService.CreateDepartmentAsync(departmentName, departmentDescription);
 
-            // Assert
-            resultDepartment.Should().NotBeNull(); // Sprawdzenie, czy dział został zwrócony
-            addedDepartmentToRepository.Should().NotBeNull(); // Sprawdzenie, czy callback przechwycił dział
-            resultDepartment!.Id.Should().Be(addedDepartmentToRepository!.Id); // Sprawdzenie, czy ID są spójne
+            resultDepartment.Should().NotBeNull();
+            addedDepartmentToRepository.Should().NotBeNull();
+            var createdDeptId = resultDepartment!.Id;
 
-            _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + resultDepartment.Id), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + resultDepartment.Id), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + resultDepartment.Id), Times.AtLeastOnce);
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == departmentName && op.Type == OperationType.DepartmentCreated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
+
+            _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
+            if (resultDepartment.ParentDepartmentId != null)
+            {
+                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + resultDepartment.ParentDepartmentId), Times.AtLeastOnce);
+            }
+
+            var expectedDeptsAfterCreate = new List<Department> { resultDepartment };
+            AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterCreate, false);
+            AssertCacheInvalidationByReFetchingAllDepartments(
+                resultDepartment.ParentDepartmentId == null ? expectedDeptsAfterCreate : new List<Department>(),
+                true);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.DepartmentCreated);
         }
 
         [Fact]
         public async Task UpdateDepartmentAsync_ShouldInvalidateCache()
         {
-            // Arrange
+            ResetCapturedOperationHistory();
             var deptId = "dept-update-cache";
-            var existingDept = new Department { Id = deptId, Name = "Old", ParentDepartmentId = "oldParent" };
-            var updatedDept = new Department { Id = deptId, Name = "New", ParentDepartmentId = "newParent" };
-            var newParentDept = new Department { Id = "newParent", Name = "New Parent Dept", IsActive = true };
+            var oldParentId = "oldParent";
+            var newParentId = "newParent";
+            var existingDept = new Department { Id = deptId, Name = "Old", ParentDepartmentId = oldParentId, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
+            var updatedDeptData = new Department { Id = deptId, Name = "New", ParentDepartmentId = newParentId, IsActive = true };
+            var newParentDept = new Department { Id = newParentId, Name = "New Parent Dept", IsActive = true };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(deptId)).ReturnsAsync(existingDept);
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("newParent")).ReturnsAsync(newParentDept);
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(newParentId)).ReturnsAsync(newParentDept);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+                .ReturnsAsync(new List<Department>());
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            // Act
-            await _departmentService.UpdateDepartmentAsync(updatedDept);
+            var result = await _departmentService.UpdateDepartmentAsync(updatedDeptData);
+            result.Should().BeTrue();
 
-            // Assert
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == deptId && op.Type == OperationType.DepartmentUpdated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
             _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + "oldParent"), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + "newParent"), Times.AtLeastOnce);
-            // Token też powinien być zresetowany
+            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + deptId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + oldParentId), Times.AtLeastOnce);
+            if (newParentId != null)
+            {
+                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + newParentId), Times.AtLeastOnce);
+            }
+
+            var expectedDeptAfterUpdate = new Department
+            {
+                Id = deptId,
+                Name = "New",
+                ParentDepartmentId = newParentId,
+                IsActive = true,
+                ParentDepartment = newParentDept
+            };
+            var expectedDeptsAfterUpdateList = new List<Department> { expectedDeptAfterUpdate };
+
+            AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterUpdateList, false);
+            AssertCacheInvalidationByReFetchingAllDepartments(
+                expectedDeptAfterUpdate.ParentDepartmentId == null ? expectedDeptsAfterUpdateList : new List<Department>(),
+                true);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.DepartmentUpdated);
         }
 
         [Fact]
         public async Task DeleteDepartmentAsync_ShouldInvalidateCache()
         {
-            // Arrange
+            ResetCapturedOperationHistory();
             var deptId = "dept-delete-cache";
-            var deptToDelete = new Department { Id = deptId, Name = "ToDelete", ParentDepartmentId = "parentDel", IsActive = true };
+            var parentId = "parentDel";
+            var deptToDelete = new Department { Id = deptId, Name = "ToDelete", ParentDepartmentId = parentId, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(deptId)).ReturnsAsync(deptToDelete);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
-                                    .ReturnsAsync(new List<Department>()); // No sub-departments
-            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
-                              .ReturnsAsync(new List<User>()); // No users
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, deptId))))
+                                    .ReturnsAsync(new List<Department>());
+            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, deptId))))
+                              .ReturnsAsync(new List<User>());
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            // Act
-            await _departmentService.DeleteDepartmentAsync(deptId);
+            var result = await _departmentService.DeleteDepartmentAsync(deptId);
+            result.Should().BeTrue();
 
-            // Assert
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == deptId && op.Type == OperationType.DepartmentDeleted)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
             _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + "parentDel"), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + deptId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
+            if (parentId != null)
+            {
+                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + parentId), Times.AtLeastOnce);
+            }
+
+            AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), false);
+            AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), true);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.DepartmentDeleted);
         }
 
         [Fact]
         public async Task RefreshCacheAsync_ShouldTriggerCacheInvalidationForAllDepartmentKeys()
         {
-            // Act
             await _departmentService.RefreshCacheAsync();
 
-            // Assert
-            // Weryfikacja, że odpowiednie klucze zostałyby usunięte (lub token anulowany)
-            // Najprostsza weryfikacja to sprawdzenie, czy następne wywołanie Get pobiera z repozytorium
-            SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false); // Symulacja braku w cache
+            _mockMemoryCache.Verify(m => m.Remove(AllDepartmentsRootOnlyCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(AllDepartmentsAllCacheKey), Times.AtLeastOnce);
+
+            SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false);
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                    .ReturnsAsync(new List<Department>())
                                    .Verifiable();
 
             await _departmentService.GetAllDepartmentsAsync();
-            _mockDepartmentRepository.Verify(); // Sprawdza, czy metoda oznaczona Verifiable została wywołana
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForActiveDepartments(ex))), Times.Once);
         }
 
         // --- Test CreateDepartmentAsync ---
         [Fact]
         public async Task CreateDepartmentAsync_ValidInputs_ShouldCreateDepartmentSuccessfully()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var name = "Nowy Dział";
             var description = "Opis nowego działu";
             var departmentCode = "ND";
             Department? addedDepartment = null;
             _mockDepartmentRepository.Setup(r => r.AddAsync(It.IsAny<Department>()))
-                                    .Callback<Department>(dept => addedDepartment = dept)
+                                    .Callback<Department>(dept =>
+                                    {
+                                        dept.Id = Guid.NewGuid().ToString();
+                                        addedDepartment = dept;
+                                    })
                                     .Returns(Task.CompletedTask);
 
-            // Act
             var result = await _departmentService.CreateDepartmentAsync(name, description, null, departmentCode);
 
-            // Assert
             result.Should().NotBeNull();
             addedDepartment.Should().NotBeNull();
             result.Should().BeSameAs(addedDepartment);
@@ -378,7 +434,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task CreateDepartmentAsync_WithParentDepartment_ShouldCreateDepartmentWithParent()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var name = "Subdział";
             var description = "Opis poddziału";
@@ -389,13 +444,15 @@ namespace TeamsManager.Tests.Services
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(parentId)).ReturnsAsync(parentDepartment);
             _mockDepartmentRepository.Setup(r => r.AddAsync(It.IsAny<Department>()))
-                                    .Callback<Department>(dept => addedDepartment = dept)
+                                    .Callback<Department>(dept =>
+                                    {
+                                        dept.Id = Guid.NewGuid().ToString();
+                                        addedDepartment = dept;
+                                    })
                                     .Returns(Task.CompletedTask);
 
-            // Act
             var result = await _departmentService.CreateDepartmentAsync(name, description, parentId, departmentCode);
 
-            // Assert
             result.Should().NotBeNull();
             addedDepartment.Should().NotBeNull();
             result!.ParentDepartmentId.Should().Be(parentId);
@@ -406,22 +463,31 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task CreateDepartmentAsync_NullOrEmptyName_ShouldThrowArgumentException()
         {
-            // Arrange
             ResetCapturedOperationHistory();
 
-            // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 _departmentService.CreateDepartmentAsync(null!, "Description"));
+            // Po rzuceniu wyjątku, _capturedOperationHistory może nie być w pełni zaktualizowane,
+            // jeśli SaveOperationHistoryAsync jest w bloku finally, a MarkAsFailed jest wołane przed rzuceniem.
+            // Aby to przetestować, musielibyśmy przechwycić wyjątek i sprawdzić _capturedOperationHistory
+            // lub upewnić się, że MarkAsFailed jest ostatnią operacją przed rzuceniem.
+            // Zgodnie z implementacją CreateDepartmentAsync, MarkAsFailed jest wołane PRZED rzuceniem wyjątku,
+            // a SaveOperationHistoryAsync w bloku finally powinno zapisać ten stan.
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Status == OperationStatus.Failed)), Times.AtLeastOnce());
+
+
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 _departmentService.CreateDepartmentAsync("", "Description"));
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Status == OperationStatus.Failed)), Times.AtLeastOnce());
+
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 _departmentService.CreateDepartmentAsync("   ", "Description"));
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Status == OperationStatus.Failed)), Times.AtLeastOnce());
         }
 
         [Fact]
         public async Task UpdateDepartmentAsync_ValidDepartment_ShouldUpdateSuccessfully()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var departmentId = "dept-to-update";
             var existingDepartment = new Department
@@ -429,7 +495,9 @@ namespace TeamsManager.Tests.Services
                 Id = departmentId,
                 Name = "Old Name",
                 Description = "Old Description",
-                IsActive = true
+                IsActive = true,
+                CreatedBy = "initial",
+                CreatedDate = DateTime.UtcNow.AddDays(-1)
             };
             var updatedDepartment = new Department
             {
@@ -442,10 +510,8 @@ namespace TeamsManager.Tests.Services
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(existingDepartment);
             _mockDepartmentRepository.Setup(r => r.Update(It.IsAny<Department>())).Verifiable();
 
-            // Act
             await _departmentService.UpdateDepartmentAsync(updatedDepartment);
 
-            // Assert
             _mockDepartmentRepository.Verify(r => r.Update(It.Is<Department>(d =>
                 d.Id == departmentId &&
                 d.Name == "New Name" &&
@@ -457,22 +523,19 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task DeleteDepartmentAsync_DepartmentWithNoSubDepartmentsOrUsers_ShouldDeleteSuccessfully()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var departmentId = "dept-to-delete";
-            var department = new Department { Id = departmentId, Name = "To Delete", IsActive = true };
+            var department = new Department { Id = departmentId, Name = "To Delete", IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
                                     .ReturnsAsync(new List<Department>());
-            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
+            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
                               .ReturnsAsync(new List<User>());
             _mockDepartmentRepository.Setup(r => r.Update(It.IsAny<Department>())).Verifiable();
 
-            // Act
             await _departmentService.DeleteDepartmentAsync(departmentId);
 
-            // Assert
             _mockDepartmentRepository.Verify(r => r.Update(It.Is<Department>(d =>
                 d.Id == departmentId && d.IsActive == false)), Times.Once);
             _capturedOperationHistory.Should().NotBeNull();
@@ -482,7 +545,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task DeleteDepartmentAsync_DepartmentWithSubDepartments_ShouldThrowInvalidOperationException()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var departmentId = "dept-with-subdepts";
             var department = new Department { Id = departmentId, Name = "Parent Dept", IsActive = true };
@@ -492,12 +554,12 @@ namespace TeamsManager.Tests.Services
             };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
                                     .ReturnsAsync(subDepartments);
 
-            // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _departmentService.DeleteDepartmentAsync(departmentId));
+
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory!.Status.Should().Be(OperationStatus.Failed);
         }
@@ -505,7 +567,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task DeleteDepartmentAsync_DepartmentWithUsers_ShouldThrowInvalidOperationException()
         {
-            // Arrange
             ResetCapturedOperationHistory();
             var departmentId = "dept-with-users";
             var department = new Department { Id = departmentId, Name = "Dept with Users", IsActive = true };
@@ -515,14 +576,14 @@ namespace TeamsManager.Tests.Services
             };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
                                     .ReturnsAsync(new List<Department>());
-            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
+            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
                               .ReturnsAsync(users);
 
-            // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _departmentService.DeleteDepartmentAsync(departmentId));
+
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory!.Status.Should().Be(OperationStatus.Failed);
         }
@@ -548,6 +609,25 @@ namespace TeamsManager.Tests.Services
 
                 var compiled = expression.Compile();
                 return compiled(user) && !compiled(nonMatchingUser) && !compiled(inactiveUser);
+            }
+
+            public static bool IsForRootDepartments(Expression<Func<Department, bool>> expression)
+            {
+                var rootDept = new Department { ParentDepartmentId = null, IsActive = true };
+                var childDept = new Department { ParentDepartmentId = "root1", IsActive = true };
+                var inactiveRootDept = new Department { ParentDepartmentId = null, IsActive = false };
+
+                var compiled = expression.Compile();
+                return compiled(rootDept) && !compiled(childDept) && !compiled(inactiveRootDept);
+            }
+
+            public static bool IsForActiveDepartments(Expression<Func<Department, bool>> expression)
+            {
+                var activeDept = new Department { IsActive = true };
+                var inactiveDept = new Department { IsActive = false };
+
+                var compiled = expression.Compile();
+                return compiled(activeDept) && !compiled(inactiveDept);
             }
         }
     }

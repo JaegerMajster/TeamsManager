@@ -30,7 +30,8 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<UserService>> _mockLogger;
-        private readonly Mock<IMemoryCache> _mockMemoryCache; // Dodano
+        private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<ISubjectService> _mockSubjectService; // Dodany mock dla ISubjectService
 
         private readonly UserService _userService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -53,14 +54,14 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<UserService>>();
-            _mockMemoryCache = new Mock<IMemoryCache>(); // Inicjalizacja
+            _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockSubjectService = new Mock<ISubjectService>(); // Inicjalizacja mocka
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
                                          .Returns(Task.CompletedTask);
-            _mockOperationHistoryRepository.Setup(r => r.Update(It.IsAny<OperationHistory>()))
-                                        .Callback<OperationHistory>(op => _capturedOperationHistory = op!);
+            // Usunięto Setup dla Update, jeśli SaveOperationHistoryAsync zawsze robi AddAsync
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -83,7 +84,8 @@ namespace TeamsManager.Tests.Services
                 _mockOperationHistoryRepository.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object // Przekazanie mocka
+                _mockMemoryCache.Object,
+                _mockSubjectService.Object // Przekazanie mocka ISubjectService
             );
         }
 
@@ -93,6 +95,26 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
                            .Returns(foundInCache);
         }
+
+        private void ResetCapturedOperationHistory()
+        {
+            _capturedOperationHistory = null;
+        }
+
+        private void AssertCacheInvalidationByReFetchingAllActiveUsers(List<User> expectedDbItemsAfterOperation)
+        {
+            SetupCacheTryGetValue(AllActiveUsersCacheKey, (IEnumerable<User>?)null, false);
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
+                                 .ReturnsAsync(expectedDbItemsAfterOperation)
+                                 .Verifiable();
+
+            var resultAfterInvalidation = _userService.GetAllActiveUsersAsync().Result;
+
+            _mockUserRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()), Times.Once, "GetAllActiveUsersAsync powinno odpytać repozytorium po unieważnieniu cache.");
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
+            _mockMemoryCache.Verify(m => m.CreateEntry(AllActiveUsersCacheKey), Times.AtLeastOnce, "Dane GetAllActiveUsersAsync powinny zostać ponownie zcache'owane.");
+        }
+
 
         // --- Testy GetUserByIdAsync ---
         [Fact]
@@ -109,7 +131,7 @@ namespace TeamsManager.Tests.Services
             result.Should().BeEquivalentTo(expectedUser);
             _mockUserRepository.Verify(r => r.GetByIdAsync(userId), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(UserByUpnCacheKeyPrefix + expectedUser.UPN), Times.Once); // Sprawdzenie cache'owania także po UPN
+            _mockMemoryCache.Verify(m => m.CreateEntry(UserByUpnCacheKeyPrefix + expectedUser.UPN), Times.Once);
         }
 
         [Fact]
@@ -127,88 +149,22 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task DEBUG_UpdateUserAsync_ShouldCallCacheRemove()
-        {
-            // Arrange
-            var userId = "user-update-cache";
-            var departmentId = "dept1";
-
-            var existingUser = new User
-            {
-                Id = userId,
-                UPN = "old@example.com",
-                Role = UserRole.Uczen,
-                FirstName = "Old",
-                LastName = "Data",
-                DepartmentId = departmentId,
-                IsActive = true
-            };
-
-            var userToUpdate = new User
-            {
-                Id = userId,
-                UPN = "new@example.com",
-                Role = UserRole.Nauczyciel,
-                FirstName = "New",
-                LastName = "Data",
-                DepartmentId = departmentId,
-                IsActive = true
-            };
-
-            var department = new Department { Id = departmentId, Name = "Test Dept", IsActive = true };
-
-            // Setup wszystkich wymaganych mocków
-            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(existingUser);
-            _mockUserRepository.Setup(r => r.GetUserByUpnAsync("new@example.com")).ReturnsAsync((User?)null);
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
-            _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>())).Returns(Task.CompletedTask);
-
-            // Dodaj callback żeby zobaczyć czy Remove jest wywoływane
-            var removeCalls = new List<object>();
-            _mockMemoryCache.Setup(m => m.Remove(It.IsAny<object>()))
-                           .Callback<object>(key => removeCalls.Add(key));
-
-            // Act
-            var result = await _userService.UpdateUserAsync(userToUpdate);
-
-            // Assert & Debug
-            result.Should().BeTrue("UpdateUserAsync should succeed");
-
-            // Debug: sprawdź co zostało wywołane
-            Console.WriteLine($"Remove calls count: {removeCalls.Count}");
-            foreach (var call in removeCalls)
-            {
-                Console.WriteLine($"Remove called with: {call}");
-            }
-
-            // Verify podstawowe wywołanie
-            _mockMemoryCache.Verify(m => m.Remove(It.IsAny<object>()), Times.AtLeastOnce,
-                "Cache Remove should be called at least once");
-
-            // Verify konkretny klucz
-            _mockMemoryCache.Verify(m => m.Remove("User_Id_user-update-cache"), Times.Once,
-                "Should remove specific user cache key");
-        }
-
-        [Fact]
         public async Task GetUserByIdAsync_WithForceRefresh_ShouldBypassCache()
         {
             var userId = "user-force-id";
             var cachedUser = new User { Id = userId, UPN = "old@example.com" };
             var dbUser = new User { Id = userId, UPN = "new@example.com" };
             string cacheKey = UserByIdCacheKeyPrefix + userId;
-            string upnCacheKey = UserByUpnCacheKeyPrefix + dbUser.UPN; // Klucz dla nowego UPN
+            string upnCacheKey = UserByUpnCacheKeyPrefix + dbUser.UPN;
 
-            SetupCacheTryGetValue(cacheKey, cachedUser, true); // Jest w cache
-            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(dbUser); // Repo zwróci nowy obiekt
-            SetupCacheTryGetValue(upnCacheKey, (User?)null, false); // Załóżmy, że cache dla UPN jest pusty lub zostanie nadpisany
+            SetupCacheTryGetValue(cacheKey, cachedUser, true);
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(dbUser);
+            SetupCacheTryGetValue(upnCacheKey, (User?)null, false);
 
             var result = await _userService.GetUserByIdAsync(userId, forceRefresh: true);
 
             result.Should().BeEquivalentTo(dbUser);
-            _mockUserRepository.Verify(r => r.GetByIdAsync(userId), Times.Once); // Powinno być jedno wywołanie
+            _mockUserRepository.Verify(r => r.GetByIdAsync(userId), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(upnCacheKey), Times.Once);
         }
@@ -223,16 +179,16 @@ namespace TeamsManager.Tests.Services
             string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
             string idCacheKey = UserByIdCacheKeyPrefix + userId;
 
-            SetupCacheTryGetValue(upnCacheKey, (User?)null, false); // Brak w cache UPN
-            SetupCacheTryGetValue(idCacheKey, (User?)null, false); // Brak w cache ID (dla GetUserByIdAsync wywoływanego wewnętrznie)
-            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(upn)).ReturnsAsync(new User { Id = userId, UPN = upn }); // Podstawowy obiekt
-            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(expectedUser); // Pełny obiekt
+            SetupCacheTryGetValue(upnCacheKey, (User?)null, false);
+            SetupCacheTryGetValue(idCacheKey, (User?)null, false);
+            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(upn)).ReturnsAsync(new User { Id = userId, UPN = upn });
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(expectedUser);
 
             var result = await _userService.GetUserByUpnAsync(upn);
 
             result.Should().BeEquivalentTo(expectedUser);
             _mockUserRepository.Verify(r => r.GetUserByUpnAsync(upn), Times.Once);
-            _mockUserRepository.Verify(r => r.GetByIdAsync(userId), Times.Once); // Wywołanie GetUserByIdAsync wewnątrz
+            _mockUserRepository.Verify(r => r.GetByIdAsync(userId), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(upnCacheKey), Times.Once);
             _mockMemoryCache.Verify(m => m.CreateEntry(idCacheKey), Times.Once);
         }
@@ -271,20 +227,40 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task CreateUserAsync_ShouldInvalidateCache()
         {
-            var newUser = new User { Id = "new-user", UPN = "new@example.com", Role = UserRole.Uczen, FirstName = "New", LastName = "User" };
+            ResetCapturedOperationHistory();
+            var newUser = new User { UPN = "new@example.com", Role = UserRole.Uczen, FirstName = "New", LastName = "User", DepartmentId = "dept1" };
+            var createdUserWithId = new User { Id = "new-user-id", UPN = newUser.UPN, Role = newUser.Role, FirstName = newUser.FirstName, LastName = newUser.LastName, DepartmentId = newUser.DepartmentId, IsActive = true };
+
             _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newUser.UPN)).ReturnsAsync((User?)null);
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync(new Department { Id = "dept1", IsActive = true });
-            _mockUserRepository.Setup(r => r.AddAsync(It.IsAny<User>())).Callback<User>(u => u.Id = newUser.Id).Returns(Task.CompletedTask); // Symulacja ustawienia ID
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("dept1")).ReturnsAsync(new Department { Id = "dept1", IsActive = true });
+            _mockUserRepository.Setup(r => r.AddAsync(It.IsAny<User>()))
+                                 .Callback<User>(u => u.Id = createdUserWithId.Id)
+                                 .Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            await _userService.CreateUserAsync(newUser.FirstName, newUser.LastName, newUser.UPN, newUser.Role, "dept1");
+            var result = await _userService.CreateUserAsync(newUser.FirstName, newUser.LastName, newUser.UPN, newUser.Role, "dept1");
+            result.Should().NotBeNull();
 
-            _mockMemoryCache.Verify(m => m.Remove(It.IsAny<object>()), Times.AtLeastOnce);
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == $"{newUser.FirstName} {newUser.LastName} ({newUser.UPN})" && op.Type == OperationType.UserCreated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
+
+            _mockMemoryCache.Verify(m => m.Remove(AllActiveUsersCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + result!.Id), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + result.UPN), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + result.Role.ToString()), Times.AtLeastOnce);
+
+            AssertCacheInvalidationByReFetchingAllActiveUsers(new List<User> { result });
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.UserCreated);
         }
 
         [Fact]
-        public async Task UpdateUserAsync_ShouldInvalidateCacheForUserAndPotentiallyRolesAndAllUsers()
+        public async Task UpdateUserAsync_ShouldInvalidateCache_AndHandleUpnAndRoleChange()
         {
-            // Arrange
+            ResetCapturedOperationHistory();
             var userId = "user-update-cache";
             var oldUpn = "old.update@example.com";
             var newUpn = "new.update@example.com";
@@ -292,7 +268,7 @@ namespace TeamsManager.Tests.Services
             var newRole = UserRole.Nauczyciel;
             var departmentId = "dept1";
 
-            var existingUser = new User
+            var existingUserInDb = new User
             {
                 Id = userId,
                 UPN = oldUpn,
@@ -300,10 +276,11 @@ namespace TeamsManager.Tests.Services
                 FirstName = "Old",
                 LastName = "Data",
                 DepartmentId = departmentId,
-                IsActive = true
+                IsActive = true,
+                CreatedBy = "initial",
+                CreatedDate = DateTime.UtcNow.AddDays(-1)
             };
-
-            var userToUpdate = new User
+            var userToUpdateData = new User
             {
                 Id = userId,
                 UPN = newUpn,
@@ -313,104 +290,207 @@ namespace TeamsManager.Tests.Services
                 DepartmentId = departmentId,
                 IsActive = true
             };
+            var department = new Department { Id = departmentId, Name = "Test Department", IsActive = true };
 
-            var department = new Department
-            {
-                Id = departmentId,
-                Name = "Test Department",
-                IsActive = true
-            };
-
-            // Setup mocków - KLUCZOWE: wszystkie wymagane zależności
-            _mockUserRepository.Setup(r => r.GetByIdAsync(userId))
-                              .ReturnsAsync(existingUser);
-
-            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newUpn))
-                              .ReturnsAsync((User?)null); // Brak konfliktu UPN
-
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId))
-                                    .ReturnsAsync(department);
-
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(existingUserInDb);
+            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newUpn)).ReturnsAsync((User?)null);
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
             _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            // Setup dla SaveOperationHistoryAsync - BARDZO WAŻNE
-            _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>()))
-                                          .ReturnsAsync((OperationHistory?)null);
+            var updateResult = await _userService.UpdateUserAsync(userToUpdateData);
+            updateResult.Should().BeTrue();
 
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                          .Returns(Task.CompletedTask);
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == userId && op.Type == OperationType.UserUpdated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            // Act
-            var result = await _userService.UpdateUserAsync(userToUpdate);
-
-            // Assert
-            result.Should().BeTrue();
-
-            // Verify że cache został inwalidowany dla wszystkich kluczowych elementów
-            _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + userId), Times.Once);
+            _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + userId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + oldUpn), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + newUpn), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + oldRole.ToString()), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + newRole.ToString()), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllActiveUsersCacheKey), Times.AtLeastOnce);
 
-            // Opcjonalne dodatkowe weryfikacje - te mogą być wymagane w zależności od implementacji
-            // _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + oldUpn), Times.AtLeastOnce);
-            // _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + newUpn), Times.AtLeastOnce);
-            // _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + oldRole.ToString()), Times.AtLeastOnce);
-            // _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + newRole.ToString()), Times.AtLeastOnce);
+            var expectedAfterUpdate = new User
+            {
+                Id = userId,
+                UPN = newUpn,
+                Role = newRole,
+                FirstName = "New",
+                LastName = "Data",
+                DepartmentId = departmentId,
+                Department = department,
+                IsActive = true,
+                CreatedBy = existingUserInDb.CreatedBy,
+                CreatedDate = existingUserInDb.CreatedDate
+            };
+            AssertCacheInvalidationByReFetchingAllActiveUsers(new List<User> { expectedAfterUpdate });
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.UserUpdated);
         }
 
         [Fact]
         public async Task DeactivateUserAsync_ShouldInvalidateCacheForUserAndLists()
         {
+            ResetCapturedOperationHistory();
             var userId = "user-deactivate";
-            var user = new User { Id = userId, UPN = "deactivate@example.com", Role = UserRole.Nauczyciel, IsActive = true };
+            var user = new User { Id = userId, UPN = "deactivate@example.com", Role = UserRole.Nauczyciel, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(user);
+            _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            await _userService.DeactivateUserAsync(userId);
+            var deactivateResult = await _userService.DeactivateUserAsync(userId);
+            deactivateResult.Should().BeTrue();
+
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == userId && op.Type == OperationType.UserDeactivated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
             _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + userId), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + user.UPN), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(UsersByRoleCacheKeyPrefix + user.Role.ToString()), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllActiveUsersCacheKey), Times.AtLeastOnce);
+
+            AssertCacheInvalidationByReFetchingAllActiveUsers(new List<User>());
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.UserDeactivated);
         }
 
         [Fact]
         public async Task AssignUserToSchoolTypeAsync_ShouldInvalidateUserCache()
         {
+            ResetCapturedOperationHistory();
             var userId = "user-assign-st";
-            var user = new User { Id = userId, UPN = "assign.st@example.com", SchoolTypeAssignments = new List<UserSchoolType>() };
+            var user = new User { Id = userId, UPN = "assign.st@example.com", SchoolTypeAssignments = new List<UserSchoolType>(), IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             var schoolType = new SchoolType { Id = "st1", IsActive = true };
+            var newUserSchoolType = new UserSchoolType { Id = "new-ust-id", UserId = userId, SchoolTypeId = schoolType.Id, User = user, SchoolType = schoolType, IsActive = true, IsCurrentlyActive = true };
 
             _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(user);
             _mockSchoolTypeRepository.Setup(r => r.GetByIdAsync(schoolType.Id)).ReturnsAsync(schoolType);
             _mockUserSchoolTypeRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<UserSchoolType, bool>>>()))
                                        .ReturnsAsync(new List<UserSchoolType>());
-            _mockUserSchoolTypeRepository.Setup(r => r.AddAsync(It.IsAny<UserSchoolType>())).Returns(Task.CompletedTask);
+            _mockUserSchoolTypeRepository.Setup(r => r.AddAsync(It.IsAny<UserSchoolType>()))
+                                        .Callback<UserSchoolType>(ust => ust.Id = newUserSchoolType.Id)
+                                        .Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            await _userService.AssignUserToSchoolTypeAsync(userId, schoolType.Id, DateTime.UtcNow);
+            var assignResult = await _userService.AssignUserToSchoolTypeAsync(userId, schoolType.Id, DateTime.UtcNow);
+            assignResult.Should().NotBeNull();
+
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSchoolTypeAssigned)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
             _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + userId), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + user.UPN), Times.AtLeastOnce);
+
+            SetupCacheTryGetValue(UserByIdCacheKeyPrefix + userId, (User?)null, false);
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId)).ReturnsAsync(user).Verifiable();
+            await _userService.GetUserByIdAsync(userId);
+            _mockUserRepository.Verify();
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.UserSchoolTypeAssigned);
         }
+
+        [Fact]
+        public async Task AssignTeacherToSubjectAsync_ValidData_ShouldAssignAndInvalidateSubjectCache()
+        {
+            ResetCapturedOperationHistory();
+            var teacherId = "teacher-1";
+            var subjectId = "subject-1";
+            var assignedDate = DateTime.UtcNow;
+            var teacher = new User { Id = teacherId, UPN = "teacher@example.com", Role = UserRole.Nauczyciel, IsActive = true, TaughtSubjects = new List<UserSubject>() };
+            var subject = new Subject { Id = subjectId, Name = "Matematyka", IsActive = true };
+            var expectedUserSubject = new UserSubject { Id = "us-1", UserId = teacherId, SubjectId = subjectId, AssignedDate = assignedDate, IsActive = true };
+
+            _mockUserRepository.Setup(r => r.GetByIdAsync(teacherId)).ReturnsAsync(teacher);
+            _mockSubjectRepository.Setup(r => r.GetByIdAsync(subjectId)).ReturnsAsync(subject);
+            _mockUserSubjectRepository.Setup(r => r.AddAsync(It.IsAny<UserSubject>()))
+                                    .Callback<UserSubject>(us => us.Id = expectedUserSubject.Id)
+                                    .Returns(Task.CompletedTask);
+            _mockSubjectService.Setup(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId)).Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
+
+            var result = await _userService.AssignTeacherToSubjectAsync(teacherId, subjectId, assignedDate);
+
+            result.Should().NotBeNull();
+            result!.Id.Should().Be(expectedUserSubject.Id);
+            _mockUserRepository.Verify(r => r.GetByIdAsync(teacherId), Times.Once);
+            _mockSubjectRepository.Verify(r => r.GetByIdAsync(subjectId), Times.Once);
+            _mockUserSubjectRepository.Verify(r => r.AddAsync(It.Is<UserSubject>(us => us.UserId == teacherId && us.SubjectId == subjectId)), Times.Once);
+
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSubjectAssigned)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
+            _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + teacherId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + teacher.UPN), Times.AtLeastOnce);
+
+            _mockSubjectService.Verify(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId), Times.Once);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.UserSubjectAssigned);
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.Completed);
+        }
+
+        [Fact]
+        public async Task RemoveTeacherFromSubjectAsync_ValidId_ShouldRemoveAndInvalidateSubjectCache()
+        {
+            ResetCapturedOperationHistory();
+            var userSubjectId = "us-to-remove";
+            var teacherId = "teacher-for-removal";
+            var subjectId = "subject-for-removal";
+            var user = new User { Id = teacherId, UPN = "teacher.remove@example.com", IsActive = true };
+            var subject = new Subject { Id = subjectId, Name = "Fizyka", IsActive = true };
+            var assignmentToRemove = new UserSubject { Id = userSubjectId, UserId = teacherId, SubjectId = subjectId, User = user, Subject = subject, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
+
+            _mockUserSubjectRepository.Setup(r => r.GetByIdAsync(userSubjectId)).ReturnsAsync(assignmentToRemove);
+            _mockUserRepository.Setup(r => r.GetByIdAsync(teacherId)).ReturnsAsync(user);
+            _mockSubjectRepository.Setup(r => r.GetByIdAsync(subjectId)).ReturnsAsync(subject);
+            _mockUserSubjectRepository.Setup(r => r.Update(It.IsAny<UserSubject>()));
+            _mockSubjectService.Setup(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId)).Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
+
+            var result = await _userService.RemoveTeacherFromSubjectAsync(userSubjectId);
+
+            result.Should().BeTrue();
+            _mockUserSubjectRepository.Verify(r => r.GetByIdAsync(userSubjectId), Times.Once);
+            _mockUserSubjectRepository.Verify(r => r.Update(It.Is<UserSubject>(us => us.Id == userSubjectId && !us.IsActive)), Times.Once);
+
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSubjectRemoved)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
+            _mockMemoryCache.Verify(m => m.Remove(UserByIdCacheKeyPrefix + teacherId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UserByUpnCacheKeyPrefix + user.UPN), Times.AtLeastOnce);
+
+            _mockSubjectService.Verify(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId), Times.Once);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.UserSubjectRemoved);
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.Completed);
+        }
+
 
         [Fact]
         public async Task RefreshCacheAsync_ShouldTriggerCacheInvalidationForAllUserKeys()
         {
             await _userService.RefreshCacheAsync();
 
-            // Sprawdzenie, czy token został zresetowany, co unieważni wszystkie wpisy
-            // Możemy to zasymulować, sprawdzając, czy następne wywołanie Get pobiera z repozytorium
             SetupCacheTryGetValue(AllActiveUsersCacheKey, (IEnumerable<User>?)null, false);
             _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                                .ReturnsAsync(new List<User>())
                                .Verifiable();
 
             await _userService.GetAllActiveUsersAsync();
-            _mockUserRepository.Verify();
+            _mockUserRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()), Times.Once);
         }
 
 
-        // Przykładowy istniejący test, który nadal powinien działać
         [Fact]
-        public async Task GetUserByIdAsync_ExistingUser_ShouldReturnUser_OriginalTest()
+        public async Task GetUserByIdAsync_ExistingUser_OriginalTest_ShouldReturnUser()
         {
             var userId = "user-123-orig";
             var expectedUser = new User { Id = userId, UPN = "jan.kowalski@example.com", FirstName = "Jan", LastName = "Kowalski", IsActive = true };

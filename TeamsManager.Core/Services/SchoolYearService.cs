@@ -615,35 +615,23 @@ namespace TeamsManager.Core.Services
         /// <param name="operation">Obiekt operacji do zapisania</param>
         private async Task SaveOperationHistoryAsync(OperationHistory operation)
         {
-            // Upewnij się, że operacja ma wszystkie wymagane pola
-            if (string.IsNullOrEmpty(operation.Id))
-                operation.Id = Guid.NewGuid().ToString();
+            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
             if (string.IsNullOrEmpty(operation.CreatedBy))
                 operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
 
-            // Sprawdź czy operacja już istnieje w bazie
-            var existingLog = await _operationHistoryRepository.GetByIdAsync(operation.Id);
-            if (existingLog == null)
+            if (operation.StartedAt == default(DateTime) &&
+                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
             {
-                // Nowa operacja - dodaj do repozytorium
-                await _operationHistoryRepository.AddAsync(operation);
+                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
+                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
+                {
+                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
+                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
+                }
             }
-            else
-            {
-                // Aktualizacja istniejącej operacji - skopiuj wszystkie zmienione właściwości
-                existingLog.Status = operation.Status;
-                existingLog.CompletedAt = operation.CompletedAt;
-                existingLog.Duration = operation.Duration;
-                existingLog.ErrorMessage = operation.ErrorMessage;
-                existingLog.ErrorStackTrace = operation.ErrorStackTrace;
-                existingLog.OperationDetails = operation.OperationDetails;
-                existingLog.TargetEntityName = operation.TargetEntityName;
-                existingLog.TargetEntityId = operation.TargetEntityId;
-                existingLog.ProcessedItems = operation.ProcessedItems;
-                existingLog.FailedItems = operation.FailedItems;
-                existingLog.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_log_update");
-                _operationHistoryRepository.Update(existingLog);
-            }
+
+            await _operationHistoryRepository.AddAsync(operation);
+            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla roku szkolnego.", operation.Id);
         }
     }
 }

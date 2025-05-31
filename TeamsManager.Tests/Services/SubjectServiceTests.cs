@@ -21,7 +21,6 @@ namespace TeamsManager.Tests.Services
 {
     public class SubjectServiceTests
     {
-        // ZMIANA: Typ mocka na ISubjectRepository
         private readonly Mock<ISubjectRepository> _mockSubjectRepository;
         private readonly Mock<IGenericRepository<SchoolType>> _mockSchoolTypeRepository;
         private readonly Mock<IGenericRepository<UserSubject>> _mockUserSubjectRepository;
@@ -43,7 +42,6 @@ namespace TeamsManager.Tests.Services
 
         public SubjectServiceTests()
         {
-            // ZMIANA: Inicjalizacja nowego typu mocka
             _mockSubjectRepository = new Mock<ISubjectRepository>();
             _mockSchoolTypeRepository = new Mock<IGenericRepository<SchoolType>>();
             _mockUserSubjectRepository = new Mock<IGenericRepository<UserSubject>>();
@@ -57,8 +55,7 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op)
                                          .Returns(Task.CompletedTask);
-            _mockOperationHistoryRepository.Setup(r => r.Update(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op);
+            // Celowo nie mockujemy Update dla OperationHistory, aby upewnić się, że nie jest wołane przez SaveOperationHistoryAsync
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -71,7 +68,6 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
                            .Returns(mockCacheEntry.Object);
 
-            // ZMIANA: Przekazanie _mockSubjectRepository.Object do konstruktora SubjectService
             _subjectService = new SubjectService(
                 _mockSubjectRepository.Object,
                 _mockSchoolTypeRepository.Object,
@@ -96,6 +92,37 @@ namespace TeamsManager.Tests.Services
                            .Returns(foundInCache);
         }
 
+        private void AssertCacheInvalidationByReFetchingAllActiveSubjects(List<Subject> expectedDbItemsAfterOperation)
+        {
+            SetupCacheTryGetValue(AllSubjectsCacheKey, (IEnumerable<Subject>?)null, false);
+            _mockSubjectRepository.Setup(r => r.GetAllActiveWithDetailsAsync())
+                                 .ReturnsAsync(expectedDbItemsAfterOperation)
+                                 .Verifiable();
+
+            var resultAfterInvalidation = _subjectService.GetAllActiveSubjectsAsync().Result;
+
+            _mockSubjectRepository.Verify(r => r.GetAllActiveWithDetailsAsync(), Times.Once, "GetAllActiveSubjectsAsync powinno odpytać repozytorium po unieważnieniu cache.");
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
+            _mockMemoryCache.Verify(m => m.CreateEntry(AllSubjectsCacheKey), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
+        }
+
+        private void AssertCacheInvalidationForTeachersList(string subjectId, List<User> expectedTeachers)
+        {
+            SetupCacheTryGetValue(TeachersForSubjectCacheKeyPrefix + subjectId, (IEnumerable<User>?)null, false);
+            _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId))
+                              .ReturnsAsync(new Subject { Id = subjectId, IsActive = true });
+            _mockSubjectRepository.Setup(r => r.GetTeachersAsync(subjectId))
+                                 .ReturnsAsync(expectedTeachers)
+                                 .Verifiable();
+
+            var resultAfterInvalidation = _subjectService.GetTeachersForSubjectAsync(subjectId).Result;
+
+            _mockSubjectRepository.Verify(r => r.GetTeachersAsync(subjectId), Times.Once, $"GetTeachersForSubjectAsync({subjectId}) powinno odpytać repozytorium po unieważnieniu cache.");
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedTeachers);
+            _mockMemoryCache.Verify(m => m.CreateEntry(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce);
+        }
+
+
         // --- Testy GetSubjectByIdAsync ---
         [Fact]
         public async Task GetSubjectByIdAsync_ExistingId_NotInCache_ShouldReturnAndCache()
@@ -114,7 +141,6 @@ namespace TeamsManager.Tests.Services
             string cacheKey = SubjectByIdCacheKeyPrefix + subjectId;
             SetupCacheTryGetValue(cacheKey, (Subject?)null, false);
 
-            // ZMIANA: Użycie GetByIdWithDetailsAsync
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(expectedSubject);
 
             var result = await _subjectService.GetSubjectByIdAsync(subjectId);
@@ -135,7 +161,6 @@ namespace TeamsManager.Tests.Services
             var result = await _subjectService.GetSubjectByIdAsync(subjectId);
 
             result.Should().BeEquivalentTo(cachedSubject);
-            // ZMIANA: Weryfikacja, że GetByIdWithDetailsAsync nie jest wołane
             _mockSubjectRepository.Verify(r => r.GetByIdWithDetailsAsync(It.IsAny<string>()), Times.Never);
         }
 
@@ -148,7 +173,6 @@ namespace TeamsManager.Tests.Services
             string cacheKey = SubjectByIdCacheKeyPrefix + subjectId;
             SetupCacheTryGetValue(cacheKey, cachedSubject, true);
 
-            // ZMIANA: Użycie GetByIdWithDetailsAsync
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(dbSubject);
 
             var result = await _subjectService.GetSubjectByIdAsync(subjectId, forceRefresh: true);
@@ -163,7 +187,6 @@ namespace TeamsManager.Tests.Services
         {
             var subjectId = "subj-with-st";
             var schoolTypeId = "st-for-subject";
-            // Symulujemy, że repozytorium ZAWSZE zwraca obiekt z załadowanym DefaultSchoolType
             var schoolTypeFromDb = new SchoolType { Id = schoolTypeId, ShortName = "LO" };
             var subjectFromRepo = new Subject
             {
@@ -175,15 +198,13 @@ namespace TeamsManager.Tests.Services
             };
             string cacheKey = SubjectByIdCacheKeyPrefix + subjectId;
 
-            SetupCacheTryGetValue(cacheKey, (Subject?)null, false); // Nie ma w cache
+            SetupCacheTryGetValue(cacheKey, (Subject?)null, false);
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(subjectFromRepo);
 
             var result = await _subjectService.GetSubjectByIdAsync(subjectId);
 
             result.Should().NotBeNull();
             result!.DefaultSchoolType.Should().NotBeNull().And.BeEquivalentTo(schoolTypeFromDb);
-            // Nie ma już potrzeby weryfikowania _mockSchoolTypeRepository.GetByIdAsync,
-            // bo ta logika jest wewnątrz SubjectRepository, którego tu mockujemy.
             _mockSubjectRepository.Verify(r => r.GetByIdWithDetailsAsync(subjectId), Times.Once);
         }
 
@@ -196,7 +217,6 @@ namespace TeamsManager.Tests.Services
                 new Subject { Id = "s1", Name = "Fizyka", IsActive = true, DefaultSchoolType = new SchoolType{Id="st1"} }
             };
             SetupCacheTryGetValue(AllSubjectsCacheKey, (IEnumerable<Subject>?)null, false);
-            // ZMIANA: Użycie GetAllActiveWithDetailsAsync
             _mockSubjectRepository.Setup(r => r.GetAllActiveWithDetailsAsync()).ReturnsAsync(activeSubjects);
 
             var result = await _subjectService.GetAllActiveSubjectsAsync();
@@ -217,7 +237,6 @@ namespace TeamsManager.Tests.Services
             var result = await _subjectService.GetAllActiveSubjectsAsync();
 
             result.Should().BeEquivalentTo(cachedSubjects);
-            // ZMIANA: Weryfikacja GetAllActiveWithDetailsAsync
             _mockSubjectRepository.Verify(r => r.GetAllActiveWithDetailsAsync(), Times.Never);
         }
 
@@ -227,23 +246,19 @@ namespace TeamsManager.Tests.Services
         {
             var subjectId = "subj-teachers";
             var teachers = new List<User> { new User { Id = "t1", FirstName = "Nauczyciel" } };
-            // Symulujemy, że przedmiot istnieje i jest aktywny (serwis to sprawdzi)
             var subject = new Subject { Id = subjectId, IsActive = true };
             string cacheKey = TeachersForSubjectCacheKeyPrefix + subjectId;
 
             SetupCacheTryGetValue(cacheKey, (IEnumerable<User>?)null, false);
-            // ZMIANA: Serwis najpierw sprawdzi, czy przedmiot istnieje i jest aktywny
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(subject);
-            // ZMIANA: Główny mock na GetTeachersAsync
             _mockSubjectRepository.Setup(r => r.GetTeachersAsync(subjectId)).ReturnsAsync(teachers);
-            // Mock dla _mockUserSubjectRepository.FindAsync nie jest już potrzebny tutaj
 
             var result = await _subjectService.GetTeachersForSubjectAsync(subjectId);
 
             result.Should().BeEquivalentTo(teachers);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
-            _mockSubjectRepository.Verify(r => r.GetByIdWithDetailsAsync(subjectId), Times.Once); // Weryfikacja sprawdzenia przedmiotu
-            _mockSubjectRepository.Verify(r => r.GetTeachersAsync(subjectId), Times.Once); // Weryfikacja pobrania nauczycieli
+            _mockSubjectRepository.Verify(r => r.GetByIdWithDetailsAsync(subjectId), Times.Once);
+            _mockSubjectRepository.Verify(r => r.GetTeachersAsync(subjectId), Times.Once);
         }
 
         // --- Testy inwalidacji ---
@@ -253,16 +268,28 @@ namespace TeamsManager.Tests.Services
             ResetCapturedOperationHistory();
             var newSubjectName = "Nowy Przedmiot";
             var newSubjectCode = "NP001";
-            // ZMIANA: mock dla GetByCodeAsync
+            var createdSubject = new Subject { Id = "new-subj-id", Name = newSubjectName, Code = newSubjectCode, IsActive = true };
+
             _mockSubjectRepository.Setup(r => r.GetByCodeAsync(newSubjectCode)).ReturnsAsync((Subject?)null);
-            _mockSubjectRepository.Setup(r => r.AddAsync(It.IsAny<Subject>())).Returns(Task.CompletedTask);
+            _mockSubjectRepository.Setup(r => r.AddAsync(It.IsAny<Subject>()))
+                                 .Callback<Subject>(s => s.Id = createdSubject.Id)
+                                 .Returns(Task.CompletedTask);
 
-            await _subjectService.CreateSubjectAsync(newSubjectName, code: newSubjectCode);
+            var result = await _subjectService.CreateSubjectAsync(newSubjectName, code: newSubjectCode);
+            result.Should().NotBeNull();
 
-            // _mockMemoryCache.Verify(m => m.Remove(It.IsAny<object>()), Times.AtLeastOnce);
-            // Lepsza weryfikacja z użyciem konkretnych kluczy lub tokenu
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == newSubjectName && op.Type == OperationType.SubjectCreated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
-            // Dodatkowo, token powinien być zresetowany, co można przetestować w RefreshCacheAsync_ShouldTriggerCacheInvalidation
+            _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + result!.Id), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + result.Id), Times.Never);
+
+            AssertCacheInvalidationByReFetchingAllActiveSubjects(new List<Subject> { result });
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.SubjectCreated);
         }
 
         [Fact]
@@ -279,56 +306,58 @@ namespace TeamsManager.Tests.Services
                 IsActive = true,
                 DefaultSchoolTypeId = schoolTypeForSubject.Id,
                 DefaultSchoolType = schoolTypeForSubject,
-                Category = "Stara Kategoria"
+                Category = "Stara Kategoria",
+                CreatedBy = "initial",
+                CreatedDate = DateTime.UtcNow.AddDays(-1)
             };
             var updatedSubjectData = new Subject
-            { // Dane do aktualizacji
+            {
                 Id = subjectId,
                 Name = "Nowy Przedmiot",
                 Code = "NEW01",
                 IsActive = true,
                 Description = "Nowy opis",
-                DefaultSchoolTypeId = schoolTypeForSubject.Id, // Załóżmy, że typ szkoły się nie zmienia
+                DefaultSchoolTypeId = schoolTypeForSubject.Id,
                 Category = "Nowa Kategoria"
             };
 
-            // Mock dla pobrania istniejącego przedmiotu
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(existingSubject);
-            // Mock dla sprawdzenia unikalności nowego kodu (zakładamy brak konfliktu)
             _mockSubjectRepository.Setup(r => r.GetByCodeAsync(updatedSubjectData.Code)).ReturnsAsync((Subject?)null);
-            // Mock dla metody Update repozytorium
             _mockSubjectRepository.Setup(r => r.Update(It.IsAny<Subject>()));
-            // Jeśli DefaultSchoolTypeId jest aktualizowany i nie jest nullem, serwis wywoła _schoolTypeRepository.GetByIdAsync
             if (!string.IsNullOrEmpty(updatedSubjectData.DefaultSchoolTypeId))
             {
                 _mockSchoolTypeRepository.Setup(sr => sr.GetByIdAsync(updatedSubjectData.DefaultSchoolTypeId)).ReturnsAsync(schoolTypeForSubject);
             }
 
-            // Act
-            await _subjectService.UpdateSubjectAsync(updatedSubjectData);
+            var updateResult = await _subjectService.UpdateSubjectAsync(updatedSubjectData);
+            updateResult.Should().BeTrue();
 
-            // Assert - Weryfikacja unieważnienia cache
-            // 1. Cache dla konkretnego przedmiotu po ID powinien być usunięty.
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectUpdated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
             _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + subjectId), Times.AtLeastOnce);
-
-            // 2. Cache dla listy wszystkich aktywnych przedmiotów powinien być usunięty,
-            //    ponieważ aktualizacja (np. zmiana nazwy, statusu IsActive) wpływa na tę listę.
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce);
 
-            // 3. Cache dla listy nauczycieli tego przedmiotu NIE powinien być tutaj unieważniany,
-            //    ponieważ UpdateSubjectAsync nie modyfikuje przypisań nauczycieli.
-            //    Dlatego poniższa linia została USUNIĘTA:
-            // _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce); 
+            var expectedAfterUpdate = new Subject
+            {
+                Id = subjectId,
+                Name = "Nowy Przedmiot",
+                Code = "NEW01",
+                IsActive = true,
+                Description = "Nowy opis",
+                DefaultSchoolTypeId = schoolTypeForSubject.Id,
+                DefaultSchoolType = schoolTypeForSubject,
+                Category = "Nowa Kategoria",
+                CreatedBy = existingSubject.CreatedBy,
+                CreatedDate = existingSubject.CreatedDate
+            };
+            AssertCacheInvalidationByReFetchingAllActiveSubjects(new List<Subject> { expectedAfterUpdate });
+            AssertCacheInvalidationForTeachersList(subjectId, new List<User>()); // Zakładając, że aktualizacja mogła wpłynąć na nauczycieli (np. zmiana statusu przedmiotu)
 
-            // 4. Jeśli kategoria się zmieniła, cache dla starej i nowej kategorii powinien być unieważniony
-            //    przez zresetowanie tokenu. Możemy też sprawdzić jawne usunięcie, jeśli InvalidateCache by to robiło.
-            //    Obecna implementacja InvalidateCache resetuje token, co obejmuje wszystkie kategorie.
-            //    Jeśli chcemy być bardziej precyzyjni, można dodać:
-            // _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + existingSubject.Category), Times.AtLeastOnce); // Dla starej kategorii, jeśli była
-            // _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + updatedSubjectData.Category), Times.AtLeastOnce); // Dla nowej kategorii
-
-            // Weryfikacja, że metoda Update na repozytorium została wywołana
-            _mockSubjectRepository.Verify(r => r.Update(It.Is<Subject>(s => s.Id == subjectId && s.Name == updatedSubjectData.Name)), Times.Once);
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.SubjectUpdated);
         }
 
         [Fact]
@@ -336,18 +365,27 @@ namespace TeamsManager.Tests.Services
         {
             ResetCapturedOperationHistory();
             var subjectId = "subj-delete-cache";
-            var subjectToDelete = new Subject { Id = subjectId, Name = "Do Usunięcia", IsActive = true };
-            // ZMIANA: GetByIdAsync pochodzi teraz z ISubjectRepository (przez IGenericRepository)
+            var subjectToDelete = new Subject { Id = subjectId, Name = "Do Usunięcia", IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockSubjectRepository.Setup(r => r.GetByIdAsync(subjectId)).ReturnsAsync(subjectToDelete);
             _mockUserSubjectRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<UserSubject, bool>>>())).ReturnsAsync(new List<UserSubject>());
             _mockSubjectRepository.Setup(r => r.Update(It.IsAny<Subject>()));
 
+            var deleteResult = await _subjectService.DeleteSubjectAsync(subjectId);
+            deleteResult.Should().BeTrue();
 
-            await _subjectService.DeleteSubjectAsync(subjectId);
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectDeleted)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
             _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + subjectId), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
+
+            AssertCacheInvalidationByReFetchingAllActiveSubjects(new List<Subject>());
+            AssertCacheInvalidationForTeachersList(subjectId, new List<User>());
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.SubjectDeleted);
         }
 
         [Fact]
@@ -355,8 +393,10 @@ namespace TeamsManager.Tests.Services
         {
             await _subjectService.RefreshCacheAsync();
 
+            _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.Once);
+            // Token jest resetowany, co unieważni wpisy ID i TeachersList
+
             SetupCacheTryGetValue(AllSubjectsCacheKey, (IEnumerable<Subject>?)null, false);
-            // ZMIANA: Weryfikacja GetAllActiveWithDetailsAsync
             _mockSubjectRepository.Setup(r => r.GetAllActiveWithDetailsAsync())
                                    .ReturnsAsync(new List<Subject>())
                                    .Verifiable();
@@ -365,7 +405,26 @@ namespace TeamsManager.Tests.Services
             _mockSubjectRepository.Verify(r => r.GetAllActiveWithDetailsAsync(), Times.Once);
         }
 
-        // Istniejące testy (sprawdź, czy nadal przechodzą)
+        [Fact]
+        public async Task InvalidateTeachersCacheForSubjectAsync_ShouldRemoveSpecificCacheKey()
+        {
+            // Arrange
+            var subjectId = "subject-with-teachers";
+            var cacheKey = TeachersForSubjectCacheKeyPrefix + subjectId;
+
+            // Act
+            await _subjectService.InvalidateTeachersCacheForSubjectAsync(subjectId);
+
+            // Assert
+            // Metoda InvalidateCache resetuje token, co jest głównym mechanizmem.
+            // Dodatkowo, jeśli subjectId jest podany i invalidateTeachersList jest true (co jest w InvalidateTeachersCacheForSubjectAsync),
+            // to klucz TeachersForSubjectCacheKeyPrefix + subjectId jest usuwany.
+            _mockMemoryCache.Verify(m => m.Remove(cacheKey), Times.Once);
+            // Również AllSubjectsCacheKey jest usuwany przez wywołanie InvalidateCache(subjectId, true)
+            _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.Once);
+        }
+
+
         [Fact]
         public async Task GetSubjectByIdAsync_ExistingId_OriginalTest_ShouldReturnSubject()
         {
@@ -373,7 +432,6 @@ namespace TeamsManager.Tests.Services
             var subjectId = "subj-math-001-orig";
             var expectedSubject = new Subject { Id = subjectId, Name = "Matematyka", IsActive = true, DefaultSchoolType = new SchoolType() };
             SetupCacheTryGetValue(SubjectByIdCacheKeyPrefix + subjectId, (Subject?)null, false);
-            // ZMIANA: Użycie GetByIdWithDetailsAsync
             _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(expectedSubject);
 
             var result = await _subjectService.GetSubjectByIdAsync(subjectId);

@@ -54,11 +54,15 @@ namespace TeamsManager.Tests.Services
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
 
+            // Setup AddAsync dla OperationHistoryRepository, aby przechwytywać dodawany obiekt
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op)
                                          .Returns(Task.CompletedTask);
+            // Update nie powinno być już wywoływane przez uproszczoną metodę SaveOperationHistoryAsync
+            // w tym serwisie, więc ten setup może nie być potrzebny dla wszystkich testów.
             _mockOperationHistoryRepository.Setup(r => r.Update(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op);
+
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -93,6 +97,21 @@ namespace TeamsManager.Tests.Services
                            .Returns(foundInCache);
         }
 
+        private void AssertCacheInvalidationByReFetchingAll(List<ApplicationSetting> expectedDbSettingsAfterOperation)
+        {
+            SetupCacheTryGetValue(AllSettingsCacheKey, (IEnumerable<ApplicationSetting>?)null, false);
+            _mockSettingsRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<ApplicationSetting, bool>>>()))
+                                 .ReturnsAsync(expectedDbSettingsAfterOperation)
+                                 .Verifiable();
+
+            var resultAfterInvalidation = _applicationSettingService.GetAllSettingsAsync().Result;
+
+            _mockSettingsRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<ApplicationSetting, bool>>>()), Times.Once, "GetAllSettingsAsync powinno odpytać repozytorium po unieważnieniu cache.");
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedDbSettingsAfterOperation);
+            _mockMemoryCache.Verify(m => m.CreateEntry(AllSettingsCacheKey), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
+        }
+
+
         // --- Testy GetSettingValueAsync ---
         [Fact]
         public async Task GetSettingValueAsync_ExistingStringSetting_ShouldReturnValue()
@@ -100,12 +119,12 @@ namespace TeamsManager.Tests.Services
             var key = "TestStringKey";
             var expectedValue = "Test Value";
             var setting = new ApplicationSetting { Key = key, Value = expectedValue, Type = SettingType.String, IsActive = true };
-            SetupCacheTryGetValue(SettingByKeyCacheKeyPrefix + key, (ApplicationSetting?)null, false); // Symulacja braku w cache
+            SetupCacheTryGetValue(SettingByKeyCacheKeyPrefix + key, (ApplicationSetting?)null, false);
             _mockSettingsRepository.Setup(r => r.GetSettingByKeyAsync(key)).ReturnsAsync(setting);
 
             var result = await _applicationSettingService.GetSettingValueAsync<string>(key);
             result.Should().Be(expectedValue);
-            _mockMemoryCache.Verify(m => m.CreateEntry(SettingByKeyCacheKeyPrefix + key), Times.Once); // Powinien dodać do cache
+            _mockMemoryCache.Verify(m => m.CreateEntry(SettingByKeyCacheKeyPrefix + key), Times.Once);
         }
 
         // --- Testy GetSettingByKeyAsync ---
@@ -203,16 +222,31 @@ namespace TeamsManager.Tests.Services
             var value = "NewValue";
             var type = SettingType.String;
             var category = "NewCat";
+            var newSetting = new ApplicationSetting { Id = "new-id", Key = key, Value = value, Type = type, Category = category, IsActive = true };
 
             _mockSettingsRepository.Setup(r => r.GetSettingByKeyAsync(key)).ReturnsAsync((ApplicationSetting?)null);
-            _mockSettingsRepository.Setup(r => r.AddAsync(It.IsAny<ApplicationSetting>())).Returns(Task.CompletedTask);
+            _mockSettingsRepository.Setup(r => r.AddAsync(It.IsAny<ApplicationSetting>()))
+                                 .Callback<ApplicationSetting>(s => s.Id = newSetting.Id)
+                                 .Returns(Task.CompletedTask);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Usunięte, bo nie jest już potrzebne
 
             var result = await _applicationSettingService.SaveSettingAsync(key, value, type, "New Description", category);
             result.Should().BeTrue();
 
+            // Weryfikacja, że AddAsync na OperationHistoryRepository zostało wywołane raz
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == key && op.Type == OperationType.ApplicationSettingCreated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never); // Upewniamy się, że Update nie jest wołane
+
             _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + key), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + category), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+
+            var expectedSettingsAfterCreate = new List<ApplicationSetting> { newSetting };
+            AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterCreate);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingCreated);
         }
 
         [Fact]
@@ -225,20 +259,38 @@ namespace TeamsManager.Tests.Services
             var newKey = "NewUpdatedKey";
             var newCategory = "CategoryNew";
 
-            var existingSetting = new ApplicationSetting { Id = settingId, Key = oldKey, Value = "OldValue", Category = oldCategory, IsActive = true };
-            var updatedData = new ApplicationSetting { Id = settingId, Key = newKey, Value = "NewUpdatedValue", Description = "Updated Description", Type = SettingType.Integer, Category = newCategory, IsActive = true };
+            var existingSettingInDb = new ApplicationSetting { Id = settingId, Key = oldKey, Value = "OldValue", Category = oldCategory, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
+            var updatedDataForService = new ApplicationSetting { Id = settingId, Key = newKey, Value = "NewUpdatedValue", Description = "Updated Description", Type = SettingType.Integer, Category = newCategory, IsActive = true };
 
-            _mockSettingsRepository.Setup(r => r.GetByIdAsync(settingId)).ReturnsAsync(existingSetting);
-            _mockSettingsRepository.Setup(r => r.GetSettingByKeyAsync(newKey)).ReturnsAsync((ApplicationSetting?)null); // Załóżmy, że nowy klucz nie konfliktuje
+            _mockSettingsRepository.Setup(r => r.GetByIdAsync(settingId)).ReturnsAsync(existingSettingInDb);
+            _mockSettingsRepository.Setup(r => r.GetSettingByKeyAsync(newKey)).ReturnsAsync((ApplicationSetting?)null);
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Usunięte
 
-            var result = await _applicationSettingService.UpdateSettingAsync(updatedData);
+            var result = await _applicationSettingService.UpdateSettingAsync(updatedDataForService);
             result.Should().BeTrue();
+
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingId && op.Type == OperationType.ApplicationSettingUpdated)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
             _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + newKey), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + oldKey), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + newCategory), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + oldCategory), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+
+            var expectedSettingsAfterUpdate = new List<ApplicationSetting>
+            {
+                new ApplicationSetting
+                {
+                    Id = settingId, Key = newKey, Value = "NewUpdatedValue", Category = newCategory, Type = SettingType.Integer,
+                    Description = "Updated Description", IsActive = true, CreatedBy = existingSettingInDb.CreatedBy, CreatedDate = existingSettingInDb.CreatedDate
+                }
+            };
+            AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterUpdate);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingUpdated);
         }
 
         [Fact]
@@ -247,15 +299,27 @@ namespace TeamsManager.Tests.Services
             ResetCapturedOperationHistory();
             var key = "KeyToDelete";
             var category = "CatToDelete";
-            var settingToDelete = new ApplicationSetting { Id = "setting-del-1", Key = key, Value = "Val", Category = category, IsActive = true };
+            var settingToDelete = new ApplicationSetting { Id = "setting-del-1", Key = key, Value = "Val", Category = category, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockSettingsRepository.Setup(r => r.GetSettingByKeyAsync(key)).ReturnsAsync(settingToDelete);
+            _mockSettingsRepository.Setup(r => r.Update(It.IsAny<ApplicationSetting>()));
+            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Usunięte
 
             var result = await _applicationSettingService.DeleteSettingAsync(key);
             result.Should().BeTrue();
 
+            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingToDelete.Id && op.Type == OperationType.ApplicationSettingDeleted)), Times.Once);
+            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+
             _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + key), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + category), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+
+            var expectedSettingsAfterDelete = new List<ApplicationSetting>();
+            AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterDelete);
+
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingDeleted);
         }
 
         [Fact]
@@ -263,19 +327,15 @@ namespace TeamsManager.Tests.Services
         {
             await _applicationSettingService.RefreshCacheAsync();
 
-            // Weryfikacja, że CreateEntry jest wywoływane przy następnym żądaniu GetAllSettingsAsync
             SetupCacheTryGetValue(AllSettingsCacheKey, (IEnumerable<ApplicationSetting>?)null, false);
             _mockSettingsRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<ApplicationSetting, bool>>>()))
                                  .ReturnsAsync(new List<ApplicationSetting>())
-                                 .Verifiable(); // Oznaczamy jako weryfikowalne
+                                 .Verifiable();
 
             await _applicationSettingService.GetAllSettingsAsync();
-            _mockSettingsRepository.Verify(); // Sprawdza, czy metoda oznaczona Verifiable została wywołana
+            _mockSettingsRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<ApplicationSetting, bool>>>()), Times.Once);
         }
 
-        // Pozostałe testy z oryginalnego pliku powinny nadal przechodzić,
-        // ponieważ logika cache jest "wokół" oryginalnej logiki pobierania i konwersji.
-        // Warto je zachować i upewnić się, że działają.
         [Fact]
         public async Task GetSettingValueAsync_ExistingIntSetting_ShouldReturnValue()
         {
