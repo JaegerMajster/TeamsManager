@@ -60,7 +60,7 @@ namespace TeamsManager.Tests.Repositories
             savedUser.LastName.Should().Be("Kowalski");
             savedUser.UPN.Should().Be("jan.kowalski@test.com");
             savedUser.Role.Should().Be(UserRole.Nauczyciel);
-            savedUser.CreatedBy.Should().Be("test_user");
+            savedUser.CreatedBy.Should().Be("test_user_integration_base_default");
             savedUser.CreatedDate.Should().NotBe(default(DateTime));
             savedUser.ModifiedBy.Should().BeNull();
             savedUser.ModifiedDate.Should().BeNull();
@@ -95,8 +95,7 @@ namespace TeamsManager.Tests.Repositories
                 DisplayName = "Test Team",
                 Description = "Test",
                 Owner = "owner@test.com",
-                Status = TeamStatus.Active,
-                IsActive = true
+                Status = TeamStatus.Active
             };
 
             await Context.Departments.AddAsync(department);
@@ -154,7 +153,7 @@ namespace TeamsManager.Tests.Repositories
             result.SchoolTypeAssignments.Should().HaveCount(1);
             result.SchoolTypeAssignments.First().SchoolType.Should().NotBeNull();
             result.SchoolTypeAssignments.First().SchoolType!.ShortName.Should().Be("LO");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -185,7 +184,7 @@ namespace TeamsManager.Tests.Repositories
             result!.UPN.Should().Be(upn);
             result.FirstName.Should().Be("Unique");
             result.LastName.Should().Be("User");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Theory]

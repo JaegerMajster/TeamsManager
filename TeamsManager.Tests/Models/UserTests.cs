@@ -271,9 +271,9 @@ namespace TeamsManager.Tests.Models
         public void User_WhenAddingMemberships_ShouldUpdateCounts()
         {
             var user = new User { Id = "user-multi-team" };
-            var team1 = new Team { Id = "t1", Status = TeamStatus.Active, IsActive = true };
-            var team2 = new Team { Id = "t2", Status = TeamStatus.Active, IsActive = true };
-            var teamArchived = new Team { Id = "t-arch", Status = TeamStatus.Archived, IsActive = false };
+            var team1 = new Team { Id = "t1", Status = TeamStatus.Active };
+            var team2 = new Team { Id = "t2", Status = TeamStatus.Active };
+            var teamArchived = new Team { Id = "t-arch", Status = TeamStatus.Archived };
 
             user.ActiveMembershipsCount.Should().Be(0);
             user.OwnedTeamsCount.Should().Be(0);
@@ -346,9 +346,9 @@ namespace TeamsManager.Tests.Models
         public void User_IsMemberOfTeam_And_IsOwnerOfTeam_ShouldWorkCorrectly()
         {
             var user = new User { Id = "test-user" };
-            var team1 = new Team { Id = "team1", IsActive = true, Status = TeamStatus.Active };
-            var team2 = new Team { Id = "team2", IsActive = true, Status = TeamStatus.Active };
-            var inactiveTeam = new Team { Id = "team-inactive", IsActive = false, Status = TeamStatus.Archived };
+            var team1 = new Team { Id = "team1", Status = TeamStatus.Active };
+            var team2 = new Team { Id = "team2", Status = TeamStatus.Active };
+            var inactiveTeam = new Team { Id = "team-inactive", Status = TeamStatus.Archived };
 
             // Członek w team1
             user.TeamMemberships.Add(new TeamMember { User = user, UserId = user.Id, Team = team1, TeamId = team1.Id, Role = TeamMemberRole.Member, IsActive = true });

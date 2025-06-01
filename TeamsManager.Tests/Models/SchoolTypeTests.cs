@@ -18,7 +18,7 @@ namespace TeamsManager.Tests.Models
 
         private Team CreateTestTeam(string id, bool isActive = true, TeamStatus status = TeamStatus.Active)
         {
-            return new Team { Id = id, DisplayName = $"Zespół {id}", IsActive = isActive, Status = status, CreatedBy = "test" };
+            return new Team { Id = id, DisplayName = $"Zespół {id}", Status = status, CreatedBy = "test" };
         }
 
         private TeamTemplate CreateTestTemplate(string id, bool isActive = true)
@@ -118,17 +118,18 @@ namespace TeamsManager.Tests.Models
         }
 
         [Fact]
-        public void ActiveTeamsCount_ShouldCountOnlyActiveTeamsWithActiveStatus()
+        public void ActiveTeamsCount_ShouldCountOnlyTeamsWithStatusActive() 
         {
             // Przygotowanie
             var schoolType = new SchoolType();
-            schoolType.Teams.Add(CreateTestTeam("t1", isActive: true, status: TeamStatus.Active));
-            schoolType.Teams.Add(CreateTestTeam("t2", isActive: true, status: TeamStatus.Active));
-            schoolType.Teams.Add(CreateTestTeam("t3", isActive: true, status: TeamStatus.Archived)); // Zespół zarchiwizowany
-            schoolType.Teams.Add(CreateTestTeam("t4", isActive: false, status: TeamStatus.Active)); // Rekord zespołu nieaktywny
+            schoolType.Teams.Add(CreateTestTeam("t1", status: TeamStatus.Active));     
+            schoolType.Teams.Add(CreateTestTeam("t2", status: TeamStatus.Active));     
+            schoolType.Teams.Add(CreateTestTeam("t3", status: TeamStatus.Archived));  
 
-            // Sprawdzenie
-            schoolType.ActiveTeamsCount.Should().Be(2);
+            var team4 = CreateTestTeam("t4", status: TeamStatus.Active);                
+                                                                                          
+            schoolType.Teams.Add(team4);
+            schoolType.ActiveTeamsCount.Should().Be(3); 
         }
 
         [Fact]

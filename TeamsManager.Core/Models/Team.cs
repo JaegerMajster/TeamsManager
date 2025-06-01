@@ -6,7 +6,7 @@ using TeamsManager.Core.Enums;
 namespace TeamsManager.Core.Models
 {
     /// <summary>
-    /// Zespół Microsoft Teams
+    /// Zespół Microsoft Teams.
     /// Reprezentuje grupę edukacyjną, klasę, kurs lub inną jednostkę dydaktyczną.
     /// Dziedziczy z BaseEntity dla wspólnych pól audytu i flagi aktywności.
     /// </summary>
@@ -15,11 +15,13 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Nazwa wyświetlana zespołu.
         /// Może być generowana na podstawie szablonu lub wprowadzona ręcznie.
+        /// Powinna być przechowywana w formie kanonicznej (z prefiksem "ARCHIWALNY - " jeśli Status == Archived).
         /// </summary>
         public string DisplayName { get; set; } = string.Empty;
 
         /// <summary>
         /// Szczegółowy opis zespołu, jego celów i zakresu.
+        /// Podobnie jak DisplayName, powinien być w formie kanonicznej dla danego statusu.
         /// </summary>
         public string Description { get; set; } = string.Empty;
 
@@ -30,6 +32,7 @@ namespace TeamsManager.Core.Models
 
         /// <summary>
         /// Aktualny status zespołu (np. Aktywny, Zarchiwizowany).
+        /// To jest główne źródło prawdy o stanie cyklu życia zespołu.
         /// </summary>
         public TeamStatus Status { get; set; } = TeamStatus.Active;
 
@@ -90,6 +93,7 @@ namespace TeamsManager.Core.Models
 
         /// <summary>
         /// Zewnętrzny identyfikator zespołu, np. z systemu dziekanatowego lub dziennika elektronicznego.
+        /// W przypadku integracji z Microsoft Teams, to będzie GroupId.
         /// </summary>
         public string? ExternalId { get; set; }
 
@@ -124,9 +128,10 @@ namespace TeamsManager.Core.Models
         public string? Notes { get; set; }
 
         /// <summary>
-        /// Określa, czy zespół powinien być widoczny np. w publicznym katalogu zespołów.
+        /// Określa widoczność zespołu (np. Prywatny, Publiczny).
+        /// Zastępuje poprzednie pole IsVisible.
         /// </summary>
-        public TeamVisibility Visibility { get; set; } = TeamVisibility.Private; // Domyślnie Private
+        public TeamVisibility Visibility { get; set; } = TeamVisibility.Private;
 
         /// <summary>
         /// Określa, czy dołączenie do zespołu wymaga zatwierdzenia przez właściciela.
@@ -168,21 +173,26 @@ namespace TeamsManager.Core.Models
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 
         /// <summary>
-        /// Określa, czy zespół jest uznawany za funkcjonalnie aktywny na podstawie jego statusu domenowego.
-        /// Używane do odróżnienia od BaseEntity.IsActive, które oznacza ogólną aktywność rekordu.
+        /// Wskazuje, czy zespół jest aktywny.
+        /// Ta właściwość jest teraz obliczana na podstawie Statusu zespołu.
+        /// Ukrywa właściwość IsActive z BaseEntity.
         /// </summary>
-        public bool IsEffectivelyActive => Status == TeamStatus.Active;
+        public new bool IsActive
+        {
+            get { return Status == TeamStatus.Active; }
+            // Brak settera - stan aktywności jest determinowany przez Status.
+        }
 
         /// <summary>
         /// Sprawdza, czy zespół jest w pełni operacyjny:
-        /// rekord jest aktywny (BaseEntity.IsActive), status domenowy to Aktywny,
-        /// oraz bieżąca data mieści się w okresie funkcjonowania zespołu (StartDate - EndDate).
+        /// status domenowy to Aktywny, oraz bieżąca data mieści się w okresie funkcjonowania zespołu (StartDate - EndDate).
         /// </summary>
         public bool IsFullyOperational
         {
             get
             {
-                if (!this.IsActive || this.Status != TeamStatus.Active) return false;
+                // Używamy this.IsActive, które jest teraz oparte na Status
+                if (!this.IsActive) return false;
 
                 var now = DateTime.Today;
                 if (StartDate.HasValue && now < StartDate.Value.Date) return false;
@@ -301,21 +311,14 @@ namespace TeamsManager.Core.Models
 
         /// <summary>
         /// Nazwa wyświetlana zespołu z dodanym prefiksem "ARCHIWALNY - ", jeśli zespół ma status Archived.
+        /// Ta właściwość jest czysto prezentacyjna i opiera się na aktualnym `Status` oraz `DisplayName`.
         /// </summary>
         public string DisplayNameWithStatus
         {
             get
             {
-                if (Status == TeamStatus.Archived)
-                {
-                    var baseName = DisplayName.StartsWith("ARCHIWALNY - ")
-                        ? DisplayName.Substring("ARCHIWALNY - ".Length)
-                        : DisplayName;
-                    return $"ARCHIWALNY - {baseName}";
-                }
-                return DisplayName.StartsWith("ARCHIWALNY - ")
-                    ? DisplayName.Substring("ARCHIWALNY - ".Length)
-                    : DisplayName;
+                string baseName = GetBaseDisplayName(); // Pobiera nazwę bez ewentualnego prefiksu
+                return Status == TeamStatus.Archived ? $"ARCHIWALNY - {baseName}" : baseName;
             }
         }
 
@@ -335,65 +338,95 @@ namespace TeamsManager.Core.Models
             }
         }
 
-        // ===== METODY POMOCNICZE =====
+        // ===== METODY MANIPULUJĄCE STANEM =====
+
+        private const string ArchivePrefix = "ARCHIWALNY - "; // Stała dla prefiksu
+
+        /// <summary>
+        /// Pobiera bazową nazwę wyświetlaną zespołu, usuwając prefiks archiwizacji, jeśli istnieje.
+        /// </summary>
+        /// <returns>Nazwa wyświetlana bez prefiksu "ARCHIWALNY - ".</returns>
+        internal string GetBaseDisplayName()
+        {
+            if (DisplayName.StartsWith(ArchivePrefix))
+            {
+                return DisplayName.Substring(ArchivePrefix.Length);
+            }
+            return DisplayName;
+        }
+
+        /// <summary>
+        /// Pobiera bazowy opis zespołu, usuwając prefiks archiwizacji, jeśli istnieje.
+        /// </summary>
+        /// <returns>Opis bez prefiksu "ARCHIWALNY - " lub oryginalny opis, jeśli nie było prefiksu.</returns>
+        internal string GetBaseDescription()
+        {
+            if (!string.IsNullOrEmpty(Description) && Description.StartsWith(ArchivePrefix))
+            {
+                return Description.Substring(ArchivePrefix.Length);
+            }
+            return Description;
+        }
 
         /// <summary>
         /// Archiwizuje zespół, ustawiając odpowiedni status i szczegóły operacji.
         /// Aktualizuje nazwę i opis dodając prefiks "ARCHIWALNY - ".
-        /// Ustawia flagę BaseEntity.IsActive na false.
         /// </summary>
         /// <param name="reason">Powód archiwizacji.</param>
         /// <param name="archivedBy">UPN użytkownika dokonującego archiwizacji.</param>
         public void Archive(string reason, string archivedBy)
         {
+            // Zapobiega wielokrotnej archiwizacji lub archiwizacji, jeśli status jest już Archived
             if (Status == TeamStatus.Archived) return;
 
-            Status = TeamStatus.Archived;
-            this.IsActive = false;
+            var baseName = GetBaseDisplayName(); // Pobierz czystą nazwę przed modyfikacją
+            var baseDescription = GetBaseDescription(); // Pobierz czysty opis
 
-            StatusChangeDate = DateTime.UtcNow;
-            StatusChangedBy = archivedBy;
-            StatusChangeReason = reason;
+            this.Status = TeamStatus.Archived;
+            // IsActive zmieni się automatycznie dzięki właściwości obliczeniowej
 
-            if (!DisplayName.StartsWith("ARCHIWALNY - ")) // Ta logika jest OK
+            this.DisplayName = ArchivePrefix + baseName;
+            if (!string.IsNullOrEmpty(baseDescription)) // Dodaj prefiks do opisu tylko, jeśli opis nie jest pusty
             {
-                DisplayName = $"ARCHIWALNY - {DisplayName}";
+                this.Description = ArchivePrefix + baseDescription;
             }
-            if (!string.IsNullOrEmpty(Description) && !Description.StartsWith("ARCHIWALNY - "))
+            else if (string.IsNullOrEmpty(this.Description) && string.IsNullOrEmpty(baseDescription))
             {
-                Description = $"ARCHIWALNY - {Description}";
+                this.Description = string.Empty; // Jawnie ustaw na pusty, jeśli był pusty
             }
 
-            MarkAsModified(archivedBy);
+
+            this.StatusChangeDate = DateTime.UtcNow;
+            this.StatusChangedBy = archivedBy;
+            this.StatusChangeReason = reason;
+            MarkAsModified(archivedBy); // Ustawia ModifiedDate i ModifiedBy z BaseEntity
         }
 
         /// <summary>
-        /// Przywraca zespół z archiwum, ustawiając status na aktywny, usuwając prefiksy
-        /// i ustawiając BaseEntity.IsActive na true.
+        /// Przywraca zespół z archiwum, ustawiając status na aktywny, usuwając prefiksy.
         /// </summary>
         /// <param name="restoredBy">UPN użytkownika dokonującego przywrócenia.</param>
         public void Restore(string restoredBy)
         {
+            // Zapobiega wielokrotnemu przywracaniu lub przywracaniu, jeśli status jest już Active
             if (Status == TeamStatus.Active) return;
 
-            Status = TeamStatus.Active;
-            this.IsActive = true;
+            this.Status = TeamStatus.Active;
+            // IsActive zmieni się automatycznie
 
-            StatusChangeDate = DateTime.UtcNow;
-            StatusChangedBy = restoredBy;
-            StatusChangeReason = "Przywrócono z archiwum";
-
-            if (DisplayName.StartsWith("ARCHIWALNY - ")) // Ta logika jest OK
+            this.DisplayName = GetBaseDisplayName(); // Przywraca oryginalną nazwę
+            if (!string.IsNullOrEmpty(this.Description)) // Usuń prefiks z opisu, jeśli istnieje
             {
-                DisplayName = DisplayName.Substring("ARCHIWALNY - ".Length);
-            }
-            if (!string.IsNullOrEmpty(Description) && Description.StartsWith("ARCHIWALNY - "))
-            {
-                Description = Description.Substring("ARCHIWALNY - ".Length);
+                this.Description = GetBaseDescription();
             }
 
-            MarkAsModified(restoredBy);
+            this.StatusChangeDate = DateTime.UtcNow;
+            this.StatusChangedBy = restoredBy;
+            this.StatusChangeReason = "Przywrócono z archiwum"; // Domyślny powód przywrócenia
+            MarkAsModified(restoredBy); // Ustawia ModifiedDate i ModifiedBy z BaseEntity
         }
+
+        // ===== METODY POMOCNICZE =====
 
         /// <summary>
         /// Sprawdza, czy użytkownik o podanym ID jest aktywnym członkiem zespołu

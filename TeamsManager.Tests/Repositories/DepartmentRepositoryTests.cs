@@ -48,7 +48,7 @@ namespace TeamsManager.Tests.Repositories
             savedDept!.Name.Should().Be("Departament Informatyki");
             savedDept.DepartmentCode.Should().Be("IT");
             savedDept.Location.Should().Be("Budynek A, piętro 2");
-            savedDept.CreatedBy.Should().Be("test_user");
+            savedDept.CreatedBy.Should().Be("test_user_integration_base_default");
             savedDept.CreatedDate.Should().NotBe(default(DateTime));
             savedDept.ModifiedBy.Should().BeNull();
             savedDept.ModifiedDate.Should().BeNull();
@@ -71,7 +71,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().NotBeNull();
             result!.DepartmentCode.Should().Be("MATH");
             result.Name.Should().Be("Departament Matematyki");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -95,7 +95,7 @@ namespace TeamsManager.Tests.Repositories
             // Weryfikacja
             result.Should().HaveCount(4);
             result.Select(d => d.DepartmentCode).Should().Contain(new[] { "IT", "MATH", "PHYS", "LANG" });
-            result.ToList().ForEach(d => d.CreatedBy.Should().Be("test_user"));
+            result.ToList().ForEach(d => d.CreatedBy.Should().Be("test_user_integration_base_default"));
         }
 
         [Fact]

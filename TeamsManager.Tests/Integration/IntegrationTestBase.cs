@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// Plik: TeamsManager.Tests/Integration/IntegrationTestBase.cs
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TeamsManager.Data;
 using TeamsManager.Tests.Infrastructure;
@@ -9,10 +10,6 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Tests.Integration
 {
-    /// <summary>
-    /// Bazowa klasa dla wszystkich testów integracyjnych
-    /// Zapewnia konfigurację DbContext, serwisów i czyszczenie danych
-    /// </summary>
     public abstract class IntegrationTestBase : IDisposable
     {
         protected IServiceProvider ServiceProvider { get; }
@@ -22,61 +19,50 @@ namespace TeamsManager.Tests.Integration
 
         protected IntegrationTestBase()
         {
-            // Konfiguracja kontenera DI dla testów
             var services = new ServiceCollection();
 
-            // Konfiguracja DbContext - InMemory dla szybkości
-            services.AddDbContext<TeamsManagerDbContext>(options =>
-            {
-                options.UseInMemoryDatabase($"TestDb_{Guid.NewGuid()}");
-                options.EnableSensitiveDataLogging(); // Pomocne przy debugowaniu testów
-            });
-
-            // Rejestracja TestDbContext z tymi samymi opcjami
-            services.AddScoped<TestDbContext>(provider =>
-            {
-                var options = provider.GetRequiredService<DbContextOptions<TeamsManagerDbContext>>();
-                return new TestDbContext(options);
-            });
-
-            // Rejestracja serwisów testowych
+            // 1. Rejestracja TestCurrentUserService jako ICurrentUserService (Singleton dla spójności w teście)
             services.AddSingleton<TestCurrentUserService>();
             services.AddSingleton<ICurrentUserService>(provider => provider.GetRequiredService<TestCurrentUserService>());
 
-            // Tu możesz dodać więcej serwisów używanych w testach
+            // 2. Rejestracja DbContextOptions<TeamsManagerDbContext>
+            services.AddSingleton(provider => // Może być Scoped, jeśli każdy test/scope ma mieć inne opcje
+            {
+                return new DbContextOptionsBuilder<TeamsManagerDbContext>()
+                    .UseInMemoryDatabase($"TestDb_{Guid.NewGuid()}")
+                    .EnableSensitiveDataLogging()
+                    .Options;
+            });
+
+            // 3. Rejestracja TestDbContext.
+            // Kontener DI wstrzyknie DbContextOptions<TeamsManagerDbContext> i ICurrentUserService.
+            services.AddScoped<TestDbContext>();
+
+            // 4. Rejestracja TeamsManagerDbContext tak, aby wskazywał na TestDbContext.
+            services.AddScoped<TeamsManagerDbContext>(provider => provider.GetRequiredService<TestDbContext>());
+
             ConfigureServices(services);
 
             ServiceProvider = services.BuildServiceProvider();
             ServiceScope = ServiceProvider.CreateScope();
 
-            // Pobierz instancje z kontenera
             Context = ServiceScope.ServiceProvider.GetRequiredService<TestDbContext>();
             CurrentUserService = ServiceScope.ServiceProvider.GetRequiredService<TestCurrentUserService>();
 
-            // Upewnij się że baza jest utworzona
             Context.Database.EnsureCreated();
+            SetTestUser("test_user_integration_base_default"); // Ustawienie domyślnego użytkownika na początku
         }
 
-        /// <summary>
-        /// Metoda do nadpisania w klasach pochodnych
-        /// Pozwala dodać dodatkowe serwisy specyficzne dla danego zestawu testów
-        /// </summary>
         protected virtual void ConfigureServices(IServiceCollection services)
         {
-            // Domyślnie pusta - do nadpisania w klasach pochodnych
+            // Domyślnie pusta
         }
 
-        /// <summary>
-        /// Zapisuje zmiany w kontekście
-        /// </summary>
         protected async Task SaveChangesAsync()
         {
             await Context.SaveChangesAsync();
         }
 
-        /// <summary>
-        /// Zapisuje zmiany bez automatycznego ustawiania pól audytowych
-        /// </summary>
         protected async Task SaveChangesWithoutAuditAsync()
         {
             Context.DisableAutoAudit();
@@ -90,56 +76,42 @@ namespace TeamsManager.Tests.Integration
             }
         }
 
-        /// <summary>
-        /// Czyści wszystkie dane z bazy testowej
-        /// </summary>
         protected async Task CleanDatabaseAsync()
         {
-            // Kolejność jest ważna ze względu na relacje!
             Context.OperationHistories.RemoveRange(Context.OperationHistories);
+            Context.UserSubjects.RemoveRange(Context.UserSubjects);
+            Context.UserSchoolTypes.RemoveRange(Context.UserSchoolTypes);
             Context.TeamMembers.RemoveRange(Context.TeamMembers);
             Context.Channels.RemoveRange(Context.Channels);
             Context.Teams.RemoveRange(Context.Teams);
-            Context.UserSchoolTypes.RemoveRange(Context.UserSchoolTypes);
-            Context.UserSubjects.RemoveRange(Context.UserSubjects);
             Context.Users.RemoveRange(Context.Users);
             Context.Departments.RemoveRange(Context.Departments);
-            Context.SchoolTypes.RemoveRange(Context.SchoolTypes);
-            Context.SchoolYears.RemoveRange(Context.SchoolYears);
             Context.Subjects.RemoveRange(Context.Subjects);
             Context.TeamTemplates.RemoveRange(Context.TeamTemplates);
+            Context.SchoolTypes.RemoveRange(Context.SchoolTypes);
+            Context.SchoolYears.RemoveRange(Context.SchoolYears);
             Context.ApplicationSettings.RemoveRange(Context.ApplicationSettings);
-
-            await SaveChangesAsync();
+            await SaveChangesWithoutAuditAsync();
         }
 
-        /// <summary>
-        /// Ustawia konkretnego użytkownika dla testu
-        /// </summary>
         protected void SetTestUser(string userName)
         {
-            Context.SetTestUser(userName);
             CurrentUserService.SetCurrentUserUpn(userName);
         }
 
-        /// <summary>
-        /// Resetuje użytkownika do domyślnego
-        /// </summary>
         protected void ResetTestUser()
         {
-            Context.ResetTestUser();
             CurrentUserService.Reset();
         }
 
         public void Dispose()
         {
             ServiceScope?.Dispose();
-
-            // ServiceProvider może być IDisposable, ale IServiceProvider nie gwarantuje tego
             if (ServiceProvider is IDisposable disposableProvider)
             {
                 disposableProvider.Dispose();
             }
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -54,7 +54,7 @@ namespace TeamsManager.Tests.Repositories
             savedTemplate.Template.Should().Be("{SchoolType} {Class} - {Subject}");
             savedTemplate.IsUniversal.Should().BeTrue();
             savedTemplate.Category.Should().Be("Klasy");
-            savedTemplate.CreatedBy.Should().Be("test_user");
+            savedTemplate.CreatedBy.Should().Be("test_user_integration_base_default");
             savedTemplate.CreatedDate.Should().NotBe(default(DateTime));
             savedTemplate.ModifiedBy.Should().BeNull();
             savedTemplate.ModifiedDate.Should().BeNull();
@@ -97,7 +97,7 @@ namespace TeamsManager.Tests.Repositories
             result.SchoolTypeId.Should().Be(schoolType.Id);
             result.SchoolType.Should().NotBeNull();
             result.SchoolType!.ShortName.Should().Be("LO");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -137,7 +137,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().HaveCount(2);
             result.Should().OnlyContain(t => t.IsUniversal && t.IsActive);
             result.Select(t => t.Name).Should().Contain(new[] { "Universal 1", "Universal 2" });
-            result.ToList().ForEach(t => t.CreatedBy.Should().Be("test_user"));
+            result.ToList().ForEach(t => t.CreatedBy.Should().Be("test_user_integration_base_default"));
         }
 
         [Fact]
@@ -192,7 +192,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().OnlyContain(t => t.SchoolTypeId == schoolType1.Id && t.IsActive);
             result.Select(t => t.Name).Should().Contain(new[] { "LO Template 1", "LO Template 2" });
             result.All(t => t.SchoolType != null).Should().BeTrue();
-            result.ToList().ForEach(t => t.CreatedBy.Should().Be("test_user"));
+            result.ToList().ForEach(t => t.CreatedBy.Should().Be("test_user_integration_base_default"));
         }
 
         [Theory]

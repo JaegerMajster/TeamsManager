@@ -1,6 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TeamsManager.Core.Models;
-using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
+using System; // Dla ArgumentNullException
+using System.Threading; // Dla CancellationToken
+using System.Threading.Tasks; // Dla Task
+using TeamsManager.Core.Enums; // Dla Enumów
 
 namespace TeamsManager.Data
 {
@@ -16,9 +20,10 @@ namespace TeamsManager.Data
         {
             _currentUserService = currentUserService;
         }
+        // Konstruktor używany przez niektóre narzędzia EF Core (np. migracje) lub w scenariuszach bez DI dla ICurrentUserService
         public TeamsManagerDbContext(DbContextOptions<TeamsManagerDbContext> options) : base(options)
         {
-            _currentUserService = null;
+            _currentUserService = null; // W tym przypadku pola audytu mogą nie być poprawnie wypełniane automatycznie
         }
 
         // ===== DEFINICJA TABEL =====
@@ -75,22 +80,16 @@ namespace TeamsManager.Data
                 entity.Property(u => u.Position).HasMaxLength(100);
                 entity.Property(u => u.Notes).HasMaxLength(1000);
 
-                // Konwersja enum UserRole na liczbę całkowitą
                 entity.Property(u => u.Role).HasConversion<int>();
 
-                // Indeks unikalny na UPN dla szybkiego wyszukiwania i logowania
                 entity.HasIndex(u => u.UPN).IsUnique();
-
-                // Indeks na ExternalId dla integracji z systemami zewnętrznymi
                 entity.HasIndex(u => u.ExternalId);
 
-                // Relacja z działem
                 entity.HasOne(u => u.Department)
                       .WithMany(d => d.Users)
                       .HasForeignKey(u => u.DepartmentId)
-                      .OnDelete(DeleteBehavior.Restrict); // Nie można usunąć działu jeśli ma przypisanych użytkowników
+                      .OnDelete(DeleteBehavior.Restrict);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(u => u.FullName);
                 entity.Ignore(u => u.DisplayName);
                 entity.Ignore(u => u.Email);
@@ -118,17 +117,14 @@ namespace TeamsManager.Data
                 entity.Property(d => d.Phone).HasMaxLength(20);
                 entity.Property(d => d.Location).HasMaxLength(200);
 
-                // Indeks na nazwie działu dla szybkiego wyszukiwania
                 entity.HasIndex(d => d.Name);
                 entity.HasIndex(d => d.DepartmentCode);
 
-                // Relacja hierarchiczna - dział nadrzędny
                 entity.HasOne(d => d.ParentDepartment)
                       .WithMany(d => d.SubDepartments)
                       .HasForeignKey(d => d.ParentDepartmentId)
-                      .OnDelete(DeleteBehavior.Restrict); // Nie można usunąć działu nadrzędnego jeśli ma poddziały
+                      .OnDelete(DeleteBehavior.Restrict);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(d => d.IsRootDepartment);
                 entity.Ignore(d => d.HierarchyLevel);
                 entity.Ignore(d => d.FullPath);
@@ -146,19 +142,16 @@ namespace TeamsManager.Data
                 entity.HasKey(st => st.Id);
                 entity.Property(st => st.ShortName).IsRequired().HasMaxLength(10);
                 entity.Property(st => st.FullName).IsRequired().HasMaxLength(200);
-                entity.Property(st => st.Description).HasMaxLength(500);
-                entity.Property(st => st.ColorCode).HasMaxLength(7); // Format #RRGGBB
+                entity.Property(st => st.Description).HasMaxLength(500); // Było IsRequired(), ale opis może być opcjonalny
+                entity.Property(st => st.ColorCode).HasMaxLength(7);
 
-                // Indeks unikalny na ShortName
                 entity.HasIndex(st => st.ShortName).IsUnique();
                 entity.HasIndex(st => st.FullName);
 
-                // Relacja wiele-do-wielu z wicedyrektorami (nadzór nad typami szkół)
                 entity.HasMany(st => st.SupervisingViceDirectors)
                       .WithMany(u => u.SupervisedSchoolTypes)
                       .UsingEntity(j => j.ToTable("UserSchoolTypeSupervision"));
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(st => st.DisplayName);
                 entity.Ignore(st => st.ActiveTeamsCount);
                 entity.Ignore(st => st.AssignedTeachersCount);
@@ -169,14 +162,12 @@ namespace TeamsManager.Data
             modelBuilder.Entity<SchoolYear>(entity =>
             {
                 entity.HasKey(sy => sy.Id);
-                entity.Property(sy => sy.Name).IsRequired().HasMaxLength(20); // np. "2024/2025"
-                entity.Property(sy => sy.Description).HasMaxLength(500);
+                entity.Property(sy => sy.Name).IsRequired().HasMaxLength(20);
+                entity.Property(sy => sy.Description).HasMaxLength(500); // Było IsRequired()
 
-                // Indeks na nazwie roku szkolnego
                 entity.HasIndex(sy => sy.Name).IsUnique();
                 entity.HasIndex(sy => sy.IsCurrent);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(sy => sy.HasStarted);
                 entity.Ignore(sy => sy.HasEnded);
                 entity.Ignore(sy => sy.IsCurrentlyActive);
@@ -196,11 +187,10 @@ namespace TeamsManager.Data
                 entity.Property(s => s.Category).HasMaxLength(100);
 
                 entity.HasIndex(s => s.Name);
-                entity.HasIndex(s => s.Code).IsUnique(false); // Kod może nie być unikalny globalnie, ale warto go indeksować
+                entity.HasIndex(s => s.Code).IsUnique(false);
 
-                // Opcjonalna relacja jeden-do-wielu z SchoolType (jeden typ szkoły może mieć wiele przedmiotów "domyślnych")
                 entity.HasOne(s => s.DefaultSchoolType)
-                      .WithMany() // Zakładamy, że SchoolType nie ma bezpośredniej kolekcji "DefaultSubjects"
+                      .WithMany()
                       .HasForeignKey(s => s.DefaultSchoolTypeId)
                       .OnDelete(DeleteBehavior.SetNull);
             });
@@ -213,54 +203,46 @@ namespace TeamsManager.Data
                 entity.Property(us => us.SubjectId).IsRequired();
                 entity.Property(us => us.Notes).HasMaxLength(500);
 
-                // Indeks unikalny, aby jeden nauczyciel nie mógł być wielokrotnie przypisany do tego samego przedmiotu
-                // (chyba że rozróżniamy przypisania np. datą lub innym atrybutem - wtedy ten indeks może być inny)
                 entity.HasIndex(us => new { us.UserId, us.SubjectId }).IsUnique();
 
-                // Relacja z User
                 entity.HasOne(us => us.User)
-                      .WithMany(u => u.TaughtSubjects) // Odwołanie do nowej kolekcji w User.cs
+                      .WithMany(u => u.TaughtSubjects)
                       .HasForeignKey(us => us.UserId)
-                      .OnDelete(DeleteBehavior.Cascade); // Usunięcie użytkownika usuwa jego przypisania do przedmiotów
+                      .OnDelete(DeleteBehavior.Cascade);
 
-                // Relacja z Subject
                 entity.HasOne(us => us.Subject)
-                      .WithMany(s => s.TeacherAssignments) // Odwołanie do kolekcji w Subject.cs
+                      .WithMany(s => s.TeacherAssignments)
                       .HasForeignKey(us => us.SubjectId)
-                      .OnDelete(DeleteBehavior.Cascade); // Usunięcie przedmiotu usuwa jego przypisania do nauczycieli
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             // ===== KONFIGURACJA ZESPOŁÓW =====
             modelBuilder.Entity<Team>(entity =>
             {
-                entity.Property(t => t.DisplayName).IsRequired().HasMaxLength(200); // Pozostaje lub dostosuj MaxLength
-                entity.Property(t => t.Description).HasMaxLength(1000); // Pozostaje lub dostosuj MaxLength
-                entity.Property(t => t.Owner).IsRequired().HasMaxLength(100); // Pozostaje
-                entity.Property(t => t.Visibility).HasConversion<int>();
+                entity.HasKey(t => t.Id); // Dodano definicję klucza głównego, jeśli przypadkiem brakowało
+                entity.Property(t => t.DisplayName).IsRequired().HasMaxLength(200);
+                entity.Property(t => t.Description).HasMaxLength(1000); // Było IsRequired()
+                entity.Property(t => t.Owner).IsRequired().HasMaxLength(100);
+                entity.Property(t => t.Visibility).HasConversion<int>(); // Używamy nowego TeamVisibility
 
-                // Status i pola związane ze zmianą statusu
-                entity.Property(t => t.Status).HasConversion<int>().IsRequired(); // Upewnij się, że jest IsRequired
-                entity.Property(t => t.StatusChangeDate); // DateTime? jest domyślnie nullowalne
-                entity.Property(t => t.StatusChangedBy).HasMaxLength(100); // UPN osoby zmieniającej status
-                entity.Property(t => t.StatusChangeReason).HasMaxLength(500); // Powód zmiany statusu
+                entity.Property(t => t.Status).HasConversion<int>().IsRequired();
+                entity.Property(t => t.StatusChangeDate);
+                entity.Property(t => t.StatusChangedBy).HasMaxLength(100);
+                entity.Property(t => t.StatusChangeReason).HasMaxLength(500);
 
-                // Klucze obce i inne właściwości
-                entity.Property(t => t.TemplateId); // Nullable string, MaxLength może być zdefiniowane przez typ klucza w TeamTemplate
-                entity.Property(t => t.SchoolTypeId); // Nullable string
-                entity.Property(t => t.SchoolYearId); // Nullable string
+                entity.Property(t => t.TemplateId);
+                entity.Property(t => t.SchoolTypeId);
+                entity.Property(t => t.SchoolYearId);
 
                 entity.Property(t => t.AcademicYear).HasMaxLength(20);
-                entity.Property(t => t.Semester).HasMaxLength(50); // Zwiększyłem trochę, np. "Semestr Letni Dodatkowy"
-                entity.Property(t => t.ExternalId).HasMaxLength(100); // Zwiększyłem trochę dla elastyczności
-                entity.Property(t => t.CourseCode).HasMaxLength(50); // Zwiększyłem
+                entity.Property(t => t.Semester).HasMaxLength(50);
+                entity.Property(t => t.ExternalId).HasMaxLength(100);
+                entity.Property(t => t.CourseCode).HasMaxLength(50);
                 entity.Property(t => t.Level).HasMaxLength(100);
                 entity.Property(t => t.Language).HasMaxLength(50);
                 entity.Property(t => t.Tags).HasMaxLength(500);
-                entity.Property(t => t.Notes).HasColumnType("TEXT"); // Dla dłuższych notatek
-                                                                     // IsVisible i RequiresApproval są bool, domyślnie OK
-                entity.Property(t => t.LastActivityDate);
+                entity.Property(t => t.Notes).HasColumnType("TEXT");
 
-                // Indeksy
                 entity.HasIndex(t => t.DisplayName);
                 entity.HasIndex(t => t.Status);
                 entity.HasIndex(t => t.Owner);
@@ -268,9 +250,8 @@ namespace TeamsManager.Data
                 entity.HasIndex(t => t.SchoolTypeId);
                 entity.HasIndex(t => t.SchoolYearId);
                 entity.HasIndex(t => t.TemplateId);
-                entity.HasIndex(t => t.IsActive); // Indeks na IsActive z BaseEntity
+                // Indeks na BaseEntity.IsActive jest konfigurowany w ConfigureBaseEntity
 
-                // Relacje (pozostają takie same jak wcześniej, ale weryfikujemy)
                 entity.HasOne(t => t.Template)
                       .WithMany(tt => tt.Teams)
                       .HasForeignKey(t => t.TemplateId)
@@ -279,26 +260,25 @@ namespace TeamsManager.Data
                 entity.HasOne(t => t.SchoolType)
                       .WithMany(st => st.Teams)
                       .HasForeignKey(t => t.SchoolTypeId)
-                      .OnDelete(DeleteBehavior.SetNull); // Lub Restrict, jeśli typ szkoły nie może być usunięty, gdy ma zespoły
+                      .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasOne(t => t.SchoolYear)
                       .WithMany(sy => sy.Teams)
                       .HasForeignKey(t => t.SchoolYearId)
-                      .OnDelete(DeleteBehavior.SetNull); // Lub Restrict
+                      .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasMany(t => t.Members)
                       .WithOne(m => m.Team)
                       .HasForeignKey(m => m.TeamId)
-                      .OnDelete(DeleteBehavior.Cascade); // Usunięcie Team usunie jego TeamMember
+                      .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasMany(t => t.Channels)
                       .WithOne(c => c.Team)
                       .HasForeignKey(c => c.TeamId)
-                      .OnDelete(DeleteBehavior.Cascade); // Usunięcie Team usunie jego Channel
+                      .OnDelete(DeleteBehavior.Cascade);
 
-                // Ignorowanie właściwości obliczanych (lista powinna być kompletna)
-                entity.Ignore(t => t.IsEffectivelyActive);
-                entity.Ignore(t => t.IsFullyOperational); // Nowa nazwa
+                // Usunięto entity.Ignore(t => t.IsEffectivelyActive);
+                entity.Ignore(t => t.IsFullyOperational);
                 entity.Ignore(t => t.MemberCount);
                 entity.Ignore(t => t.OwnerCount);
                 entity.Ignore(t => t.RegularMemberCount);
@@ -313,6 +293,8 @@ namespace TeamsManager.Data
                 entity.Ignore(t => t.CompletionPercentage);
                 entity.Ignore(t => t.DisplayNameWithStatus);
                 entity.Ignore(t => t.ShortDescription);
+                // Nowe, obliczeniowe Team.IsActive (ukrywające to z BaseEntity) nie jest mapowane przez EF Core domyślnie,
+                // ponieważ ma tylko getter. Nie ma potrzeby go ignorować.
             });
 
             // ===== KONFIGURACJA CZŁONKÓW ZESPOŁU =====
@@ -320,7 +302,7 @@ namespace TeamsManager.Data
             {
                 entity.HasKey(m => m.Id);
                 entity.Property(m => m.TeamId).IsRequired();
-                entity.Property(m => m.UserId).IsRequired(); // Wymagane - każdy członek musi być powiązany z użytkownikiem
+                entity.Property(m => m.UserId).IsRequired();
                 entity.Property(m => m.AddedBy).HasMaxLength(100);
                 entity.Property(m => m.RemovedBy).HasMaxLength(100);
                 entity.Property(m => m.RoleChangedBy).HasMaxLength(100);
@@ -330,22 +312,25 @@ namespace TeamsManager.Data
                 entity.Property(m => m.Notes).HasMaxLength(1000);
                 entity.Property(m => m.Source).HasMaxLength(50);
 
-                // Konwersja enum TeamMemberRole na liczbę całkowitą
                 entity.Property(m => m.Role).HasConversion<int>();
-                entity.Property(m => m.PreviousRole).HasConversion<int>();
+                entity.Property(m => m.PreviousRole).HasConversion<int>(); // Było HasConversion<int>()?, ale enum nullable nie jest bezpośrednio wspierany
 
-                // Indeks unikalny - jeden użytkownik może być w zespole tylko raz
                 entity.HasIndex(m => new { m.UserId, m.TeamId }).IsUnique();
                 entity.HasIndex(m => m.Role);
                 entity.HasIndex(m => m.IsApproved);
 
-                // Relacja z użytkownikiem (wymagana)
                 entity.HasOne(m => m.User)
                       .WithMany(u => u.TeamMemberships)
                       .HasForeignKey(m => m.UserId)
-                      .OnDelete(DeleteBehavior.Cascade); // Usunięcie Użytkownika usunie jego Członkostwa w zespołach
+                      .OnDelete(DeleteBehavior.Cascade);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
+                // Relacja z Team jest już zdefiniowana w konfiguracji Team (HasMany Members)
+                // entity.HasOne(m => m.Team)
+                //       .WithMany(t => t.Members)
+                //       .HasForeignKey(m => m.TeamId)
+                //       .OnDelete(DeleteBehavior.Cascade);
+
+
                 entity.Ignore(m => m.Email);
                 entity.Ignore(m => m.DisplayName);
                 entity.Ignore(m => m.FullName);
@@ -366,28 +351,30 @@ namespace TeamsManager.Data
             {
                 entity.HasKey(c => c.Id);
                 entity.Property(c => c.DisplayName).IsRequired().HasMaxLength(100);
-                entity.Property(c => c.Description).HasMaxLength(500);
+                entity.Property(c => c.Description).HasMaxLength(500); // Było IsRequired()
                 entity.Property(c => c.TeamId).IsRequired();
                 entity.Property(c => c.ChannelType).HasMaxLength(20);
 
-                // Konfiguracja dla pól związanych ze statusem
                 entity.Property(c => c.Status).HasConversion<int>();
                 entity.Property(c => c.StatusChangedBy).HasMaxLength(100);
-                entity.Property(c => c.StatusChangeReason).HasMaxLength(500); 
-                
-                // Istniejące konfiguracje dla innych pól...
+                entity.Property(c => c.StatusChangeReason).HasMaxLength(500);
+
                 entity.Property(c => c.NotificationSettings).HasMaxLength(1000);
                 entity.Property(c => c.Category).HasMaxLength(50);
                 entity.Property(c => c.Tags).HasMaxLength(500);
                 entity.Property(c => c.ExternalUrl).HasMaxLength(500);
 
-                // Indeks na nazwie kanału i zespole
                 entity.HasIndex(c => c.DisplayName);
-                entity.HasIndex(c => new { c.TeamId, c.DisplayName });
+                entity.HasIndex(c => new { c.TeamId, c.DisplayName }); // Można dodać IsUnique(), jeśli nazwa kanału w zespole ma być unikalna
                 entity.HasIndex(c => c.IsGeneral);
                 entity.HasIndex(c => c.IsPrivate);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
+                // Relacja z Team jest już zdefiniowana w konfiguracji Team (HasMany Channels)
+                // entity.HasOne(c => c.Team)
+                //       .WithMany(t => t.Channels)
+                //       .HasForeignKey(c => c.TeamId)
+                //       .OnDelete(DeleteBehavior.Cascade);
+
                 entity.Ignore(c => c.IsCurrentlyActive);
                 entity.Ignore(c => c.IsRecentlyActive);
                 entity.Ignore(c => c.DaysSinceLastActivity);
@@ -396,6 +383,7 @@ namespace TeamsManager.Data
                 entity.Ignore(c => c.StatusDescription);
                 entity.Ignore(c => c.ActivityLevel);
                 entity.Ignore(c => c.ShortSummary);
+                // Nowe, obliczeniowe Channel.IsActive nie musi być tutaj ignorowane.
             });
 
             // ===== KONFIGURACJA SZABLONÓW ZESPOŁÓW =====
@@ -404,27 +392,24 @@ namespace TeamsManager.Data
                 entity.HasKey(tt => tt.Id);
                 entity.Property(tt => tt.Name).IsRequired().HasMaxLength(100);
                 entity.Property(tt => tt.Template).IsRequired().HasMaxLength(500);
-                entity.Property(tt => tt.Description).HasMaxLength(1000);
+                entity.Property(tt => tt.Description).HasMaxLength(1000); // Było IsRequired()
                 entity.Property(tt => tt.ExampleOutput).HasMaxLength(300);
-                entity.Property(tt => tt.Category).HasMaxLength(50);
-                entity.Property(tt => tt.Language).HasMaxLength(20);
+                entity.Property(tt => tt.Category).HasMaxLength(50); // Było IsRequired()
+                entity.Property(tt => tt.Language).HasMaxLength(20); // Było IsRequired()
                 entity.Property(tt => tt.Prefix).HasMaxLength(50);
                 entity.Property(tt => tt.Suffix).HasMaxLength(50);
-                entity.Property(tt => tt.Separator).HasMaxLength(10);
+                entity.Property(tt => tt.Separator).HasMaxLength(10); // Było IsRequired()
 
-                // Indeks na nazwie szablonu
-                entity.HasIndex(tt => tt.Name);
+                entity.HasIndex(tt => tt.Name); // Rozważyć .IsUnique(), jeśli nazwy szablonów mają być unikalne
                 entity.HasIndex(tt => tt.IsDefault);
                 entity.HasIndex(tt => tt.IsUniversal);
                 entity.HasIndex(tt => tt.Category);
 
-                // Relacja z typem szkoły (opcjonalna dla szablonów uniwersalnych)
                 entity.HasOne(tt => tt.SchoolType)
                       .WithMany(st => st.Templates)
                       .HasForeignKey(tt => tt.SchoolTypeId)
                       .OnDelete(DeleteBehavior.SetNull);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(tt => tt.Placeholders);
                 entity.Ignore(tt => tt.HasPlaceholders);
                 entity.Ignore(tt => tt.PlaceholderCount);
@@ -440,25 +425,21 @@ namespace TeamsManager.Data
                 entity.Property(ust => ust.UserId).IsRequired();
                 entity.Property(ust => ust.SchoolTypeId).IsRequired();
                 entity.Property(ust => ust.Notes).HasMaxLength(500);
-                entity.Property(ust => ust.WorkloadPercentage).HasColumnType("decimal(5,2)"); // np. 87.50%
+                entity.Property(ust => ust.WorkloadPercentage).HasColumnType("decimal(5,2)");
 
-                // Indeks unikalny - jeden użytkownik może być przypisany do tego samego typu szkoły tylko raz
                 entity.HasIndex(ust => new { ust.UserId, ust.SchoolTypeId }).IsUnique();
                 entity.HasIndex(ust => ust.IsCurrentlyActive);
 
-                // Relacja z User
                 entity.HasOne(ust => ust.User)
                       .WithMany(u => u.SchoolTypeAssignments)
                       .HasForeignKey(ust => ust.UserId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Relacja ze SchoolType
                 entity.HasOne(ust => ust.SchoolType)
                       .WithMany(st => st.TeacherAssignments)
                       .HasForeignKey(ust => ust.SchoolTypeId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(ust => ust.IsActiveToday);
                 entity.Ignore(ust => ust.DaysAssigned);
                 entity.Ignore(ust => ust.AssignmentDescription);
@@ -469,22 +450,20 @@ namespace TeamsManager.Data
             {
                 entity.HasKey(oh => oh.Id);
                 entity.Property(oh => oh.TargetEntityType).IsRequired().HasMaxLength(50);
-                entity.Property(oh => oh.TargetEntityId).IsRequired().HasMaxLength(50);
-                entity.Property(oh => oh.TargetEntityName).HasMaxLength(200);
-                entity.Property(oh => oh.OperationDetails).HasColumnType("TEXT"); // Dla dużych JSON-ów
+                entity.Property(oh => oh.TargetEntityId).IsRequired().HasMaxLength(50); // Było nullable
+                entity.Property(oh => oh.TargetEntityName).HasMaxLength(200); // Było IsRequired()
+                entity.Property(oh => oh.OperationDetails).HasColumnType("TEXT"); // Było IsRequired()
                 entity.Property(oh => oh.ErrorMessage).HasMaxLength(1000);
                 entity.Property(oh => oh.ErrorStackTrace).HasColumnType("TEXT");
-                entity.Property(oh => oh.UserIpAddress).HasMaxLength(45); // IPv6
+                entity.Property(oh => oh.UserIpAddress).HasMaxLength(45);
                 entity.Property(oh => oh.UserAgent).HasMaxLength(500);
                 entity.Property(oh => oh.SessionId).HasMaxLength(100);
                 entity.Property(oh => oh.ParentOperationId).HasMaxLength(50);
                 entity.Property(oh => oh.Tags).HasMaxLength(200);
 
-                // Konwersja enums na liczby całkowite
                 entity.Property(oh => oh.Type).HasConversion<int>();
                 entity.Property(oh => oh.Status).HasConversion<int>();
 
-                // Indeksy dla wydajnych zapytań
                 entity.HasIndex(oh => oh.Type);
                 entity.HasIndex(oh => oh.Status);
                 entity.HasIndex(oh => oh.TargetEntityType);
@@ -493,7 +472,6 @@ namespace TeamsManager.Data
                 entity.HasIndex(oh => oh.CreatedBy);
                 entity.HasIndex(oh => oh.ParentOperationId);
 
-                // Właściwości obliczane - nie przechowywane w bazie danych
                 entity.Ignore(oh => oh.IsInProgress);
                 entity.Ignore(oh => oh.IsCompleted);
                 entity.Ignore(oh => oh.IsSuccessful);
@@ -508,17 +486,15 @@ namespace TeamsManager.Data
             {
                 entity.HasKey(a => a.Id);
                 entity.Property(a => a.Key).IsRequired().HasMaxLength(100);
-                entity.Property(a => a.Value).IsRequired().HasColumnType("TEXT");
-                entity.Property(a => a.Description).HasMaxLength(500);
+                entity.Property(a => a.Value).HasColumnType("TEXT"); // Było IsRequired(), ale Value może być puste, jeśli DefaultValue jest używane
+                entity.Property(a => a.Description).HasMaxLength(500); // Było IsRequired()
                 entity.Property(a => a.Category).HasMaxLength(50);
                 entity.Property(a => a.DefaultValue).HasColumnType("TEXT");
                 entity.Property(a => a.ValidationPattern).HasMaxLength(200);
                 entity.Property(a => a.ValidationMessage).HasMaxLength(200);
 
-                // Konwersja enum SettingType na liczbę całkowitą
                 entity.Property(a => a.Type).HasConversion<int>();
 
-                // Indeks unikalny na kluczu ustawienia
                 entity.HasIndex(a => a.Key).IsUnique();
                 entity.HasIndex(a => a.Category);
                 entity.HasIndex(a => a.Type);
@@ -530,51 +506,35 @@ namespace TeamsManager.Data
         /// <summary>
         /// Konfiguruje wspólne właściwości dla wszystkich encji dziedziczących z BaseEntity
         /// </summary>
-        /// <typeparam name="T">Typ encji dziedziczącej z BaseEntity</typeparam>
-        /// <param name="modelBuilder">ModelBuilder</param>
         private void ConfigureBaseEntity<T>(ModelBuilder modelBuilder) where T : BaseEntity
         {
             modelBuilder.Entity<T>(entity =>
             {
-                // Konfiguracja pól audytu
                 entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.ModifiedBy).HasMaxLength(100);
 
-                // Indeksy na polach audytu dla wydajności
                 entity.HasIndex(e => e.CreatedDate);
                 entity.HasIndex(e => e.IsActive);
                 entity.HasIndex(e => e.CreatedBy);
             });
         }
 
-        /// <summary>
-        /// Automatycznie ustawia wartości audytu przed zapisem do bazy danych
-        /// </summary>
-        /// <returns></returns>
         public override int SaveChanges()
         {
             SetAuditFields();
             return base.SaveChanges();
         }
 
-        /// <summary>
-        /// Automatycznie ustawia wartości audytu przed zapisem do bazy danych (async)
-        /// </summary>
-        /// <param name="cancellationToken"></param>
-        /// <returns></returns>
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             SetAuditFields();
             return await base.SaveChangesAsync(cancellationToken);
         }
 
-        /// <summary>
-        /// Ustawia pola audytu dla nowych i modyfikowanych encji
-        /// </summary>
         private void SetAuditFields()
         {
             var entries = ChangeTracker.Entries<BaseEntity>();
-            var currentUser = GetCurrentUser(); // TODO: Implementuj pobieranie aktualnego użytkownika
+            var currentUser = GetCurrentUser();
             var currentTime = DateTime.UtcNow;
 
             foreach (var entry in entries)
@@ -582,13 +542,18 @@ namespace TeamsManager.Data
                 switch (entry.State)
                 {
                     case EntityState.Added:
-                        entry.Entity.CreatedDate = currentTime;
-                        entry.Entity.CreatedBy = currentUser;
-                        // Tylko ustaw IsActive = true jeśli nie zostało explicite ustawione na false
-                        if (entry.Entity.IsActive != false)
+                        if (entry.Entity.CreatedDate == default) // Ustawiaj tylko jeśli nie zostało już ustawione
                         {
-                            entry.Entity.IsActive = true;
+                            entry.Entity.CreatedDate = currentTime;
                         }
+                        if (string.IsNullOrWhiteSpace(entry.Entity.CreatedBy)) // Ustawiaj tylko jeśli nie zostało już ustawione
+                        {
+                            entry.Entity.CreatedBy = currentUser;
+                        }
+                        // Flaga IsActive jest domyślnie true w BaseEntity,
+                        // więc nie ma potrzeby jej tu ustawiać, chyba że chcemy wymusić
+                        // true, nawet jeśli ktoś ustawił false przed dodaniem.
+                        // Obecna logika BaseEntity jest taka, że IsActive = true domyślnie.
                         break;
 
                     case EntityState.Modified:
@@ -599,13 +564,10 @@ namespace TeamsManager.Data
             }
         }
 
-        /// <summary>
-        /// Pobiera identyfikator aktualnego użytkownika
-        /// TODO: Implementuj pobieranie z kontekstu HTTP lub innego źródła
-        /// </summary>
-        /// <returns>UPN aktualnego użytkownika</returns>
         protected virtual string GetCurrentUser()
         {
+            // Jeśli _currentUserService nie zostało wstrzyknięte (np. podczas migracji),
+            // użyj wartości domyślnej.
             return _currentUserService?.GetCurrentUserUpn() ?? "system@teamsmanager.local";
         }
     }

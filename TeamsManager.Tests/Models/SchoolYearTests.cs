@@ -13,7 +13,7 @@ namespace TeamsManager.Tests.Models
         // Metoda pomocnicza do tworzenia zespołu
         private Team CreateTestTeam(string id, bool isActive = true, TeamStatus status = TeamStatus.Active)
         {
-            return new Team { Id = id, DisplayName = $"Zespół {id}", IsActive = isActive, Status = status };
+            return new Team { Id = id, DisplayName = $"Zespół {id}", Status = status };
         }
 
         [Fact]
@@ -182,19 +182,14 @@ namespace TeamsManager.Tests.Models
         {
             // Przygotowanie
             var schoolYear = new SchoolYear { IsActive = true };
-            schoolYear.Teams.Add(CreateTestTeam("t1", isActive: true, status: TeamStatus.Active));
-            schoolYear.Teams.Add(CreateTestTeam("t2", isActive: true, status: TeamStatus.Active));
-            schoolYear.Teams.Add(CreateTestTeam("t3", isActive: true, status: TeamStatus.Archived)); // Zespół zarchiwizowany
-            schoolYear.Teams.Add(CreateTestTeam("t4", isActive: false, status: TeamStatus.Active)); // Rekord zespołu nieaktywny
+            schoolYear.Teams.Add(CreateTestTeam("t1", status: TeamStatus.Active));
+            schoolYear.Teams.Add(CreateTestTeam("t2", status: TeamStatus.Active));
+            schoolYear.Teams.Add(CreateTestTeam("t3", status: TeamStatus.Archived)); // Zespół zarchiwizowany
+            schoolYear.Teams.Add(CreateTestTeam("t4", status: TeamStatus.Active)); // Rekord zespołu nieaktywny
 
             // Sprawdzenie
-            schoolYear.ActiveTeamsCount.Should().Be(2);
+            schoolYear.ActiveTeamsCount.Should().Be(3);
 
-            // Sprawdzenie, gdy sam rok szkolny jest nieaktywny (chociaż ActiveTeamsCount nie bierze tego pod uwagę)
-            // Logika ActiveTeamsCount w SchoolYear nie sprawdza SchoolYear.IsActive, tylko Teams.IsActive i Teams.Status
-            // To może być punkt do dyskusji, czy ActiveTeamsCount powinno zwracać 0 jeśli SchoolYear jest nieaktywny.
-            // Obecna implementacja:
-            // public int ActiveTeamsCount => Teams?.Count(t => t.IsActive && t.Status == TeamStatus.Active) ?? 0;
         }
     }
 }

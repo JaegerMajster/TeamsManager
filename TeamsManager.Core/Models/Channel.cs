@@ -6,52 +6,53 @@ using TeamsManager.Core.Enums;
 namespace TeamsManager.Core.Models
 {
     /// <summary>
-    /// Kanał w zespole Microsoft Teams
-    /// Reprezentuje miejsce komunikacji w ramach zespołu
+    /// Kanał w zespole Microsoft Teams.
+    /// Reprezentuje miejsce komunikacji w ramach zespołu.
     /// </summary>
     public class Channel : BaseEntity
     {
         /// <summary>
-        /// Nazwa wyświetlana kanału
+        /// Nazwa wyświetlana kanału.
         /// </summary>
         public string DisplayName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Opis kanału i jego przeznaczenia
+        /// Opis kanału i jego przeznaczenia.
         /// </summary>
         public string Description { get; set; } = string.Empty;
 
         /// <summary>
-        /// Typ kanału (Standard, Private, Shared)
+        /// Typ kanału (Standard, Private, Shared).
         /// </summary>
         public string ChannelType { get; set; } = "Standard";
 
         /// <summary>
-        /// Czy kanał jest kanałem ogólnym (domyślnym)
-        /// Kanał ogólny nie może być usunięty
+        /// Czy kanał jest kanałem ogólnym (domyślnym).
+        /// Kanał ogólny nie może być usunięty.
         /// </summary>
         public bool IsGeneral { get; set; } = false;
 
         /// <summary>
-        /// Czy kanał jest prywatny
-        /// Prywatne kanały są dostępne tylko dla wybranych członków
+        /// Czy kanał jest prywatny.
+        /// Prywatne kanały są dostępne tylko dla wybranych członków.
         /// </summary>
         public bool IsPrivate { get; set; } = false;
 
         /// <summary>
-        /// Czy kanał jest tylko do odczytu
+        /// Czy kanał jest tylko do odczytu.
         /// </summary>
         public bool IsReadOnly { get; set; } = false;
 
         /// <summary>
         /// Status kanału (np. Aktywny, Zarchiwizowany).
+        /// To jest główne źródło prawdy o stanie cyklu życia kanału.
         /// </summary>
         public ChannelStatus Status { get; set; } = ChannelStatus.Active;
 
         /// <summary>
-        /// Data zmiany statusu na zarchiwizowany.
+        /// Data zmiany statusu.
         /// </summary>
-        public DateTime? StatusChangeDate { get; set; } // Ogólna data zmiany statusu
+        public DateTime? StatusChangeDate { get; set; }
 
         /// <summary>
         /// Osoba, która ostatnio zmieniła status kanału (UPN).
@@ -64,90 +65,106 @@ namespace TeamsManager.Core.Models
         public string? StatusChangeReason { get; set; }
 
         /// <summary>
-        /// Data ostatniej aktywności w kanale
+        /// Data ostatniej aktywności w kanale.
         /// </summary>
         public DateTime? LastActivityDate { get; set; }
 
         /// <summary>
-        /// Data ostatniej wiadomości w kanale
+        /// Data ostatniej wiadomości w kanale.
         /// </summary>
         public DateTime? LastMessageDate { get; set; }
 
         /// <summary>
-        /// Liczba wiadomości w kanale
+        /// Liczba wiadomości w kanale.
         /// </summary>
         public int MessageCount { get; set; } = 0;
 
         /// <summary>
-        /// Liczba plików udostępnionych w kanale
+        /// Liczba plików udostępnionych w kanale.
         /// </summary>
         public int FilesCount { get; set; } = 0;
 
         /// <summary>
-        /// Rozmiar plików w kanale (w bajtach)
+        /// Rozmiar plików w kanale (w bajtach).
         /// </summary>
         public long FilesSize { get; set; } = 0;
 
         /// <summary>
-        /// Ustawienia powiadomień dla kanału
-        /// Format JSON z ustawieniami
+        /// Ustawienia powiadomień dla kanału.
+        /// Format JSON z ustawieniami.
         /// </summary>
         public string? NotificationSettings { get; set; }
 
         /// <summary>
-        /// Czy kanał ma moderację włączoną
+        /// Czy kanał ma moderację włączoną.
         /// </summary>
         public bool IsModerationEnabled { get; set; } = false;
 
         /// <summary>
-        /// Kategoria kanału (np. "Ogólne", "Projekty", "Socjalne")
+        /// Kategoria kanału (np. "Ogólne", "Projekty", "Socjalne").
         /// </summary>
         public string? Category { get; set; }
 
         /// <summary>
-        /// Znaczniki/tagi dla kanału
+        /// Znaczniki/tagi dla kanału.
         /// </summary>
         public string? Tags { get; set; }
 
         /// <summary>
-        /// Zewnętrzny URL powiązany z kanałem (opcjonalny)
+        /// Zewnętrzny URL powiązany z kanałem (opcjonalny).
         /// </summary>
         public string? ExternalUrl { get; set; }
 
         /// <summary>
-        /// Kolejność sortowania kanałów w zespole
+        /// Kolejność sortowania kanałów w zespole.
         /// </summary>
         public int SortOrder { get; set; } = 0;
 
         // ===== KLUCZE OBCE =====
 
         /// <summary>
-        /// Identyfikator zespołu do którego należy kanał
+        /// Identyfikator zespołu do którego należy kanał.
         /// </summary>
         public string TeamId { get; set; } = string.Empty;
 
         // ===== WŁAŚCIWOŚCI NAWIGACYJNE =====
 
         /// <summary>
-        /// Zespół do którego należy kanał
+        /// Zespół do którego należy kanał.
         /// </summary>
         public Team? Team { get; set; }
 
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 
         /// <summary>
-        /// Czy kanał jest obecnie aktywny (nie zarchiwizowany)
+        /// Wskazuje, czy kanał jest aktywny.
+        /// Ta właściwość jest teraz obliczana na podstawie Statusu kanału.
+        /// Ukrywa właściwość IsActive z BaseEntity.
         /// </summary>
-        public bool IsCurrentlyActive => IsActive && Status == ChannelStatus.Active;
+        public new bool IsActive // Słowo kluczowe 'new' do ukrycia IsActive z BaseEntity
+        {
+            get { return Status == ChannelStatus.Active; }
+            // Brak settera - stan aktywności jest determinowany przez Status.
+        }
 
         /// <summary>
-        /// Czy kanał był niedawno aktywny (ostatnie 30 dni)
+        /// Czy kanał jest obecnie aktywny (operacyjnie).
+        /// Wcześniej: IsActive (z BaseEntity) && Status == ChannelStatus.Active.
+        /// Teraz, gdy this.IsActive jest oparte na Status, wystarczy this.IsActive.
+        /// Dodatkowo, można by tu uwzględnić aktywność samego rekordu BaseEntity, jeśli miałaby ona inne znaczenie.
+        /// Na potrzeby ujednolicenia, jeśli IsActive kanału zależy tylko od jego Statusu, to:
+        /// </summary>
+        public bool IsCurrentlyActive => this.IsActive;
+
+
+        /// <summary>
+        /// Czy kanał był niedawno aktywny (ostatnie 30 dni).
         /// </summary>
         public bool IsRecentlyActive => LastActivityDate.HasValue &&
                                         (DateTime.UtcNow - LastActivityDate.Value).Days < 30;
 
         /// <summary>
-        /// Ile dni minęło od ostatniej aktywności
+        /// Ile dni minęło od ostatniej aktywności.
         /// </summary>
         public int? DaysSinceLastActivity
         {
@@ -159,7 +176,7 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Ile dni minęło od ostatniej wiadomości
+        /// Ile dni minęło od ostatniej wiadomości.
         /// </summary>
         public int? DaysSinceLastMessage
         {
@@ -171,7 +188,7 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Rozmiar plików w formacie czytelnym dla człowieka
+        /// Rozmiar plików w formacie czytelnym dla człowieka.
         /// </summary>
         public string FilesSizeFormatted
         {
@@ -194,24 +211,28 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Status kanału w czytelnej formie
+        /// Status kanału w czytelnej formie.
         /// </summary>
         public string StatusDescription
         {
             get
             {
-                if (!IsActive) return "Nieaktywny (ogólnie)"; // Encja BaseEntity.IsActive = false
+                // Używamy this.IsActive (obliczeniowego) zamiast base.IsActive
+                if (!this.IsActive && Status != ChannelStatus.Archived) return "Nieaktywny (rekord)"; // Jeśli Status nie jest Archived, a this.IsActive jest false, to coś jest nietypowe.
+                                                                                                      // Ale bazując na nowej logice this.IsActive, ten warunek praktycznie nie zajdzie,
+                                                                                                      // chyba że Status miałby więcej wartości niż Active/Archived.
+                                                                                                      // Poprawiona logika:
                 return Status switch
                 {
                     ChannelStatus.Active => IsPrivate ? "Prywatny" : (IsReadOnly ? "Tylko do odczytu" : "Aktywny"),
                     ChannelStatus.Archived => "Zarchiwizowany",
-                    _ => "Nieznany status"
+                    _ => "Nieznany status" // Powinno obsłużyć inne potencjalne stany
                 };
             }
         }
 
         /// <summary>
-        /// Poziom aktywności kanału na podstawie liczby wiadomości
+        /// Poziom aktywności kanału na podstawie liczby wiadomości.
         /// </summary>
         public string ActivityLevel
         {
@@ -229,7 +250,7 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Krótki opis kanału dla list i podglądów
+        /// Krótki opis kanału dla list i podglądów.
         /// </summary>
         public string ShortSummary
         {
@@ -250,45 +271,48 @@ namespace TeamsManager.Core.Models
         // ===== METODY POMOCNICZE =====
 
         /// <summary>
-        /// Archiwizuje kanał z podaniem powodu
+        /// Archiwizuje kanał z podaniem powodu.
         /// </summary>
-        /// <param name="reason">Powód archiwizacji</param>
-        /// <param name="archivedBy">Osoba archiwizująca (UPN)</param>
+        /// <param name="reason">Powód archiwizacji.</param>
+        /// <param name="archivedBy">Osoba archiwizująca (UPN).</param>
         public void Archive(string reason, string archivedBy)
         {
             if (IsGeneral)
                 throw new InvalidOperationException("Nie można zarchiwizować kanału ogólnego.");
 
-            if (Status == ChannelStatus.Archived) return; // Już zarchiwizowany
+            if (Status == ChannelStatus.Archived) return;
 
             Status = ChannelStatus.Archived;
+            // this.IsActive jest teraz false automatycznie.
+            // Nie modyfikujemy DisplayName ani Description dla kanałów, chyba że jest takie wymaganie.
+
             StatusChangeDate = DateTime.UtcNow;
             StatusChangedBy = archivedBy;
             StatusChangeReason = reason;
-            MarkAsModified(archivedBy);
-            // Możesz też zaktualizować LastActivityDate, jeśli archiwizacja jest traktowana jako aktywność
-            // UpdateLastActivity(); 
+            MarkAsModified(archivedBy); // Metoda z BaseEntity
         }
 
         /// <summary>
-        /// Przywraca kanał z archiwum
+        /// Przywraca kanał z archiwum.
         /// </summary>
-        /// <param name="restoredBy">Osoba przywracająca (UPN)</param>
+        /// <param name="restoredBy">Osoba przywracająca (UPN).</param>
         public void Restore(string restoredBy)
         {
-            if (Status == ChannelStatus.Active) return; // Już aktywny
+            if (Status == ChannelStatus.Active) return;
 
             Status = ChannelStatus.Active;
+            // this.IsActive jest teraz true automatycznie.
+
             StatusChangeDate = DateTime.UtcNow;
             StatusChangedBy = restoredBy;
-            StatusChangeReason = "Przywrócono z archiwum"; // Lub inny domyślny powód
-            MarkAsModified(restoredBy);
+            StatusChangeReason = "Przywrócono z archiwum";
+            MarkAsModified(restoredBy); // Metoda z BaseEntity
         }
 
         /// <summary>
-        /// Ustawia kanał jako tylko do odczytu
+        /// Ustawia kanał jako tylko do odczytu.
         /// </summary>
-        /// <param name="setBy">Osoba ustawiająca (UPN)</param>
+        /// <param name="setBy">Osoba ustawiająca (UPN).</param>
         public void SetReadOnly(string setBy)
         {
             IsReadOnly = true;
@@ -296,9 +320,9 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Usuwa ograniczenie tylko do odczytu
+        /// Usuwa ograniczenie tylko do odczytu.
         /// </summary>
-        /// <param name="setBy">Osoba usuwająca ograniczenie (UPN)</param>
+        /// <param name="setBy">Osoba usuwająca ograniczenie (UPN).</param>
         public void RemoveReadOnly(string setBy)
         {
             IsReadOnly = false;
@@ -306,11 +330,11 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Aktualizuje statistyki aktywności kanału
+        /// Aktualizuje statystyki aktywności kanału.
         /// </summary>
-        /// <param name="messageCount">Nowa liczba wiadomości</param>
-        /// <param name="filesCount">Nowa liczba plików</param>
-        /// <param name="filesSize">Nowy rozmiar plików</param>
+        /// <param name="messageCount">Nowa liczba wiadomości.</param>
+        /// <param name="filesCount">Nowa liczba plików.</param>
+        /// <param name="filesSize">Nowy rozmiar plików.</param>
         public void UpdateActivityStats(int? messageCount = null, int? filesCount = null, long? filesSize = null)
         {
             if (messageCount.HasValue)
@@ -326,35 +350,31 @@ namespace TeamsManager.Core.Models
                 FilesSize = filesSize.Value;
 
             LastActivityDate = DateTime.UtcNow;
+            // Rozważenie wywołania MarkAsModified, jeśli te statystyki są częścią stanu encji, który powinien być audytowany.
+            // MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_activity_update"); // Jeśli jest dostępne ICurrentUserService
         }
 
         /// <summary>
-        /// Sprawdza czy kanał może być usunięty
+        /// Sprawdza czy kanał może być usunięty.
         /// </summary>
-        /// <returns>True jeśli można usunąć</returns>
+        /// <returns>True jeśli można usunąć.</returns>
         public bool CanBeDeleted()
         {
-            // Kanał ogólny nie może być usunięty
             if (IsGeneral) return false;
-
-            // Kanały z dużą aktywnością wymagają potwierdzenia
             if (MessageCount > 100) return false;
-
             return true;
         }
 
         /// <summary>
-        /// Pobiera powód dlaczego kanał nie może być usunięty
+        /// Pobiera powód dlaczego kanał nie może być usunięty.
         /// </summary>
-        /// <returns>Powód lub null jeśli można usunąć</returns>
+        /// <returns>Powód lub null jeśli można usunąć.</returns>
         public string? GetDeletionBlockReason()
         {
             if (IsGeneral)
                 return "Kanał ogólny nie może być usunięty";
-
             if (MessageCount > 100)
                 return $"Kanał zawiera {MessageCount} wiadomości - wymagane ręczne potwierdzenie";
-
             return null;
         }
     }

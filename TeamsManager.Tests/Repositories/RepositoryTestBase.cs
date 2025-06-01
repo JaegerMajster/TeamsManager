@@ -60,7 +60,7 @@ namespace TeamsManager.Tests.Repositories
             }
             finally
             {
-                SetTestUser(previousUser ?? "test_user");
+                SetTestUser(previousUser ?? "test_user_integration_base_default");
             }
         }
     }

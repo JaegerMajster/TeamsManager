@@ -52,7 +52,7 @@ namespace TeamsManager.Tests.Repositories
             savedOperation!.Type.Should().Be(OperationType.TeamCreated);
             savedOperation.TargetEntityType.Should().Be("Team");
             savedOperation.Status.Should().Be(OperationStatus.Completed);
-            savedOperation.CreatedBy.Should().Be("test_user");
+            savedOperation.CreatedBy.Should().Be("test_user_integration_base_default");
             savedOperation.CreatedDate.Should().NotBe(default(DateTime));
             savedOperation.ModifiedBy.Should().BeNull();
             savedOperation.ModifiedDate.Should().BeNull();
@@ -80,7 +80,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().NotBeNull();
             result!.Type.Should().Be(OperationType.UserCreated);
             result.TargetEntityName.Should().Be("John Doe");
-            result.CreatedBy.Should().Be("test_user"); // Oczekujemy użytkownika z TestDbContext
+            result.CreatedBy.Should().Be("test_user_integration_base_default"); // Oczekujemy użytkownika z TestDbContext
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace TeamsManager.Tests.Repositories
             resultAll.Should().HaveCount(4);
             resultAll.Should().OnlyContain(oh => oh.TargetEntityType == entityType && oh.TargetEntityId == entityId);
             resultAll.First().Type.Should().Be(OperationType.MemberRemoved); // najnowsza operacja
-            resultAll.ToList().ForEach(op => op.CreatedBy.Should().Be("test_user"));
+            resultAll.ToList().ForEach(op => op.CreatedBy.Should().Be("test_user_integration_base_default"));
 
 
             // Działanie - z limitem

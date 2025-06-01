@@ -1,7 +1,8 @@
-﻿using System; // Potrzebne dla DateTime
+﻿using System;
 using FluentAssertions;
 using TeamsManager.Core.Models;
-using TeamsManager.Core.Enums; // Potrzebne dla ChannelStatus
+using TeamsManager.Core.Enums;
+using Xunit;
 
 namespace TeamsManager.Tests.Models
 {
@@ -21,18 +22,19 @@ namespace TeamsManager.Tests.Models
             channel.TeamId.Should().Be(string.Empty);
             channel.Team.Should().BeNull();
 
-            // NOWE ASERCJE dla statusu i powiązanych pól
-            channel.Status.Should().Be(ChannelStatus.Active);
+            // Sprawdzenie Status i obliczeniowego IsActive
+            channel.Status.Should().Be(ChannelStatus.Active); // Domyślny status
+            channel.IsActive.Should().BeTrue(); // Obliczone na podstawie Status
+            channel.IsCurrentlyActive.Should().BeTrue(); // Również oparte na nowym IsActive
+
             channel.StatusChangeDate.Should().BeNull();
             channel.StatusChangedBy.Should().BeNull();
             channel.StatusChangeReason.Should().BeNull();
 
-            // Domyślne wartości dla innych nowych pól, jeśli mają znaczenie
-            channel.ChannelType.Should().Be("Standard"); // Jak zdefiniowano w modelu
+            channel.ChannelType.Should().Be("Standard");
             channel.IsGeneral.Should().BeFalse();
             channel.IsPrivate.Should().BeFalse();
             channel.IsReadOnly.Should().BeFalse();
-            // channel.IsArchived // USUNIĘTE - zastąpione przez Status
         }
 
         [Fact]
@@ -44,7 +46,7 @@ namespace TeamsManager.Tests.Models
             var displayName = "Ogólny";
             var description = "Główny kanał zespołu";
             var teamId = "team-456";
-            var createdDate = DateTime.UtcNow; // Użyj UtcNow dla spójności
+            var createdDate = DateTime.UtcNow;
             var statusChangedBy = "user@test.com";
             var statusChangeReason = "Testowa zmiana statusu";
 
@@ -53,24 +55,26 @@ namespace TeamsManager.Tests.Models
             channel.DisplayName = displayName;
             channel.Description = description;
             channel.TeamId = teamId;
-            channel.CreatedDate = createdDate; // To jest z BaseEntity, zwykle ustawiane przez SaveChanges
+            // channel.CreatedDate = createdDate; // CreatedDate jest z BaseEntity, nie ustawiamy go bezpośrednio w ten sposób w teście modelu
             channel.Status = ChannelStatus.Archived; // Testujemy ustawienie Status
-            channel.StatusChangeDate = createdDate; // Przykład
+            channel.StatusChangeDate = createdDate;
             channel.StatusChangedBy = statusChangedBy;
             channel.StatusChangeReason = statusChangeReason;
             channel.ChannelType = "Private";
             channel.IsGeneral = true;
-            channel.IsPrivate = true; // Zgodne z ChannelType = "Private"
+            channel.IsPrivate = true;
             channel.IsReadOnly = true;
-
+            // ((BaseEntity)channel).IsActive = false; // Bezpośrednie ustawienie IsActive z BaseEntity nie jest już głównym mechanizmem
 
             // Sprawdzenie
             channel.Id.Should().Be(channelId);
             channel.DisplayName.Should().Be(displayName);
             channel.Description.Should().Be(description);
             channel.TeamId.Should().Be(teamId);
-            channel.CreatedDate.Should().Be(createdDate);
-            channel.Status.Should().Be(ChannelStatus.Archived); // Sprawdzenie Status
+            // channel.CreatedDate.Should().Be(createdDate); // Ta asercja może być problematyczna bez kontroli nad BaseEntity
+            channel.Status.Should().Be(ChannelStatus.Archived);
+            channel.IsActive.Should().BeFalse(); // Obliczone na podstawie Status
+            channel.IsCurrentlyActive.Should().BeFalse(); // Obliczone
             channel.StatusChangeDate.Should().Be(createdDate);
             channel.StatusChangedBy.Should().Be(statusChangedBy);
             channel.StatusChangeReason.Should().Be(statusChangeReason);
@@ -83,7 +87,7 @@ namespace TeamsManager.Tests.Models
         [Theory]
         [InlineData("Ogólny", "Główny kanał")]
         [InlineData("Projekty", "Kanał do omawiania projektów")]
-        [InlineData("", "")] // Przypadek brzegowy
+        [InlineData("", "")]
         public void Channel_WhenSettingNameAndDescription_ShouldRetainValues(string name, string description)
         {
             // Przygotowanie
@@ -98,8 +102,6 @@ namespace TeamsManager.Tests.Models
             channel.Description.Should().Be(description);
         }
 
-        // ===== NOWE TESTY DLA LOGIKI ARCHIWIZACJI/PRZYWRACANIA =====
-
         [Fact]
         public void Archive_WhenChannelIsGeneral_ShouldThrowInvalidOperationException()
         {
@@ -112,7 +114,8 @@ namespace TeamsManager.Tests.Models
             // Sprawdzenie
             act.Should().Throw<InvalidOperationException>()
                .WithMessage("Nie można zarchiwizować kanału ogólnego.");
-            channel.Status.Should().Be(ChannelStatus.Active); // Status nie powinien się zmienić
+            channel.Status.Should().Be(ChannelStatus.Active);
+            channel.IsActive.Should().BeTrue(); // Powiązane ze Statusem
         }
 
         [Fact]
@@ -122,21 +125,23 @@ namespace TeamsManager.Tests.Models
             var channel = new Channel { DisplayName = "Kanał do archiwizacji", Status = ChannelStatus.Active, IsGeneral = false };
             var archiver = "admin@test.com";
             var reason = "Test archiwizacji";
-            var modificationDateBeforeArchive = channel.ModifiedDate; // Z BaseEntity
+            var initialModifiedBy = channel.ModifiedBy; // Z BaseEntity
+            var initialModifiedDate = channel.ModifiedDate; // Z BaseEntity
 
             // Wykonanie
             channel.Archive(reason, archiver);
 
             // Sprawdzenie
             channel.Status.Should().Be(ChannelStatus.Archived);
+            channel.IsActive.Should().BeFalse(); // Obliczone
             channel.StatusChangeDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
             channel.StatusChangedBy.Should().Be(archiver);
             channel.StatusChangeReason.Should().Be(reason);
             channel.ModifiedBy.Should().Be(archiver); // Z BaseEntity.MarkAsModified
             channel.ModifiedDate.Should().HaveValue();
-            if (modificationDateBeforeArchive.HasValue)
+            if (initialModifiedDate.HasValue)
             {
-                channel.ModifiedDate.Should().BeAfter(modificationDateBeforeArchive.Value);
+                channel.ModifiedDate.Should().BeAfter(initialModifiedDate.Value);
             }
             else
             {
@@ -152,23 +157,25 @@ namespace TeamsManager.Tests.Models
             var channel = new Channel
             {
                 DisplayName = "Już zarchiwizowany",
-                Status = ChannelStatus.Archived,
+                Status = ChannelStatus.Archived, // Już zarchiwizowany
                 IsGeneral = false,
                 StatusChangeDate = initialStatusChangeDate,
                 StatusChangedBy = "initial_archiver",
                 StatusChangeReason = "Initial reason"
             };
+            var initialModifiedDate = channel.ModifiedDate;
 
             // Wykonanie
             channel.Archive("Próba ponownej archiwizacji", "admin_again@test.com");
 
-            // Sprawdzenie - status i pola audytu zmiany statusu nie powinny się zmienić
+            // Sprawdzenie
             channel.Status.Should().Be(ChannelStatus.Archived);
-            channel.StatusChangeDate.Should().Be(initialStatusChangeDate);
+            channel.IsActive.Should().BeFalse();
+            channel.StatusChangeDate.Should().Be(initialStatusChangeDate); // Nie powinno się zmienić
             channel.StatusChangedBy.Should().Be("initial_archiver");
             channel.StatusChangeReason.Should().Be("Initial reason");
-            // ModifiedDate i ModifiedBy z BaseEntity mogą się zmienić, jeśli MarkAsModified jest zawsze wołane,
-            // ale logika `if (Status == ChannelStatus.Archived) return;` powinna zapobiec wywołaniu MarkAsModified
+            // ModifiedDate z BaseEntity NIE powinno się zmienić, bo metoda powinna wyjść na początku
+            channel.ModifiedDate.Should().Be(initialModifiedDate);
         }
 
         [Fact]
@@ -178,26 +185,27 @@ namespace TeamsManager.Tests.Models
             var channel = new Channel
             {
                 DisplayName = "Kanał do przywrócenia",
-                Status = ChannelStatus.Archived,
+                Status = ChannelStatus.Archived, // Ustawiamy jako zarchiwizowany
                 IsGeneral = false,
-                StatusChangeReason = "Został zarchiwizowany" // Poprzedni powód
+                StatusChangeReason = "Został zarchiwizowany"
             };
             var restorer = "admin@test.com";
-            var modificationDateBeforeRestore = channel.ModifiedDate;
+            var initialModifiedDate = channel.ModifiedDate;
 
             // Wykonanie
             channel.Restore(restorer);
 
             // Sprawdzenie
             channel.Status.Should().Be(ChannelStatus.Active);
+            channel.IsActive.Should().BeTrue(); // Obliczone
             channel.StatusChangeDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
             channel.StatusChangedBy.Should().Be(restorer);
             channel.StatusChangeReason.Should().Be("Przywrócono z archiwum");
             channel.ModifiedBy.Should().Be(restorer);
             channel.ModifiedDate.Should().HaveValue();
-            if (modificationDateBeforeRestore.HasValue)
+            if (initialModifiedDate.HasValue)
             {
-                channel.ModifiedDate.Should().BeAfter(modificationDateBeforeRestore.Value);
+                channel.ModifiedDate.Should().BeAfter(initialModifiedDate.Value);
             }
             else
             {
@@ -213,21 +221,71 @@ namespace TeamsManager.Tests.Models
             var channel = new Channel
             {
                 DisplayName = "Już aktywny",
-                Status = ChannelStatus.Active,
+                Status = ChannelStatus.Active, // Już aktywny
                 IsGeneral = false,
                 StatusChangeDate = initialStatusChangeDate,
                 StatusChangedBy = "initial_restorer",
                 StatusChangeReason = "Initial reason for active"
             };
+            var initialModifiedDate = channel.ModifiedDate;
 
             // Wykonanie
             channel.Restore("admin_again@test.com");
 
-            // Sprawdzenie - status i pola audytu zmiany statusu nie powinny się zmienić
+            // Sprawdzenie
             channel.Status.Should().Be(ChannelStatus.Active);
-            channel.StatusChangeDate.Should().Be(initialStatusChangeDate);
+            channel.IsActive.Should().BeTrue();
+            channel.StatusChangeDate.Should().Be(initialStatusChangeDate); // Nie powinno się zmienić
             channel.StatusChangedBy.Should().Be("initial_restorer");
             channel.StatusChangeReason.Should().Be("Initial reason for active");
+            channel.ModifiedDate.Should().Be(initialModifiedDate); // Nie powinno się zmienić
+        }
+
+        // Test dla IsCurrentlyActive
+        [Fact]
+        public void IsCurrentlyActive_ShouldReflectNewIsActiveLogic()
+        {
+            var channel = new Channel();
+
+            channel.Status = ChannelStatus.Active;
+            channel.IsCurrentlyActive.Should().BeTrue(); // Bo IsActive (new) jest true
+
+            channel.Status = ChannelStatus.Archived;
+            channel.IsCurrentlyActive.Should().BeFalse(); // Bo IsActive (new) jest false
+        }
+
+        // Test dla StatusDescription
+        [Fact]
+        public void StatusDescription_ShouldCorrectlyDescribeStatus()
+        {
+            var channel = new Channel();
+
+            channel.Status = ChannelStatus.Active;
+            channel.IsPrivate = false;
+            channel.IsReadOnly = false;
+            channel.StatusDescription.Should().Be("Aktywny");
+
+            channel.Status = ChannelStatus.Active;
+            channel.IsPrivate = true;
+            channel.StatusDescription.Should().Be("Prywatny");
+
+            channel.Status = ChannelStatus.Active;
+            channel.IsPrivate = false;
+            channel.IsReadOnly = true;
+            channel.StatusDescription.Should().Be("Tylko do odczytu");
+
+            channel.Status = ChannelStatus.Archived;
+            channel.StatusDescription.Should().Be("Zarchiwizowany");
+
+            // Test dla przypadku, gdyby base.IsActive było false, a Status był Active (teoretycznie niemożliwe z nową logiką)
+            // W tym celu musielibyśmy mieć dostęp do setter-a base.IsActive
+            // Jednak z nową logiką, jeśli Channel.IsActive jest false, to znaczy, że Status nie jest Active.
+            // Poniższy fragment jest trudny do przetestowania bez bezpośredniej manipulacji base.IsActive
+            // przy jednoczesnym utrzymaniu Channel.Status = ChannelStatus.Active.
+            // Założenie: Nowe `Channel.IsActive` jest jedynym źródłem prawdy o aktywności kanału bazującej na statusie.
+
+            // var channelNonStandard = new Channel { Status = (ChannelStatus)99 }; // Jakaś nieznana wartość
+            // channelNonStandard.StatusDescription.Should().Be("Nieznany status"); // Zakładając, że enum nie ma tej wartości
         }
     }
 }

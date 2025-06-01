@@ -52,7 +52,7 @@ namespace TeamsManager.Tests.Repositories
             savedSubject.Name.Should().Be("Matematyka");
             savedSubject.Hours.Should().Be(4);
             savedSubject.Category.Should().Be("Nauki ścisłe");
-            savedSubject.CreatedBy.Should().Be("test_user");
+            savedSubject.CreatedBy.Should().Be("test_user_integration_base_default");
             savedSubject.CreatedDate.Should().NotBe(default(DateTime));
             savedSubject.ModifiedBy.Should().BeNull();
             savedSubject.ModifiedDate.Should().BeNull();
@@ -72,7 +72,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().NotBeNull();
             result!.Code.Should().Be("FIZ");
             result.Name.Should().Be("Fizyka");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -99,7 +99,7 @@ namespace TeamsManager.Tests.Repositories
             result.IsActive.Should().BeTrue();
             result.DefaultSchoolType.Should().NotBeNull();
             result.DefaultSchoolType!.ShortName.Should().Be("TECH");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -183,7 +183,7 @@ namespace TeamsManager.Tests.Repositories
             result.DefaultSchoolType.Should().NotBeNull();
             result.DefaultSchoolType!.ShortName.Should().Be("SP");
             result.DefaultSchoolType.FullName.Should().Be("Szkoła Podstawowa");
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -227,7 +227,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().OnlyContain(s => s.IsActive);
             result.Select(s => s.Code).Should().Contain(new[] { "MAT", "FIZ", "CHEM", "BIOL" });
             result.Should().OnlyContain(s => s.DefaultSchoolType != null);
-            result.ToList().ForEach(s => s.CreatedBy.Should().Be("test_user"));
+            result.ToList().ForEach(s => s.CreatedBy.Should().Be("test_user_integration_base_default"));
         }
 
         [Fact]
@@ -325,7 +325,7 @@ namespace TeamsManager.Tests.Repositories
             subjectWithDetails.Should().NotBeNull();
             subjectWithDetails!.Code.Should().Be("PROG");
             subjectWithDetails.DefaultSchoolType!.ShortName.Should().Be("TECH");
-            subjectWithDetails.CreatedBy.Should().Be("test_user");
+            subjectWithDetails.CreatedBy.Should().Be("test_user_integration_base_default");
 
             assignedTeachers.Should().HaveCount(2);
             assignedTeachers.Select(t => t.UPN).Should().Contain(new[] { "teacher1@test.com", "teacher2@test.com" });

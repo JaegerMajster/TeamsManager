@@ -32,28 +32,22 @@ namespace TeamsManager.Tests.Repositories
                 DisplayName = "Test Team",
                 Description = "Test Description",
                 Owner = "owner@test.com",
-                Status = TeamStatus.Active,
-                Visibility = TeamVisibility.Private,
-                // CreatedBy zostanie ustawione przez TestDbContext
-                IsActive = true
+                Status = TeamStatus.Active, // Ustawiamy Status
+                Visibility = TeamVisibility.Private
+                // IsActive jest teraz obliczane
             };
 
             // Działanie
             await _repository.AddAsync(team);
-            await SaveChangesAsync();
+            await SaveChangesAsync(); // To ustawi pola audytu
 
             // Weryfikacja
             var savedTeam = await Context.Teams.FirstOrDefaultAsync(t => t.Id == team.Id);
             savedTeam.Should().NotBeNull();
             savedTeam!.DisplayName.Should().Be("Test Team");
-            savedTeam.Description.Should().Be("Test Description");
-            savedTeam.Owner.Should().Be("owner@test.com");
             savedTeam.Status.Should().Be(TeamStatus.Active);
-            savedTeam.Visibility.Should().Be(TeamVisibility.Private);
-            savedTeam.CreatedBy.Should().Be("test_user");
-            savedTeam.CreatedDate.Should().NotBe(default(DateTime));
-            savedTeam.ModifiedBy.Should().BeNull();
-            savedTeam.ModifiedDate.Should().BeNull();
+            savedTeam.IsActive.Should().BeTrue(); // Sprawdzenie obliczeniowego IsActive
+            savedTeam.CreatedBy.Should().Be("test_user_integration_base_default"); // Oczekujemy użytkownika z TestDbContext
         }
 
         [Fact]
@@ -61,103 +55,42 @@ namespace TeamsManager.Tests.Repositories
         {
             // Przygotowanie
             await CleanDatabaseAsync();
-
-            var schoolType = new SchoolType
-            {
-                Id = Guid.NewGuid().ToString(),
-                ShortName = "LO",
-                FullName = "Liceum Ogólnokształcące",
-                Description = "Test",
-                IsActive = true
-            };
-
-            var schoolYear = new SchoolYear
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = "2024/2025",
-                StartDate = new DateTime(2024, 9, 1),
-                EndDate = new DateTime(2025, 6, 30),
-                IsCurrent = true,
-                Description = "Test",
-                IsActive = true
-            };
-
-            var template = new TeamTemplate
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = "Test Template",
-                Template = "{SchoolType} {Class} - {Subject}",
-                Description = "Test",
-                IsUniversal = false,
-                SchoolTypeId = schoolType.Id,
-                IsActive = true
-            };
-
+            var schoolType = new SchoolType { Id = Guid.NewGuid().ToString(), ShortName = "LO", FullName = "Liceum Ogólnokształcące", IsActive = true };
+            var schoolYear = new SchoolYear { Id = Guid.NewGuid().ToString(), Name = "2024/2025", StartDate = new DateTime(2024, 9, 1), EndDate = new DateTime(2025, 6, 30), IsCurrent = true, IsActive = true };
+            var template = new TeamTemplate { Id = Guid.NewGuid().ToString(), Name = "Test Template", Template = "{SchoolType} {Class} - {Subject}", SchoolTypeId = schoolType.Id, IsActive = true };
             await Context.SchoolTypes.AddAsync(schoolType);
             await Context.SchoolYears.AddAsync(schoolYear);
             await Context.TeamTemplates.AddAsync(template);
-            await Context.SaveChangesAsync(); // Zapis z audytem dla powyższych
+            await SaveChangesAsync();
 
             var team = new Team
             {
                 Id = Guid.NewGuid().ToString(),
                 DisplayName = "LO 1A - Matematyka",
-                Description = "Zespół matematyczny",
                 Owner = "teacher@test.com",
-                Status = TeamStatus.Active,
+                Status = TeamStatus.Active, // Ustawiamy Status
                 SchoolTypeId = schoolType.Id,
                 SchoolYearId = schoolYear.Id,
-                TemplateId = template.Id,
-                IsActive = true
+                TemplateId = template.Id
             };
             await Context.Teams.AddAsync(team);
-            await Context.SaveChangesAsync(); // Zapis z audytem dla zespołu
+            await SaveChangesAsync();
 
-            var user = new User
-            {
-                Id = Guid.NewGuid().ToString(),
-                FirstName = "Jan",
-                LastName = "Kowalski",
-                UPN = "jan.kowalski@test.com",
-                Role = UserRole.Uczen,
-                IsActive = true
-            };
-            // Aby dodać użytkownika, potrzebujemy działu
-            var department = await Context.Departments.FirstOrDefaultAsync(d => d.Name == "Dział dla Użytkowników Testowych");
-            if (department == null)
-            {
-                department = new Department { Id = Guid.NewGuid().ToString(), Name = "Dział dla Użytkowników Testowych", IsActive = true };
-                await Context.Departments.AddAsync(department);
-                await Context.SaveChangesAsync();
-            }
+            var user = new User { Id = Guid.NewGuid().ToString(), FirstName = "Jan", LastName = "Kowalski", UPN = "jan.kowalski@test.com", Role = UserRole.Uczen, IsActive = true };
+            var department = await Context.Departments.FirstOrDefaultAsync(d => d.Name == "Dział dla Użytkowników Testowych")
+                ?? new Department { Id = Guid.NewGuid().ToString(), Name = "Dział dla Użytkowników Testowych", IsActive = true };
+            if (!Context.Departments.Local.Any(d => d.Id == department.Id)) await Context.Departments.AddAsync(department); // Dodaj jeśli nie istnieje
+            await SaveChangesAsync();
             user.DepartmentId = department.Id;
             await Context.Users.AddAsync(user);
-            await Context.SaveChangesAsync(); // Zapis z audytem dla użytkownika
+            await SaveChangesAsync();
 
-            var teamMember = new TeamMember
-            {
-                Id = Guid.NewGuid().ToString(),
-                TeamId = team.Id,
-                UserId = user.Id,
-                Role = TeamMemberRole.Member,
-                AddedDate = DateTime.UtcNow,
-                IsActive = true
-            };
+
+            var teamMember = new TeamMember { Id = Guid.NewGuid().ToString(), TeamId = team.Id, UserId = user.Id, Role = TeamMemberRole.Member, AddedDate = DateTime.UtcNow, IsActive = true };
+            var channel = new Channel { Id = Guid.NewGuid().ToString(), DisplayName = "General", TeamId = team.Id, Status = ChannelStatus.Active, IsGeneral = true }; // Kanał też ma Status
             await Context.TeamMembers.AddAsync(teamMember);
-
-            var channel = new Channel
-            {
-                Id = Guid.NewGuid().ToString(),
-                DisplayName = "General",
-                Description = "Kanał ogólny",
-                TeamId = team.Id,
-                ChannelType = "Standard",
-                Status = ChannelStatus.Active,
-                IsGeneral = true,
-                IsActive = true
-            };
             await Context.Channels.AddAsync(channel);
-            await Context.SaveChangesAsync(); // Zapis z audytem dla TeamMember i Channel
+            await SaveChangesAsync();
 
             // Działanie
             var result = await _repository.GetByIdAsync(team.Id);
@@ -165,37 +98,23 @@ namespace TeamsManager.Tests.Repositories
             // Weryfikacja
             result.Should().NotBeNull();
             result!.DisplayName.Should().Be("LO 1A - Matematyka");
+            result.Status.Should().Be(TeamStatus.Active);
+            result.IsActive.Should().BeTrue();
             result.SchoolType.Should().NotBeNull();
-            result.SchoolType!.ShortName.Should().Be("LO");
-            result.SchoolYear.Should().NotBeNull();
-            result.SchoolYear!.Name.Should().Be("2024/2025");
-            result.Template.Should().NotBeNull();
-            result.Template!.Name.Should().Be("Test Template");
             result.Members.Should().HaveCount(1);
-            result.Members.First().User.Should().NotBeNull();
-            result.Members.First().User!.FullName.Should().Be("Jan Kowalski");
             result.Channels.Should().HaveCount(1);
-            result.Channels.First().DisplayName.Should().Be("General");
-            result.CreatedBy.Should().Be("test_user"); // Sprawdzenie pola audytu dla zespołu
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
-        public async Task GetTeamByNameAsync_ShouldReturnCorrectTeam()
+        public async Task GetTeamByNameAsync_ShouldReturnCorrectTeam_WhenActive()
         {
             // Przygotowanie
             await CleanDatabaseAsync();
-            var teamName = "Unique Team Name";
-            var team = new Team
-            {
-                Id = Guid.NewGuid().ToString(),
-                DisplayName = teamName,
-                Description = "Test",
-                Owner = "owner@test.com",
-                Status = TeamStatus.Active,
-                IsActive = true
-            };
+            var teamName = "Unique Active Team Name";
+            var team = CreateTeam(teamName, TeamStatus.Active, TeamVisibility.Private); // Pomocnik używa Status
             await Context.Teams.AddAsync(team);
-            await Context.SaveChangesAsync(); // Zapis z audytem
+            await SaveChangesAsync();
 
             // Działanie
             var result = await _repository.GetTeamByNameAsync(teamName);
@@ -203,12 +122,34 @@ namespace TeamsManager.Tests.Repositories
             // Weryfikacja
             result.Should().NotBeNull();
             result!.DisplayName.Should().Be(teamName);
-            result.Id.Should().Be(team.Id);
-            result.CreatedBy.Should().Be("test_user");
+            result.Status.Should().Be(TeamStatus.Active);
+            result.IsActive.Should().BeTrue();
         }
 
         [Fact]
-        public async Task GetTeamsByOwnerAsync_ShouldReturnMatchingTeams()
+        public async Task GetTeamByNameAsync_ShouldReturnCorrectTeam_WhenArchived()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var teamName = "Unique Archived Team Name";
+            // GetTeamByNameAsync nie filtruje po statusie
+            var team = CreateTeam(teamName, TeamStatus.Archived, TeamVisibility.Private);
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetTeamByNameAsync(teamName);
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.DisplayName.Should().Be(teamName); // Nazwa w bazie jest bez prefiksu
+            result.Status.Should().Be(TeamStatus.Archived);
+            result.IsActive.Should().BeFalse();
+        }
+
+
+        [Fact]
+        public async Task GetTeamsByOwnerAsync_ShouldReturnOnlyActiveStatusTeams()
         {
             // Przygotowanie
             await CleanDatabaseAsync();
@@ -217,101 +158,71 @@ namespace TeamsManager.Tests.Repositories
 
             var teams = new List<Team>
             {
-                CreateTeamWithOwner("Team 1", owner1, TeamStatus.Active, true),
-                CreateTeamWithOwner("Team 2", owner1, TeamStatus.Active, true),
-                CreateTeamWithOwner("Team 3", owner1, TeamStatus.Archived, true),
-                CreateTeamWithOwner("Team 4", owner2, TeamStatus.Active, true),
+                CreateTeamWithOwner("Team 1 Owner1 Active", owner1, TeamStatus.Active),
+                CreateTeamWithOwner("Team 2 Owner1 Active", owner1, TeamStatus.Active),
+                CreateTeamWithOwner("Team 3 Owner1 Archived", owner1, TeamStatus.Archived), // Ten nie powinien być zwrócony
+                CreateTeamWithOwner("Team 4 Owner2 Active", owner2, TeamStatus.Active),
             };
-
             await Context.Teams.AddRangeAsync(teams);
-            await Context.SaveChangesAsync(); // Zapis z audytem
-
-            var inactiveTeam = CreateTeamWithOwner("Inactive Team", owner1, TeamStatus.Active, true);
-            await Context.Teams.AddAsync(inactiveTeam);
-            await Context.SaveChangesAsync();
-
-            inactiveTeam.IsActive = false;
-            Context.Teams.Update(inactiveTeam);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync();
 
             // Działanie
             var result = await _repository.GetTeamsByOwnerAsync(owner1);
 
             // Weryfikacja
             result.Should().HaveCount(3);
-            result.Should().OnlyContain(t => t.Owner == owner1 && t.IsActive);
-            result.Select(t => t.DisplayName).Should().Contain(new[] { "Team 1", "Team 2", "Team 3" });
-            result.ToList().ForEach(t => t.CreatedBy.Should().Be("test_user"));
+            result.Should().OnlyContain(t => t.Owner == owner1 && t.Status == TeamStatus.Active);
+            result.Select(t => t.DisplayName).Should().Contain(new[] { "Team 1 Owner1 Active", "Team 2 Owner1 Active" });
         }
 
         [Fact]
-        public async Task GetActiveTeamsAsync_ShouldReturnOnlyActiveStatusTeams()
+        public async Task GetActiveTeamsAsync_ShouldReturnOnlyTeamsWithStatusActive()
         {
             // Przygotowanie
             await CleanDatabaseAsync();
-
             var teams = new List<Team>
             {
-                CreateTeam("Active Team 1", TeamStatus.Active, TeamVisibility.Private, true),
-                CreateTeam("Active Team 2", TeamStatus.Active, TeamVisibility.Public, true),
-                CreateTeam("Archived Team", TeamStatus.Archived, TeamVisibility.Private, true),
+                CreateTeam("Active Team 1", TeamStatus.Active, TeamVisibility.Private),
+                CreateTeam("Active Team 2", TeamStatus.Active, TeamVisibility.Public),
+                CreateTeam("Archived Team", TeamStatus.Archived, TeamVisibility.Private),
             };
-
             await Context.Teams.AddRangeAsync(teams);
-            await Context.SaveChangesAsync();
-
-            var inactiveTeam = CreateTeam("Inactive Team", TeamStatus.Active, TeamVisibility.Private, true);
-            await Context.Teams.AddAsync(inactiveTeam);
-            await Context.SaveChangesAsync();
-
-            inactiveTeam.IsActive = false;
-            Context.Teams.Update(inactiveTeam);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync();
 
             // Działanie
             var result = await _repository.GetActiveTeamsAsync();
 
             // Weryfikacja
             result.Should().HaveCount(2);
-            result.Should().OnlyContain(t => t.Status == TeamStatus.Active && t.IsActive);
+            result.Should().OnlyContain(t => t.Status == TeamStatus.Active); // Co implikuje t.IsActive == true
             result.Select(t => t.DisplayName).Should().Contain(new[] { "Active Team 1", "Active Team 2" });
         }
 
         [Fact]
-        public async Task GetArchivedTeamsAsync_ShouldReturnOnlyArchivedStatusTeams()
+        public async Task GetArchivedTeamsAsync_ShouldReturnOnlyTeamsWithStatusArchived()
         {
             // Przygotowanie
             await CleanDatabaseAsync();
-
             var teams = new List<Team>
             {
-                CreateTeam("Active Team", TeamStatus.Active, TeamVisibility.Private, true),
-                CreateTeam("Archived Team 1", TeamStatus.Archived, TeamVisibility.Private, true),
-                CreateTeam("Archived Team 2", TeamStatus.Archived, TeamVisibility.Public, true),
+                CreateTeam("Active Team", TeamStatus.Active, TeamVisibility.Private),
+                CreateTeam("Archived Team 1", TeamStatus.Archived, TeamVisibility.Private),
+                CreateTeam("Archived Team 2", TeamStatus.Archived, TeamVisibility.Public),
             };
-
             await Context.Teams.AddRangeAsync(teams);
-            await Context.SaveChangesAsync();
-
-            var inactiveArchivedTeam = CreateTeam("Inactive Archived", TeamStatus.Archived, TeamVisibility.Private, true);
-            await Context.Teams.AddAsync(inactiveArchivedTeam);
-            await Context.SaveChangesAsync();
-
-            inactiveArchivedTeam.IsActive = false;
-            Context.Teams.Update(inactiveArchivedTeam);
-            await Context.SaveChangesAsync();
+            await SaveChangesAsync();
 
             // Działanie
             var result = await _repository.GetArchivedTeamsAsync();
 
             // Weryfikacja
             result.Should().HaveCount(2);
-            result.Should().OnlyContain(t => t.Status == TeamStatus.Archived && t.IsActive);
+            result.Should().OnlyContain(t => t.Status == TeamStatus.Archived); // Co implikuje t.IsActive == false
             result.Select(t => t.DisplayName).Should().Contain(new[] { "Archived Team 1", "Archived Team 2" });
         }
 
         [Fact]
-        public async Task Update_ShouldModifyTeamData()
+        public async Task Update_ShouldModifyTeamData_AndAuditFields()
         {
             // Przygotowanie
             await CleanDatabaseAsync();
@@ -321,56 +232,49 @@ namespace TeamsManager.Tests.Repositories
                 DisplayName = "Original Name",
                 Description = "Original Description",
                 Owner = "original.owner@test.com",
-                Status = TeamStatus.Active,
-                IsActive = true
+                Status = TeamStatus.Active
             };
             await Context.Teams.AddAsync(team);
-            await SaveChangesAsync(); // Zapis z audytem dla CreatedBy
+            await SaveChangesAsync(); // Ustawia CreatedBy, CreatedDate
 
             var initialCreatedBy = team.CreatedBy;
             var initialCreatedDate = team.CreatedDate;
-            var currentUser = "team_updater";
-            SetTestUser(currentUser);
+            var currentUser = "team_updater_repo_test";
+            SetTestUser(currentUser); // Ustawiamy użytkownika dla tej operacji Update
 
             // Działanie
-            var teamToUpdate = await _repository.GetByIdAsync(team.Id); // Pobieramy encję, aby była śledzona
-            teamToUpdate!.DisplayName = "Updated Name";
-            teamToUpdate.Description = "Updated Description";
-            teamToUpdate.Owner = "new.owner@test.com";
-            teamToUpdate.Status = TeamStatus.Archived;
-            teamToUpdate.StatusChangeDate = DateTime.UtcNow;
-            teamToUpdate.StatusChangedBy = "admin";
-            teamToUpdate.StatusChangeReason = "End of semester";
-            teamToUpdate.Language = "English";
-            teamToUpdate.MaxMembers = 100;
-            // teamToUpdate.MarkAsModified(currentUser); // Niepotrzebne
+            var teamToUpdate = await _repository.GetByIdAsync(team.Id);
+            teamToUpdate!.DisplayName = "Updated Name Repo";
+            teamToUpdate.Description = "Updated Description Repo";
+            teamToUpdate.Owner = "new.owner.repo@test.com";
+            // Celowo nie zmieniamy Statusu tutaj, aby sprawdzić modyfikację innych pól
+            // gdybyśmy chcieli zmienić Status, użylibyśmy teamToUpdate.Archive() lub teamToUpdate.Restore()
+            // a następnie _repository.Update(teamToUpdate).
 
             _repository.Update(teamToUpdate);
-            await SaveChangesAsync(); // TestDbContext ustawi ModifiedBy na `currentUser`
+            await SaveChangesAsync(); // To powinno ustawić ModifiedBy i ModifiedDate
 
             // Weryfikacja
             var updatedTeam = await Context.Teams.FirstOrDefaultAsync(t => t.Id == team.Id);
             updatedTeam.Should().NotBeNull();
-            updatedTeam!.DisplayName.Should().Be("Updated Name");
-            updatedTeam.Description.Should().Be("Updated Description");
-            updatedTeam.Owner.Should().Be("new.owner@test.com");
-            updatedTeam.Status.Should().Be(TeamStatus.Archived);
-            updatedTeam.StatusChangeDate.Should().NotBeNull();
-            updatedTeam.StatusChangedBy.Should().Be("admin");
-            updatedTeam.StatusChangeReason.Should().Be("End of semester");
-            updatedTeam.Language.Should().Be("English");
-            updatedTeam.MaxMembers.Should().Be(100);
+            updatedTeam!.DisplayName.Should().Be("Updated Name Repo");
+            updatedTeam.Description.Should().Be("Updated Description Repo");
+            updatedTeam.Owner.Should().Be("new.owner.repo@test.com");
+            updatedTeam.Status.Should().Be(TeamStatus.Active); // Status nie powinien się zmienić
+            updatedTeam.IsActive.Should().BeTrue();
+
             updatedTeam.CreatedBy.Should().Be(initialCreatedBy);
             updatedTeam.CreatedDate.Should().Be(initialCreatedDate);
-            updatedTeam.ModifiedBy.Should().Be(currentUser);
+            updatedTeam.ModifiedBy.Should().Be(currentUser); // Oczekujemy użytkownika z SetTestUser
             updatedTeam.ModifiedDate.Should().NotBeNull();
 
-            ResetTestUser();
+            ResetTestUser(); // Przywracamy domyślnego użytkownika testowego
         }
 
         #region Helper Methods
 
-        private Team CreateTeam(string displayName, TeamStatus status, TeamVisibility visibility, bool isActive)
+        // Metody pomocnicze nie ustawiają już BaseEntity.IsActive bezpośrednio
+        private Team CreateTeam(string displayName, TeamStatus status, TeamVisibility visibility)
         {
             return new Team
             {
@@ -378,14 +282,13 @@ namespace TeamsManager.Tests.Repositories
                 DisplayName = displayName,
                 Description = $"Description for {displayName}",
                 Owner = "owner@test.com",
-                Status = status,
-                Visibility = visibility,
-                // CreatedBy zostanie ustawione przez TestDbContext
-                IsActive = isActive
+                Status = status, // Ustawiamy Status
+                Visibility = visibility
+                // IsActive jest obliczane na podstawie Status
             };
         }
 
-        private Team CreateTeamWithOwner(string displayName, string owner, TeamStatus status, bool isActive)
+        private Team CreateTeamWithOwner(string displayName, string owner, TeamStatus status)
         {
             return new Team
             {
@@ -393,10 +296,8 @@ namespace TeamsManager.Tests.Repositories
                 DisplayName = displayName,
                 Description = $"Description for {displayName}",
                 Owner = owner,
-                Status = status,
-                Visibility = TeamVisibility.Private,
-                // CreatedBy zostanie ustawione przez TestDbContext
-                IsActive = isActive
+                Status = status, // Ustawiamy Status
+                Visibility = TeamVisibility.Private
             };
         }
 

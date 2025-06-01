@@ -51,7 +51,7 @@ namespace TeamsManager.Tests.Repositories
             savedMember!.TeamId.Should().Be(team.Id);
             savedMember.UserId.Should().Be(user.Id);
             savedMember.Role.Should().Be(TeamMemberRole.Member);
-            savedMember.CreatedBy.Should().Be("test_user");
+            savedMember.CreatedBy.Should().Be("test_user_integration_base_default");
             savedMember.CreatedDate.Should().NotBe(default(DateTime));
             savedMember.ModifiedBy.Should().BeNull();
             savedMember.ModifiedDate.Should().BeNull();
@@ -74,7 +74,7 @@ namespace TeamsManager.Tests.Repositories
             result!.TeamId.Should().Be(team.Id);
             result.UserId.Should().Be(user.Id);
             result.Role.Should().Be(TeamMemberRole.Owner);
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -107,7 +107,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().HaveCount(4);
             result.Where(tm => tm.TeamId == team1.Id).Should().HaveCount(2);
             result.Where(tm => tm.TeamId == team2.Id).Should().HaveCount(2);
-            result.ToList().ForEach(tm => tm.CreatedBy.Should().Be("test_user"));
+            result.ToList().ForEach(tm => tm.CreatedBy.Should().Be("test_user_integration_base_default"));
         }
 
         [Fact]
@@ -262,8 +262,6 @@ namespace TeamsManager.Tests.Repositories
                 Owner = "owner@test.com",
                 Status = TeamStatus.Active,
                 Visibility = TeamVisibility.Private,
-                // CreatedBy zostanie ustawione przez TestDbContext
-                IsActive = true
             };
             await Context.Teams.AddAsync(team);
             await Context.SaveChangesAsync(); // Zapis z audytem

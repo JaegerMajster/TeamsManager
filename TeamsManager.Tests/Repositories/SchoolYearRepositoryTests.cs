@@ -52,7 +52,7 @@ namespace TeamsManager.Tests.Repositories
             savedSchoolYear.StartDate.Should().Be(new DateTime(2024, 9, 1));
             savedSchoolYear.EndDate.Should().Be(new DateTime(2025, 6, 30));
             savedSchoolYear.IsCurrent.Should().BeTrue();
-            savedSchoolYear.CreatedBy.Should().Be("test_user");
+            savedSchoolYear.CreatedBy.Should().Be("test_user_integration_base_default");
             savedSchoolYear.CreatedDate.Should().NotBe(default(DateTime));
             savedSchoolYear.ModifiedBy.Should().BeNull();
             savedSchoolYear.ModifiedDate.Should().BeNull();
@@ -84,7 +84,7 @@ namespace TeamsManager.Tests.Repositories
             result.Should().NotBeNull();
             result!.Name.Should().Be("2023/2024");
             result.IsCurrent.Should().BeFalse();
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace TeamsManager.Tests.Repositories
             result!.Name.Should().Be("2024/2025");
             result.IsCurrent.Should().BeTrue();
             result.IsActive.Should().BeTrue();
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Fact]
@@ -161,7 +161,7 @@ namespace TeamsManager.Tests.Repositories
             result!.Name.Should().Be(targetName);
             result.IsActive.Should().BeTrue();
             result.IsCurrent.Should().BeTrue();
-            result.CreatedBy.Should().Be("test_user");
+            result.CreatedBy.Should().Be("test_user_integration_base_default");
         }
 
         [Theory]
