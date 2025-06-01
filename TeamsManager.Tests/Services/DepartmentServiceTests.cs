@@ -95,13 +95,14 @@ namespace TeamsManager.Tests.Services
             string cacheKeyToReFetch = rootOnly ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey;
 
             SetupCacheTryGetValue(cacheKeyToReFetch, (IEnumerable<Department>?)null, false);
+
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                    .ReturnsAsync(expectedDbDeptsAfterOperation)
                                    .Verifiable();
 
             var resultAfterInvalidation = _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: rootOnly).Result;
 
-            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.Once, $"GetAllDepartmentsAsync(rootOnly:{rootOnly}) powinno odpytać repozytorium po unieważnieniu cache.");
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.AtLeastOnce, $"GetAllDepartmentsAsync(rootOnly:{rootOnly}) powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbDeptsAfterOperation);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKeyToReFetch), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
         }

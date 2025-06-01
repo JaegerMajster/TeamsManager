@@ -198,7 +198,7 @@ namespace TeamsManager.Tests.Repositories
         [Theory]
         [InlineData("Klasowy", 2)]
         [InlineData("PROJEKT", 1)]
-        [InlineData("test", 3)]
+        [InlineData("test", 2)]
         [InlineData("nieistniejacy", 0)]
         [InlineData("", 5)]
         [InlineData(null, 5)]

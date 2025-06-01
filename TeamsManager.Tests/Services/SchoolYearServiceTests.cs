@@ -95,7 +95,11 @@ namespace TeamsManager.Tests.Services
             var schoolYearToDelete = new SchoolYear { Id = schoolYearId, Name = "Test Year", IsActive = true, IsCurrent = false };
             var activeTeam = new Team { Id = "team1", SchoolYearId = schoolYearId, Status = TeamStatus.Active }; // Team.IsActive będzie true
 
-            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(schoolYearToDelete);
+            // Serwis DeleteSchoolYearAsync używa FindAsync do szukania roku szkolnego
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<SchoolYear, bool>>>(
+                expr => expr.Compile().Invoke(schoolYearToDelete) // Sprawdza, czy predykat sy => sy.Id == schoolYearId pasuje do naszego roku
+            ))).ReturnsAsync(new List<SchoolYear> { schoolYearToDelete });
+            
             // Mock FindAsync, aby zwrócił zespół, który jest "aktywny" (Status = Active)
             _mockTeamRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Team, bool>>>(
                 expr => expr.Compile().Invoke(activeTeam) // Sprawdza, czy predykat pasuje do naszego aktywnego zespołu
@@ -121,7 +125,14 @@ namespace TeamsManager.Tests.Services
             var schoolYearId = "sy-current-to-delete";
             var currentSchoolYear = new SchoolYear { Id = schoolYearId, Name = "Current Test Year", IsActive = true, IsCurrent = true };
 
-            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(currentSchoolYear);
+            // Serwis używa FindAsync do szukania roku szkolnego
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<SchoolYear, bool>>>(
+                expr => expr.Compile().Invoke(currentSchoolYear) // Sprawdza, czy predykat sy => sy.Id == schoolYearId pasuje do naszego roku
+            ))).ReturnsAsync(new List<SchoolYear> { currentSchoolYear });
+            
+            // Dodajemy mock dla sprawdzenia zespołów - może być pusta lista, bo sprawdzenie IsCurrent następuje przed sprawdzeniem zespołów
+            _mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Team, bool>>>()))
+                               .ReturnsAsync(new List<Team>());
 
             // Działanie
             var result = await _schoolYearService.DeleteSchoolYearAsync(schoolYearId);
@@ -142,7 +153,11 @@ namespace TeamsManager.Tests.Services
             var schoolYearId = "sy-to-delete-ok";
             var schoolYearToDelete = new SchoolYear { Id = schoolYearId, Name = "Old Year", IsActive = true, IsCurrent = false, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-10) };
 
-            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(schoolYearToDelete);
+            // Serwis DeleteSchoolYearAsync używa FindAsync do szukania roku szkolnego
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<SchoolYear, bool>>>(
+                expr => expr.Compile().Invoke(schoolYearToDelete) // Sprawdza, czy predykat sy => sy.Id == schoolYearId pasuje do naszego roku
+            ))).ReturnsAsync(new List<SchoolYear> { schoolYearToDelete });
+            
             // Mock FindAsync, aby zwrócił pustą listę zespołów (brak aktywnych zespołów)
             _mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Team, bool>>>()))
                                .ReturnsAsync(new List<Team>());

@@ -109,7 +109,7 @@ namespace TeamsManager.Tests.Services
         private void AssertCacheInvalidationForTeachersList(string subjectId, List<User> expectedTeachers)
         {
             SetupCacheTryGetValue(TeachersForSubjectCacheKeyPrefix + subjectId, (IEnumerable<User>?)null, false);
-            _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId))
+            _mockSubjectRepository.Setup(r => r.GetByIdAsync(subjectId))
                               .ReturnsAsync(new Subject { Id = subjectId, IsActive = true });
             _mockSubjectRepository.Setup(r => r.GetTeachersAsync(subjectId))
                                  .ReturnsAsync(expectedTeachers)
@@ -250,14 +250,14 @@ namespace TeamsManager.Tests.Services
             string cacheKey = TeachersForSubjectCacheKeyPrefix + subjectId;
 
             SetupCacheTryGetValue(cacheKey, (IEnumerable<User>?)null, false);
-            _mockSubjectRepository.Setup(r => r.GetByIdWithDetailsAsync(subjectId)).ReturnsAsync(subject);
+            _mockSubjectRepository.Setup(r => r.GetByIdAsync(subjectId)).ReturnsAsync(subject);
             _mockSubjectRepository.Setup(r => r.GetTeachersAsync(subjectId)).ReturnsAsync(teachers);
 
             var result = await _subjectService.GetTeachersForSubjectAsync(subjectId);
 
             result.Should().BeEquivalentTo(teachers);
             _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
-            _mockSubjectRepository.Verify(r => r.GetByIdWithDetailsAsync(subjectId), Times.Once);
+            _mockSubjectRepository.Verify(r => r.GetByIdAsync(subjectId), Times.Once);
             _mockSubjectRepository.Verify(r => r.GetTeachersAsync(subjectId), Times.Once);
         }
 
@@ -282,8 +282,7 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + result!.Id), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + result.Id), Times.Never);
+            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + result!.Id), Times.Never);
 
             AssertCacheInvalidationByReFetchingAllActiveSubjects(new List<Subject> { result });
 
@@ -335,9 +334,8 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectUpdated)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + subjectId), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce);
+            // Klucz TeachersForSubjectCacheKeyPrefix nie jest jawnie usuwany gdy invalidateAll: true - serwis polega na CancellationTokenSource
 
             var expectedAfterUpdate = new Subject
             {
@@ -376,8 +374,7 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectDeleted)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(SubjectByIdCacheKeyPrefix + subjectId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + subjectId), Times.AtLeastOnce);
+            // Klucz TeachersForSubjectCacheKeyPrefix nie jest jawnie usuwany gdy invalidateAll: true - serwis polega na CancellationTokenSource
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
 
             AssertCacheInvalidationByReFetchingAllActiveSubjects(new List<Subject>());

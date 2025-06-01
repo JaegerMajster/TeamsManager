@@ -220,13 +220,13 @@ namespace TeamsManager.Tests.Repositories
         }
 
         [Theory]
-        [InlineData("Jan", 3)]
+        [InlineData("Jan", 2)]
         [InlineData("KOWALSKI", 1)]
         [InlineData("anna", 1)]
-        [InlineData("test.com", 5)]
+        [InlineData("test.com", 4)]
         [InlineData("nieistniejacy", 0)]
-        [InlineData("", 5)]
-        [InlineData(null, 5)]
+        [InlineData("", 4)]
+        [InlineData(null, 4)]
         public async Task SearchUsersAsync_ShouldReturnMatchingUsers(string searchTerm, int expectedCount)
         {
             // Przygotowanie

@@ -29,7 +29,8 @@ namespace TeamsManager.Data.Repositories
         {
             if (string.IsNullOrWhiteSpace(searchTerm))
             {
-                return await GetAllAsync(); // Lub pustą listę, w zależności od wymagań
+                // Zwróć tylko aktywnych użytkowników zamiast wszystkich
+                return await _dbSet.Where(u => u.IsActive).ToListAsync();
             }
 
             var lowerSearchTerm = searchTerm.ToLower();

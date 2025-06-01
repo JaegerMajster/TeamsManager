@@ -29,18 +29,15 @@ namespace TeamsManager.Data.Repositories
         public async Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn)
         {
             // Zwraca zespoły danego właściciela, które są aktywne (Status == TeamStatus.Active).
-            // Właściwość Team.IsActive jest teraz obliczana na podstawie Status,
-            // więc warunek t.IsActive w LINQ to Entities będzie prawidłowo przetłumaczony
-            // na sprawdzenie Statusu.
-            return await _dbSet.Where(t => t.Owner == ownerUpn && t.IsActive).ToListAsync();
+            // Używamy bezpośrednio Status zamiast IsActive, ponieważ EF nie potrafi przetłumaczyć właściwości obliczeniowej.
+            return await _dbSet.Where(t => t.Owner == ownerUpn && t.Status == TeamStatus.Active).ToListAsync();
         }
 
         public async Task<IEnumerable<Team>> GetActiveTeamsAsync()
         {
             // Zwraca zespoły, których Status to Active.
-            // Właściwość Team.IsActive (obliczeniowa) również będzie true dla tych zespołów.
-            // Użycie t.IsActive jest bardziej zwięzłe i zgodne z nową logiką modelu.
-            return await _dbSet.Where(t => t.IsActive).ToListAsync();
+            // Używamy bezpośrednio Status zamiast IsActive dla kompatybilności z LINQ to Entities.
+            return await _dbSet.Where(t => t.Status == TeamStatus.Active).ToListAsync();
         }
 
         public async Task<IEnumerable<Team>> GetArchivedTeamsAsync()

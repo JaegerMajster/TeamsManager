@@ -367,7 +367,14 @@ namespace TeamsManager.Tests.Services
             var existingTeam = new Team { Id = teamId, DisplayName = "Old", Owner = oldOwnerUpn, ExternalId = "ext", Status = oldStatus, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             var updatedTeamData = new Team { Id = teamId, DisplayName = "New", Owner = newOwnerUpn, Status = newStatus }; // Status nadal Active
 
-            _mockTeamRepository.Setup(r => r.GetByIdAsync(teamId)).ReturnsAsync(existingTeam);
+            // Serwis używa FindAsync, a nie GetByIdAsync do szukania zespołu
+            _mockTeamRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Team, bool>>>(
+                expr => expr.Compile().Invoke(existingTeam) // Sprawdza, czy predykat t => t.Id == teamId pasuje do naszego zespołu
+            ))).ReturnsAsync(new List<Team> { existingTeam });
+            
+            // Mock dla sprawdzenia nowego właściciela
+            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newOwnerUpn)).ReturnsAsync(_testOwnerUser);
+            
             _mockPowerShellService.Setup(p => p.UpdateTeamPropertiesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TeamVisibility?>()))
                                   .ReturnsAsync(true);
             _mockTeamRepository.Setup(r => r.Update(It.IsAny<Team>()));
@@ -399,7 +406,11 @@ namespace TeamsManager.Tests.Services
             var ownerUpn = _testOwnerUser.UPN;
             var team = new Team { Id = teamId, DisplayName = "To Archive", Owner = ownerUpn, ExternalId = "ext-archive", Status = TeamStatus.Active, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
 
-            _mockTeamRepository.Setup(r => r.GetByIdAsync(teamId)).ReturnsAsync(team);
+            // Serwis używa FindAsync, a nie GetByIdAsync do szukania zespołu
+            _mockTeamRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Team, bool>>>(
+                expr => expr.Compile().Invoke(team) // Sprawdza, czy predykat t => t.Id == teamId pasuje do naszego zespołu
+            ))).ReturnsAsync(new List<Team> { team });
+            
             _mockPowerShellService.Setup(p => p.ArchiveTeamAsync(It.IsAny<string>())).ReturnsAsync(true);
             _mockTeamRepository.Setup(r => r.Update(It.IsAny<Team>()));
 

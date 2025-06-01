@@ -1,18 +1,50 @@
 ﻿# TeamsManager - Dokumentacja Projektu
 
+## 📋 Spis treści
+
+1. [Informacje Ogólne](#1-informacje-ogólne)
+2. [Architektura Aplikacji](#2-architektura-aplikacji)
+3. [Model Danych Domeny](#3-model-danych-domeny)
+4. [Wykorzystane Technologie](#4-wykorzystane-technologie)
+5. [Strategia Testowania](#5-strategia-testowania)
+6. [Aktualny Status Implementacji](#6-aktualny-status-implementacji-i-plan-dalszych-prac)
+7. [Instrukcje Uruchomienia](#7-instrukcje-uruchomienia-i-wymagania-wstępne)
+8. [Funkcjonalności dla Środowiska Edukacyjnego](#8-funkcjonalności-dla-środowiska-edukacyjnego)
+9. [Korzyści Rozwiązania](#9-korzyści-rozwiązania)
+10. [Dokumentacja Techniczna](#10-dokumentacja-techniczna)
+11. [Licencja i Autorzy](#11-licencja-i-autorzy)
+
+---
+
 ## 1. Informacje Ogólne
 
-TeamsManager to lokalnie uruchamiana aplikacja desktopowa (WPF) dla systemu Windows, zaprojektowana jako zaawansowana nakładka na skrypty PowerShell. Jej głównym celem jest usprawnienie i automatyzacja zarządzania zespołami, użytkownikami oraz powiązanymi zasobami w środowisku Microsoft Teams. Aplikacja eliminuje potrzebę bezpośredniego korzystania z licencjonowanego Microsoft Graph API dla wielu typowych operacji administracyjnych, oferując jednocześnie bogatszą funkcjonalność i bardziej przyjazny interfejs użytkownika niż standardowe narzędzia.
+**TeamsManager** to lokalnie uruchamiana aplikacja desktopowa (WPF) dla systemu Windows, zaprojektowana jako zaawansowana nakładka na skrypty PowerShell. Jej głównym celem jest usprawnienie i automatyzacja zarządzania zespołami, użytkownikami oraz powiązanymi zasobami w środowisku Microsoft Teams.
 
-**Specjalizacja:** Aplikacja jest szczególnie dedykowana do zarządzania złożonymi środowiskami edukacyjnymi (np. szkoły, uczelnie). Oferuje zaawansowane funkcje, takie jak dynamiczne szablony nazw zespołów, zarządzanie cyklem życia zespołów (archiwizacja, przywracanie z modyfikacją nazw), obsługa hierarchii działów, typów szkół, lat szkolnych oraz szczegółowe powiązania nauczycieli z przedmiotami i typami szkół.
+### 🎯 Główne cele aplikacji:
+- Eliminacja potrzeby bezpośredniego korzystania z licencjonowanego Microsoft Graph API
+- Oferowanie bogatszej funkcjonalności niż standardowe narzędzia
+- Zapewnienie przyjaznego interfejsu użytkownika
 
-Projekt realizowany jest jako praca zaliczeniowa na studiach informatycznych, obejmująca zagadnienia z przedmiotów takich jak "Programowanie aplikacji sieciowych", "Projektowanie zaawansowanych systemów informatycznych" oraz "Programowanie w technologii .NET".
+### 🏫 Specjalizacja edukacyjna:
+Aplikacja jest szczególnie dedykowana do zarządzania złożonymi środowiskami edukacyjnymi oferując:
+- Dynamiczne szablony nazw zespołów
+- Zarządzanie cyklem życia zespołów (archiwizacja, przywracanie)
+- Obsługę hierarchii działów, typów szkół, lat szkolnych
+- Szczegółowe powiązania nauczycieli z przedmiotami
+
+### 📚 Kontekst akademicki:
+Projekt realizowany jako praca zaliczeniowa obejmująca zagadnienia z przedmiotów:
+- *Programowanie aplikacji sieciowych*
+- *Projektowanie zaawansowanych systemów informatycznych*
+- *Programowanie w technologii .NET*
+
+---
 
 ## 2. Architektura Aplikacji
 
 ### 2.1. Struktura Rozwiązania
 
-Rozwiązanie TeamsManager zostało zaprojektowane zgodnie z zasadami czystej architektury (Clean Architecture), z wyraźnym podziałem na warstwy i jednoznacznie zdefiniowane odpowiedzialności poszczególnych komponentów. Składa się z pięciu głównych projektów:
+Rozwiązanie TeamsManager zostało zaprojektowane zgodnie z zasadami **Clean Architecture**, z wyraźnym podziałem na warstwy:
 
 ```mermaid
 graph TD;
@@ -31,22 +63,41 @@ graph TD;
     style Tests fill:#ffcccc,stroke:#333,stroke-width:2px;
 ```
 
-**TeamsManager.Core:** Centralna biblioteka klas .NET stanowiąca serce aplikacji. Zawiera całą logikę biznesową, szczegółowe modele domenowe (encje, enumy, bogate właściwości obliczane i metody domenowe), serwisy aplikacyjne oraz interfejsy definiujące kontrakty dla innych warstw. Kluczowym elementem jest tu PowerShellService, odpowiedzialny za bezpośrednią interakcję ze skryptami PowerShell i Microsoft Teams.
+#### 📦 Komponenty rozwiązania:
 
-**TeamsManager.Data:** Warstwa infrastruktury odpowiedzialna za trwałość danych i komunikację z lokalną bazą danych SQLite. Implementuje TeamsManagerDbContext (kontekst Entity Framework Core), szczegółowe konfiguracje mapowania encji przy użyciu Fluent API oraz implementacje wzorca Repository dla abstrakcji dostępu do danych.
+**TeamsManager.Core** 💚
+- Centralna biblioteka klas .NET
+- Logika biznesowa i modele domenowe
+- Serwisy aplikacyjne i interfejsy
+- PowerShellService dla integracji z MS Teams
 
-**TeamsManager.Api:** Lokalny serwer REST API, zbudowany w technologii ASP.NET Core. Stanowi bramę dla interfejsu użytkownika, udostępniając endpointy HTTP dla wszystkich operacji biznesowych. Odpowiada również za implementację komunikacji WebSocket (za pomocą SignalR) na potrzeby powiadomień w czasie rzeczywistym.
+**TeamsManager.Data** 🟠
+- Warstwa infrastruktury i trwałości danych
+- Lokalna baza danych SQLite
+- Entity Framework Core z Fluent API
+- Implementacje wzorca Repository
 
-**TeamsManager.UI:** Aplikacja kliencka typu desktop, zrealizowana w technologii WPF (Windows Presentation Foundation). Stanowi graficzny interfejs użytkownika (GUI), umożliwiając interakcję z systemem. Została zaprojektowana zgodnie ze wzorcem architektonicznym MVVM (Model-View-ViewModel) i wykorzystuje bibliotekę MaterialDesignInXAML do zapewnienia nowoczesnego wyglądu (w tym ciemnego motywu). Komunikuje się z TeamsManager.Api.
+**TeamsManager.Api** 🟣
+- Lokalny serwer REST API (ASP.NET Core)
+- Endpointy HTTP dla operacji biznesowych
+- Komunikacja WebSocket (SignalR)
+- Powiadomienia w czasie rzeczywistym
 
-**TeamsManager.Tests:** Projekt zawierający kompleksowy zestaw testów jednostkowych i integracyjnych dla wszystkich pozostałych komponentów aplikacji. Celem jest zapewnienie wysokiej jakości, niezawodności i łatwości utrzymania kodu.
+**TeamsManager.UI** 🔵
+- Aplikacja desktop WPF
+- Wzorzec MVVM
+- MaterialDesignInXAML
+- Komunikacja z API
+
+**TeamsManager.Tests** 🔴
+- Testy jednostkowe i integracyjne
+- xUnit, FluentAssertions, Moq
+- Zapewnienie jakości kodu
 
 ### 2.2. Elementy Sieciowe i Komunikacja (Planowane)
 
-Aplikacja będzie wykorzystywać lokalną komunikację sieciową między swoimi komponentami:
-
-**REST API:** Interfejs użytkownika (TeamsManager.UI) będzie komunikował się z logiką aplikacji udostępnianą przez TeamsManager.Api za pomocą standardowych żądań HTTP/HTTPS (GET, POST, PUT, DELETE) do zarządzania zespołami, użytkownikami, szablonami itp. Przykładowe planowane endpointy:
-
+#### 🌐 REST API
+Przykładowe planowane endpointy:
 - `/api/teams` (GET, POST)
 - `/api/teams/{id}` (GET, PUT, DELETE)
 - `/api/teams/{id}/archive` (POST)
@@ -61,13 +112,20 @@ Aplikacja będzie wykorzystywać lokalną komunikację sieciową między swoimi 
 - `/api/settings` (GET, PUT)
 - `/api/departments` (GET, POST, PUT, DELETE)
 
-**WebSockets (SignalR):** TeamsManager.Api wykorzysta SignalR do wysyłania powiadomień w czasie rzeczywistym do klienta TeamsManager.UI o statusie długotrwałych operacji (np. masowe tworzenie zespołów, import użytkowników), zakończonych zadaniach lub innych ważnych zdarzeniach systemowych, co zapewni dynamiczne odświeżanie interfejsu użytkownika.
+#### 🔄 WebSockets (SignalR)
+- Powiadomienia w czasie rzeczywistym
+- Status długotrwałych operacji
+- Dynamiczne odświeżanie UI
 
-**Synchronizacja między instancjami (Rozważane na przyszłość):** W przyszłości może zostać dodany mechanizm komunikacji (np. oparty na TCP/IP lub kolejkach komunikatów) umożliwiający synchronizację stanu i operacji między wieloma instancjami aplikacji TeamsManager uruchomionymi na różnych stanowiskach.
+#### 🔮 Przyszłe rozszerzenia
+- Synchronizacja między instancjami
+- Komunikacja TCP/IP lub kolejki komunikatów
+
+---
 
 ## 3. Model Danych Domeny
 
-Model danych został starannie zaprojektowany zgodnie z zasadami Domain-Driven Design (DDD), aby precyzyjnie odzwierciedlić złożoność i specyfikę zarządzania środowiskiem edukacyjnym w Microsoft Teams. Encje są bogate w logikę biznesową, właściwości obliczane i metody pomocnicze.
+Model danych zaprojektowany zgodnie z zasadami **Domain-Driven Design (DDD)**.
 
 ### 3.1. Schemat Klas Domenowych
 
@@ -185,7 +243,7 @@ classDiagram
         +SchoolYear? SchoolYear
         +List~TeamMember~ Members
         +List~Channel~ Channels
-        +bool IsEffectivelyActive (get)
+        +bool IsActive (get)
         +int MemberCount (get)
     }
     Team --|> BaseEntity
@@ -213,7 +271,7 @@ classDiagram
         +ChannelStatus Status
         +string TeamId
         +Team? Team
-        +bool IsCurrentlyActive (get)
+        +bool IsActive (get)
     }
     Channel --|> BaseEntity
     Channel "*" --o "1" Team : BelongsTo
@@ -270,8 +328,6 @@ classDiagram
         +SettingType Type
     }
     ApplicationSetting --|> BaseEntity
-
-    note "Diagram uproszczony, pokazuje główne klasy i relacje."
 ```
 
 ### 3.2. Diagram ERD (Entity Relationship Diagram)
@@ -308,7 +364,6 @@ erDiagram
     User ||--o{ UserSchoolType : ma_przypisania_do_typu_szkoly
     User ||--o{ UserSubject : naucza_przedmiotow
     User ||--o{ TeamMember : jest_czlonkiem_w
-    User ||--|{ SchoolType : nadzoruje_typy_szkol (M:N przez UserSchoolTypeSupervision - niejawna tabela łącząca)
 
     Department {
         string Id PK
@@ -507,7 +562,7 @@ erDiagram
         int FailedItems NULL "Liczba nieudanych"
         string Tags NULL
     }
-    OperationHistory ||--o{ OperationHistory : jest_rodzicem_dla_podoperacji (self-referencing)
+    OperationHistory ||--o{ OperationHistory : jest_rodzicem_dla_podoperacji
 
     ApplicationSetting {
         string Id PK
@@ -527,272 +582,256 @@ erDiagram
 
 ### 3.3. Opis Głównych Encji i Enumów
 
-**BaseEntity:** Abstrakcyjna klasa bazowa dostarczająca wspólne pola audytu (Id, CreatedDate, CreatedBy, ModifiedDate, ModifiedBy) oraz flagę IsActive dla mechanizmu "soft delete".
+#### 📊 Główne Encje:
 
-**User:** Reprezentuje użytkownika systemu (ucznia, nauczyciela, administratora). Przechowuje dane osobowe, rolę systemową, przypisanie do działu oraz informacje o członkostwach w zespołach i przypisaniach do typów szkół/przedmiotów.
+**BaseEntity** 🏗️
+- Abstrakcyjna klasa bazowa
+- Wspólne pola audytu
+- Mechanizm "soft delete"
 
-**Department:** Modeluje dział, wydział lub inną jednostkę organizacyjną, z możliwością tworzenia struktur hierarchicznych.
+**User** 👤
+- Reprezentuje użytkownika systemu
+- Role: uczeń, nauczyciel, administrator
+- Bogate właściwości obliczane
 
-**SchoolType:** Definiuje typ szkoły lub jednostki edukacyjnej (np. LO, Technikum, KKZ), umożliwiając ich dynamiczne zarządzanie i kategoryzację.
+**Department** 🏢
+- Struktura organizacyjna
+- Hierarchia działów
+- Przypisania użytkowników
 
-**SchoolYear:** Reprezentuje rok szkolny/akademicki z datami rozpoczęcia, zakończenia oraz opcjonalnymi definicjami semestrów.
+**SchoolType** 🏫
+- Typy szkół (LO, Technikum, KKZ, PNZ)
+- Dynamiczne zarządzanie
+- Powiązania z zespołami
 
-**Subject:** Definiuje przedmiot nauczania lub kurs, z możliwością przypisania go do domyślnego typu szkoły.
+**Team** 👥
+- Główna encja - zespół MS Teams
+- Status, metadane, członkowie
+- Powiązania z szablonami
 
-**Team:** Główna encja reprezentująca zespół Microsoft Teams, z jego statusem, metadanymi, powiązaniami z szablonem, typem szkoły, rokiem szkolnym, członkami i kanałami. Właściwość IsVisible została zastąpiona przez Visibility typu TeamVisibility.
+**TeamTemplate** 📋
+- Szablony nazw zespołów
+- Placeholdery dynamiczne
+- Personalizacja nazewnictwa
 
-**TeamMember:** Encja pośrednicząca w relacji wiele-do-wielu między User a Team, przechowująca szczegóły członkostwa (rola, data dodania, status zatwierdzenia itp.).
+#### 🎯 Kluczowe Enumy:
 
-**Channel:** Modeluje kanał komunikacyjny wewnątrz zespołu Teams, z jego statusem (Aktywny/Zarchiwizowany), typem i metadanymi aktywności.
-
-**TeamTemplate:** Umożliwia definiowanie szablonów nazw dla nowo tworzonych zespołów, wspierając placeholdery, prefiksy, sufiksy i inne opcje personalizacji.
-
-**UserSchoolType:** Encja pośrednicząca w relacji wiele-do-wielu między User (nauczycielami) a SchoolType, określająca szczegóły przypisania (np. data, procent etatu).
-
-**UserSubject:** Encja pośrednicząca w relacji wiele-do-wielu między User (nauczycielami) a Subject, określająca, który nauczyciel naucza jakiego przedmiotu.
-
-**OperationHistory:** Rejestruje wszystkie istotne operacje wykonywane w systemie, służąc jako dziennik audytu, monitorowania postępu operacji wsadowych i diagnostyki błędów.
-
-**ApplicationSetting:** Pozwala na dynamiczną konfigurację aplikacji poprzez przechowywanie różnych ustawień (np. kluczy API, wartości domyślnych, flag funkcji) w bazie danych.
-
-#### Kluczowe Enumy:
-
-- **UserRole:** (Uczen, Sluchacz, Nauczyciel, Wicedyrektor, Dyrektor) - Definiuje role użytkowników w systemie edukacyjnym.
-- **TeamMemberRole:** (Member, Owner) - Określa rolę użytkownika w konkretnym zespole Microsoft Teams.
-- **TeamStatus:** (Active, Archived) - Definiuje status zespołu.
-- **TeamVisibility:** (Private, Public) - Definiuje widoczność zespołu (nowy enum zastępujący Team.IsVisible).
-- **ChannelStatus:** (Active, Archived) - Definiuje status kanału.
-- **OperationType:** (np. TeamCreated, MemberAdded, BulkUserImport) - Kategoryzuje typy operacji logowanych w OperationHistory.
-- **OperationStatus:** (Pending, InProgress, Completed, Failed, Cancelled, PartialSuccess) - Określa status wykonywanej operacji.
-- **SettingType:** (String, Integer, Boolean, Json, DateTime, Decimal) - Definiuje typ danych przechowywanych w ApplicationSetting.Value.
+- **UserRole**: `Uczen`, `Sluchacz`, `Nauczyciel`, `Wicedyrektor`, `Dyrektor`
+- **TeamMemberRole**: `Member`, `Owner`
+- **TeamStatus**: `Active`, `Archived`
+- **TeamVisibility**: `Private`, `Public`
+- **ChannelStatus**: `Active`, `Archived`
+- **OperationType**: Różne typy operacji (tworzenie, modyfikacja, import)
+- **OperationStatus**: `Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`, `PartialSuccess`
+- **SettingType**: `String`, `Integer`, `Boolean`, `Json`, `DateTime`, `Decimal`
 
 ### 3.4. Kluczowe Relacje Między Encjami
 
-| Encja Nadrzędna | Typ Relacji | Encja Podrzędna/Powiązana | Tabela Pośrednicząca (dla M:N) | Kluczowe Właściwości Nawigacyjne | Opis |
-|---|---|---|---|---|---|
-| Department | 1 : N | User | - | Department.Users, User.Department | Jeden dział może mieć wielu użytkowników; użytkownik należy do jednego działu. |
-| Department | 1 : N | Department | - | Department.SubDepartments, Department.ParentDepartment | Jeden dział może mieć wiele poddziałów; poddział ma jeden dział nadrzędny (hierarchia). |
-| User | 1 : N | TeamMember | - | User.TeamMemberships, TeamMember.User | Jeden użytkownik może mieć wiele członkostw w różnych zespołach. |
-| Team | 1 : N | TeamMember | - | Team.Members, TeamMember.Team | Jeden zespół może mieć wielu członków. |
-| Team | 1 : N | Channel | - | Team.Channels, Channel.Team | Jeden zespół może mieć wiele kanałów. |
-| SchoolType | 1 : N | Team | - | SchoolType.Teams, Team.SchoolType | Jeden typ szkoły może być powiązany z wieloma zespołami. |
-| SchoolYear | 1 : N | Team | - | SchoolYear.Teams, Team.SchoolYear | Jeden rok szkolny może obejmować wiele zespołów. |
-| TeamTemplate | 1 : N | Team | - | TeamTemplate.Teams, Team.Template | Jeden szablon może być użyty do stworzenia wielu zespołów. |
-| SchoolType | 1 : N | TeamTemplate | - | SchoolType.Templates, TeamTemplate.SchoolType | Jeden typ szkoły może mieć wiele dedykowanych szablonów. |
-| User | M : N | SchoolType | UserSchoolType | User.SchoolTypeAssignments, SchoolType.TeacherAssignments | Nauczyciel może być przypisany do wielu typów szkół; typ szkoły może mieć wielu przypisanych nauczycieli. |
-| User | M : N | SchoolType | UserSchoolTypeSupervision (niejawna) | User.SupervisedSchoolTypes, SchoolType.SupervisingViceDirectors | Wicedyrektor może nadzorować wiele typów szkół; typ szkoły może być nadzorowany przez wielu wicedyrektorów. |
-| User | M : N | Subject | UserSubject | User.TaughtSubjects, Subject.TeacherAssignments | Nauczyciel może nauczać wielu przedmiotów; przedmiot może być nauczany przez wielu nauczycieli. |
-| OperationHistory | 1 : N | OperationHistory | - | OperationHistory.SubOperations (planowane), OperationHistory.ParentOperation | Operacja może mieć wiele podoperacji. |
-| SchoolType | 1 : N | Subject | - | (brak bezpośredniej kolekcji w SchoolType), Subject.DefaultSchoolType | Jeden typ szkoły może być domyślnym dla wielu przedmiotów. |
-
-**Uwaga:** Tabela UserSchoolTypeSupervision dla relacji M:N User <-> SchoolType (dla nadzoru) jest obsługiwana przez EF Core "niejawnie" poprzez konfigurację .UsingEntity() w DbContext.
+| Encja Nadrzędna | Relacja | Encja Podrzędna | Opis |
+|-----------------|---------|-----------------|------|
+| Department | 1:N | User | Jeden dział - wielu użytkowników |
+| Department | 1:N | Department | Hierarchia działów |
+| User | 1:N | TeamMember | Użytkownik w wielu zespołach |
+| Team | 1:N | TeamMember | Zespół ma wielu członków |
+| Team | 1:N | Channel | Zespół ma wiele kanałów |
+| SchoolType | 1:N | Team | Typ szkoły dla wielu zespołów |
+| User | M:N | SchoolType | Nauczyciele przypisani do typów szkół |
+| User | M:N | Subject | Nauczyciele uczący przedmiotów |
 
 ### 3.5. Logika Domenowa w Modelach
 
-Modele zostały zaprojektowane jako "bogate modele domenowe" (Rich Domain Models), co oznacza, że zawierają nie tylko dane, ale również logikę biznesową bezpośrednio w encjach. Przykłady:
+Modele zaprojektowane jako **"Rich Domain Models"**:
 
-- **Właściwości obliczane:** (np. User.FullName, Team.MemberCount, SchoolYear.CompletionPercentage, Department.FullPath, Channel.StatusDescription, TeamTemplate.Placeholders, OperationHistory.ProgressPercentage, UserSchoolType.AssignmentDescription).
-- **Metody pomocnicze modyfikujące stan encji:** (np. Team.Archive(), Team.Restore(), OperationHistory.MarkAsCompleted(), ApplicationSetting.IsValid(), Channel.Archive(), BaseEntity.MarkAsModified()).
-- **Logika walidacji i transformacji danych:** (np. TeamTemplate.GenerateTeamName(), TeamTemplate.ValidateTemplate()).
+✨ **Właściwości obliczane:**
+- `User.FullName`, `User.Age`, `User.YearsOfService`
+- `Team.MemberCount`, `Team.IsActive`
+- `SchoolYear.CompletionPercentage`
+- `Department.FullPath`
+
+🔧 **Metody pomocnicze:**
+- `Team.Archive()`, `Team.Restore()`
+- `Channel.Archive()`
+- `BaseEntity.MarkAsModified()`
+- `OperationHistory.MarkAsCompleted()`
+
+🎨 **Logika walidacji i transformacji:**
+- `TeamTemplate.GenerateTeamName()`
+- `TeamTemplate.ValidateTemplate()`
+- `ApplicationSetting.IsValid()`
+
+---
 
 ## 4. Wykorzystane Technologie
 
 ### 4.1. Stos Technologiczny
 
-- **Platforma:** .NET 8.0
-- **Język programowania:** C# 12
-- **Interfejs użytkownika (UI):** WPF (Windows Presentation Foundation)
-- **Stylizacja:** MaterialDesignInXAML
-- **Wzorzec architektoniczny:** MVVM (Model-View-ViewModel)
-- **Logika biznesowa i interakcja z PowerShell:** Biblioteka klas .NET
-- **PowerShell:** System.Management.Automation (SDK)
-- **API:** ASP.NET Core Web API (dla lokalnego serwera)
-- **Komunikacja w czasie rzeczywistym:** SignalR (WebSockets)
-- **Dostęp do danych (ORM):** Entity Framework Core 8
-- **Baza danych:** SQLite (lokalna, plikowa)
-- **Cache:** Microsoft.Extensions.Caching.Memory (Lokalny cache w pamięci)
-- **Testowanie:**
-  - Framework: xUnit
-  - Asercje: FluentAssertions
-  - Mockowanie: Moq
-- **Kontrola wersji:** Git, GitHub
+| Warstwa | Technologia | Wersja |
+|---------|-------------|--------|
+| **Platforma** | .NET | 8.0 |
+| **Język** | C# | 12 |
+| **UI** | WPF + MaterialDesignInXAML | Latest |
+| **Wzorzec UI** | MVVM | - |
+| **API** | ASP.NET Core Web API | 8.0 |
+| **WebSockets** | SignalR | Latest |
+| **ORM** | Entity Framework Core | 8.0 |
+| **Baza danych** | SQLite | Latest |
+| **Cache** | IMemoryCache | Built-in |
+| **PowerShell** | System.Management.Automation | SDK |
+| **Testy** | xUnit + FluentAssertions + Moq | Latest |
+| **VCS** | Git + GitHub | - |
 
 ### 4.2. Kluczowe Pakiety NuGet
 
-**TeamsManager.Core:**
-- System.Management.Automation: Integracja z PowerShell.
-- Microsoft.Extensions.DependencyInjection.Abstractions: Podstawa dla wstrzykiwania zależności.
-- Microsoft.Extensions.Logging.Abstractions: Podstawa dla systemu logowania.
-- Microsoft.Extensions.Caching.Abstractions: Interfejsy dla mechanizmów cache.
+#### 📚 TeamsManager.Core:
+- `System.Management.Automation` - Integracja z PowerShell
+- `Microsoft.Extensions.DependencyInjection.Abstractions` - DI
+- `Microsoft.Extensions.Logging.Abstractions` - Logowanie
+- `Microsoft.Extensions.Caching.Abstractions` - Cache
 
-**TeamsManager.Data:**
-- Microsoft.EntityFrameworkCore: Główny pakiet Entity Framework Core.
-- Microsoft.EntityFrameworkCore.Sqlite: Dostawca bazy danych SQLite dla EF Core.
-- Microsoft.EntityFrameworkCore.Tools: Narzędzia wiersza poleceń dla EF Core (np. do migracji).
-- Microsoft.EntityFrameworkCore.Design: Narzędzia czasu projektowania dla EF Core.
+#### 💾 TeamsManager.Data:
+- `Microsoft.EntityFrameworkCore` - ORM
+- `Microsoft.EntityFrameworkCore.Sqlite` - SQLite provider
+- `Microsoft.EntityFrameworkCore.Tools` - CLI tools
+- `Microsoft.EntityFrameworkCore.Design` - Design-time
 
-**TeamsManager.Api:**
-- Microsoft.AspNetCore.SignalR: Implementacja WebSockets w ASP.NET Core.
-- Swashbuckle.AspNetCore: Automatyczne generowanie dokumentacji API (Swagger/OpenAPI).
-- Microsoft.EntityFrameworkCore.Sqlite (pośrednio przez TeamsManager.Data).
-- Microsoft.Extensions.Caching.Memory: Implementacja lokalnego cache'u w pamięci.
+#### 🌐 TeamsManager.Api:
+- `Microsoft.AspNetCore.SignalR` - WebSockets
+- `Swashbuckle.AspNetCore` - Swagger/OpenAPI
+- `Microsoft.Extensions.Caching.Memory` - Memory cache
 
-**TeamsManager.UI:**
-- MaterialDesignThemes: Biblioteka kontrolek i stylów Material Design dla WPF.
-- Microsoft.AspNetCore.SignalR.Client: Klient SignalR do komunikacji WebSocket z API.
-- System.Net.Http.Json: Ułatwienia do pracy z JSON przez HTTP.
-- Microsoft.Extensions.DependencyInjection: Implementacja wstrzykiwania zależności w aplikacjach WPF.
-- Microsoft.Extensions.Caching.Memory: (Dodane, jeśli UI miałoby własny cache, choć główny jest w API).
+#### 🖥️ TeamsManager.UI:
+- `MaterialDesignThemes` - Material Design dla WPF
+- `Microsoft.AspNetCore.SignalR.Client` - SignalR client
+- `System.Net.Http.Json` - JSON helpers
+- `Microsoft.Extensions.DependencyInjection` - DI dla WPF
 
-**TeamsManager.Tests:**
-- xUnit: Popularny framework do testów jednostkowych.
-- FluentAssertions: Biblioteka do tworzenia bardziej czytelnych i ekspresyjnych asercji w testach.
-- Moq: Biblioteka do tworzenia obiektów mock (zaślepek) na potrzeby testów jednostkowych.
-- Microsoft.EntityFrameworkCore.InMemory: Dostawca bazy danych w pamięci dla EF Core, użyteczny do szybkich testów integracyjnych warstwy danych.
-- Microsoft.Extensions.Caching.Memory: (Używane w testach serwisów, które korzystają z IMemoryCache).
+#### 🧪 TeamsManager.Tests:
+- `xUnit` - Testing framework
+- `FluentAssertions` - Assertions
+- `Moq` - Mocking
+- `Microsoft.EntityFrameworkCore.InMemory` - In-memory DB
+
+---
 
 ## 5. Strategia Testowania
 
-Projekt kładzie duży nacisk na jakość kodu poprzez rozbudowaną strategię testowania:
+### 🎯 Podejście do testowania:
 
-**Testy Jednostkowe (Unit Tests):** Dla wszystkich klas modeli (weryfikacja wartości domyślnych, logiki właściwości, metod pomocniczych), wszystkich enumów oraz kluczowych komponentów logiki biznesowej (serwisów) w izolacji. Pokrycie dla modeli i enumów jest kompletne. Testy dla serwisów są w trakcie implementacji i rozbudowy, obejmując logikę biznesową oraz interakcję z mockowanymi zależnościami (repozytoria, cache, inne serwisy).
+#### ✅ Testy Jednostkowe (Unit Tests)
+- **Modele domenowe**: 100% pokrycie
+- **Enumy**: Kompletne testy
+- **Serwisy**: Testy z mockami, cache, logika biznesowa
+- **Stan**: Ponad 100 metod testowych dla modeli
 
-**Testy Integracyjne (Integration Tests):** Sprawdzają poprawność współpracy między różnymi modułami, np. interakcję modeli z DbContext i bazą danych (przy użyciu InMemory lub TestContainers), działanie relacji, współpracę serwisów z repozytoriami. TeamIntegrationTests.cs jest przykładem testowania złożonych interakcji między modelami.
+#### 🔄 Testy Integracyjne (Integration Tests)
+- Współpraca modułów
+- Interakcje z bazą danych (InMemory)
+- Relacje między encjami
+- Repozytoria z rzeczywistymi zapytaniami
 
-**Pokrycie Kodu:** Dążenie do jak najwyższego pokrycia kodu testami. Obecnie modele domenowe i ich wewnętrzna logika są w pełni pokryte. Rozpoczęto prace nad pokryciem testami serwisów aplikacyjnych.
+#### 📊 Pokrycie Kodu
+- Modele: **100%** ✅
+- Serwisy: **~80%** 🔄
+- Repozytoria: **~90%** ✅
+- API: W planach
 
-**Narzędzia:** xUnit jako główny framework testowy, FluentAssertions dla czytelnych i ekspresyjnych asercji, Moq do mockowania zależności w testach jednostkowych serwisów.
+#### 🛠️ Narzędzia
+- **xUnit** - Framework testowy
+- **FluentAssertions** - Czytelne asercje
+- **Moq** - Mockowanie
+- **EF InMemory** - Testowa baza danych
 
-**Aktualny status testów:** Wszystkie zaimplementowane testy jednostkowe dla modeli domenowych (ponad 100 metod testowych) przechodzą pomyślnie. Testy dla serwisów są sukcesywnie dodawane wraz z implementacją kolejnych funkcjonalności.
+### 📈 Status testów:
+> ✅ Wszystkie testy modeli przechodzą pomyślnie  
+> 🔄 Testy serwisów w ciągłym rozwoju  
+> ✅ Testy repozytoriów zaimplementowane
+
+---
 
 ## 6. Aktualny Status Implementacji i Plan Dalszych Prac
 
-**Data aktualizacji:** 2025-05-31
+### 📅 Data aktualizacji: 2025-06-01
 
-### ✅ Ukończono
+### ✅ Faza 1: Modelowanie Domeny i Podstawy (Zakończona)
+- [x] Model domenowy (13 encji, 8 enumów)
+- [x] Konfiguracja EF Core z Fluent API
+- [x] Podstawowy PowerShellService
+- [x] Kompleksowe testy jednostkowe modeli
+- [x] Testy integracyjne relacji
+- [x] Dokumentacja i plan prac
 
-#### Faza 1: Modelowanie Domeny i Podstawy (Zakończona)
+### ✅ Faza 2: Warstwa Danych i Serwisy (Zakończona)
+- [x] Generic Repository pattern
+- [x] Specjalizowane repozytoria (wszystkie encje)
+- [x] Serwisy aplikacyjne z cache:
+  - DepartmentService
+  - UserService
+  - TeamService
+  - TeamTemplateService
+  - SchoolYearService
+  - SchoolTypeService
+  - SubjectService
+  - ApplicationSettingService
+  - OperationHistoryService
+- [x] Mechanizm cache z tokenami unieważniania
+- [x] Testy jednostkowe serwisów
+- [x] PowerShellService - funkcje M365
+- [x] Testy integracyjne repozytoriów
 
-- Zdefiniowanie i implementacja kompletnego, rozbudowanego modelu domenowego (13 encji, 8 enumów - dodano TeamVisibility) z uwzględnieniem zasad Domain-Driven Design.
-- Pełna konfiguracja TeamsManagerDbContext dla wszystkich encji i ich relacji przy użyciu Entity Framework Core Fluent API.
-- Implementacja podstawowej wersji PowerShellService do interakcji z PowerShell.
-- Stworzenie kompleksowego zestawu testów jednostkowych dla wszystkich klas modeli i enumów.
-- Implementacja kluczowych testów integracyjnych weryfikujących współpracę między modelami.
-- Ustalenie szczegółowego planu dalszych prac, strategii testowania i zasad dokumentacji.
-- Wszystkie testy dla modeli przechodzą pomyślnie.
-- Konfiguracja projektu TeamsManager.Api (Program.cs, appsettings.json) do obsługi EF Core i DI.
-- Dodanie ICurrentUserService i jego podstawowej implementacji CurrentUserService do TeamsManager.Core.
-- Poprawna rejestracja DbContext i ICurrentUserService w kontenerze DI projektu API.
-- Pomyślne wygenerowanie migracji bazy danych (InitialCreate, ReplaceTeamIsVisibleWithVisibility).
-- Pomyślne zastosowanie migracji i utworzenie/aktualizacja schematu bazy danych SQLite (teamsmanager.db).
+### 🔄 Faza 3: API i Komunikacja (W trakcie)
+- [ ] Kontrolery API dla wszystkich serwisów
+- [ ] Swagger/OpenAPI dokumentacja
+- [ ] SignalR Hub dla powiadomień
+- [ ] Middleware (błędy, logowanie)
+- [ ] Testy integracyjne API
 
-#### Faza 2: Warstwa Danych i Serwisy (Częściowo Ukończona)
+### 📋 Faza 4: Interfejs Użytkownika (Planowana)
+- [ ] Główne okna i nawigacja
+- [ ] Widoki MVVM dla encji
+- [ ] Integracja z API
+- [ ] Klient SignalR
+- [ ] Logowanie użytkownika
+- [ ] Stylizacja MaterialDesign
 
-- Implementacja wzorca Generic Repository (GenericRepository<T>).
-- Implementacja specjalizowanych repozytoriów:
-  - UserRepository
-  - TeamRepository
-  - TeamTemplateRepository
-  - SchoolYearRepository
-  - OperationHistoryRepository
-  - ApplicationSettingRepository
-- Implementacja wszystkich głównych serwisów aplikacyjnych z cache'owaniem:
-  - DepartmentService (z hierarchią i cache'owaniem)
-  - UserService (z obsługą ról i przypisań)
-  - TeamService (z zarządzaniem członkami)
-  - TeamTemplateService (z generowaniem nazw)
-  - SchoolYearService (z obsługą semestrów)
-  - SchoolTypeService (z zarządzaniem typami szkół)
-  - SubjectService (z przypisaniami nauczycieli)
-  - ApplicationSettingService (z cache'owaniem ustawień)
-  - OperationHistoryService (z audytem operacji)
-- Implementacja mechanizmu cache'owania z IMemoryCache oraz tokenów unieważniania cache w serwisach.
-- Napisanie testów jednostkowych dla wszystkich serwisów (pokrycie logiki biznesowej i interakcji z mockami).
-- Integracja serwisów z repozytoriami.
+### 🚀 Faza 5: Funkcje Zaawansowane (Planowana)
+- [ ] Import użytkowników z CSV
+- [ ] Masowe tworzenie zespołów
+- [ ] Eksport danych
+- [ ] System raportów
+- [ ] Harmonogram zadań
+- [ ] Optymalizacje wydajności
 
-### 🔄 W Trakcie Realizacji / Następne Kroki
+### 🎯 Faza 6: Finalizacja (do 2025-06-08)
+- [ ] Testy E2E
+- [ ] Poprawki i optymalizacja
+- [ ] Dokumentacja użytkownika
+- [ ] Instrukcja instalacji
+- [ ] Prezentacja projektu
 
-#### Faza 2: Warstwa Danych i Serwisy (Dokończenie - ok. 10%)
-
-- Implementacja brakujących repozytoriów (jeśli jakiekolwiek zostały pominięte, np. specyficzne dla Channel, jeśli GenericRepository<Channel> nie wystarcza). Obecnie wydaje się, że wszystkie kluczowe repozytoria są na miejscu.
-- Rozbudowa PowerShellService o kolejne metody (np. bardziej zaawansowane zarządzanie kanałami, aktualizacja właściwości użytkowników M365).
-- Dodanie testów integracyjnych dla repozytoriów (weryfikacja poprawności działania z bazą danych InMemory/TestContainers).
-
-#### Faza 3: API i Komunikacja
-
-- Implementacja kontrolerów w TeamsManager.Api dla wszystkich zaimplementowanych serwisów:
-  - DepartmentController
-  - UserController
-  - TeamController
-  - SchoolTypeController
-  - SchoolYearController
-  - SubjectController
-  - TeamTemplateController
-  - ApplicationSettingController
-  - OperationHistoryController
-- Konfiguracja Swagger/OpenAPI dla dokumentacji API.
-- Implementacja SignalR Hub w TeamsManager.Api dla powiadomień w czasie rzeczywistym.
-- Implementacja middleware dla obsługi błędów i logowania w API.
-- Testy integracyjne dla API (sprawdzenie poprawności działania endpointów i komunikacji z serwisami).
-
-#### Faza 4: Interfejs Użytkownika (WPF)
-
-- Budowa głównych okien i nawigacji w aplikacji TeamsManager.UI zgodnie z MVVM.
-- Implementacja widoków i ViewModeli dla zarządzania kluczowymi encjami:
-  - DashboardView (strona główna z podsumowaniem)
-  - TeamsView (zarządzanie zespołami)
-  - UsersView (zarządzanie użytkownikami)
-  - DepartmentsView (zarządzanie działami)
-  - SchoolTypesView (zarządzanie typami szkół)
-  - TemplatesView (zarządzanie szablonami)
-  - SettingsView (ustawienia aplikacji)
-- Integracja UI z TeamsManager.Api (np. przy użyciu HttpClient lub biblioteki takiej jak RestSharp).
-- Implementacja klienta SignalR w UI do odbierania powiadomień.
-- Implementacja mechanizmu logowania użytkownika i przekazywania jego tożsamości do ICurrentUserService.
-- Stylizacja z MaterialDesignInXAML.
-
-#### Faza 5: Funkcje Zaawansowane i Usprawnienia
-
-- Implementacja operacji wsadowych:
-  - Import użytkowników z CSV
-  - Masowe tworzenie zespołów
-  - Eksport danych do CSV/Excel
-- Rozbudowa systemu raportów i statystyk.
-- Implementacja harmonogramu zadań (np. automatyczna archiwizacja).
-- Optymalizacja wydajności dla dużych zbiorów danych.
-- Implementacja systemu powiadomień i alertów w UI.
-
-#### Faza 6: Finalizacja (do 2025-06-08)
-
-- Kompleksowe testy E2E (End-to-End).
-- Testy wydajnościowe i optymalizacja.
-- Poprawki błędów wykrytych podczas testów.
-- Finalizacja dokumentacji użytkownika.
-- Przygotowanie instrukcji instalacji i konfiguracji.
-- Przygotowanie prezentacji projektu.
-
-### Harmonogram (Główne Etapy - Zaktualizowany)
+### 📊 Harmonogram Gantta
 
 ```mermaid
 gantt
     dateFormat  YYYY-MM-DD
-    title Harmonogram Projektu TeamsManager (Stan na 2025-05-31)
+    title Harmonogram Projektu TeamsManager (Stan na 2025-06-01)
 
     section Faza 1: Modelowanie (Zakończona)
     Definicja i Implementacja Modeli Domenowych :done, des1, 2025-05-27, 2d
     Testy Jednostkowe i Integracyjne Modeli   :done, des2, after des1, 2d
     
-    section Faza 2: Warstwa Danych i Serwisy (Zakończona w 90%)
+    section Faza 2: Warstwa Danych i Serwisy (Zakończona w 98%)
     Migracje Bazy Danych (Initial, Visibility) :done, db_mig, 2025-05-30, 1d
     ICurrentUserService i DI                 :done, di_ius, after db_mig, 1d
     Repozytoria (Generic, Specjalizowane)    :done, repo, after di_ius, 2d
     Serwisy Aplikacyjne (CRUD, Logika, Cache):done, services_app, after repo, 3d
-    Testy Jednostkowe dla Serwisów           :done, tests_serv, during services_app, 2d
-    Rozbudowa PowerShellService (częściowo)  :crit, active, ps_enh, after services_app, 2d
-    Testy Integracyjne dla Repozytoriów      :todo, tests_repo_int, after ps_enh, 1d
+    Refaktoryzacja IsActive/Status, Cache, Logi :done, refactor_phase2, after services_app, 2d
+    Testy Jednostkowe dla Serwisów (z poprawkami) :done, tests_serv_enh, during refactor_phase2, 2d
+    PowerShellService (kluczowe funkcje)     :done, ps_core, after services_app, 2d 
+    Testy Integracyjne dla Repozytoriów (InMemory) :done, tests_repo_int_inmem, after ps_core, 1d
+    Finalny przegląd Fazy 2                  :crit, active, review_phase2, 2025-06-01, 1d
 
     section Faza 3: API i Komunikacja
-    Kontrolery API (wszystkie serwisy)       :crit, active, api_ctrl, 2025-06-01, 2d 
+    Kontrolery API (wszystkie serwisy)       :crit, active, api_ctrl, after review_phase2, 2d 
     Swagger/OpenAPI                          :api_swagger, after api_ctrl, 1d
     SignalR Hub (podstawy)                   :signalr_hub, after api_swagger, 1d
     Middleware (błędy, logowanie)            :api_middleware, after api_swagger, 1d
@@ -820,103 +859,137 @@ gantt
     Prezentacja Projektu                     :final_prep, 2025-06-08, 1d
 ```
 
+---
+
 ## 7. Instrukcje Uruchomienia i Wymagania Wstępne
 
-*(Sekcja do uzupełnienia, gdy aplikacja będzie w pełni uruchamialna – na razie pozostaje jak w pierwotnej wersji, zaktualizujemy ją później)*
-
-### Środowisko deweloperskie
-
+### 💻 Środowisko deweloperskie
 - Windows 10/11
 - Visual Studio 2022 (Community lub wyższa)
 - .NET 8.0 SDK
-- Git do kontroli wersji
+- Git
 
-### Moduły PowerShell
-
+### 📦 Moduły PowerShell
 ```powershell
-# Instalacja wymaganych modułów (jeśli jeszcze nie zainstalowane)
-# Install-Module -Name MicrosoftTeams -Force -AllowClobber
-# Install-Module -Name ExchangeOnlineManagement -Force -AllowClobber
+# Instalacja wymaganych modułów
+Install-Module -Name MicrosoftTeams -Force -AllowClobber
+Install-Module -Name ExchangeOnlineManagement -Force -AllowClobber
 ```
 
-**Uwaga:** Upewnij się, że używasz kompatybilnych wersji modułów PowerShell z Twoim systemem i uprawnieniami.
+### 🔐 Uprawnienia Microsoft 365
+- Konto z uprawnieniami administratora Teams
+- Właściciel zespołu dla operacji na zespołach
 
-### Uprawnienia Microsoft 365
-
-Konto z uprawnieniami do zarządzania zespołami Microsoft Teams (np. Administrator Teams, Właściciel zespołu dla niektórych operacji).
+---
 
 ## 8. Funkcjonalności dla Środowiska Edukacyjnego
 
-- **Zarządzanie Strukturą Organizacyjną:** Definiowanie działów (z hierarchią), typów szkół (np. LO, Technikum, KKZ, PNZ – dynamicznie konfigurowalne), lat szkolnych.
-- **Zarządzanie Użytkownikami:** Tworzenie kont dla uczniów, słuchaczy, nauczycieli, wicedyrektorów, dyrektorów z przypisaniem do działów i ról systemowych. Mapowanie na atrybuty M365 (planowane).
-- **Zarządzanie Przedmiotami:** Możliwość definiowania przedmiotów i przypisywania do nich nauczycieli (relacja M:N).
-- **Dynamiczne Szablony Nazw Zespołów:** Tworzenie zaawansowanych szablonów (np. {TypSzkoly} {Oddzial} - {Przedmiot} - {Nauczyciel}) do automatycznego i spójnego nazywania zespołów, z możliwością przypisania szablonów do konkretnych typów szkół oraz stosowania prefiksów, sufiksów i walidacji.
-- **Zarządzanie Zespołami Edukacyjnymi:** Tworzenie zespołów (w tym typu "Class" dla funkcji edukacyjnych) na podstawie szablonów lub ręcznie, przypisywanie do typu szkoły i roku szkolnego, zarządzanie członkami (dodawanie z CSV, usuwanie, zmiana ról), zarządzanie kanałami.
-- **Cykl Życia Zespołu:** Archiwizacja zespołów po zakończeniu roku szkolnego/kursu (z automatyczną zmianą nazwy przez dodanie prefiksu "ARCHIWALNY - ") oraz ich przywracanie.
-- **Audyt i Historia:** Śledzenie wszystkich kluczowych operacji wykonywanych w systemie (tworzenie, modyfikacja, usuwanie, operacje wsadowe) z możliwością przeglądania szczegółów.
-- **Konfiguracja Aplikacji:** Możliwość dostosowania parametrów działania aplikacji (np. domyślne wartości, limity, flagi funkcji) poprzez ustawienia przechowywane w bazie.
+### 🏫 Zarządzanie Strukturą Organizacyjną
+- Hierarchiczne działy i wydziały
+- Dynamiczne typy szkół (LO, Technikum, KKZ, PNZ)
+- Zarządzanie latami szkolnymi i semestrami
+
+### 👥 Zarządzanie Użytkownikami
+- Role: Uczeń, Słuchacz, Nauczyciel, Wicedyrektor, Dyrektor
+- Przypisania do działów
+- Mapowanie na atrybuty M365
+
+### 📚 Zarządzanie Przedmiotami
+- Definiowanie przedmiotów i kursów
+- Przypisywanie nauczycieli (relacja M:N)
+- Kategorie i godziny lekcyjne
+
+### 📋 Dynamiczne Szablony Nazw
+- Wzorce z placeholderami: `{TypSzkoly} {Oddzial} - {Przedmiot}`
+- Prefiksy i sufiksy
+- Walidacja długości nazw
+
+### 👨‍🏫 Zarządzanie Zespołami Edukacyjnymi
+- Tworzenie zespołów typu "Class"
+- Import członków z CSV
+- Zarządzanie kanałami tematycznymi
+
+### 🔄 Cykl Życia Zespołu
+- Automatyczna archiwizacja
+- Prefiks "ARCHIWALNY -"
+- Przywracanie z modyfikacją
+
+### 📊 Audyt i Historia
+- Rejestrowanie wszystkich operacji
+- Szczegółowe logi z czasem
+- Analiza błędów
+
+### ⚙️ Konfiguracja Aplikacji
+- Ustawienia w bazie danych
+- Parametry domyślne
+- Flagi funkcji
+
+---
 
 ## 9. Korzyści Rozwiązania
 
-### Dla szkół i instytucji edukacyjnych
+### 🏫 Dla szkół i instytucji edukacyjnych
+✅ **Darmowe** - brak opłat za Graph API  
+✅ **Dedykowane** funkcje edukacyjne  
+✅ **Automatyzacja** zadań administracyjnych  
+✅ **Standaryzacja** nazewnictwa i struktur  
+✅ **Pełny cykl życia** zespołów  
+✅ **Import danych** z CSV  
+✅ **Lokalna kontrola** nad danymi  
 
-✅ Darmowe (w kontekście braku opłat za Graph API dla wielu operacji) i oparte na istniejącej infrastrukturze Microsoft 365.
+### 💻 Dla administratorów IT
+✅ **PowerShell** - znajome narzędzia  
+✅ **Transparentność** operacji  
+✅ **Monitoring** w czasie rzeczywistym  
+✅ **Dziennik audytu** kompletny  
+✅ **Synchronizacja** pracy (planowana)  
 
-✅ Dedykowane funkcje dla specyficznych potrzeb środowiska edukacyjnego, z możliwością dostosowania.
-
-✅ Automatyzacja czasochłonnych zadań administracyjnych związanych z zarządzaniem zespołami i użytkownikami.
-
-✅ Standaryzacja dzięki zaawansowanym szablonom nazw i predefiniowanym strukturom.
-
-✅ Pełne zarządzanie cyklem życia zespołów i użytkowników.
-
-✅ Możliwość importu danych (np. użytkowników z plików CSV).
-
-✅ Lokalne działanie z pełną kontrolą nad danymi konfiguracyjnymi i historią operacji przechowywanymi w lokalnej bazie SQLite.
-
-### Dla administratorów IT
-
-✅ Wykorzystanie istniejących uprawnień i skryptów PowerShell, co ułatwia wdrożenie.
-
-✅ Pełna kontrola i transparentność wykonywanych operacji dzięki szczegółowemu logowaniu.
-
-✅ Możliwość monitorowania działań w czasie rzeczywistym (planowane przez WebSockets).
-
-✅ Kompletny dziennik historii operacji dla celów audytu, diagnostyki i raportowania.
-
-✅ Potencjalna synchronizacja pracy między wieloma administratorami (planowane).
+---
 
 ## 10. Dokumentacja Techniczna
 
-### Wzorce Projektowe
+### 🏗️ Wzorce Projektowe
 
-- **Domain-Driven Design (DDD):** Modele encji są bogate w logikę biznesową, odzwierciedlają rzeczywiste koncepty domeny i hermetyzują swoje zachowania.
+#### Domain-Driven Design (DDD)
+- Bogate modele domenowe
+- Logika biznesowa w encjach
+- Hermetyzacja zachowań
 
-- **Repository Pattern:** Abstrakcja nad warstwą dostępu do danych, zapewniająca separację logiki biznesowej od technologii utrwalania danych (zaimplementowane dla wszystkich encji).
+#### Repository Pattern
+- Abstrakcja dostępu do danych
+- Separacja warstw
+- Łatwość testowania
 
-- **Service Layer Pattern:** Warstwa serwisów aplikacyjnych enkapsulująca logikę biznesową i koordynująca repozytoria oraz inne serwisy.
+#### Service Layer Pattern
+- Enkapsulacja logiki biznesowej
+- Koordynacja repozytoriów
+- Zarządzanie transakcjami
 
-- **MVVM (Model-View-ViewModel):** Wzorzec architektoniczny dla aplikacji WPF (TeamsManager.UI), zapewniający separację logiki prezentacji od widoku.
+#### MVVM (Model-View-ViewModel)
+- Separacja widoku od logiki
+- Data binding
+- Testowalne ViewModele
 
-- **Dependency Injection (DI):** Szeroko stosowane we wszystkich warstwach do zarządzania zależnościami, promowania luźnych powiązań i ułatwiania testowania (zrealizowane w TeamsManager.Api i TeamsManager.UI).
+#### Dependency Injection (DI)
+- Luźne powiązania
+- Łatwość testowania
+- Konfiguracja w runtime
 
-- **Test-Oriented Development:** Nacisk na tworzenie testów jednostkowych i integracyjnych na każdym etapie rozwoju w celu zapewnienia jakości i regresji.
-
-### Architektura (koncepcja warstw)
+### 📐 Architektura warstw
 
 ```mermaid
 graph LR
     subgraph "Warstwa Prezentacji"
-        UI[TeamsManager.UI (WPF)]
+        UI[TeamsManager.UI<br/>WPF]
     end
-    subgraph "Warstwa Aplikacji / Brama"
-        API[TeamsManager.Api (ASP.NET Core)]
+    subgraph "Warstwa Aplikacji"
+        API[TeamsManager.Api<br/>ASP.NET Core]
     end
-    subgraph "Warstwa Domeny i Logiki Aplikacji"
+    subgraph "Warstwa Domeny"
         Core[TeamsManager.Core]
     end
     subgraph "Warstwa Infrastruktury"
-        Data[TeamsManager.Data (EF Core, SQLite)]
+        Data[TeamsManager.Data<br/>EF Core, SQLite]
         PowerShell[PowerShell Engine]
         Cache[IMemoryCache]
     end
@@ -938,17 +1011,38 @@ graph LR
     Tests -- testuje --> Data;
 ```
 
+---
+
 ## 11. Licencja i Autorzy
 
-- **Projekt:** TeamsManager - System zarządzania zespołami Microsoft Teams dla środowiska edukacyjnego
-- **Autor:** Mariusz Jaguścik
-- **Przedmiot:** Programowanie w technologii .NET, Projektowanie zaawansowanych systemów informatycznych, Programowanie aplikacji sieciowych
-- **Uczelnia:** Akademia Ekonomiczno-Humanistyczna
-- **Rok akademicki:** 2024/2025
-- **Licencja:** MIT License
+### 👨‍💻 Informacje o projekcie
+
+**Projekt:** TeamsManager - System zarządzania zespołami Microsoft Teams dla środowiska edukacyjnego
+
+**Autor:** Mariusz Jaguścik
+
+**Przedmioty:** 
+- Programowanie w technologii .NET
+- Projektowanie zaawansowanych systemów informatycznych
+- Programowanie aplikacji sieciowych
+
+**Uczelnia:** Akademia Ekonomiczno-Humanistyczna
+
+**Rok akademicki:** 2024/2025
+
+**Licencja:** MIT License
+
+### 📊 Status projektu
+
+**Ostatnia aktualizacja:** 2025-06-01
+
+**Status:** Faza 2 (Warstwa Danych i Serwisy) jest prawie ukończona (98%). Rozpoczęto implementację warstwy API.
+
+**Testy:** 
+- ✅ Modele: 100+ testów przechodzi pomyślnie
+- ✅ Serwisy: Dobre pokrycie, cache przetestowany
+- ✅ Repozytoria: Testy integracyjne zaimplementowane
 
 ---
 
-**Ostatnia aktualizacja:** 2025-05-31  
-**Status:** Zakończono fazę modelowania danych, implementację repozytoriów i serwisów aplikacyjnych z cache'owaniem. Rozpoczęto implementację warstwy API.  
-**Testy:** Wszystkie testy modeli (ponad 100 metod testowych) przechodzą pomyślnie. Testy jednostkowe dla serwisów są w trakcie implementacji.
+*Dziękuję za zapoznanie się z dokumentacją projektu TeamsManager!* 🚀

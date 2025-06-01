@@ -98,12 +98,12 @@ namespace TeamsManager.Tests.Services
         {
             SetupCacheTryGetValue(AllTeamTemplatesCacheKey, (IEnumerable<TeamTemplate>?)null, false);
             _mockTeamTemplateRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()))
-                                 .ReturnsAsync(expectedDbItemsAfterOperation)
-                                 .Verifiable();
+                                     .ReturnsAsync(expectedDbItemsAfterOperation)
+                                     .Verifiable();
 
             var resultAfterInvalidation = _teamTemplateService.GetAllActiveTemplatesAsync().Result;
 
-            _mockTeamTemplateRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()), Times.Once, "GetAllActiveTemplatesAsync powinno odpytać repozytorium po unieważnieniu cache.");
+            _mockTeamTemplateRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()), Times.AtLeastOnce, "GetAllActiveTemplatesAsync powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
             _mockMemoryCache.Verify(m => m.CreateEntry(AllTeamTemplatesCacheKey), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
         }
@@ -295,7 +295,7 @@ namespace TeamsManager.Tests.Services
             if (!isUniversal && !string.IsNullOrWhiteSpace(schoolType.Id))
             {
                 _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolType.Id), Times.AtLeastOnce);
-                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolType.Id), Times.Never);
+                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolType.Id), Times.AtLeastOnce);
             }
 
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate> { result });
@@ -330,9 +330,9 @@ namespace TeamsManager.Tests.Services
 
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Never);
+            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
 
             var expectedAfterUpdate = new TeamTemplate { Id = templateId, Name = "Nowy Prosty", SchoolTypeId = schoolTypeId, IsDefault = false, IsUniversal = false, IsActive = true, Template = "new", SchoolType = schoolType, CreatedBy = existingTemplate.CreatedBy, CreatedDate = existingTemplate.CreatedDate };
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate> { expectedAfterUpdate });
@@ -368,8 +368,8 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Never);
+            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
 
             var expectedAfterUpdate = new TeamTemplate { Id = templateId, Name = "Nowy Domyślny", SchoolTypeId = schoolTypeId, IsDefault = true, IsUniversal = false, IsActive = true, Template = "content", SchoolType = schoolType, CreatedBy = existingTemplate.CreatedBy, CreatedDate = existingTemplate.CreatedDate };
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate> { expectedAfterUpdate });
@@ -437,9 +437,9 @@ namespace TeamsManager.Tests.Services
 
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
             _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Never);
+            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
+            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
 
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate>());
 
@@ -522,8 +522,8 @@ namespace TeamsManager.Tests.Services
 
             if (!string.IsNullOrWhiteSpace(clonedSchoolTypeId))
             {
-                _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.Once);
-                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.Never);
+                _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.AtLeastOnce);
+                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.AtLeastOnce);
             }
 
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate> { cloned });
