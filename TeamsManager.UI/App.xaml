@@ -4,6 +4,14 @@
              xmlns:local="clr-namespace:TeamsManager.UI"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <!-- Globalne zasoby aplikacji dla Dark Mode -->
+        <SolidColorBrush x:Key="BackgroundDark" Color="#FF202020"/>
+        <SolidColorBrush x:Key="BackgroundMedium" Color="#FF252526"/>
+        <SolidColorBrush x:Key="BackgroundLight" Color="#FF2D2D30"/>
+        <SolidColorBrush x:Key="BorderDark" Color="#FF3F3F46"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#FFECECEC"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#FF969696"/>
+        <SolidColorBrush x:Key="AccentBlue" Color="#FF0078D4"/>
+        <SolidColorBrush x:Key="AccentRed" Color="#FFD13438"/>
     </Application.Resources>
 </Application>

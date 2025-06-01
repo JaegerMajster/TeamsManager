@@ -5,8 +5,218 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TeamsManager.UI"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Teams Manager" Height="700" Width="500"
+        MinHeight="650" MinWidth="450"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF202020"
+        SizeToContent="Height">
 
+    <Window.Resources>
+        <!-- Definicje stylów dla ciemnego motywu -->
+
+        <!-- Styl dla przycisków -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="#FF2D2D30"/>
+            <Setter Property="Foreground" Value="#FFECECEC"/>
+            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF3F3F46"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#FF007ACC"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF007ACC"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FF656565"/>
+                                <Setter TargetName="border" Property="Background" Value="#FF2D2D30"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#FF3F3F46"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Styl dla przycisku głównego (Login) -->
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="#FF0078D4"/>
+            <Setter Property="BorderBrush" Value="#FF0078D4"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF106EBE"/>
+                    <Setter Property="BorderBrush" Value="#FF106EBE"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#FF005A9E"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Styl dla przycisku Logout -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Background" Value="#FFD13438"/>
+            <Setter Property="BorderBrush" Value="#FFD13438"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FFE81123"/>
+                    <Setter Property="BorderBrush" Value="#FFE81123"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#FFA80000"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Animacja fade-in -->
+        <Storyboard x:Key="FadeIn">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                           From="0" To="1" Duration="0:0:0.3"/>
+        </Storyboard>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.Background>
+            <!-- Gradient tła -->
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#FF1E1E1E" Offset="0"/>
+                <GradientStop Color="#FF2D2D30" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
+
+        <!-- Główny kontener z cieniem -->
+        <Border Margin="30" 
+                Background="#FF252526"
+                CornerRadius="12"
+                BorderBrush="#FF3F3F46"
+                BorderThickness="1"
+                MaxWidth="500">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" 
+                                  Direction="270" 
+                                  BlurRadius="15" 
+                                  ShadowDepth="3" 
+                                  Opacity="0.3"/>
+            </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Nagłówek -->
+                <Border Grid.Row="0" 
+                        Background="#FF2D2D30" 
+                        CornerRadius="12,12,0,0"
+                        Padding="30,35,30,25">
+                    <StackPanel>
+                        <TextBlock Text="Teams Manager" 
+                                   FontSize="28" 
+                                   FontWeight="Light"
+                                   FontFamily="Segoe UI"
+                                   Foreground="#FFECECEC"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Microsoft Teams Integration" 
+                                   FontSize="14" 
+                                   FontWeight="Normal"
+                                   FontFamily="Segoe UI"
+                                   Foreground="#FF969696"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Obszar główny -->
+                <StackPanel Grid.Row="1" 
+                            VerticalAlignment="Center" 
+                            HorizontalAlignment="Center"
+                            Margin="40,25,40,25">
+
+                    <!-- Ikona użytkownika -->
+                    <Border Width="80" Height="80" 
+                            CornerRadius="40"
+                            Background="#FF3F3F46"
+                            Margin="0,0,0,20">
+                        <TextBlock Text="👤" 
+                                   FontSize="40" 
+                                   HorizontalAlignment="Center" 
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Informacje o użytkowniku -->
+                    <Border Background="#FF1E1E1E" 
+                            CornerRadius="8" 
+                            Padding="20,15"
+                            MinHeight="60"
+                            Margin="0,0,0,30">
+                        <TextBlock x:Name="UserInfoTextBlock" 
+                                   Text="Niezalogowany" 
+                                   FontSize="14" 
+                                   FontFamily="Segoe UI"
+                                   Foreground="#FFECECEC"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
+                    <!-- Przyciski -->
+                    <Button x:Name="LoginButton" 
+                            Content="Zaloguj się przez Microsoft" 
+                            Width="280" 
+                            Height="48" 
+                            Margin="0,5" 
+                            Click="LoginButton_Click"
+                            Style="{StaticResource PrimaryButton}"/>
+
+                    <Button x:Name="LogoutButton" 
+                            Content="Wyloguj" 
+                            Width="280" 
+                            Height="48" 
+                            Margin="0,5" 
+                            Click="LogoutButton_Click" 
+                            IsEnabled="False"
+                            Style="{StaticResource DangerButton}"/>
+
+                    <Button x:Name="TestApiButton" 
+                            Content="Testuj API (WhoAmI)" 
+                            Width="280" 
+                            Height="48" 
+                            Margin="0,5" 
+                            Click="TestApiButton_Click" 
+                            IsEnabled="False"
+                            Style="{StaticResource ModernButton}"/>
+                </StackPanel>
+
+                <!-- Stopka -->
+                <Border Grid.Row="2" 
+                        Background="#FF1E1E1E" 
+                        CornerRadius="0,0,12,12"
+                        Padding="20,15">
+                    <TextBlock Text="© 2024 Teams Manager" 
+                               FontSize="12" 
+                               FontFamily="Segoe UI"
+                               Foreground="#FF656565"
+                               HorizontalAlignment="Center"/>
+                </Border>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

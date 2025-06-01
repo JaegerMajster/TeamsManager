@@ -19,6 +19,12 @@
         void SetCurrentUserUpn(string? upn);
 
         /// <summary>
+        /// Pobiera unikalny identyfikator (np. ObjectId z Azure AD) aktualnie zalogowanego użytkownika.
+        /// </summary>
+        /// <returns>ID użytkownika lub null, jeśli użytkownik nie jest zalogowany lub ID nie jest dostępne.</returns>
+        string? GetCurrentUserId();
+
+        /// <summary>
         /// Sprawdza czy użytkownik jest zalogowany
         /// </summary>
         bool IsAuthenticated => !string.IsNullOrWhiteSpace(GetCurrentUserUpn());

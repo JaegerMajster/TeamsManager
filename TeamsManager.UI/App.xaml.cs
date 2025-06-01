@@ -1,11 +1,11 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.IO; // Dla Path.Combine
+using System.IO;
 using System.Windows;
-using TeamsManager.Core.Abstractions;         // Dla ICurrentUserService
-using TeamsManager.Core.Services.UserContext; // Dla CurrentUserService
-using TeamsManager.Data;                      // Dla TeamsManagerDbContext
-using Microsoft.EntityFrameworkCore;          // Dla UseSqlite i DbContextOptionsBuilder
+using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Services.UserContext;
+using TeamsManager.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace TeamsManager.UI
