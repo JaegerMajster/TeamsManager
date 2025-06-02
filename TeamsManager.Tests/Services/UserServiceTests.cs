@@ -32,6 +32,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ILogger<UserService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
         private readonly Mock<ISubjectService> _mockSubjectService; // Dodany mock dla ISubjectService
+        private readonly Mock<IPowerShellService> _mockPowerShellService; // Dodany mock dla IPowerShellService
 
         private readonly UserService _userService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -55,7 +56,8 @@ namespace TeamsManager.Tests.Services
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<UserService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
-            _mockSubjectService = new Mock<ISubjectService>(); // Inicjalizacja mocka
+            _mockSubjectService = new Mock<ISubjectService>(); // Inicjalizacja mocka ISubjectService
+            _mockPowerShellService = new Mock<IPowerShellService>(); // Inicjalizacja mocka IPowerShellService
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
@@ -85,7 +87,8 @@ namespace TeamsManager.Tests.Services
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
                 _mockMemoryCache.Object,
-                _mockSubjectService.Object // Przekazanie mocka ISubjectService
+                _mockSubjectService.Object, // Przekazanie mocka ISubjectService
+                _mockPowerShellService.Object // Przekazanie mocka IPowerShellService
             );
         }
 
@@ -238,7 +241,7 @@ namespace TeamsManager.Tests.Services
                                  .Returns(Task.CompletedTask);
             // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            var result = await _userService.CreateUserAsync(newUser.FirstName, newUser.LastName, newUser.UPN, newUser.Role, "dept1");
+            var result = await _userService.CreateUserAsync(newUser.FirstName, newUser.LastName, newUser.UPN, newUser.Role, "dept1", "password123", "mock-access-token");
             result.Should().NotBeNull();
 
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == $"{newUser.FirstName} {newUser.LastName} ({newUser.UPN})" && op.Type == OperationType.UserCreated)), Times.Once);
@@ -298,7 +301,7 @@ namespace TeamsManager.Tests.Services
             _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
             // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            var updateResult = await _userService.UpdateUserAsync(userToUpdateData);
+            var updateResult = await _userService.UpdateUserAsync(userToUpdateData, "mock-access-token");
             updateResult.Should().BeTrue();
 
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == userId && op.Type == OperationType.UserUpdated)), Times.Once);
@@ -341,7 +344,7 @@ namespace TeamsManager.Tests.Services
             _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
             // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            var deactivateResult = await _userService.DeactivateUserAsync(userId);
+            var deactivateResult = await _userService.DeactivateUserAsync(userId, "mock-access-token");
             deactivateResult.Should().BeTrue();
 
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == userId && op.Type == OperationType.UserDeactivated)), Times.Once);

@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Plik: TeamsManager.Core/Services/UserService.cs
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -31,6 +32,7 @@ namespace TeamsManager.Core.Services
         private readonly ILogger<UserService> _logger;
         private readonly IMemoryCache _cache;
         private readonly ISubjectService _subjectService;
+        private readonly IPowerShellService _powerShellService; // Dodane pole
 
         // Definicje kluczy cache
         private const string AllActiveUsersCacheKey = "Users_AllActive";
@@ -56,7 +58,8 @@ namespace TeamsManager.Core.Services
             ICurrentUserService currentUserService,
             ILogger<UserService> logger,
             IMemoryCache memoryCache,
-            ISubjectService subjectService)
+            ISubjectService subjectService,
+            IPowerShellService powerShellService) // Dodany parametr
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -69,6 +72,7 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
+            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService)); // Inicjalizacja
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
@@ -80,7 +84,7 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
-        public async Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false)
+        public async Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie użytkownika o ID: {UserId}. Wymuszenie odświeżenia: {ForceRefresh}", userId, forceRefresh);
 
@@ -99,9 +103,26 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Użytkownik ID: {UserId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", userId);
-            var userFromDb = await _userRepository.GetByIdAsync(userId); // Metoda repozytorium powinna dołączać zależności
 
-            if (userFromDb != null && userFromDb.IsActive) // Cache'ujemy tylko aktywnych użytkowników
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUserByIdAsync.");
+                    // W tym scenariuszu, jeśli połączenie się nie uda, nadal próbujemy pobrać z lokalnego repozytorium.
+                }
+                else
+                {
+                    // Opcjonalnie: Zaktualizuj lokalną bazę danych na podstawie danych z Graph
+                    // var psUser = await _powerShellService.GetM365UserAsync(userId); // Potrzebna metoda w IPowerShellService
+                    // if (psUser != null) { /* logika aktualizacji lokalnego użytkownika */ }
+                }
+            }
+
+            var userFromDb = await _userRepository.GetByIdAsync(userId);
+
+            if (userFromDb != null && userFromDb.IsActive)
             {
                 var cacheEntryOptions = GetDefaultCacheEntryOptions();
                 _cache.Set(cacheKey, userFromDb, cacheEntryOptions);
@@ -128,7 +149,7 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
-        public async Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false)
+        public async Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie użytkownika o UPN: {UPN}. Wymuszenie odświeżenia: {ForceRefresh}", upn, forceRefresh);
 
@@ -147,27 +168,42 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Użytkownik UPN: {UPN} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", upn);
-            var userFromDbBase = await _userRepository.GetUserByUpnAsync(upn); // Pobiera tylko podstawowe dane
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUserByUpnAsync.");
+                }
+                else
+                {
+                    // Opcjonalnie: Zaktualizuj lokalną bazę danych na podstawie danych z Graph
+                    // var psUser = await _powerShellService.GetM365UserAsync(upn); // Potrzebna metoda w IPowerShellService
+                    // if (psUser != null) { /* logika aktualizacji lokalnego użytkownika */ }
+                }
+            }
+
+            var userFromDbBase = await _userRepository.GetUserByUpnAsync(upn);
 
             if (userFromDbBase == null)
             {
                 _logger.LogInformation("Nie znaleziono użytkownika o UPN: {UPN} w repozytorium.", upn);
-                _cache.Set(upnCacheKey, (User?)null, TimeSpan.FromMinutes(1)); // Cache'uj brak wyniku na krótko
+                _cache.Set(upnCacheKey, (User?)null, TimeSpan.FromMinutes(1));
                 return null;
             }
 
             // Pobierz pełny obiekt przez ID, aby mieć spójne dane w cache (z zależnościami)
             // GetUserByIdAsync zajmie się cachowaniem (również po UPN)
             // Jeśli userFromDbBase jest nieaktywny, GetUserByIdAsync zwróci null i usunie z cache
-            var userFromDbFull = await GetUserByIdAsync(userFromDbBase.Id, forceRefresh: true);
+            var userFromDbFull = await GetUserByIdAsync(userFromDbBase.Id, forceRefresh: true, accessToken); // Przekazanie tokenu
 
-            // Nie ma potrzeby dodatkowego cachowania po UPN tutaj, bo GetUserByIdAsync już to robi.
             return userFromDbFull;
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
-        public async Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false)
+        public async Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych użytkowników. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
@@ -178,6 +214,22 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Wszyscy aktywni użytkownicy nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetAllActiveUsersAsync.");
+                }
+                else
+                {
+                    // Opcjonalnie: Synchronizuj użytkowników z Graph do lokalnej bazy danych.
+                    // var psUsers = await _powerShellService.GetAllUsersAsync(); // Metoda Get-MgUser -All z IPowerShellService
+                    // if (psUsers != null) { /* logika synchronizacji */ }
+                }
+            }
+
             var usersFromDb = await _userRepository.FindAsync(u => u.IsActive);
 
             _cache.Set(AllActiveUsersCacheKey, usersFromDb, GetDefaultCacheEntryOptions());
@@ -188,7 +240,7 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
-        public async Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false)
+        public async Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie użytkowników o roli: {Role}. Wymuszenie odświeżenia: {ForceRefresh}", role, forceRefresh);
             string cacheKey = UsersByRoleCacheKeyPrefix + role.ToString();
@@ -200,7 +252,23 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Użytkownicy o roli {Role} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", role);
-            var usersFromDb = await _userRepository.GetUsersByRoleAsync(role); // Metoda repozytorium filtruje też po IsActive
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUsersByRoleAsync.");
+                }
+                else
+                {
+                    // Opcjonalnie: Synchronizuj użytkowników o danej roli z Graph do lokalnej bazy danych.
+                    // var psUsers = await _powerShellService.GetAllUsersAsync($"accountEnabled eq true and userType eq 'Member'"); // Example filter
+                    // if (psUsers != null) { /* logika synchronizacji */ }
+                }
+            }
+
+            var usersFromDb = await _userRepository.GetUsersByRoleAsync(role);
 
             _cache.Set(cacheKey, usersFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Użytkownicy o roli {Role} dodani do cache.", role);
@@ -215,6 +283,8 @@ namespace TeamsManager.Core.Services
             string upn,
             UserRole role,
             string departmentId,
+            string password, // Dodany parametr
+            string accessToken, // Dodany parametr
             bool sendWelcomeEmail = false)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
@@ -233,16 +303,16 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie tworzenia użytkownika: {FirstName} {LastName} ({UPN}) przez {User}", firstName, lastName, upn, currentUserUpn);
 
-                if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(upn))
+                if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(upn) || string.IsNullOrWhiteSpace(password))
                 {
-                    operation.MarkAsFailed("Imię, nazwisko i UPN są wymagane.");
+                    operation.MarkAsFailed("Imię, nazwisko, UPN i hasło są wymagane.");
                     await SaveOperationHistoryAsync(operation);
-                    _logger.LogError("Nie można utworzyć użytkownika: Imię, nazwisko lub UPN są puste.");
+                    _logger.LogError("Nie można utworzyć użytkownika: Imię, nazwisko, UPN lub hasło są puste.");
                     return null;
                 }
 
                 var existingUser = await _userRepository.GetUserByUpnAsync(upn);
-                if (existingUser != null) // Nie sprawdzamy IsActive, bo UPN musi być unikalny globalnie
+                if (existingUser != null)
                 {
                     operation.MarkAsFailed($"Użytkownik o UPN '{upn}' już istnieje.");
                     await SaveOperationHistoryAsync(operation);
@@ -259,6 +329,31 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.ReadWrite.All", "Directory.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można utworzyć użytkownika: Nie udało się połączyć z Microsoft Graph API.");
+                    return null;
+                }
+
+                // Krok 2: Utwórz użytkownika w M365 (Azure AD)
+                string? externalUserId = await _powerShellService.CreateM365UserAsync(
+                    $"{firstName} {lastName}",
+                    upn,
+                    password,
+                    accountEnabled: true);
+
+                if (string.IsNullOrEmpty(externalUserId))
+                {
+                    operation.MarkAsFailed("Nie udało się utworzyć użytkownika w Microsoft 365.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie udało się utworzyć użytkownika {UPN} w Microsoft 365.", upn);
+                    return null;
+                }
+
                 var newUser = new User
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -267,17 +362,17 @@ namespace TeamsManager.Core.Services
                     UPN = upn,
                     Role = role,
                     DepartmentId = departmentId,
-                    Department = department, // Dla spójności obiektu
-                    CreatedBy = currentUserUpn, // Ustawiane też przez DbContext
+                    Department = department,
+                    ExternalId = externalUserId, // Zapisz ID z M365
+                    CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _userRepository.AddAsync(newUser);
-                // SaveChangesAsync() na wyższym poziomie
 
                 operation.TargetEntityId = newUser.Id;
-                operation.MarkAsCompleted($"Użytkownik ID: {newUser.Id} utworzony.");
-                _logger.LogInformation("Użytkownik {FirstName} {LastName} ({UPN}) pomyślnie utworzony. ID: {UserId}", firstName, lastName, upn, newUser.Id);
+                operation.MarkAsCompleted($"Użytkownik ID: {newUser.Id} utworzony lokalnie i w M365. External ID: {externalUserId}");
+                _logger.LogInformation("Użytkownik {FirstName} {LastName} ({UPN}) pomyślnie utworzony. ID: {UserId}, External ID: {ExternalUserId}", firstName, lastName, upn, newUser.Id, externalUserId);
 
                 InvalidateUserCache(userId: newUser.Id, upn: newUser.UPN, role: newUser.Role, invalidateAllGlobalLists: true);
 
@@ -301,7 +396,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> UpdateUserAsync(User userToUpdate)
+        public async Task<bool> UpdateUserAsync(User userToUpdate, string accessToken)
         {
             if (userToUpdate == null || string.IsNullOrWhiteSpace(userToUpdate.Id))
             {
@@ -329,13 +424,12 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie aktualizacji użytkownika ID: {UserId} przez {User}", userToUpdate.Id, currentUserUpn);
 
-                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id); // Pobiera z zależnościami
-                if (existingUser == null) // GetByIdAsync z UserRepository może zwracać null jeśli nieaktywny lub nie znaleziony
+                var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id);
+                if (existingUser == null)
                 {
-                    // Jeśli chcemy aktualizować także nieaktywnych, musimy użyć innego sposobu pobrania, np. FindAsync bez filtra IsActive
-                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony (lub jest nieaktywny i nie można go pobrać przez GetByIdAsync).");
+                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony.");
                     await SaveOperationHistoryAsync(operation);
-                    _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje lub nie można go załadować.", userToUpdate.Id);
+                    _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userToUpdate.Id);
                     return false;
                 }
 
@@ -346,7 +440,7 @@ namespace TeamsManager.Core.Services
 
                 if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
                 {
-                    var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN); // Sprawdza globalnie
+                    var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN);
                     if (userWithSameUpn != null && userWithSameUpn.Id != userToUpdate.Id)
                     {
                         operation.MarkAsFailed($"UPN '{userToUpdate.UPN}' już istnieje w systemie.");
@@ -365,12 +459,53 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateUserAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zaktualizować użytkownika: Nie udało się połączyć z Microsoft Graph API.");
+                    return false;
+                }
+
+                // Krok 2: Zaktualizuj użytkownika w M365 (Azure AD)
+                bool psSuccess = await _powerShellService.UpdateM365UserPropertiesAsync(
+                    userToUpdate.UPN, // Użyj nowego UPN, jeśli zmieniono
+                    userToUpdate.Department?.Name, // Tutaj możesz potrzebować nazwy działu z Graph
+                    userToUpdate.Position, // Pozycja
+                    userToUpdate.FirstName,
+                    userToUpdate.LastName);
+
+                if (!psSuccess)
+                {
+                    operation.MarkAsFailed("Nie udało się zaktualizować użytkownika w Microsoft 365.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie udało się zaktualizować użytkownika {UPN} w Microsoft 365.", userToUpdate.UPN);
+                    return false;
+                }
+
+                // Aktualizuj UPN w M365, jeśli się zmienił
+                if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
+                {
+                    bool upnUpdateSuccess = await _powerShellService.UpdateM365UserPrincipalNameAsync(existingUser.UPN, userToUpdate.UPN);
+                    if (!upnUpdateSuccess)
+                    {
+                        operation.MarkAsFailed($"Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{existingUser.UPN}' na '{userToUpdate.UPN}'.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{OldUpn}' na '{NewUpn}'.", existingUser.UPN, userToUpdate.UPN);
+                        // Możesz zdecydować, czy rzucać wyjątek, czy kontynuować z częściową aktualizacją.
+                        // Na razie traktujemy jako błąd całej operacji.
+                        return false;
+                    }
+                }
+
                 existingUser.FirstName = userToUpdate.FirstName;
                 existingUser.LastName = userToUpdate.LastName;
                 existingUser.UPN = userToUpdate.UPN;
                 existingUser.Role = userToUpdate.Role;
                 existingUser.DepartmentId = userToUpdate.DepartmentId;
-                existingUser.Department = department; // Aktualizacja obiektu nawigacyjnego
+                existingUser.Department = department;
                 existingUser.Phone = userToUpdate.Phone;
                 existingUser.AlternateEmail = userToUpdate.AlternateEmail;
                 existingUser.ExternalId = userToUpdate.ExternalId;
@@ -379,14 +514,13 @@ namespace TeamsManager.Core.Services
                 existingUser.Position = userToUpdate.Position;
                 existingUser.Notes = userToUpdate.Notes;
                 existingUser.IsSystemAdmin = userToUpdate.IsSystemAdmin;
-                existingUser.IsActive = userToUpdate.IsActive; // Zmiana IsActive jest dozwolona
+                existingUser.IsActive = userToUpdate.IsActive;
 
                 existingUser.MarkAsModified(currentUserUpn);
                 _userRepository.Update(existingUser);
-                // SaveChangesAsync na wyższym poziomie
 
                 operation.TargetEntityName = $"{existingUser.FirstName} {existingUser.LastName} ({existingUser.UPN})";
-                operation.MarkAsCompleted("Użytkownik zaktualizowany.");
+                operation.MarkAsCompleted("Użytkownik zaktualizowany lokalnie i w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);
 
                 InvalidateUserCache(userId: existingUser.Id,
@@ -411,7 +545,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> DeactivateUserAsync(string userId)
+        public async Task<bool> DeactivateUserAsync(string userId, string accessToken, bool deactivateM365Account = true)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_deactivate";
             var operation = new OperationHistory
@@ -429,19 +563,14 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie dezaktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
 
-                user = await _userRepository.GetByIdAsync(userId); // Potrzebujemy obiektu do modyfikacji, nawet jeśli już nieaktywny
-                if (user == null) // Jeśli GetByIdAsync zwraca null dla nieaktywnych, to nie zadziała tak
+                var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
+                user = foundUsers.FirstOrDefault();
+                if (user == null)
                 {
-                    // Spróbujmy pobrać go inaczej, jeśli GetByIdAsync filtruje po IsActive
-                    var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
-                    user = foundUsers.FirstOrDefault();
-                    if (user == null)
-                    {
-                        operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
-                        await SaveOperationHistoryAsync(operation);
-                        _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
-                        return false;
-                    }
+                    operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId);
+                    return false;
                 }
                 operation.TargetEntityName = user.FullName;
 
@@ -450,16 +579,36 @@ namespace TeamsManager.Core.Services
                     operation.MarkAsCompleted($"Użytkownik o ID '{userId}' był już nieaktywny.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId);
-                    // Mimo wszystko odśwież cache, bo inne dane mogły być w cache
                     InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true);
                     return true;
                 }
 
-                user.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
-                _userRepository.Update(user);
-                // SaveChangesAsync na wyższym poziomie
+                if (deactivateM365Account)
+                {
+                    // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                    bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.ReadWrite.All" });
+                    if (!isConnected)
+                    {
+                        operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
+                        return false;
+                    }
 
-                operation.MarkAsCompleted("Użytkownik zdezaktywowany.");
+                    bool psSuccess = await _powerShellService.SetM365UserAccountStateAsync(user.UPN, false);
+                    if (!psSuccess)
+                    {
+                        operation.MarkAsFailed($"Nie udało się zdezaktywować konta użytkownika '{user.UPN}' w Microsoft 365.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie udało się zdezaktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN);
+                        return false;
+                    }
+                }
+
+                user.MarkAsDeleted(currentUserUpn);
+                _userRepository.Update(user);
+
+                operation.MarkAsCompleted("Użytkownik zdezaktywowany lokalnie i opcjonalnie w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zdezaktywowany.", userId);
 
                 InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
@@ -478,7 +627,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> ActivateUserAsync(string userId)
+        public async Task<bool> ActivateUserAsync(string userId, string accessToken, bool activateM365Account = true)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_activate";
             var operation = new OperationHistory
@@ -496,7 +645,7 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie aktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
 
-                var foundUsers = await _userRepository.FindAsync(u => u.Id == userId); // Pobierz niezależnie od IsActive
+                var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
                 user = foundUsers.FirstOrDefault();
                 if (user == null)
                 {
@@ -516,12 +665,33 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
+                if (activateM365Account)
+                {
+                    // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                    bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "User.ReadWrite.All" });
+                    if (!isConnected)
+                    {
+                        operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
+                        return false;
+                    }
+
+                    bool psSuccess = await _powerShellService.SetM365UserAccountStateAsync(user.UPN, true);
+                    if (!psSuccess)
+                    {
+                        operation.MarkAsFailed($"Nie udało się aktywować konta użytkownika '{user.UPN}' w Microsoft 365.");
+                        await SaveOperationHistoryAsync(operation);
+                        _logger.LogError("Nie udało się aktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN);
+                        return false;
+                    }
+                }
+
                 user.IsActive = true;
                 user.MarkAsModified(currentUserUpn);
                 _userRepository.Update(user);
-                // SaveChangesAsync na wyższym poziomie
 
-                operation.MarkAsCompleted("Użytkownik aktywowany.");
+                operation.MarkAsCompleted("Użytkownik aktywowany lokalnie i opcjonalnie w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie aktywowany.", userId);
 
                 InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
@@ -557,7 +727,7 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Rozpoczynanie przypisania użytkownika {UserId} do typu szkoły {SchoolTypeId} przez {User}", userId, schoolTypeId, currentUserUpn);
 
-                user = await _userRepository.GetByIdAsync(userId); // Powinno załadować SchoolTypeAssignments
+                user = await _userRepository.GetByIdAsync(userId);
                 var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
 
                 if (user == null || !user.IsActive)
@@ -596,21 +766,18 @@ namespace TeamsManager.Core.Services
                     EndDate = endDate,
                     WorkloadPercentage = workloadPercentage,
                     Notes = notes,
-                    IsCurrentlyActive = true, // Nowe przypisanie jest domyślnie bieżąco aktywne
+                    IsCurrentlyActive = true,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _userSchoolTypeRepository.AddAsync(newUserSchoolType);
-                // SaveChangesAsync() na wyższym poziomie
-                // user.SchoolTypeAssignments.Add(newUserSchoolType); // Jeśli 'user' jest śledzony
 
                 operation.TargetEntityId = newUserSchoolType.Id;
                 operation.MarkAsCompleted($"Przypisano użytkownika {userId} do typu szkoły {schoolTypeId}.");
                 _logger.LogInformation("Użytkownik {UserId} pomyślnie przypisany do typu szkoły {SchoolTypeId}.", userId, schoolTypeId);
 
-                InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false); // Niekoniecznie wpływa na globalne listy, tylko na tego użytkownika
-                // TODO: Rozważyć inwalidację cache dla SchoolTypeService, jeśli cache'uje listę nauczycieli.
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
                 return newUserSchoolType;
             }
             catch (Exception ex)
@@ -645,7 +812,7 @@ namespace TeamsManager.Core.Services
                 _logger.LogInformation("Rozpoczynanie usuwania przypisania UserSchoolType ID: {UserSchoolTypeId} przez {User}", userSchoolTypeId, currentUserUpn);
 
                 assignment = await _userSchoolTypeRepository.GetByIdAsync(userSchoolTypeId);
-                if (assignment == null) // Nie sprawdzamy IsActive, bo możemy chcieć "naprawić" usunięcie
+                if (assignment == null)
                 {
                     operation.MarkAsFailed($"Przypisanie o ID '{userSchoolTypeId}' nie zostało znalezione.");
                     await SaveOperationHistoryAsync(operation);
@@ -653,9 +820,8 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                // Pobierz powiązane obiekty dla celów logowania i cache'a
-                var user = await _userRepository.GetByIdAsync(assignment.UserId); // Potrzebujemy UPN
-                var schoolType = await _schoolTypeRepository.GetByIdAsync(assignment.SchoolTypeId); // Potrzebujemy ShortName
+                var user = await _userRepository.GetByIdAsync(assignment.UserId);
+                var schoolType = await _schoolTypeRepository.GetByIdAsync(assignment.SchoolTypeId);
                 operation.TargetEntityName = $"Przypisanie {user?.UPN ?? assignment.UserId} do {schoolType?.ShortName ?? assignment.SchoolTypeId}";
 
                 if (!assignment.IsActive)
@@ -667,10 +833,8 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
-
-                assignment.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
+                assignment.MarkAsDeleted(currentUserUpn);
                 _userSchoolTypeRepository.Update(assignment);
-                // SaveChangesAsync na wyższym poziomie
 
                 operation.MarkAsCompleted($"Usunięto przypisanie UserSchoolType ID: {userSchoolTypeId}.");
                 _logger.LogInformation("Przypisanie UserSchoolType ID: {UserSchoolTypeId} pomyślnie usunięte (oznaczone jako nieaktywne).", userSchoolTypeId);
@@ -679,7 +843,6 @@ namespace TeamsManager.Core.Services
                 {
                     InvalidateUserCache(userId: user.Id, upn: user.UPN, invalidateAllGlobalLists: false);
                 }
-                // TODO: Rozważyć inwalidację cache dla SchoolTypeService.
 
                 return true;
             }
@@ -712,8 +875,8 @@ namespace TeamsManager.Core.Services
             try
             {
                 _logger.LogInformation("Rozpoczynanie przypisania nauczyciela {TeacherId} do przedmiotu {SubjectId} przez {User}", teacherId, subjectId, currentUserUpn);
-                teacher = await _userRepository.GetByIdAsync(teacherId); // GetByIdAsync ładuje TaughtSubjects
-                var subject = await _subjectRepository.GetByIdAsync(subjectId); // Zwykłe GetByIdAsync bez szczegółów
+                teacher = await _userRepository.GetByIdAsync(teacherId);
+                var subject = await _subjectRepository.GetByIdAsync(subjectId);
 
                 if (teacher == null || !teacher.IsActive || (teacher.Role != UserRole.Nauczyciel && teacher.Role != UserRole.Wicedyrektor && teacher.Role != UserRole.Dyrektor))
                 {
@@ -744,16 +907,15 @@ namespace TeamsManager.Core.Services
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = teacherId,
-                    User = teacher, // Dla spójności obiektu
+                    User = teacher,
                     SubjectId = subjectId,
-                    Subject = subject, // Dla spójności obiektu
+                    Subject = subject,
                     AssignedDate = assignedDate,
                     Notes = notes,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
                 await _userSubjectRepository.AddAsync(newUserSubject);
-                // teacher.TaughtSubjects.Add(newUserSubject); // Jeśli 'teacher' jest śledzony
 
                 operation.TargetEntityId = newUserSubject.Id;
                 operation.MarkAsCompleted($"Przypisano nauczyciela {teacherId} do przedmiotu {subjectId}.");
@@ -901,9 +1063,6 @@ namespace TeamsManager.Core.Services
                     _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString());
                 }
                 _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAll=true).");
-                // Można by też iterować po prefiksach UserByIdCacheKeyPrefix i UserByUpnCacheKeyPrefix,
-                // ale to byłoby bardzo kosztowne i token powinien to załatwić.
-                // Usunięcie konkretnych kluczy ID/UPN poniżej, jeśli są znane, jest wystarczające przy invalidateAll.
             }
 
             // 3. Jawne usuwanie specyficznych kluczy ID i UPN
@@ -912,37 +1071,36 @@ namespace TeamsManager.Core.Services
                 _cache.Remove(UserByIdCacheKeyPrefix + userId);
                 _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", UserByIdCacheKeyPrefix, userId);
             }
-            if (!string.IsNullOrWhiteSpace(upn)) // Nowy UPN
+            if (!string.IsNullOrWhiteSpace(upn))
             {
                 _cache.Remove(UserByUpnCacheKeyPrefix + upn);
                 _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Upn}", UserByUpnCacheKeyPrefix, upn);
             }
-            if (!string.IsNullOrWhiteSpace(oldUpnIfChanged) && oldUpnIfChanged != upn) // Stary UPN, jeśli się zmienił
+            if (!string.IsNullOrWhiteSpace(oldUpnIfChanged) && oldUpnIfChanged != upn)
             {
                 _cache.Remove(UserByUpnCacheKeyPrefix + oldUpnIfChanged);
                 _logger.LogDebug("Usunięto z cache klucz dla starego UPN: {CacheKey}{OldUpn}", UserByUpnCacheKeyPrefix, oldUpnIfChanged);
             }
 
             // 4. Jawne usuwanie kluczy dla list globalnych i po rolach
-            if (invalidateAllGlobalLists || isActiveChanged) // Jeśli zmienił się status aktywności lub wymuszono dla wszystkich list
+            if (invalidateAllGlobalLists || isActiveChanged)
             {
                 _cache.Remove(AllActiveUsersCacheKey);
                 _logger.LogDebug("Usunięto z cache klucz: {CacheKey} (z powodu invalidateAllGlobalLists lub isActiveChanged).", AllActiveUsersCacheKey);
-                // Jeśli wszystkie listy są unieważniane, to również listy po rolach
                 foreach (UserRole enumRole in Enum.GetValues(typeof(UserRole)))
                 {
                     _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString());
                 }
                 _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAllGlobalLists lub isActiveChanged).");
             }
-            else // Jeśli nie unieważniamy wszystkich list globalnie, zajmijmy się rolami
+            else
             {
-                if (role.HasValue) // Nowa rola
+                if (role.HasValue)
                 {
                     _cache.Remove(UsersByRoleCacheKeyPrefix + role.Value.ToString());
                     _logger.LogDebug("Usunięto z cache klucz dla roli: {CacheKey}{Role}", UsersByRoleCacheKeyPrefix, role.Value);
                 }
-                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role) // Stara rola, jeśli się zmieniła
+                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role)
                 {
                     _cache.Remove(UsersByRoleCacheKeyPrefix + oldRoleIfChanged.Value.ToString());
                     _logger.LogDebug("Usunięto z cache klucz dla starej roli: {CacheKey}{OldRole}", UsersByRoleCacheKeyPrefix, oldRoleIfChanged.Value);

@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Plik: TeamsManager.Core/Services/TeamService.cs
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -81,9 +82,10 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache. Zwraca zespół tylko jeśli jego Status to Active.</remarks>
-        public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false)
+        public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}. Dołączanie członków: {IncludeMembers}, Dołączanie kanałów: {IncludeChannels}, Wymuszenie odświeżenia: {ForceRefresh}", teamId, includeMembers, includeChannels, forceRefresh);
+
             if (string.IsNullOrWhiteSpace(teamId))
             {
                 _logger.LogWarning("Próba pobrania zespołu z pustym ID.");
@@ -107,6 +109,34 @@ namespace TeamsManager.Core.Services
             else
             {
                 _logger.LogDebug("Zespół ID: {TeamId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", teamId);
+
+                // Nawiąż połączenie z PowerShellService z tokenem przed wywołaniem API Graph/Teams
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.Read.All", "GroupMember.Read.All", "Channel.Read.All" });
+                    if (!isConnected)
+                    {
+                        _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetTeamByIdAsync.");
+                        return null;
+                    }
+                    // Pobierz zespół z PowerShell/Graph
+                    var psTeam = await _powerShellService.GetTeamAsync(teamId);
+                    if (psTeam != null)
+                    {
+                        // Opcjonalnie: Zaktualizuj lokalną bazę danych na podstawie danych z Graph
+                        // Ta logika jest już zaimplementowana w serwisie, więc można ją pominąć,
+                        // ale jeśli chcemy mieć pewność, że dane lokalne są zawsze aktualne,
+                        // to tutaj można by wywołać UpdateTeamAsync z danymi z psTeam,
+                        // ale to wymagałoby utworzenia obiektu Team z PSObject.
+                        // Na razie polegamy na tym, że repozytorium zwróci nam poprawny obiekt.
+                        _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API.", teamId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Zespół ID: {TeamId} nie znaleziony w Graph API.", teamId);
+                    }
+                }
+
                 team = await _teamRepository.GetByIdAsync(teamId); // TeamRepository.GetByIdAsync domyślnie dołącza zależności
 
                 if (team != null && team.IsActive) // team.IsActive jest teraz oparte na team.Status == TeamStatus.Active
@@ -130,7 +160,7 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda zwraca listę zespołów z Team.Status = Active. Wykorzystuje cache.</remarks>
-        public async Task<IEnumerable<Team>> GetAllTeamsAsync(bool forceRefresh = false)
+        public async Task<IEnumerable<Team>> GetAllTeamsAsync(bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie wszystkich zespołów z Team.Status = Active. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = AllActiveTeamsCacheKey;
@@ -142,6 +172,25 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Zespoły z Team.Status = Active nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetAllTeamsAsync.");
+                    // Możemy zdecydować, czy zwrócić puste dane, czy rzucić wyjątek, czy pobrać z lokalnej bazy bez synchronizacji.
+                    // Na razie, w przypadku błędu połączenia, spróbujemy zwrócić dane z lokalnej bazy (jeśli dostępne).
+                    // W przyszłości można dodać logikę, która zdecyduje, czy w ogóle kontynuować bez połączenia Graph.
+                }
+                else
+                {
+                    // Tutaj można by zaimplementować synchronizację danych z Graph API do lokalnej bazy
+                    // np. foreach (var psTeam in await _powerShellService.GetAllTeamsAsync()) { /* zaktualizuj lokalny Team */ }
+                    _logger.LogDebug("Połączono z Graph API, potencjalnie zaktualizowano lokalne dane (jeśli logika synchronizacji jest zaimplementowana).");
+                }
+            }
+
             // Predykat t => t.IsActive użyje nowego, obliczeniowego Team.IsActive, które sprawdza Status.
             var teamsFromDb = await _teamRepository.FindAsync(t => t.IsActive);
 
@@ -152,7 +201,7 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda zwraca listę zespołów o statusie domenowym 'Active' (Team.Status == TeamStatus.Active). Wykorzystuje cache.</remarks>
-        public async Task<IEnumerable<Team>> GetActiveTeamsAsync(bool forceRefresh = false)
+        public async Task<IEnumerable<Team>> GetActiveTeamsAsync(bool forceRefresh = false, string? accessToken = null)
         {
             // Ta metoda jest teraz funkcjonalnie identyczna z GetAllTeamsAsync po zmianach.
             _logger.LogInformation("Pobieranie zespołów o statusie 'Active'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
@@ -160,42 +209,64 @@ namespace TeamsManager.Core.Services
 
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
-                _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache.");
+                _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
             }
 
-            _logger.LogDebug("Zespoły o statusie 'Active' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            _logger.LogDebug("Zespoły o statusie 'Active' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium. Cache key: {CacheKey}", cacheKey);
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetActiveTeamsAsync.");
+                    // Dalsze działanie bez danych z Graph, polegając na lokalnej bazie.
+                }
+            }
+
             var teamsFromDb = await _teamRepository.GetActiveTeamsAsync();
 
             _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache.");
+            _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda zwraca listę zespołów o statusie domenowym 'Archived' (Team.Status == TeamStatus.Archived). Wykorzystuje cache.</remarks>
-        public async Task<IEnumerable<Team>> GetArchivedTeamsAsync(bool forceRefresh = false)
+        public async Task<IEnumerable<Team>> GetArchivedTeamsAsync(bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie zespołów o statusie 'Archived'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = ArchivedTeamsCacheKey;
 
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
-                _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache.");
+                _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
             }
 
-            _logger.LogDebug("Zespoły o statusie 'Archived' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            _logger.LogDebug("Zespoły o statusie 'Archived' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium. Cache key: {CacheKey}", cacheKey);
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetArchivedTeamsAsync.");
+                    // Dalsze działanie bez danych z Graph, polegając na lokalnej bazie.
+                }
+            }
+
             var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync();
 
             _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache.");
+            _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda zwraca listę zespołów (Team.Status = Active) dla danego właściciela. Wykorzystuje cache.</remarks>
-        public async Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn, bool forceRefresh = false)
+        public async Task<IEnumerable<Team>> GetTeamsByOwnerAsync(string ownerUpn, bool forceRefresh = false, string? accessToken = null)
         {
             _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn} (tylko te z Team.Status=Active). Wymuszenie odświeżenia: {ForceRefresh}", ownerUpn, forceRefresh);
             if (string.IsNullOrWhiteSpace(ownerUpn))
@@ -212,8 +283,17 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Zespoły (status Active) dla właściciela {OwnerUpn} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", ownerUpn);
-            // ITeamRepository.GetTeamsByOwnerAsync filtruje po t.Owner == ownerUpn && t.IsActive
-            // A t.IsActive jest teraz t.Status == TeamStatus.Active
+
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.Read.All", "User.Read.All" });
+                if (!isConnected)
+                {
+                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetTeamsByOwnerAsync.");
+                    // Dalsze działanie bez danych z Graph, polegając na lokalnej bazie.
+                }
+            }
+
             var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn);
 
             _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
@@ -227,6 +307,7 @@ namespace TeamsManager.Core.Services
             string description,
             string ownerUpn,
             TeamVisibility visibility,
+            string accessToken, // Token jest przekazywany tutaj
             string? teamTemplateId = null,
             string? schoolTypeId = null,
             string? schoolYearId = null,
@@ -258,11 +339,22 @@ namespace TeamsManager.Core.Services
                 }
 
                 var ownerUser = await _userRepository.GetUserByUpnAsync(ownerUpn);
-                if (ownerUser == null || !ownerUser.IsActive) // Sprawdzamy aktywność użytkownika
+                if (ownerUser == null || !ownerUser.IsActive)
                 {
                     operation.MarkAsFailed($"Użytkownik właściciela '{ownerUpn}' nie istnieje lub jest nieaktywny.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć zespołu: Właściciel '{OwnerUPN}' nie istnieje lub jest nieaktywny.", ownerUpn);
+                    return null;
+                }
+
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                // Wymagane scopes dla tworzenia zespołu
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.ReadWrite.All", "User.Read.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateTeamAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można utworzyć zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     return null;
                 }
 
@@ -287,7 +379,7 @@ namespace TeamsManager.Core.Services
                         if (schoolYear != null && !valuesForTemplate.ContainsKey("RokSzkolny") && template.Placeholders.Contains("RokSzkolny")) valuesForTemplate["RokSzkolny"] = schoolYear.Name;
 
                         finalDisplayName = template.GenerateTeamName(valuesForTemplate);
-                        _teamTemplateRepository.Update(template);
+                        _teamTemplateRepository.Update(template); // Aktualizacja licznika użyć
                         _logger.LogInformation("Nazwa zespołu wygenerowana z szablonu '{TemplateName}': {FinalDisplayName}", template.Name, finalDisplayName);
                     }
                     else
@@ -314,15 +406,14 @@ namespace TeamsManager.Core.Services
                         Id = Guid.NewGuid().ToString(),
                         DisplayName = finalDisplayName,
                         Description = description,
-                        Owner = ownerUser.UPN, // Przechowujemy UPN właściciela
-                        Status = TeamStatus.Active, // Nowy zespół jest domyślnie aktywny
+                        Owner = ownerUser.UPN,
+                        Status = TeamStatus.Active,
                         Visibility = visibility,
                         TemplateId = template?.Id,
                         SchoolTypeId = schoolTypeId,
                         SchoolYearId = schoolYearId,
                         ExternalId = externalTeamIdFromPS,
-                        // CreatedBy i CreatedDate zostaną ustawione przez DbContext
-                        SchoolType = schoolType, // Przypisanie obiektów nawigacyjnych
+                        SchoolType = schoolType,
                         SchoolYear = schoolYear,
                         Template = template
                     };
@@ -333,12 +424,13 @@ namespace TeamsManager.Core.Services
                         Id = Guid.NewGuid().ToString(),
                         UserId = ownerUser.Id,
                         TeamId = newTeam.Id,
-                        Role = ownerUser.DefaultTeamRole, // Domyślna rola dla typu użytkownika
+                        Role = ownerUser.DefaultTeamRole,
                         AddedDate = DateTime.UtcNow,
                         AddedBy = currentUserUpn,
-                        IsActive = true, // Członkostwo jest aktywne
-                        IsApproved = true, // Właściciel jest automatycznie zatwierdzony
-                        // CreatedBy i CreatedDate dla TeamMember zostaną ustawione przez DbContext
+                        IsActive = true,
+                        IsApproved = !newTeam.RequiresApproval,
+                        ApprovedDate = !newTeam.RequiresApproval ? DateTime.UtcNow : null,
+                        ApprovedBy = !newTeam.RequiresApproval ? currentUserUpn : null,
                         User = ownerUser,
                         Team = newTeam
                     };
@@ -373,7 +465,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> UpdateTeamAsync(Team teamToUpdate)
+        public async Task<bool> UpdateTeamAsync(Team teamToUpdate, string accessToken)
         {
             if (teamToUpdate == null || string.IsNullOrWhiteSpace(teamToUpdate.Id))
             {
@@ -407,10 +499,11 @@ namespace TeamsManager.Core.Services
                 if (existingTeam == null)
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamToUpdate.Id}' nie istnieje.");
+                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można zaktualizować zespołu ID {TeamId} - nie istnieje.", teamToUpdate.Id);
                     return false;
                 }
-                operation.TargetEntityName = existingTeam.DisplayName; // Nazwa przed zmianami
+                operation.TargetEntityName = existingTeam.DisplayName;
                 oldOwnerUpn = existingTeam.Owner;
                 oldStatus = existingTeam.Status;
 
@@ -432,6 +525,16 @@ namespace TeamsManager.Core.Services
                 {
                     _logger.LogWarning("Próba zmiany statusu zespołu ID {TeamId} z {OldStatus} na {NewStatus} za pomocą metody UpdateTeamAsync jest ignorowana. Użyj ArchiveTeamAsync/RestoreTeamAsync do zmiany statusu.",
                         existingTeam.Id, existingTeam.Status, teamToUpdate.Status);
+                }
+
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateTeamAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zaktualizować zespołu: Nie udało się połączyć z Microsoft Graph API.");
+                    return false;
                 }
 
                 bool psSuccess = await _powerShellService.UpdateTeamPropertiesAsync(
@@ -458,7 +561,7 @@ namespace TeamsManager.Core.Services
                     existingTeam.MarkAsModified(currentUserUpn);
                     _teamRepository.Update(existingTeam);
 
-                    operation.TargetEntityName = existingTeam.DisplayName; // Nazwa po zmianach
+                    operation.TargetEntityName = existingTeam.DisplayName;
                     operation.MarkAsCompleted($"Zespół ID: {existingTeam.Id} zaktualizowany.");
                     _logger.LogInformation("Zespół ID: {TeamId} pomyślnie zaktualizowany.", existingTeam.Id);
 
@@ -485,7 +588,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> ArchiveTeamAsync(string teamId, string reason)
+        public async Task<bool> ArchiveTeamAsync(string teamId, string reason, string accessToken)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_archive";
             var operation = new OperationHistory { Id = Guid.NewGuid().ToString(), Type = OperationType.TeamArchived, TargetEntityType = nameof(Team), TargetEntityId = teamId, CreatedBy = currentUserUpn, IsActive = true };
@@ -493,7 +596,7 @@ namespace TeamsManager.Core.Services
             Team? team = null;
             try
             {
-                var teams = await _teamRepository.FindAsync(t => t.Id == teamId); // Pobierz niezależnie od statusu
+                var teams = await _teamRepository.FindAsync(t => t.Id == teamId);
                 team = teams.FirstOrDefault();
 
                 if (team == null)
@@ -503,7 +606,7 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Nie można zarchiwizować zespołu ID {TeamId} - nie istnieje.", teamId);
                     return false;
                 }
-                operation.TargetEntityName = team.GetBaseDisplayName(); // Nazwa przed archiwizacją
+                operation.TargetEntityName = team.GetBaseDisplayName();
 
                 if (team.Status == TeamStatus.Archived)
                 {
@@ -514,12 +617,22 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ArchiveTeamAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można zarchiwizować zespołu: Nie udało się połączyć z Microsoft Graph API.");
+                    return false;
+                }
+
                 bool psSuccess = await _powerShellService.ArchiveTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
-                    team.Archive(reason, currentUserUpn); // Metoda modelu zmienia Status, DisplayName, Description
+                    team.Archive(reason, currentUserUpn);
                     _teamRepository.Update(team);
 
                     operation.OperationDetails = $"Zespół '{team.GetBaseDisplayName()}' zarchiwizowany jako '{team.DisplayName}'. Powód: {reason}";
@@ -550,10 +663,10 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> RestoreTeamAsync(string teamId)
+        public async Task<bool> RestoreTeamAsync(string teamId, string accessToken)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_restore";
-            var operation = new OperationHistory { /* ... */ Type = OperationType.TeamUnarchived, TargetEntityId = teamId, CreatedBy = currentUserUpn, IsActive = true };
+            var operation = new OperationHistory { Type = OperationType.TeamUnarchived, TargetEntityId = teamId, CreatedBy = currentUserUpn, IsActive = true };
             operation.MarkAsStarted();
             Team? team = null;
             try
@@ -579,15 +692,25 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RestoreTeamAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można przywrócić zespołu: Nie udało się połączyć z Microsoft Graph API.");
+                    return false;
+                }
+
                 bool psSuccess = await _powerShellService.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
-                    team.Restore(currentUserUpn); // Metoda modelu zmienia Status, DisplayName, Description
+                    team.Restore(currentUserUpn);
                     _teamRepository.Update(team);
 
-                    operation.TargetEntityName = team.DisplayName; // Nazwa po przywróceniu
+                    operation.TargetEntityName = team.DisplayName;
                     operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {team.Id}) przywrócony.");
                     _logger.LogInformation("Zespół ID {TeamId} pomyślnie przywrócony.", teamId);
 
@@ -615,10 +738,10 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> DeleteTeamAsync(string teamId)
+        public async Task<bool> DeleteTeamAsync(string teamId, string accessToken)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory { /* ... */ Type = OperationType.TeamDeleted, TargetEntityId = teamId, CreatedBy = currentUserUpn, IsActive = true };
+            var operation = new OperationHistory { Type = OperationType.TeamDeleted, TargetEntityId = teamId, CreatedBy = currentUserUpn, IsActive = true };
             operation.MarkAsStarted();
             _logger.LogInformation("Rozpoczynanie usuwania zespołu ID: {TeamId} przez {User}", teamId, currentUserUpn);
             Team? team = null;
@@ -635,17 +758,22 @@ namespace TeamsManager.Core.Services
                 }
                 operation.TargetEntityName = team.GetBaseDisplayName();
 
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "Group.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeleteTeamAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można usunąć zespołu: Nie udało się połączyć z Microsoft Graph API.");
+                    return false;
+                }
+
                 bool psSuccess = await _powerShellService.DeleteTeamAsync(team.ExternalId ?? team.Id);
 
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
-                    // Zamiast BaseEntity.MarkAsDeleted, zmieniamy status na Archived i modyfikujemy nazwę,
-                    // co jest spójne z logiką biznesową "usunięcia" zespołu.
                     team.Archive($"Usunięty przez {currentUserUpn}", currentUserUpn);
-                    // Jeśli potrzebne jest odróżnienie od zwykłej archiwizacji, można dodać dedykowany Status.Deleted
-                    // lub zmienić pole IsActive z BaseEntity (ale to nie wpłynie na Team.IsActive)
-                    // Na razie, usunięcie = archiwizacja.
                     _teamRepository.Update(team);
 
                     operation.MarkAsCompleted($"Zespół '{team.DisplayName}' (ID: {teamId}) usunięty (zarchiwizowany).");
@@ -674,10 +802,10 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<TeamMember?> AddMemberAsync(string teamId, string userUpn, TeamMemberRole role)
+        public async Task<TeamMember?> AddMemberAsync(string teamId, string userUpn, TeamMemberRole role, string accessToken)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_add_member";
-            var operation = new OperationHistory { /* ... */ Type = OperationType.MemberAdded, CreatedBy = currentUserUpn, IsActive = true };
+            var operation = new OperationHistory { Type = OperationType.MemberAdded, CreatedBy = currentUserUpn, IsActive = true };
             operation.MarkAsStarted();
             Team? team = null;
             User? user = null;
@@ -686,7 +814,7 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Dodawanie użytkownika {UserUPN} do zespołu ID {TeamId} z rolą {Role} przez {CurrentUser}", userUpn, teamId, role, currentUserUpn);
 
-                team = await GetTeamByIdAsync(teamId); // GetTeamByIdAsync zwraca null, jeśli zespół nie jest aktywny (Status != Active)
+                team = await GetTeamByIdAsync(teamId);
                 if (team == null)
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub nie jest aktywny (status).");
@@ -697,7 +825,7 @@ namespace TeamsManager.Core.Services
                 operation.TargetEntityName = $"Członek {userUpn} do zespołu {team.DisplayName}";
 
                 user = await _userRepository.GetUserByUpnAsync(userUpn);
-                if (user == null || !user.IsActive) // Użytkownik musi być aktywny
+                if (user == null || !user.IsActive)
                 {
                     operation.MarkAsFailed($"Użytkownik o UPN '{userUpn}' nie istnieje lub jest nieaktywny.");
                     await SaveOperationHistoryAsync(operation);
@@ -718,6 +846,16 @@ namespace TeamsManager.Core.Services
                     operation.MarkAsFailed($"Zespół '{team.DisplayName}' osiągnął maksymalną liczbę członków.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można dodać członka: Zespół {TeamDisplayName} osiągnął maksymalną liczbę członków.", team.DisplayName);
+                    return null;
+                }
+
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "GroupMember.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddMemberAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można dodać członka: Nie udało się połączyć z Microsoft Graph API.");
                     return null;
                 }
 
@@ -772,10 +910,10 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> RemoveMemberAsync(string teamId, string userId)
+        public async Task<bool> RemoveMemberAsync(string teamId, string userId, string accessToken)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_member";
-            var operation = new OperationHistory { /* ... */ Type = OperationType.MemberRemoved, CreatedBy = currentUserUpn, IsActive = true };
+            var operation = new OperationHistory { Type = OperationType.MemberRemoved, CreatedBy = currentUserUpn, IsActive = true };
             operation.MarkAsStarted();
             Team? team = null;
 
@@ -783,7 +921,7 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogInformation("Usuwanie użytkownika ID {UserId} z zespołu ID {TeamId} przez {CurrentUser}", userId, teamId, currentUserUpn);
 
-                team = await GetTeamByIdAsync(teamId); // Zwraca tylko jeśli team.Status == Active
+                team = await GetTeamByIdAsync(teamId);
                 if (team == null)
                 {
                     operation.MarkAsFailed($"Zespół o ID '{teamId}' nie istnieje lub nie jest aktywny (status).");
@@ -808,6 +946,16 @@ namespace TeamsManager.Core.Services
                     operation.MarkAsFailed("Nie można usunąć ostatniego właściciela zespołu.");
                     await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można usunąć członka: Użytkownik ID {UserId} jest ostatnim właścicielem zespołu {TeamDisplayName}.", userId, team.DisplayName);
+                    return false;
+                }
+
+                // Krok 1: Nawiąż połączenie z PowerShellService z tokenem
+                bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, new[] { "GroupMember.ReadWrite.All" });
+                if (!isConnected)
+                {
+                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveMemberAsync.");
+                    await SaveOperationHistoryAsync(operation);
+                    _logger.LogError("Nie można usunąć członka: Nie udało się połączyć z Microsoft Graph API.");
                     return false;
                 }
 

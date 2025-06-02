@@ -21,6 +21,8 @@ public class AzureAdUiConfig
     public string? TenantId { get; set; }
     public string? ClientId { get; set; }
     public string? RedirectUri { get; set; }
+    public string? ApiScope { get; set; }
+    public string? ApiBaseUrl { get; set; }
 }
 
 public class MsalAuthService
@@ -40,7 +42,7 @@ public class MsalAuthService
 
         _clientId = config.AzureAd.ClientId ?? string.Empty;
         _tenantId = config.AzureAd.TenantId ?? string.Empty;
-        _scopes = config.Scopes ?? new string[] { "User.Read" };
+        _scopes = new string[] { config.AzureAd.ApiScope ?? string.Empty };
 
         // Debug: Wyświetl scopes
         System.Diagnostics.Debug.WriteLine($"MSAL Config (UI): Loaded Scopes: [{string.Join(", ", _scopes)}]");

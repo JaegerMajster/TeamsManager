@@ -1,4 +1,5 @@
-﻿using TeamsManager.Core.Models;
+﻿// Plik: TeamsManager.Core/Abstractions/Services/IUserService.cs
+using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -16,31 +17,35 @@ namespace TeamsManager.Core.Abstractions.Services
         /// </summary>
         /// <param name="userId">Identyfikator użytkownika.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API (wymagany dla odświeżenia z Graph).</param>
         /// <returns>Obiekt User lub null, jeśli nie znaleziono.</returns>
-        Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false);
+        Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false, string? accessToken = null);
 
         /// <summary>
         /// Asynchronicznie pobiera użytkownika na podstawie jego User Principal Name (UPN).
         /// </summary>
         /// <param name="upn">UPN użytkownika.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API (wymagany dla odświeżenia z Graph).</param>
         /// <returns>Obiekt User lub null, jeśli nie znaleziono.</returns>
-        Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false);
+        Task<User?> GetUserByUpnAsync(string upn, bool forceRefresh = false, string? accessToken = null);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich aktywnych użytkowników.
         /// </summary>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API (opcjonalny, używany do synchronizacji).</param>
         /// <returns>Kolekcja wszystkich aktywnych użytkowników.</returns>
-        Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false);
+        Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false, string? accessToken = null);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich aktywnych użytkowników o określonej roli.
         /// </summary>
         /// <param name="role">Rola użytkowników do pobrania.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API (opcjonalny).</param>
         /// <returns>Kolekcja użytkowników o podanej roli.</returns>
-        Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false);
+        Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role, bool forceRefresh = false, string? accessToken = null);
 
         /// <summary>
         /// Asynchronicznie tworzy nowego użytkownika.
@@ -50,6 +55,8 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="upn">UPN użytkownika.</param>
         /// <param name="role">Rola systemowa użytkownika.</param>
         /// <param name="departmentId">Identyfikator działu, do którego użytkownik ma być przypisany.</param>
+        /// <param name="password">Hasło dla nowego użytkownika w M365 (wymagane przy tworzeniu w Graph).</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
         /// <param name="sendWelcomeEmail">Opcjonalnie, czy wysłać email powitalny.</param>
         /// <returns>Utworzony obiekt User lub null, jeśli operacja się nie powiodła.</returns>
         Task<User?> CreateUserAsync(
@@ -58,28 +65,35 @@ namespace TeamsManager.Core.Abstractions.Services
             string upn,
             UserRole role,
             string departmentId,
+            string password,
+            string accessToken,
             bool sendWelcomeEmail = false);
 
         /// <summary>
         /// Asynchronicznie aktualizuje dane istniejącego użytkownika.
         /// </summary>
         /// <param name="userToUpdate">Obiekt User z zaktualizowanymi danymi.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
         /// <returns>True, jeśli aktualizacja się powiodła.</returns>
-        Task<bool> UpdateUserAsync(User userToUpdate);
+        Task<bool> UpdateUserAsync(User userToUpdate, string accessToken);
 
         /// <summary>
-        /// Asynchronicznie dezaktywuje użytkownika (soft delete).
+        /// Asynchronicznie dezaktywuje użytkownika (soft delete) i opcjonalnie wyłącza konto w M365.
         /// </summary>
         /// <param name="userId">Identyfikator użytkownika do dezaktywacji.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <param name="deactivateM365Account">Czy dezaktywować konto użytkownika w M365.</param>
         /// <returns>True, jeśli dezaktywacja się powiodła.</returns>
-        Task<bool> DeactivateUserAsync(string userId);
+        Task<bool> DeactivateUserAsync(string userId, string accessToken, bool deactivateM365Account = true);
 
         /// <summary>
-        /// Asynchronicznie aktywuje użytkownika (cofa soft delete).
+        /// Asynchronicznie aktywuje użytkownika (cofa soft delete) i opcjonalnie włącza konto w M365.
         /// </summary>
         /// <param name="userId">Identyfikator użytkownika do aktywacji.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <param name="activateM365Account">Czy aktywować konto użytkownika w M365.</param>
         /// <returns>True, jeśli aktywacja się powiodła.</returns>
-        Task<bool> ActivateUserAsync(string userId);
+        Task<bool> ActivateUserAsync(string userId, string accessToken, bool activateM365Account = true);
 
         /// <summary>
         /// Asynchronicznie przypisuje użytkownika do typu szkoły.

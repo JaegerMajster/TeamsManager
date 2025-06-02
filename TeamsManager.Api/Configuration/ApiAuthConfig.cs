@@ -1,101 +1,74 @@
 ﻿using Microsoft.Extensions.Configuration; // Dla IConfiguration
-using System;
-using System.IO;
-using System.Text.Json;
+using System; // Dla ArgumentNullException
+// Usunięto using System.IO i System.Text.Json, bo nie będą już potrzebne do czytania pliku AppData
 
 namespace TeamsManager.Api.Configuration
 {
     public class ApiAuthConfig
     {
-        // Klasy konfiguracyjne dla API (mogą być w osobnym pliku, ale tu dla prostoty)
+        // Klasa przechowująca konfigurację Azure AD dla API
         public class ApiAzureAdConfig
         {
             public string Instance { get; set; } = "https://login.microsoftonline.com/";
             public string? TenantId { get; set; }
-            public string? ClientId { get; set; } // To będzie Audience dla API (czyli ClientID aplikacji WPF)
+            public string? ClientId { get; set; }     // Client ID aplikacji API (używany przez API do OBO)
+            public string? ClientSecret { get; set; } // Client Secret aplikacji API (używany przez API do OBO)
+            public string? Audience { get; set; }     // Audience (np. App ID URI aplikacji API), na który wystawiane są tokeny przez UI
         }
 
+        // Główna klasa konfiguracyjna dla API, może być rozszerzona w przyszłości
         public class ApiOAuthConfig
         {
             public ApiAzureAdConfig AzureAd { get; set; } = new ApiAzureAdConfig();
         }
 
-        // Klasa pomocnicza do deserializacji pliku oauth_config.json (z UI)
-        // Używamy jej, bo API będzie czytać ten sam plik, co UI
-        // Nazwy właściwości muszą pasować do pliku JSON (PropertyNameCaseInsensitive pomoże)
-        public class UiMsalConfigForApiDeserialization
-        {
-            public UiAzureAdConfigForApiDeserialization AzureAd { get; set; } = new UiAzureAdConfigForApiDeserialization();
-            // Scopes i RedirectUri nie są potrzebne API do walidacji tokenów, więc można je pominąć
-        }
+        // Usunięto klasy UiMsalConfigForApiDeserialization i UiAzureAdConfigForApiDeserialization,
+        // ponieważ API nie będzie już czytać pliku konfiguracyjnego UI.
 
-        public class UiAzureAdConfigForApiDeserialization
+        /// <summary>
+        /// Wczytuje konfigurację OAuth specyficzną dla API bezpośrednio z IConfiguration
+        /// (czyli z appsettings.json, User Secrets, zmiennych środowiskowych itp.).
+        /// </summary>
+        /// <param name="configuration">Dostawca konfiguracji ASP.NET Core.</param>
+        /// <returns>Skonfigurowany obiekt ApiOAuthConfig.</returns>
+        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration configuration)
         {
-            public string Instance { get; set; } = "https://login.microsoftonline.com/";
-            public string? TenantId { get; set; }
-            public string? ClientId { get; set; } // ClientID aplikacji WPF
-        }
-
-        // Funkcja pomocnicza do wczytania konfiguracji OAuth dla API
-        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration traditionalConfiguration)
-        {
-            const string AppDataFolderName = "TeamsManager";
-            const string ConfigFileName = "oauth_config.json"; // Ten sam plik co dla UI
-            ApiOAuthConfig? configFromAppData = null;
-
-            try
+            if (configuration == null)
             {
-                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string configDir = Path.Combine(appDataPath, AppDataFolderName);
-                string configFileInAppDataPath = Path.Combine(configDir, ConfigFileName);
-
-                if (File.Exists(configFileInAppDataPath))
-                {
-                    string json = File.ReadAllText(configFileInAppDataPath);
-                    var uiConfigFileStructure = JsonSerializer.Deserialize<UiMsalConfigForApiDeserialization>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                    if (uiConfigFileStructure?.AzureAd != null &&
-                        !string.IsNullOrWhiteSpace(uiConfigFileStructure.AzureAd.ClientId) &&
-                        !string.IsNullOrWhiteSpace(uiConfigFileStructure.AzureAd.TenantId))
-                    {
-                        configFromAppData = new ApiOAuthConfig
-                        {
-                            AzureAd = new ApiAzureAdConfig
-                            {
-                                Instance = uiConfigFileStructure.AzureAd.Instance,
-                                TenantId = uiConfigFileStructure.AzureAd.TenantId,
-                                ClientId = uiConfigFileStructure.AzureAd.ClientId // To jest ClientID aplikacji WPF, które API użyje jako Audience
-                            }
-                        };
-                        System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Loaded from AppData '{configFileInAppDataPath}'. TenantId: {configFromAppData.AzureAd.TenantId}, Audience (UI ClientId): {configFromAppData.AzureAd.ClientId}");
-                        return configFromAppData;
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Data in '{configFileInAppDataPath}' is invalid or incomplete. Falling back.");
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"OAuth Config (API): File '{configFileInAppDataPath}' not found in AppData. Falling back to IConfiguration (UserSecrets/appsettings).");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Error loading from AppData '{ex.Message}'. Falling back to IConfiguration (UserSecrets/appsettings).");
+                throw new ArgumentNullException(nameof(configuration));
             }
 
-            // Fallback na tradycyjną konfigurację z IConfiguration (appsettings.json / User Secrets)
-            System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Loading from IConfiguration (UserSecrets/appsettings.json).");
-            return new ApiOAuthConfig
+            System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wczytywanie konfiguracji z IConfiguration (appsettings.json / User Secrets).");
+
+            var apiOAuthConfig = new ApiOAuthConfig();
+
+            // Bindowanie całej sekcji "AzureAd" do obiektu apiOAuthConfig.AzureAd
+            configuration.GetSection("AzureAd").Bind(apiOAuthConfig.AzureAd);
+
+            // Logowanie wczytanych wartości dla celów diagnostycznych (ClientSecret nie jest logowany)
+            System.Diagnostics.Debug.WriteLine(
+                $"OAuth Config (API) Loaded: Instance='{apiOAuthConfig.AzureAd.Instance}', " +
+                $"TenantId='{apiOAuthConfig.AzureAd.TenantId}', " +
+                $"ClientId (API's own for OBO)='{apiOAuthConfig.AzureAd.ClientId}', " +
+                $"Audience (for incoming tokens)='{apiOAuthConfig.AzureAd.Audience}', " +
+                $"ClientSecret is {(string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) ? "NOT" : "potentially")} set (checked from User Secrets/env vars).");
+
+            // Podstawowa walidacja wczytanej konfiguracji
+            if (string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.TenantId) ||
+                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientId) || // ClientID API potrzebny do OBO
+                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) || // ClientSecret API potrzebny do OBO
+                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.Audience)) // Audience, którego API oczekuje w tokenach od UI
             {
-                AzureAd = new ApiAzureAdConfig
-                {
-                    Instance = traditionalConfiguration["AzureAd:Instance"] ?? "https://login.microsoftonline.com/",
-                    TenantId = traditionalConfiguration["AzureAd:TenantId"], // Odczyt z UserSecrets/appsettings
-                    ClientId = traditionalConfiguration["AzureAd:ClientId"]  // ClientId aplikacji WPF (Audience) z UserSecrets/appsettings
-                }
-            };
+                var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
+                                   "nie zostały w pełni skonfigurowane dla API w appsettings.json lub User Secrets. " +
+                                   "Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie.";
+                Console.Error.WriteLine(errorMessage);
+                System.Diagnostics.Debug.WriteLine(errorMessage);
+                // Rozważ rzucenie wyjątku, aby zatrzymać start aplikacji, jeśli te wartości są absolutnie krytyczne:
+                // throw new InvalidOperationException(errorMessage);
+            }
+
+            return apiOAuthConfig;
         }
     }
 }

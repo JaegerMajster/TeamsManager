@@ -333,7 +333,7 @@ namespace TeamsManager.Tests.Services
                                  .Callback<Team>(t => t.Id = createdTeam.Id) // Symulacja nadania ID przez repozytorium
                                  .Returns(Task.CompletedTask);
 
-            var result = await _teamService.CreateTeamAsync(teamName, "desc", ownerUpn, TeamVisibility.Private);
+            var result = await _teamService.CreateTeamAsync(teamName, "desc", ownerUpn, TeamVisibility.Private, "mock-access-token");
             result.Should().NotBeNull();
             result!.Status.Should().Be(TeamStatus.Active); // Sprawdzenie statusu
             result.IsActive.Should().BeTrue(); // Sprawdzenie obliczeniowego IsActive
@@ -379,7 +379,7 @@ namespace TeamsManager.Tests.Services
                                   .ReturnsAsync(true);
             _mockTeamRepository.Setup(r => r.Update(It.IsAny<Team>()));
 
-            var updateResult = await _teamService.UpdateTeamAsync(updatedTeamData);
+            var updateResult = await _teamService.UpdateTeamAsync(updatedTeamData, "mock-access-token");
             updateResult.Should().BeTrue();
 
             // ... (weryfikacja OperationHistory jak wcześniej) ...
@@ -414,7 +414,7 @@ namespace TeamsManager.Tests.Services
             _mockPowerShellService.Setup(p => p.ArchiveTeamAsync(It.IsAny<string>())).ReturnsAsync(true);
             _mockTeamRepository.Setup(r => r.Update(It.IsAny<Team>()));
 
-            var archiveResult = await _teamService.ArchiveTeamAsync(teamId, "reason");
+            var archiveResult = await _teamService.ArchiveTeamAsync(teamId, "reason", "mock-access-token");
             archiveResult.Should().BeTrue();
 
             // Weryfikacja obiektu przekazanego do Update
@@ -461,7 +461,7 @@ namespace TeamsManager.Tests.Services
                                     .Callback<TeamMember>(tm => tm.Id = newMember.Id)
                                     .Returns(Task.CompletedTask);
 
-            var addResult = await _teamService.AddMemberAsync(teamId, userToAdd.UPN, TeamMemberRole.Member);
+            var addResult = await _teamService.AddMemberAsync(teamId, userToAdd.UPN, TeamMemberRole.Member, "mock-access-token");
             addResult.Should().NotBeNull();
 
             // ... (weryfikacja OperationHistory jak wcześniej) ...
@@ -530,7 +530,7 @@ namespace TeamsManager.Tests.Services
                                  })
                                  .Returns(Task.CompletedTask);
 
-            var resultTeam = await _teamService.CreateTeamAsync(displayName, description, ownerUpn, TeamVisibility.Private, null, null, null, null);
+            var resultTeam = await _teamService.CreateTeamAsync(displayName, description, ownerUpn, TeamVisibility.Private, "mock-access-token", null, null, null, null);
 
             resultTeam.Should().NotBeNull();
             resultTeam!.DisplayName.Should().Be(displayName);

@@ -1,62 +1,120 @@
-﻿using System;
+﻿// Plik: TeamsManager.Core/Services/PowerShellService.cs
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Models; // Dodano dla User, jeśli potrzebne w przyszłości
-using System.Security; // Dla SecureString
-using System.Collections.Generic; // Dla Dictionary
+using TeamsManager.Core.Models;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Text;
+using System.Collections;
+using System.Threading;
+using Microsoft.Extensions.Primitives;
+using TeamsManager.Core.Abstractions.Data;
+using TeamsManager.Core.Abstractions;
 
 namespace TeamsManager.Core.Services
 {
     /// <summary>
     /// Serwis odpowiedzialny za interakcję z PowerShell, głównie w kontekście Microsoft Teams i Azure AD.
+    /// Zoptymalizowany dla tenantów średniej wielkości (do 1000 użytkowników).
     /// </summary>
     public class PowerShellService : IPowerShellService
     {
         private readonly ILogger<PowerShellService> _logger;
-        private Runspace? _runspace; // Zmieniono na nullable
+        private readonly IMemoryCache _cache;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IOperationHistoryRepository _operationHistoryRepository;
+
+        private Runspace? _runspace;
         private bool _isConnected = false;
         private bool _disposed = false;
+
+        // Definicje kluczy cache - zgodnie z wzorcem z innych serwisów
+        private const string GraphContextCacheKey = "PowerShell_GraphContext";
+        private const string UserIdCacheKeyPrefix = "PowerShell_UserId_";
+        private const string UserUpnCacheKeyPrefix = "PowerShell_UserUpn_";
+        private const string TeamDetailsCacheKeyPrefix = "PowerShell_Team_";
+        private const string AllTeamsCacheKey = "PowerShell_Teams_All";
+        private const string TeamChannelsCacheKeyPrefix = "PowerShell_TeamChannels_";
+        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
+        private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
+
+        // Token do zarządzania unieważnianiem wpisów cache
+        private static CancellationTokenSource _powerShellCacheTokenSource = new CancellationTokenSource();
+
+        // Stałe konfiguracyjne
+        private const string DefaultUsageLocation = "PL";
+        private const int BatchSize = 50;
+        private const int MaxRetryAttempts = 3;
+
+        // Semaphore dla kontroli współbieżności
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(3, 3);
 
         /// <summary>
         /// Konstruktor serwisu PowerShell.
         /// </summary>
-        /// <param name="logger">Rejestrator zdarzeń.</param>
-        public PowerShellService(ILogger<PowerShellService> logger)
+        public PowerShellService(
+            ILogger<PowerShellService> logger,
+            IMemoryCache memoryCache,
+            ICurrentUserService currentUserService,
+            IOperationHistoryRepository operationHistoryRepository)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+
             InitializeRunspace();
+        }
+
+        /// <summary>
+        /// Zwraca domyślne opcje cache'a z tokenem unieważniania.
+        /// </summary>
+        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
+        {
+            return new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(_defaultCacheDuration)
+                .AddExpirationToken(new CancellationChangeToken(_powerShellCacheTokenSource.Token));
+        }
+
+        /// <summary>
+        /// Zwraca krótkie opcje cache'a z tokenem unieważniania.
+        /// </summary>
+        private MemoryCacheEntryOptions GetShortCacheEntryOptions()
+        {
+            return new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(_shortCacheDuration)
+                .AddExpirationToken(new CancellationChangeToken(_powerShellCacheTokenSource.Token));
         }
 
         private void InitializeRunspace()
         {
             try
             {
-                // Use minimal initial session state to avoid loading unnecessary snap-ins
                 var initialSessionState = InitialSessionState.CreateDefault2();
                 _runspace = RunspaceFactory.CreateRunspace(initialSessionState);
                 _runspace.Open();
-                _logger.LogInformation("Środowisko PowerShell zostało zainicjowane poprawnie.");
+                _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane poprawnie.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Nie udało się zainicjalizować środowiska PowerShell.");
+                _logger.LogError(ex, "Nie udało się zainicjalizować środowiska PowerShell. Próba inicjalizacji w trybie podstawowym.");
                 _runspace = null;
-                // For testing purposes, we'll create a basic runspace if the default one fails
                 try
                 {
                     _runspace = RunspaceFactory.CreateRunspace();
                     _runspace.Open();
-                    _logger.LogInformation("Środowisko PowerShell zostało zainicjowane w trybie podstawowym.");
+                    _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane w trybie podstawowym.");
                 }
-                catch
+                catch (Exception basicEx)
                 {
+                    _logger.LogError(basicEx, "Nie udało się zainicjalizować środowiska PowerShell nawet w trybie podstawowym.");
                     _runspace = null;
                 }
             }
@@ -66,90 +124,179 @@ namespace TeamsManager.Core.Services
         public bool IsConnected => _isConnected;
 
         /// <inheritdoc />
-        public async Task<bool> ConnectToTeamsAsync(string username, string password)
+        public async Task<bool> ConnectWithAccessTokenAsync(string accessToken, string[]? scopes = null)
         {
             if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
-                _logger.LogError("Nie można połączyć z Teams: środowisko PowerShell nie jest poprawnie zainicjowane lub otwarte.");
+                _logger.LogError("Nie można połączyć z Microsoft Graph: środowisko PowerShell nie jest poprawnie zainicjalizowane.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                _logger.LogError("Nie można połączyć z Microsoft Graph: token dostępu nie może być pusty.");
                 return false;
             }
 
             return await Task.Run(() =>
             {
-                SecureString? securePassword = null;
                 try
                 {
-                    _logger.LogInformation("Próba połączenia z Microsoft Teams dla użytkownika {Username}", username);
-
-                    // Bezpieczniejsze tworzenie SecureString z automatycznym czyszczeniem
-                    securePassword = new SecureString();
-                    foreach (char c in password)
-                    {
-                        securePassword.AppendChar(c);
-                    }
-                    securePassword.MakeReadOnly();
-
-                    // Pozwól GC naturalnie wyczyścić pamięć po zakończeniu metody
-                    // SecureString jest głównym mechanizmem bezpieczeństwa dla haseł
+                    _logger.LogInformation("Próba połączenia z Microsoft Graph API. Scopes: [{Scopes}]",
+                        scopes != null ? string.Join(", ", scopes) : "Brak");
 
                     using (var ps = PowerShell.Create())
                     {
                         ps.Runspace = _runspace;
-                        ps.AddScript("Import-Module MicrosoftTeams -ErrorAction Stop;");
 
-                        var credential = new PSCredential(username, securePassword);
+                        // Import modułów
+                        ps.AddScript(@"
+                            Import-Module Microsoft.Graph.Authentication -ErrorAction SilentlyContinue
+                            Import-Module Microsoft.Graph.Users -ErrorAction SilentlyContinue
+                            Import-Module Microsoft.Graph.Teams -ErrorAction SilentlyContinue
+                        ");
+                        ps.Invoke();
+                        ps.Commands.Clear();
 
-                        ps.AddCommand("Connect-MicrosoftTeams")
-                          .AddParameter("Credential", credential)
-                          .AddParameter("ErrorAction", "Stop");
+                        // Połączenie
+                        var command = ps.AddCommand("Connect-MgGraph")
+                                       .AddParameter("AccessToken", accessToken)
+                                       .AddParameter("ErrorAction", "Stop");
+
+                        if (scopes?.Length > 0)
+                        {
+                            command.AddParameter("Scopes", scopes);
+                        }
 
                         ps.Invoke();
 
                         if (ps.HadErrors)
                         {
-                            _isConnected = false;
                             foreach (var error in ps.Streams.Error)
                             {
-                                _logger.LogError("Błąd PowerShell podczas ConnectToTeamsAsync: {Error}", error.ToString());
+                                _logger.LogError("Błąd PowerShell podczas łączenia: {Error}", error.ToString());
                             }
                             return false;
                         }
+
+                        // Weryfikacja połączenia i cache kontekstu
+                        ps.Commands.Clear();
+                        var contextCheckResult = ps.AddCommand("Get-MgContext").Invoke();
+
+                        if (!contextCheckResult.Any())
+                        {
+                            _logger.LogError("Połączenie z Microsoft Graph nie zostało ustanowione.");
+                            return false;
+                        }
+
                         _isConnected = true;
-                        _logger.LogInformation("Pomyślnie połączono z Microsoft Teams jako {Username}", username);
+
+                        // Cache kontekstu
+                        var context = contextCheckResult.First();
+                        _cache.Set(GraphContextCacheKey, context, GetDefaultCacheEntryOptions());
+
+                        _logger.LogInformation("Pomyślnie połączono z Microsoft Graph API.");
                         return true;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Nie udało się połączyć z Microsoft Teams dla użytkownika {Username}", username);
+                    _logger.LogError(ex, "Nie udało się połączyć z Microsoft Graph API.");
                     _isConnected = false;
                     return false;
-                }
-                finally
-                {
-                    // Zawsze wyczyść SecureString
-                    securePassword?.Dispose();
                 }
             });
         }
 
-
-        /// <inheritdoc />
-        private async Task<Collection<PSObject>?> ExecuteCommandAsync(string commandName, Dictionary<string, object>? parameters = null)
+        /// <summary>
+        /// Pobiera ID użytkownika z cache lub Graph.
+        /// </summary>
+        private async Task<string?> GetUserIdAsync(string userUpn, bool forceRefresh = false)
         {
-            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            if (string.IsNullOrWhiteSpace(userUpn))
             {
-                _logger.LogError("Nie można wykonać komendy '{CommandName}': środowisko PowerShell nie jest poprawnie zainicjowane lub otwarte.", commandName);
+                _logger.LogWarning("Próba pobrania ID użytkownika z pustym UPN.");
                 return null;
             }
 
-            _logger.LogDebug("Wykonywanie komendy PowerShell: {CommandName} z parametrami: {Parameters}",
-                commandName, parameters != null ? string.Join(", ", parameters.Keys) : "brak");
+            string cacheKey = UserIdCacheKeyPrefix + userUpn;
 
-            return await Task.Run(() =>
+            if (!forceRefresh && _cache.TryGetValue(cacheKey, out string? cachedId))
+            {
+                _logger.LogDebug("ID użytkownika {UserUpn} znalezione w cache.", userUpn);
+                return cachedId;
+            }
+
+            _logger.LogDebug("ID użytkownika {UserUpn} nie znalezione w cache lub wymuszono odświeżenie.", userUpn);
+
+            try
+            {
+                var script = $@"
+                    $user = Get-MgUser -UserId '{userUpn.Replace("'", "''")}' -ErrorAction Stop
+                    if ($user) {{ $user.Id }} else {{ $null }}
+                ";
+
+                var results = await ExecuteScriptAsync(script);
+                var userId = results?.FirstOrDefault()?.BaseObject?.ToString();
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    _cache.Set(cacheKey, userId, GetDefaultCacheEntryOptions());
+
+                    // Cache też po UPN
+                    string upnCacheKey = UserUpnCacheKeyPrefix + userUpn;
+                    _cache.Set(upnCacheKey, userId, GetDefaultCacheEntryOptions());
+
+                    _logger.LogDebug("ID użytkownika {UserUpn} zapisane w cache.", userUpn);
+                }
+                else
+                {
+                    // Cache negatywny wynik na krótko
+                    _cache.Set(cacheKey, (string?)null, TimeSpan.FromMinutes(1));
+                }
+
+                return userId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania ID użytkownika {UserUpn}", userUpn);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Pomocnicza metoda generująca skrypt pobierania ID użytkownika.
+        /// </summary>
+        private string GetUserIdScript(string userUpn)
+        {
+            return $@"
+                $graphUser = Get-MgUser -UserId '{userUpn.Replace("'", "''")}' -ErrorAction Stop
+                if (-not $graphUser) {{ throw 'Użytkownik nie znaleziony w Azure AD.' }}
+                $userId = $graphUser.Id
+            ";
+        }
+
+        /// <summary>
+        /// Wykonuje komendę PowerShell z retry logic.
+        /// </summary>
+        private async Task<Collection<PSObject>?> ExecuteCommandWithRetryAsync(
+            string commandName,
+            Dictionary<string, object>? parameters = null,
+            int maxRetries = MaxRetryAttempts)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            int attempt = 0;
+            Exception? lastException = null;
+
+            while (attempt < maxRetries)
             {
                 try
                 {
+                    attempt++;
+                    _logger.LogDebug("Wykonywanie komendy PowerShell: {CommandName}, próba {Attempt}/{MaxRetries}",
+                        commandName, attempt, maxRetries);
+
                     using (var ps = PowerShell.Create())
                     {
                         ps.Runspace = _runspace;
@@ -168,928 +315,1901 @@ namespace TeamsManager.Core.Services
 
                         if (ps.HadErrors)
                         {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas wykonywania komendy '{CommandName}': {Error}", commandName, error.ToString());
-                            }
-                            return null;
+                            var errors = string.Join("; ", ps.Streams.Error.Select(e => e.ToString()));
+                            throw new InvalidOperationException($"PowerShell errors: {errors}");
                         }
 
-                        _logger.LogDebug("Komenda '{CommandName}' wykonana pomyślnie. Liczba zwróconych obiektów: {Count}", commandName, results.Count);
+                        _logger.LogDebug("Komenda '{CommandName}' wykonana. Wyniki: {Count}",
+                            commandName, results.Count);
                         return results;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Nie udało się wykonać komendy PowerShell: {CommandName}", commandName);
-                    return null;
-                }
-            });
-        }
+                    lastException = ex;
 
-        /// <inheritdoc />
-        public async Task<string?> CreateTeamAsync(string displayName, string description, string ownerUpn, TeamVisibility visibility = TeamVisibility.Private, string? template = null)
-        {
-            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(ownerUpn))
-            {
-                _logger.LogError("Nie można utworzyć zespołu: Nazwa wyświetlana (DisplayName) oraz właściciel (OwnerUpn) są wymagane.");
-                return null;
-            }
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można utworzyć zespołu: Nie połączono z Teams.");
-                return null;
-            }
-
-            _logger.LogInformation("Tworzenie zespołu w Microsoft Teams: Nazwa='{DisplayName}', Właściciel='{OwnerUpn}', Widoczność='{Visibility}', Szablon='{Template}'",
-                displayName, ownerUpn, visibility, template ?? "Brak");
-
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    using (var ps = PowerShell.Create())
+                    if (IsTransientError(ex) && attempt < maxRetries)
                     {
-                        ps.Runspace = _runspace;
-                        var command = ps.AddCommand("New-Team")
-                                        .AddParameter("DisplayName", displayName)
-                                        .AddParameter("Owner", ownerUpn)
-                                        .AddParameter("Visibility", visibility.ToString()) // Enum konwertowany na string
-                                        .AddParameter("ErrorAction", "Stop");
+                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)); // Exponential backoff
+                        _logger.LogWarning(ex,
+                            "Próba {Attempt}/{MaxRetries} wykonania komendy '{CommandName}' nie powiodła się. Ponawianie za {Delay}s",
+                            attempt, maxRetries, commandName, delay.TotalSeconds);
 
-                        if (!string.IsNullOrWhiteSpace(description))
-                        {
-                            command.AddParameter("Description", description);
-                        }
-
-                        if (!string.IsNullOrEmpty(template))
-                        {
-                            // Obsługa szablonu EDU_Class dla zespołów edukacyjnych
-                            if (template.Equals("EDU_Class", StringComparison.OrdinalIgnoreCase))
-                            {
-                                command.AddParameter("Template", "EDU_Class");
-                                _logger.LogInformation("Używanie szablonu EDU_Class dla zespołu edukacyjnego.");
-                            }
-                            else
-                            {
-                                // Dla innych szablonów przekaż wartość bez zmian
-                                command.AddParameter("Template", template);
-                                _logger.LogWarning("Używanie niestandardowego szablonu: {Template}. Zalecany szablon dla zespołów edukacyjnych to 'EDU_Class'.", template);
-                            }
-                        }
-
-                        var results = ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas CreateTeamAsync dla DisplayName '{DisplayName}': {Error}", displayName, error.ToString());
-                            }
-                            return null;
-                        }
-
-                        // New-Team zwraca obiekt zespołu, którego właściwość GroupId to ID zespołu
-                        var teamId = results.FirstOrDefault()?.Properties["GroupId"]?.Value?.ToString();
-                        if (string.IsNullOrEmpty(teamId))
-                        {
-                            _logger.LogError("Nie udało się uzyskać GroupId dla nowo utworzonego zespołu: {DisplayName}", displayName);
-                            return null;
-                        }
-
-                        _logger.LogInformation("Utworzono zespół '{DisplayName}' w Microsoft Teams o ID: {TeamId}{TeamType}",
-                            displayName, teamId, template == "EDU_Class" ? " (typ: edukacyjny)" : "");
-
-                        return teamId;
+                        await Task.Delay(delay);
+                    }
+                    else
+                    {
+                        break;
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Tworzenie zespołu '{DisplayName}' w Microsoft Teams nie powiodło się.", displayName);
-                    return null;
-                }
-            });
+            }
+
+            _logger.LogError(lastException, "Nie udało się wykonać komendy '{CommandName}' po {MaxRetries} próbach.",
+                commandName, maxRetries);
+            return null;
         }
 
-
-        /// <inheritdoc />
-        public async Task<bool> UpdateTeamPropertiesAsync(string teamId, string? newDisplayName = null, string? newDescription = null, TeamVisibility? newVisibility = null)
+        /// <summary>
+        /// Sprawdza czy błąd jest przejściowy i warto ponawiać.
+        /// </summary>
+        private bool IsTransientError(Exception ex)
         {
-            if (!_isConnected)
+            return ex.Message.Contains("throttl", StringComparison.OrdinalIgnoreCase) ||
+                   ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                   ex.Message.Contains("temporarily", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Waliduje stan runspace.
+        /// </summary>
+        private bool ValidateRunspaceState()
+        {
+            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
-                _logger.LogError("Nie można zaktualizować zespołu: Nie połączono z Teams. TeamID: {TeamId}", teamId);
+                _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
                 return false;
             }
+
+            if (!_isConnected)
+            {
+                _logger.LogWarning("Brak aktywnego połączenia z Microsoft Graph.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> CreateTeamAsync(
+            string displayName,
+            string description,
+            string ownerUpn,
+            TeamVisibility visibility = TeamVisibility.Private,
+            string? template = null)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_create_team";
+            var operation = new OperationHistory
+            {
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.TeamCreated,
+                TargetEntityType = "Team",
+                TargetEntityName = displayName,
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
+
+            try
+            {
+                if (!ValidateRunspaceState())
+                {
+                    operation.MarkAsFailed("Środowisko PowerShell nie jest gotowe.");
+                    return null;
+                }
+
+                if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(ownerUpn))
+                {
+                    operation.MarkAsFailed("DisplayName i OwnerUpn są wymagane.");
+                    _logger.LogError("DisplayName i OwnerUpn są wymagane.");
+                    return null;
+                }
+
+                // Pobierz ID właściciela z cache lub Graph
+                var ownerId = await GetUserIdAsync(ownerUpn);
+                if (string.IsNullOrEmpty(ownerId))
+                {
+                    operation.MarkAsFailed($"Nie znaleziono właściciela {ownerUpn}");
+                    _logger.LogError("Nie znaleziono właściciela {OwnerUpn}", ownerUpn);
+                    return null;
+                }
+
+                _logger.LogInformation("Tworzenie zespołu '{DisplayName}' dla właściciela {OwnerUpn}",
+                    displayName, ownerUpn);
+
+                var scriptBuilder = new StringBuilder();
+                scriptBuilder.AppendLine("$teamBody = @{");
+                scriptBuilder.AppendLine($"    displayName = '{displayName.Replace("'", "''")}'");
+                scriptBuilder.AppendLine($"    description = '{description.Replace("'", "''")}'");
+                scriptBuilder.AppendLine($"    visibility = '{visibility.ToString()}'");
+                scriptBuilder.AppendLine("    members = @(");
+                scriptBuilder.AppendLine("        @{");
+                scriptBuilder.AppendLine("            '@odata.type' = '#microsoft.graph.aadUserConversationMember'");
+                scriptBuilder.AppendLine("            roles = @('owner')");
+                scriptBuilder.AppendLine($"            'user@odata.bind' = 'https://graph.microsoft.com/v1.0/users(''{ownerId}'')'");
+                scriptBuilder.AppendLine("        }");
+                scriptBuilder.AppendLine("    )");
+
+                if (!string.IsNullOrEmpty(template))
+                {
+                    var graphTemplateId = MapTeamTemplate(template);
+                    scriptBuilder.AppendLine($"    'template@odata.bind' = 'https://graph.microsoft.com/v1.0/teamsTemplates(''{graphTemplateId}'')'");
+                    _logger.LogInformation("Używanie szablonu '{GraphTemplateId}'", graphTemplateId);
+                }
+
+                scriptBuilder.AppendLine("}");
+                scriptBuilder.AppendLine();
+                scriptBuilder.AppendLine("$newTeam = New-MgTeam -BodyParameter $teamBody -ErrorAction Stop");
+                scriptBuilder.AppendLine("$newTeam.Id");
+
+                var results = await ExecuteScriptAsync(scriptBuilder.ToString());
+                var teamId = results?.FirstOrDefault()?.BaseObject?.ToString();
+
+                if (!string.IsNullOrEmpty(teamId))
+                {
+                    operation.TargetEntityId = teamId;
+                    operation.MarkAsCompleted($"Zespół utworzony z ID: {teamId}");
+                    _logger.LogInformation("Utworzono zespół '{DisplayName}' o ID: {TeamId}",
+                        displayName, teamId);
+
+                    // Invalidate cache
+                    InvalidatePowerShellCache(teamId: teamId);
+                }
+                else
+                {
+                    operation.MarkAsFailed("Nie otrzymano ID zespołu.");
+                }
+
+                return teamId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd tworzenia zespołu '{DisplayName}'", displayName);
+                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace);
+                return null;
+            }
+            finally
+            {
+                await SaveOperationHistoryAsync(operation);
+            }
+        }
+
+        /// <summary>
+        /// Mapuje nazwy szablonów na identyfikatory Graph.
+        /// </summary>
+        private string MapTeamTemplate(string template)
+        {
+            return template switch
+            {
+                "EDU_Class" => "educationClass",
+                "EDU_Staff" => "educationStaff",
+                "EDU_PLC" => "educationPLC",
+                "EDU_StaffDepartment" => "educationStaffDepartment",
+                _ => template
+            };
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateTeamPropertiesAsync(
+            string teamId,
+            string? newDisplayName = null,
+            string? newDescription = null,
+            TeamVisibility? newVisibility = null)
+        {
+            if (!ValidateRunspaceState()) return false;
+
             if (string.IsNullOrWhiteSpace(teamId))
             {
-                _logger.LogError("Nie można zaktualizować zespołu: TeamID nie może być puste.");
+                _logger.LogError("TeamID nie może być puste.");
                 return false;
             }
+
+            // Sprawdź czy są jakieś zmiany
             if (newDisplayName == null && newDescription == null && newVisibility == null)
             {
-                _logger.LogInformation("Brak właściwości do aktualizacji dla zespołu TeamID: {TeamId}.", teamId);
-                return true; // Nie ma nic do zrobienia, uznajemy za sukces
+                _logger.LogInformation("Brak właściwości do aktualizacji dla zespołu {TeamId}.", teamId);
+                return true;
             }
 
-            _logger.LogInformation("Aktualizowanie właściwości zespołu ID: {TeamId}. Nowa nazwa: '{NewDisplayName}', Nowy opis: '{NewDescription}', Nowa widoczność: '{NewVisibility}'",
-                teamId, newDisplayName ?? "bez zmian", newDescription ?? "bez zmian", newVisibility?.ToString() ?? "bez zmian");
-
-            return await Task.Run(() =>
+            var parameters = new Dictionary<string, object>
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        var command = ps.AddCommand("Set-Team")
-                                        .AddParameter("GroupId", teamId)
-                                        .AddParameter("ErrorAction", "Stop");
+                { "GroupId", teamId }
+            };
 
-                        if (newDisplayName != null) command.AddParameter("DisplayName", newDisplayName);
-                        if (newDescription != null) command.AddParameter("Description", newDescription);
-                        if (newVisibility.HasValue) command.AddParameter("Visibility", newVisibility.Value.ToString());
+            if (newDisplayName != null) parameters.Add("DisplayName", newDisplayName);
+            if (newDescription != null) parameters.Add("Description", newDescription);
+            if (newVisibility.HasValue) parameters.Add("Visibility", newVisibility.Value.ToString());
 
-                        ps.Invoke();
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Update-MgTeam", parameters);
+                _logger.LogInformation("Zaktualizowano właściwości zespołu {TeamId}", teamId);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas UpdateTeamPropertiesAsync dla TeamID {TeamId}: {Error}", teamId, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Pomyślnie zaktualizowano właściwości zespołu ID: {TeamId}.", teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zaktualizować właściwości zespołu o ID: {TeamId}.", teamId);
-                    return false;
-                }
-            });
+                // Invalidate cache
+                InvalidatePowerShellCache(teamId: teamId);
+
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd aktualizacji zespołu {TeamId}", teamId);
+                return false;
+            }
         }
-
 
         /// <inheritdoc />
         public async Task<bool> ArchiveTeamAsync(string teamId)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można zarchiwizować zespołu: Nie połączono z Teams. TeamID: {TeamId}", teamId);
-                return false;
-            }
-            if (string.IsNullOrEmpty(teamId))
-            {
-                _logger.LogError("Nie można zarchiwizować zespołu: TeamID nie może być puste.");
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
 
-            _logger.LogInformation("Rozpoczynanie archiwizacji zespołu o ID: {TeamId} w Microsoft Teams.", teamId);
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Set-TeamArchivedState")
-                          .AddParameter("GroupId", teamId)
-                          .AddParameter("Archived", true)
-                          .AddParameter("ErrorAction", "Stop");
-
-                        ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas ArchiveTeamAsync dla TeamID {TeamId}: {Error}", teamId, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Zespół o ID: {TeamId} pomyślnie zarchiwizowany w Microsoft Teams.", teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zarchiwizować zespołu o ID: {TeamId} w Microsoft Teams.", teamId);
-                    return false;
-                }
-            });
+            return await UpdateTeamArchiveStateAsync(teamId, true);
         }
 
         /// <inheritdoc />
         public async Task<bool> UnarchiveTeamAsync(string teamId)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można przywrócić zespołu z archiwum: Nie połączono z Teams. TeamID: {TeamId}", teamId);
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
+
+            return await UpdateTeamArchiveStateAsync(teamId, false);
+        }
+
+        /// <summary>
+        /// Pomocnicza metoda do zmiany stanu archiwizacji.
+        /// </summary>
+        private async Task<bool> UpdateTeamArchiveStateAsync(string teamId, bool archived)
+        {
             if (string.IsNullOrEmpty(teamId))
             {
-                _logger.LogError("Nie można przywrócić zespołu z archiwum: TeamID nie może być puste.");
+                _logger.LogError("TeamID nie może być puste.");
                 return false;
             }
 
-            _logger.LogInformation("Rozpoczynanie przywracania zespołu o ID: {TeamId} z archiwum w Microsoft Teams.", teamId);
-            return await Task.Run(() =>
+            var action = archived ? "archiwizacji" : "przywracania";
+            _logger.LogInformation("Rozpoczynanie {Action} zespołu {TeamId}", action, teamId);
+
+            var parameters = new Dictionary<string, object>
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Set-TeamArchivedState")
-                          .AddParameter("GroupId", teamId)
-                          .AddParameter("Archived", false) // Ustawienie na false przywraca zespół
-                          .AddParameter("ErrorAction", "Stop");
+                { "GroupId", teamId },
+                { "IsArchived", archived }
+            };
 
-                        ps.Invoke();
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Update-MgTeam", parameters);
+                _logger.LogInformation("Pomyślnie wykonano {Action} zespołu {TeamId}", action, teamId);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas UnarchiveTeamAsync dla TeamID {TeamId}: {Error}", teamId, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Zespół o ID: {TeamId} pomyślnie przywrócony z archiwum w Microsoft Teams.", teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się przywrócić zespołu o ID: {TeamId} z archiwum w Microsoft Teams.", teamId);
-                    return false;
-                }
-            });
+                // Invalidate cache
+                InvalidatePowerShellCache(teamId: teamId);
+
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas {Action} zespołu {TeamId}", action, teamId);
+                return false;
+            }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteTeamAsync(string teamId)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można usunąć zespołu: Nie połączono z Teams. TeamID: {TeamId}", teamId);
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
+
             if (string.IsNullOrEmpty(teamId))
             {
-                _logger.LogError("Nie można usunąć zespołu: TeamID nie może być puste.");
+                _logger.LogError("TeamID nie może być puste.");
                 return false;
             }
 
-            _logger.LogInformation("Rozpoczynanie usuwania zespołu o ID: {TeamId} w Microsoft Teams.", teamId);
-            return await Task.Run(() =>
+            _logger.LogInformation("Usuwanie zespołu {TeamId}", teamId);
+
+            var parameters = new Dictionary<string, object>
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Remove-Team")
-                          .AddParameter("GroupId", teamId)
-                          .AddParameter("Confirm", false)
-                          .AddParameter("ErrorAction", "Stop");
+                { "GroupId", teamId },
+                { "Confirm", false }
+            };
 
-                        ps.Invoke();
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Remove-MgGroup", parameters);
+                _logger.LogInformation("Pomyślnie usunięto zespół {TeamId}", teamId);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas DeleteTeamAsync dla TeamID {TeamId}: {Error}", teamId, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Zespół o ID: {TeamId} pomyślnie usunięty w Microsoft Teams.", teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się usunąć zespołu o ID: {TeamId} w Microsoft Teams.", teamId);
-                    return false;
-                }
-            });
+                // Invalidate cache
+                InvalidatePowerShellCache(teamId: teamId, invalidateAll: true);
+
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd usuwania zespołu {TeamId}", teamId);
+                return false;
+            }
         }
 
         /// <inheritdoc />
         public async Task<bool> AddUserToTeamAsync(string teamId, string userUpn, string role)
         {
-            if (!_isConnected)
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_add_user";
+            var operation = new OperationHistory
             {
-                _logger.LogError("Nie można dodać użytkownika do zespołu: Nie połączono z Teams. TeamID: {TeamId}, User: {UserUpn}", teamId, userUpn);
-                return false;
-            }
-            if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(userUpn) || string.IsNullOrEmpty(role))
-            {
-                _logger.LogError("Nie można dodać użytkownika do zespołu: TeamID, UserUPN oraz Role są wymagane. TeamID: {TeamId}, User: {UserUpn}, Role: {Role}", teamId, userUpn, role);
-                return false;
-            }
-            if (!role.Equals("Owner", StringComparison.OrdinalIgnoreCase) && !role.Equals("Member", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogError("Nie można dodać użytkownika do zespołu: Nieprawidłowa rola '{Role}'. Dopuszczalne wartości to 'Owner' lub 'Member'.", role);
-                return false;
-            }
+                Id = Guid.NewGuid().ToString(),
+                Type = OperationType.MemberAdded,
+                TargetEntityType = "TeamMember",
+                TargetEntityId = teamId,
+                TargetEntityName = $"{userUpn} -> Team {teamId}",
+                CreatedBy = currentUserUpn,
+                IsActive = true
+            };
+            operation.MarkAsStarted();
 
-            _logger.LogInformation("Dodawanie użytkownika {UserUpn} do zespołu ID: {TeamId} z rolą {Role} w Microsoft Teams.", userUpn, teamId, role);
-            return await Task.Run(() =>
+            try
             {
-                try
+                if (!ValidateRunspaceState())
                 {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Add-TeamUser")
-                          .AddParameter("GroupId", teamId)
-                          .AddParameter("User", userUpn)
-                          .AddParameter("Role", role)
-                          .AddParameter("ErrorAction", "Stop");
-
-                        ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas AddUserToTeamAsync dla TeamID {TeamId}, User {UserUpn}: {Error}", teamId, userUpn, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Użytkownik {UserUpn} pomyślnie dodany do zespołu ID: {TeamId} z rolą {Role} w Microsoft Teams.", userUpn, teamId, role);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się dodać użytkownika {UserUpn} do zespołu ID: {TeamId} w Microsoft Teams.", userUpn, teamId);
+                    operation.MarkAsFailed("Środowisko PowerShell nie jest gotowe.");
                     return false;
                 }
-            });
+
+                if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(userUpn) || string.IsNullOrEmpty(role))
+                {
+                    operation.MarkAsFailed("TeamID, UserUPN i Role są wymagane.");
+                    _logger.LogError("TeamID, UserUPN i Role są wymagane.");
+                    return false;
+                }
+
+                if (!role.Equals("Owner", StringComparison.OrdinalIgnoreCase) &&
+                    !role.Equals("Member", StringComparison.OrdinalIgnoreCase))
+                {
+                    operation.MarkAsFailed($"Nieprawidłowa rola '{role}'.");
+                    _logger.LogError("Nieprawidłowa rola '{Role}'. Dozwolone: Owner, Member.", role);
+                    return false;
+                }
+
+                // Pobierz ID użytkownika z cache
+                var userId = await GetUserIdAsync(userUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    operation.MarkAsFailed($"Nie znaleziono użytkownika {userUpn}");
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return false;
+                }
+
+                _logger.LogInformation("Dodawanie użytkownika {UserUpn} do zespołu {TeamId} jako {Role}",
+                    userUpn, teamId, role);
+
+                var cmdlet = role.Equals("Owner", StringComparison.OrdinalIgnoreCase)
+                    ? "Add-MgTeamOwner"
+                    : "Add-MgTeamMember";
+
+                var script = $"{cmdlet} -TeamId '{teamId}' -UserId '{userId}' -ErrorAction Stop";
+                var results = await ExecuteScriptAsync(script);
+
+                if (results != null)
+                {
+                    operation.MarkAsCompleted("Użytkownik dodany do zespołu.");
+                    _logger.LogInformation("Pomyślnie dodano użytkownika {UserUpn} do zespołu {TeamId}",
+                        userUpn, teamId);
+
+                    // Invalidate team cache
+                    InvalidatePowerShellCache(teamId: teamId);
+                    return true;
+                }
+                else
+                {
+                    operation.MarkAsFailed("Błąd podczas dodawania użytkownika.");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd dodawania użytkownika {UserUpn} do zespołu {TeamId}",
+                    userUpn, teamId);
+                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace);
+                return false;
+            }
+            finally
+            {
+                await SaveOperationHistoryAsync(operation);
+            }
         }
 
         /// <inheritdoc />
         public async Task<bool> RemoveUserFromTeamAsync(string teamId, string userUpn)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można usunąć użytkownika z zespołu: Nie połączono z Teams. TeamID: {TeamId}, User: {UserUpn}", teamId, userUpn);
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
+
             if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(userUpn))
             {
-                _logger.LogError("Nie można usunąć użytkownika z zespołu: TeamID oraz UserUPN są wymagane. TeamID: {TeamId}, User: {UserUpn}", teamId, userUpn);
+                _logger.LogError("TeamID i UserUPN są wymagane.");
                 return false;
             }
 
-            _logger.LogInformation("Usuwanie użytkownika {UserUpn} z zespołu ID: {TeamId} w Microsoft Teams.", userUpn, teamId);
-            return await Task.Run(() =>
+            var userId = await GetUserIdAsync(userUpn);
+            if (string.IsNullOrEmpty(userId))
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Remove-TeamUser")
-                          .AddParameter("GroupId", teamId)
-                          .AddParameter("User", userUpn)
-                          .AddParameter("Confirm", false) // Unikanie interaktywnego potwierdzenia
-                          .AddParameter("ErrorAction", "Stop");
+                _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                return false;
+            }
 
-                        ps.Invoke();
+            _logger.LogInformation("Usuwanie użytkownika {UserUpn} z zespołu {TeamId}", userUpn, teamId);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas RemoveUserFromTeamAsync dla TeamID {TeamId}, User {UserUpn}: {Error}", teamId, userUpn, error.ToString());
-                            }
-                            return false;
-                        }
-                        _logger.LogInformation("Użytkownik {UserUpn} pomyślnie usunięty z zespołu ID: {TeamId} w Microsoft Teams.", userUpn, teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
+            try
+            {
+                var script = $@"
+                    $teamId = '{teamId.Replace("'", "''")}'
+                    $userId = '{userId}'
+                    
+                    $isOwner = (Get-MgTeamOwner -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
+                    $isMember = (Get-MgTeamMember -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
+                    
+                    if ($isOwner) {{
+                        Remove-MgTeamOwner -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                    }} elseif ($isMember) {{
+                        Remove-MgTeamMember -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                    }}
+                    
+                    $true
+                ";
+
+                var results = await ExecuteScriptAsync(script);
+                var success = results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+
+                if (success)
                 {
-                    _logger.LogError(ex, "Nie udało się usunąć użytkownika {UserUpn} z zespołu ID: {TeamId} w Microsoft Teams.", userUpn, teamId);
-                    return false;
+                    _logger.LogInformation("Pomyślnie usunięto użytkownika {UserUpn} z zespołu {TeamId}",
+                        userUpn, teamId);
+
+                    // Invalidate cache
+                    InvalidatePowerShellCache(teamId: teamId);
                 }
-            });
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd usuwania użytkownika {UserUpn} z zespołu {TeamId}",
+                    userUpn, teamId);
+                return false;
+            }
         }
 
         /// <inheritdoc />
-        public async Task<string?> CreateM365UserAsync(string displayName, string userPrincipalName, string password, string usageLocation = "PL", List<string>? licenseSkuIds = null, bool accountEnabled = true)
+        public async Task<string?> CreateM365UserAsync(
+            string displayName,
+            string userPrincipalName,
+            string password,
+            string? usageLocation = null,
+            List<string>? licenseSkuIds = null,
+            bool accountEnabled = true)
         {
-            if (!_isConnected)
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(displayName) ||
+                string.IsNullOrWhiteSpace(userPrincipalName) ||
+                string.IsNullOrWhiteSpace(password))
             {
-                _logger.LogError("Nie można utworzyć użytkownika M365: Nie połączono (wymagane połączenie z usługami M365 via Teams module).");
+                _logger.LogError("DisplayName, UserPrincipalName i Password są wymagane.");
                 return null;
             }
-            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(userPrincipalName) || string.IsNullOrWhiteSpace(password))
+
+            // Użyj domyślnej lokalizacji jeśli nie podano
+            usageLocation ??= DefaultUsageLocation;
+
+            _logger.LogInformation("Tworzenie użytkownika M365: {UserPrincipalName}", userPrincipalName);
+
+            try
             {
-                _logger.LogError("Nie można utworzyć użytkownika M365: DisplayName, UserPrincipalName oraz Password są wymagane.");
-                return null;
-            }
+                var script = $@"
+                    $passwordProfile = @{{
+                        password = '{password.Replace("'", "''")}'
+                        forceChangePasswordNextSignIn = $false
+                    }}
+                    
+                    $user = New-MgUser `
+                        -DisplayName '{displayName.Replace("'", "''")}' `
+                        -UserPrincipalName '{userPrincipalName.Replace("'", "''")}' `
+                        -MailNickname '{userPrincipalName.Split('@')[0].Replace("'", "''")}' `
+                        -PasswordProfile $passwordProfile `
+                        -AccountEnabled ${accountEnabled} `
+                        -UsageLocation '{usageLocation.Replace("'", "''")}' `
+                        -ErrorAction Stop
+                    
+                    $user.Id
+                ";
 
-            _logger.LogInformation("Tworzenie użytkownika M365: UPN='{UserPrincipalName}', DisplayName='{DisplayName}'", userPrincipalName, displayName);
+                var results = await ExecuteScriptAsync(script);
+                var userId = results?.FirstOrDefault()?.BaseObject?.ToString();
 
-            return await Task.Run(() =>
-            {
-                try
+                if (string.IsNullOrEmpty(userId))
                 {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-
-                        // Najpierw importuj moduł AzureAD jeśli potrzebny
-                        ps.AddScript("if (!(Get-Module -ListAvailable -Name AzureAD)) { Import-Module AzureAD }");
-                        ps.Invoke();
-                        ps.Commands.Clear();
-
-                        // Utwórz PasswordProfile
-                        ps.AddScript(@"
-                    $PasswordProfile = New-Object -TypeName Microsoft.Open.AzureAD.Model.PasswordProfile
-                    $PasswordProfile.Password = '" + password.Replace("'", "''") + @"'
-                    $PasswordProfile.ForceChangePasswordNextLogin = $false
-                ");
-                        ps.Invoke();
-                        ps.Commands.Clear();
-
-                        // Utwórz użytkownika
-                        var command = ps.AddCommand("New-AzureADUser")
-                                       .AddParameter("DisplayName", displayName)
-                                       .AddParameter("UserPrincipalName", userPrincipalName)
-                                       .AddParameter("PasswordProfile", "$PasswordProfile")
-                                       .AddParameter("AccountEnabled", accountEnabled)
-                                       .AddParameter("UsageLocation", usageLocation)
-                                       .AddParameter("MailNickName", userPrincipalName.Split('@')[0])
-                                       .AddParameter("ErrorAction", "Stop");
-
-                        var results = ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas CreateM365UserAsync dla UPN {UserPrincipalName}: {Error}", userPrincipalName, error.ToString());
-                            }
-                            return null;
-                        }
-
-                        var userId = results.FirstOrDefault()?.Properties["ObjectId"]?.Value?.ToString();
-                        if (string.IsNullOrEmpty(userId))
-                        {
-                            _logger.LogError("Nie udało się uzyskać ObjectId dla nowo utworzonego użytkownika: {UserPrincipalName}", userPrincipalName);
-                            return null;
-                        }
-
-                        // Przypisz licencje jeśli podano
-                        if (licenseSkuIds != null && licenseSkuIds.Count > 0)
-                        {
-                            ps.Commands.Clear();
-                            foreach (var skuId in licenseSkuIds)
-                            {
-                                ps.AddCommand("Set-AzureADUserLicense")
-                                  .AddParameter("ObjectId", userId)
-                                  .AddParameter("AssignedLicenses", new { AddLicenses = new[] { new { SkuId = skuId } } })
-                                  .AddParameter("ErrorAction", "Continue");
-                                ps.Invoke();
-                                ps.Commands.Clear();
-                            }
-                        }
-
-                        _logger.LogInformation("Utworzono użytkownika M365 '{UserPrincipalName}' o ID: {UserId}", userPrincipalName, userId);
-                        return userId;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się utworzyć użytkownika M365: {UserPrincipalName}", userPrincipalName);
+                    _logger.LogError("Nie udało się utworzyć użytkownika {UserPrincipalName}",
+                        userPrincipalName);
                     return null;
                 }
-            });
+
+                // Przypisz licencje jeśli podano
+                if (licenseSkuIds?.Count > 0)
+                {
+                    await AssignLicensesToUserAsync(userId, licenseSkuIds);
+                }
+
+                _logger.LogInformation("Utworzono użytkownika {UserPrincipalName} o ID: {UserId}",
+                    userPrincipalName, userId);
+
+                // Invalidate user cache
+                InvalidatePowerShellCache(userId: userId, userUpn: userPrincipalName);
+
+                return userId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd tworzenia użytkownika {UserPrincipalName}", userPrincipalName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Pomocnicza metoda do przypisywania wielu licencji.
+        /// </summary>
+        private async Task<bool> AssignLicensesToUserAsync(string userId, List<string> licenseSkuIds)
+        {
+            try
+            {
+                var addLicenses = string.Join(",",
+                    licenseSkuIds.Select(id => $"@{{SkuId='{id}'}}"));
+
+                var script = $@"
+                    Set-MgUserLicense -UserId '{userId}' `
+                        -AddLicenses @({addLicenses}) `
+                        -RemoveLicenses @() `
+                        -ErrorAction Stop
+                ";
+
+                await ExecuteScriptAsync(script);
+                _logger.LogInformation("Przypisano {Count} licencji do użytkownika {UserId}",
+                    licenseSkuIds.Count, userId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd przypisywania licencji do użytkownika {UserId}", userId);
+                return false;
+            }
         }
 
         /// <inheritdoc />
         public async Task<bool> SetM365UserAccountStateAsync(string userPrincipalName, bool isEnabled)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można zmienić stanu konta użytkownika M365: Nie połączono.");
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
+
             if (string.IsNullOrWhiteSpace(userPrincipalName))
             {
-                _logger.LogError("Nie można zmienić stanu konta użytkownika M365: UserPrincipalName jest wymagany.");
+                _logger.LogError("UserPrincipalName jest wymagany.");
                 return false;
             }
 
-            _logger.LogInformation("Zmiana stanu konta użytkownika M365: UPN='{UserPrincipalName}', Włączone={IsEnabled}", userPrincipalName, isEnabled);
+            _logger.LogInformation("Zmiana stanu konta {UserPrincipalName} na: {IsEnabled}",
+                userPrincipalName, isEnabled ? "włączone" : "wyłączone");
 
-            return await Task.Run(() =>
+            var parameters = new Dictionary<string, object>
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Set-AzureADUser")
-                          .AddParameter("ObjectId", userPrincipalName)
-                          .AddParameter("AccountEnabled", isEnabled)
-                          .AddParameter("ErrorAction", "Stop");
+                { "UserId", userPrincipalName },
+                { "AccountEnabled", isEnabled }
+            };
 
-                        ps.Invoke();
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Update-MgUser", parameters);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas SetM365UserAccountStateAsync dla UPN {UserPrincipalName}: {Error}", userPrincipalName, error.ToString());
-                            }
-                            return false;
-                        }
+                // Invalidate user cache
+                InvalidatePowerShellCache(userUpn: userPrincipalName);
 
-                        _logger.LogInformation("Pomyślnie zmieniono stan konta użytkownika {UserPrincipalName} na: {IsEnabled}", userPrincipalName, isEnabled ? "włączone" : "wyłączone");
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zmienić stanu konta użytkownika M365: {UserPrincipalName}", userPrincipalName);
-                    return false;
-                }
-            });
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd zmiany stanu konta {UserPrincipalName}", userPrincipalName);
+                return false;
+            }
         }
-
 
         /// <inheritdoc />
         public async Task<bool> UpdateM365UserPrincipalNameAsync(string currentUpn, string newUpn)
         {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można zaktualizować UPN użytkownika M365: Nie połączono.");
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
+
             if (string.IsNullOrWhiteSpace(currentUpn) || string.IsNullOrWhiteSpace(newUpn))
             {
-                _logger.LogError("Nie można zaktualizować UPN użytkownika M365: currentUpn i newUpn są wymagane.");
+                _logger.LogError("currentUpn i newUpn są wymagane.");
                 return false;
             }
 
-            _logger.LogInformation("Aktualizacja UPN użytkownika M365 z '{CurrentUpn}' na '{NewUpn}'", currentUpn, newUpn);
+            _logger.LogInformation("Aktualizacja UPN użytkownika z '{CurrentUpn}' na '{NewUpn}'", currentUpn, newUpn);
 
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddCommand("Set-AzureADUser")
-                          .AddParameter("ObjectId", currentUpn)
-                          .AddParameter("UserPrincipalName", newUpn)
-                          .AddParameter("ErrorAction", "Stop");
-
-                        ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas UpdateM365UserPrincipalNameAsync dla UPN {CurrentUpn}: {Error}", currentUpn, error.ToString());
-                            }
-                            return false;
-                        }
-
-                        _logger.LogInformation("Pomyślnie zaktualizowano UPN użytkownika z '{CurrentUpn}' na '{NewUpn}'", currentUpn, newUpn);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zaktualizować UPN użytkownika M365 z '{CurrentUpn}' na '{NewUpn}'", currentUpn, newUpn);
-                    return false;
-                }
-            });
-        }
-
-        /// <inheritdoc />
-        public async Task<Collection<PSObject>?> GetTeamChannelsAsync(string teamId)
-        {
-            // Sprawdzenie połączenia
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można pobrać kanałów: Nie połączono z Teams. TeamID: {TeamId}", teamId);
-                return null;
-            }
-            // Walidacja parametru
-            if (string.IsNullOrWhiteSpace(teamId))
-            {
-                _logger.LogError("Nie można pobrać kanałów: TeamID nie może być puste.");
-                return null;
-            }
-
-            _logger.LogInformation("Pobieranie wszystkich kanałów dla zespołu ID: {TeamId}", teamId);
-            // Skrypt PowerShell do wykonania
-            string script = $"Get-TeamChannel -GroupId \"{teamId}\"";
-
-            // Wywołanie generycznej metody ExecuteScriptAsync
-            return await ExecuteScriptAsync(script);
-        }
-
-        /// <inheritdoc />
-        public async Task<PSObject?> GetTeamChannelAsync(string teamId, string channelDisplayName)
-        {
-            // Sprawdzenie połączenia
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można pobrać kanału: Nie połączono z Teams. TeamID: {TeamId}, Channel: {ChannelDisplayName}", teamId, channelDisplayName);
-                return null;
-            }
-            // Walidacja parametrów
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelDisplayName))
-            {
-                _logger.LogError("Nie można pobrać kanału: TeamID oraz ChannelDisplayName są wymagane. TeamID: '{TeamId}', ChannelDisplayName: '{ChannelDisplayName}'", teamId, channelDisplayName);
-                return null;
-            }
-
-            _logger.LogInformation("Pobieranie kanału '{ChannelDisplayName}' dla zespołu ID: {TeamId}", channelDisplayName, teamId);
-            // Skrypt PowerShell do wykonania
-            string script = $"Get-TeamChannel -GroupId \"{teamId}\" -DisplayName \"{channelDisplayName}\"";
-
-            // Wywołanie generycznej metody ExecuteScriptAsync
-            var result = await ExecuteScriptAsync(script);
-            // Get-TeamChannel -DisplayName zwraca pojedynczy obiekt (lub nic, jeśli nie znaleziono)
-            return result?.FirstOrDefault();
-        }
-
-        /// <inheritdoc />
-        public async Task<bool> RemoveTeamChannelAsync(string teamId, string channelDisplayName)
-        {
-            // Sprawdzenie połączenia
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można usunąć kanału: Nie połączono z Teams. TeamID: {TeamId}, Kanał: {ChannelDisplayName}", teamId, channelDisplayName);
-                return false;
-            }
-            // Walidacja parametrów
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelDisplayName))
-            {
-                _logger.LogError("Nie można usunąć kanału: TeamID oraz ChannelDisplayName są wymagane. TeamID: '{TeamId}', ChannelDisplayName: '{ChannelDisplayName}'", teamId, channelDisplayName);
-                return false;
-            }
-
-            // Ostrzeżenie przed próbą usunięcia kanału "Ogólny" (General)
-            // To sprawdzenie może być również realizowane na poziomie logiki biznesowej serwisu (np. TeamService),
-            // ale dodatkowe zabezpieczenie w PowerShellService nie zaszkodzi.
-            if (channelDisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase) ||
-                channelDisplayName.Equals("General", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning("Próba usunięcia kanału ogólnego ('{ChannelDisplayName}') dla zespołu ID: {TeamId}. Ta operacja jest niedozwolona przez Microsoft Teams i cmdlet prawdopodobnie zwróci błąd.", channelDisplayName, teamId);
-                // Można zdecydować o zwróceniu false od razu, lub pozwolić PowerShellowi zwrócić błąd.
-                // Dla spójności z zachowaniem cmdlet, pozwólmy na próbę i obsłużmy błąd z PowerShell.
-            }
-
-            _logger.LogInformation("Usuwanie kanału '{ChannelDisplayName}' z zespołu ID: {TeamId}", channelDisplayName, teamId);
-
-            // Skrypt PowerShell do wykonania - parametr -Confirm:$false jest używany do uniknięcia interaktywnego potwierdzenia
-            string script = $"Remove-TeamChannel -GroupId \"{teamId}\" -DisplayName \"{channelDisplayName}\" -Confirm:$false";
-
-            var results = await ExecuteScriptAsync(script);
-
-            // Remove-TeamChannel zwykle nie zwraca obiektu przy sukcesie.
-            // Sukces jest sygnalizowany brakiem błędów.
-            // Zakładamy, że ExecuteScriptAsync zwróci null, jeśli wystąpił błąd wykonania skryptu lub błąd z samego cmdleta.
-            if (results == null)
-            {
-                _logger.LogError("Wywołanie ExecuteScriptAsync dla RemoveTeamChannelAsync nie powiodło się lub zwróciło błędy. TeamID: {TeamId}, Kanał: {ChannelDisplayName}", teamId, channelDisplayName);
-                return false;
-            }
-
-            _logger.LogInformation("Pomyślnie wykonano (lub próbowano wykonać) usunięcie kanału '{ChannelDisplayName}' w zespole ID: {TeamId}", channelDisplayName, teamId);
-            return true; // Jeśli doszliśmy tutaj, zakładamy, że operacja została zainicjowana poprawnie.
-        }
-
-        /// <inheritdoc />
-        public async Task<PSObject?> CreateTeamChannelAsync(string teamId, string displayName, bool isPrivate = false, string? description = null)
-        {
-            // Sprawdzenie połączenia
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można utworzyć kanału: Nie połączono z Teams. TeamID: {TeamId}", teamId);
-                return null;
-            }
-            // Walidacja parametrów
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(displayName))
-            {
-                _logger.LogError("Nie można utworzyć kanału: TeamID oraz DisplayName są wymagane. TeamID: '{TeamId}', DisplayName: '{DisplayName}'", teamId, displayName);
-                return null;
-            }
-
-            _logger.LogInformation("Tworzenie kanału '{DisplayName}' w zespole ID: {TeamId}. Prywatny: {IsPrivate}", displayName, teamId, isPrivate);
-
-            // Użyj ExecuteScriptAsync z parametrami dla bezpieczeństwa
             var parameters = new Dictionary<string, object>
             {
-                { "TeamId", teamId },
-                { "DisplayName", displayName }
+                { "UserId", currentUpn },
+                { "UserPrincipalName", newUpn }
             };
 
-            if (isPrivate)
+            try
             {
-                parameters.Add("MembershipType", "Private");
-            }
+                var results = await ExecuteCommandWithRetryAsync("Update-MgUser", parameters);
 
-            if (!string.IsNullOrWhiteSpace(description))
+                // Invalidate cache for both UPNs
+                InvalidatePowerShellCache(userUpn: currentUpn);
+                InvalidatePowerShellCache(userUpn: newUpn);
+
+                return results != null;
+            }
+            catch (Exception ex)
             {
-                parameters.Add("Description", description);
+                _logger.LogError(ex, "Błąd aktualizacji UPN użytkownika z '{CurrentUpn}' na '{NewUpn}'", currentUpn, newUpn);
+                return false;
             }
-
-            // Zamiast budować skrypt, użyj parametryzowanego podejścia
-            var result = await ExecuteCommandAsync("New-TeamChannel", parameters);
-            return result?.FirstOrDefault();
         }
 
         /// <inheritdoc />
-        public async Task<bool> UpdateTeamChannelAsync(string teamId, string currentDisplayName, string? newDisplayName = null, string? newDescription = null)
+        public async Task<bool> UpdateM365UserPropertiesAsync(
+            string userUpn,
+            string? department = null,
+            string? jobTitle = null,
+            string? firstName = null,
+            string? lastName = null)
         {
-            // Sprawdzenie połączenia
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można zaktualizować kanału: Nie połączono z Teams. TeamID: {TeamId}, Kanał: {CurrentDisplayName}", teamId, currentDisplayName);
-                return false;
-            }
+            if (!ValidateRunspaceState()) return false;
 
-            // Walidacja parametrów
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(currentDisplayName))
-            {
-                _logger.LogError("Nie można zaktualizować kanału: TeamID oraz CurrentDisplayName są wymagane. TeamID: '{TeamId}', CurrentDisplayName: '{CurrentDisplayName}'", teamId, currentDisplayName);
-                return false;
-            }
-
-            // Sprawdzenie czy są jakiekolwiek zmiany do wprowadzenia
-            if (newDisplayName == null && newDescription == null)
-            {
-                _logger.LogInformation("Brak właściwości do aktualizacji dla kanału '{CurrentChannelName}' w zespole ID: {TeamId}.", currentDisplayName, teamId);
-                return true;
-            }
-
-            _logger.LogInformation("Aktualizowanie kanału '{CurrentChannelName}' w zespole ID: {TeamId}. Nowa nazwa: '{NewDisplayName}', Nowy opis: '{NewDescription}'",
-                currentDisplayName, teamId, newDisplayName ?? "bez zmian", newDescription ?? "bez zmian");
-
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    var scriptBuilder = new StringBuilder($"Set-TeamChannel -GroupId \"{teamId}\" -CurrentName \"{currentDisplayName}\"");
-
-                    if (!string.IsNullOrWhiteSpace(newDisplayName))
-                    {
-                        scriptBuilder.Append($" -NewName \"{newDisplayName.Replace("\"", "\"\"")}\"");
-                    }
-
-                    if (newDescription != null)
-                    {
-                        scriptBuilder.Append($" -Description \"{newDescription.Replace("\"", "\"\"")}\"");
-                    }
-
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        ps.AddScript(scriptBuilder.ToString());
-                        ps.Invoke();
-
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas UpdateTeamChannelAsync dla TeamID {TeamId}, Kanał {CurrentChannelName}: {Error}",
-                                    teamId, currentDisplayName, error.ToString());
-                            }
-                            return false;
-                        }
-
-                        _logger.LogInformation("Pomyślnie zaktualizowano kanał '{CurrentChannelName}' w zespole ID: {TeamId}", currentDisplayName, teamId);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zaktualizować kanału '{CurrentChannelName}' w zespole ID: {TeamId}", currentDisplayName, teamId);
-                    return false;
-                }
-            });
-        }
-
-        /// <inheritdoc />
-        public async Task<bool> UpdateM365UserPropertiesAsync(string userUpn, string? department = null, string? jobTitle = null, string? firstName = null, string? lastName = null)
-        {
-            if (!_isConnected)
-            {
-                _logger.LogError("Nie można zaktualizować właściwości użytkownika M365: Nie połączono.");
-                return false;
-            }
             if (string.IsNullOrWhiteSpace(userUpn))
             {
-                _logger.LogError("Nie można zaktualizować właściwości użytkownika M365: userUpn jest wymagany.");
+                _logger.LogError("userUpn jest wymagany.");
                 return false;
             }
 
             // Sprawdzenie czy są jakiekolwiek zmiany do wprowadzenia
             if (department == null && jobTitle == null && firstName == null && lastName == null)
             {
-                _logger.LogInformation("Brak właściwości do aktualizacji dla użytkownika: {UserUpn}", userUpn);
+                _logger.LogInformation("Brak właściwości do aktualizacji dla użytkownika: {UserUpn}.", userUpn);
                 return true;
             }
 
-            _logger.LogInformation("Aktualizacja właściwości użytkownika M365: UPN='{UserUpn}', Dział='{Department}', Stanowisko='{JobTitle}', Imię='{FirstName}', Nazwisko='{LastName}'",
-                userUpn, department ?? "bez zmian", jobTitle ?? "bez zmian", firstName ?? "bez zmian", lastName ?? "bez zmian");
+            _logger.LogInformation("Aktualizacja właściwości użytkownika: {UserUpn}", userUpn);
 
-            return await Task.Run(() =>
+            var parameters = new Dictionary<string, object>
             {
-                try
-                {
-                    using (var ps = PowerShell.Create())
-                    {
-                        ps.Runspace = _runspace;
-                        var command = ps.AddCommand("Set-AzureADUser")
-                                       .AddParameter("ObjectId", userUpn)
-                                       .AddParameter("ErrorAction", "Stop");
+                { "UserId", userUpn }
+            };
 
-                        if (!string.IsNullOrWhiteSpace(department))
-                        {
-                            command.AddParameter("Department", department);
-                        }
-                        if (!string.IsNullOrWhiteSpace(jobTitle))
-                        {
-                            command.AddParameter("JobTitle", jobTitle);
-                        }
-                        if (!string.IsNullOrWhiteSpace(firstName))
-                        {
-                            command.AddParameter("GivenName", firstName);
-                        }
-                        if (!string.IsNullOrWhiteSpace(lastName))
-                        {
-                            command.AddParameter("Surname", lastName);
-                        }
+            if (!string.IsNullOrWhiteSpace(department))
+                parameters.Add("Department", department);
+            if (!string.IsNullOrWhiteSpace(jobTitle))
+                parameters.Add("JobTitle", jobTitle);
+            if (!string.IsNullOrWhiteSpace(firstName))
+                parameters.Add("GivenName", firstName);
+            if (!string.IsNullOrWhiteSpace(lastName))
+                parameters.Add("Surname", lastName);
 
-                        ps.Invoke();
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Update-MgUser", parameters);
 
-                        if (ps.HadErrors)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell podczas UpdateM365UserPropertiesAsync dla UPN {UserUpn}: {Error}", userUpn, error.ToString());
-                            }
-                            return false;
-                        }
+                // Invalidate user cache
+                InvalidatePowerShellCache(userUpn: userUpn);
 
-                        _logger.LogInformation("Pomyślnie zaktualizowano właściwości użytkownika: {UserUpn}", userUpn);
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Nie udało się zaktualizować właściwości użytkownika M365: {UserUpn}", userUpn);
-                    return false;
-                }
-            });
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd aktualizacji właściwości użytkownika: {UserUpn}", userUpn);
+                return false;
+            }
         }
 
         /// <inheritdoc />
-        public async Task<Collection<PSObject>?> ExecuteScriptAsync(string script, Dictionary<string, object>? parameters = null)
+        public async Task<PSObject?> GetTeamChannelAsync(string teamId, string channelDisplayName)
         {
-            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelDisplayName))
             {
-                _logger.LogError("Nie można wykonać skryptu: środowisko PowerShell nie jest poprawnie zainicjowane lub otwarte.");
+                _logger.LogError("TeamID i ChannelDisplayName są wymagane.");
                 return null;
             }
 
-            if (!_isConnected)
+            _logger.LogInformation("Pobieranie kanału '{ChannelDisplayName}' dla zespołu {TeamId}", channelDisplayName, teamId);
+
+            try
             {
-                _logger.LogWarning("Próba wykonania skryptu bez aktywnego połączenia z Teams. Skrypt może się nie powiesć, jeśli wymaga modułu Teams.");
+                var allChannels = await GetTeamChannelsAsync(teamId);
+                if (allChannels == null)
+                {
+                    _logger.LogError("Nie udało się pobrać listy kanałów dla zespołu {TeamId}", teamId);
+                    return null;
+                }
+
+                var foundChannel = allChannels.FirstOrDefault(c =>
+                    c.Properties["DisplayName"]?.Value?.ToString()?.Equals(channelDisplayName, StringComparison.OrdinalIgnoreCase) ?? false);
+
+                if (foundChannel == null)
+                {
+                    _logger.LogInformation("Kanał '{ChannelDisplayName}' nie znaleziony w zespole {TeamId}", channelDisplayName, teamId);
+                }
+
+                return foundChannel;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania kanału '{ChannelDisplayName}' dla zespołu {TeamId}", channelDisplayName, teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<PSObject?> CreateTeamChannelAsync(string teamId, string displayName, bool isPrivate = false, string? description = null)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(displayName))
+            {
+                _logger.LogError("TeamID i DisplayName są wymagane.");
+                return null;
+            }
+
+            _logger.LogInformation("Tworzenie kanału '{DisplayName}' w zespole {TeamId}. Prywatny: {IsPrivate}", displayName, teamId, isPrivate);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId },
+                    { "DisplayName", displayName }
+                };
+
+                if (isPrivate)
+                {
+                    parameters.Add("MembershipType", "Private");
+                }
+
+                if (!string.IsNullOrWhiteSpace(description))
+                {
+                    parameters.Add("Description", description);
+                }
+
+                var results = await ExecuteCommandWithRetryAsync("New-MgTeamChannel", parameters);
+
+                // Invalidate channels cache for this team
+                InvalidatePowerShellCache(teamId: teamId);
+
+                return results?.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Nie udało się utworzyć kanału '{DisplayName}' w zespole {TeamId}", displayName, teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateTeamChannelAsync(string teamId, string currentDisplayName, string? newDisplayName = null, string? newDescription = null)
+        {
+            if (!ValidateRunspaceState()) return false;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(currentDisplayName))
+            {
+                _logger.LogError("TeamID i CurrentDisplayName są wymagane.");
+                return false;
+            }
+
+            // Sprawdzenie czy są jakiekolwiek zmiany do wprowadzenia
+            if (newDisplayName == null && newDescription == null)
+            {
+                _logger.LogInformation("Brak właściwości do aktualizacji dla kanału '{CurrentChannelName}' w zespole {TeamId}.", currentDisplayName, teamId);
+                return true;
+            }
+
+            _logger.LogInformation("Aktualizowanie kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
+
+            try
+            {
+                // Najpierw znajdź kanał
+                var channelToUpdate = await GetTeamChannelAsync(teamId, currentDisplayName);
+                if (channelToUpdate == null || channelToUpdate.Properties["Id"]?.Value == null)
+                {
+                    _logger.LogError("Nie znaleziono kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
+                    return false;
+                }
+
+                string channelId = channelToUpdate.Properties["Id"].Value.ToString()!;
+
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId },
+                    { "ChannelId", channelId }
+                };
+
+                if (!string.IsNullOrWhiteSpace(newDisplayName))
+                {
+                    parameters.Add("DisplayName", newDisplayName);
+                }
+
+                if (newDescription != null)
+                {
+                    parameters.Add("Description", newDescription);
+                }
+
+                var results = await ExecuteCommandWithRetryAsync("Update-MgTeamChannel", parameters);
+
+                // Invalidate channels cache
+                InvalidatePowerShellCache(teamId: teamId);
+
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Nie udało się zaktualizować kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> RemoveTeamChannelAsync(string teamId, string channelDisplayName)
+        {
+            if (!ValidateRunspaceState()) return false;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelDisplayName))
+            {
+                _logger.LogError("TeamID i ChannelDisplayName są wymagane.");
+                return false;
+            }
+
+            // Ostrzeżenie przed próbą usunięcia kanału "Ogólny"
+            if (channelDisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase) ||
+                channelDisplayName.Equals("General", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Próba usunięcia kanału ogólnego ('{ChannelDisplayName}') dla zespołu {TeamId}. Ta operacja jest niedozwolona.", channelDisplayName, teamId);
+            }
+
+            _logger.LogInformation("Usuwanie kanału '{ChannelDisplayName}' z zespołu {TeamId}", channelDisplayName, teamId);
+
+            try
+            {
+                // Najpierw znajdź kanał
+                var channelToDelete = await GetTeamChannelAsync(teamId, channelDisplayName);
+                if (channelToDelete == null || channelToDelete.Properties["Id"]?.Value == null)
+                {
+                    _logger.LogError("Nie znaleziono kanału '{ChannelDisplayName}' w zespole {TeamId}", channelDisplayName, teamId);
+                    return false;
+                }
+
+                string channelId = channelToDelete.Properties["Id"].Value.ToString()!;
+
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId },
+                    { "ChannelId", channelId },
+                    { "Confirm", false }
+                };
+
+                var results = await ExecuteCommandWithRetryAsync("Remove-MgTeamChannel", parameters);
+
+                // Invalidate channels cache
+                InvalidatePowerShellCache(teamId: teamId);
+
+                return results != null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Nie udało się usunąć kanału '{ChannelDisplayName}' z zespołu {TeamId}", channelDisplayName, teamId);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetTeamChannelsAsync(string teamId)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogError("TeamID nie może być puste.");
+                return null;
+            }
+
+            string cacheKey = TeamChannelsCacheKeyPrefix + teamId;
+
+            if (_cache.TryGetValue(cacheKey, out Collection<PSObject>? cachedChannels))
+            {
+                _logger.LogDebug("Kanały dla zespołu {TeamId} znalezione w cache.", teamId);
+                return cachedChannels;
+            }
+
+            _logger.LogInformation("Pobieranie wszystkich kanałów dla zespołu {TeamId}", teamId);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId }
+                };
+
+                var results = await ExecuteCommandWithRetryAsync("Get-MgTeamChannel", parameters);
+
+                if (results != null)
+                {
+                    _cache.Set(cacheKey, results, GetShortCacheEntryOptions());
+                }
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania kanałów dla zespołu {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<PSObject?> GetTeamAsync(string teamId)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogError("TeamID nie może być puste.");
+                return null;
+            }
+
+            string cacheKey = TeamDetailsCacheKeyPrefix + teamId;
+
+            if (_cache.TryGetValue(cacheKey, out PSObject? cachedTeam))
+            {
+                _logger.LogDebug("Zespół {TeamId} znaleziony w cache.", teamId);
+                return cachedTeam;
+            }
+
+            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}", teamId);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId }
+                };
+
+                var results = await ExecuteCommandWithRetryAsync("Get-MgTeam", parameters);
+                var team = results?.FirstOrDefault();
+
+                if (team != null)
+                {
+                    _cache.Set(cacheKey, team, GetDefaultCacheEntryOptions());
+                }
+
+                return team;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania zespołu {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetAllTeamsAsync()
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (_cache.TryGetValue(AllTeamsCacheKey, out Collection<PSObject>? cachedTeams))
+            {
+                _logger.LogDebug("Wszystkie zespoły znalezione w cache.");
+                return cachedTeams;
+            }
+
+            _logger.LogInformation("Pobieranie wszystkich zespołów");
+
+            try
+            {
+                var results = await ExecuteCommandWithRetryAsync("Get-MgTeam");
+
+                if (results != null)
+                {
+                    _cache.Set(AllTeamsCacheKey, results, GetDefaultCacheEntryOptions());
+                }
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania wszystkich zespołów");
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetTeamsByOwnerAsync(string ownerUpn)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(ownerUpn))
+            {
+                _logger.LogError("OwnerUpn nie może być puste.");
+                return null;
+            }
+
+            _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}", ownerUpn);
+
+            try
+            {
+                var userId = await GetUserIdAsync(ownerUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {OwnerUpn}", ownerUpn);
+                    return null;
+                }
+
+                var script = $"Get-MgUserOwnedTeam -UserId '{userId}' -ErrorAction Stop";
+                return await ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania zespołów dla właściciela {OwnerUpn}", ownerUpn);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetTeamMembersAsync(string teamId)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogError("TeamID nie może być puste.");
+                return null;
+            }
+
+            _logger.LogInformation("Pobieranie wszystkich członków zespołu {TeamId}", teamId);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId }
+                };
+
+                return await ExecuteCommandWithRetryAsync("Get-MgTeamMember", parameters);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania członków zespołu {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(userUpn))
+            {
+                _logger.LogError("TeamID i UserUpn są wymagane.");
+                return null;
+            }
+
+            _logger.LogInformation("Pobieranie członka {UserUpn} z zespołu {TeamId}", userUpn, teamId);
+
+            try
+            {
+                var userId = await GetUserIdAsync(userUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return null;
+                }
+
+                var script = $"Get-MgTeamMember -TeamId '{teamId}' -UserId '{userId}' -ErrorAction Stop";
+                var results = await ExecuteScriptAsync(script);
+                return results?.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania członka {UserUpn} z zespołu {TeamId}", userUpn, teamId);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> AssignLicenseToUserAsync(string userUpn, string licenseSkuId)
+        {
+            if (!ValidateRunspaceState()) return false;
+
+            if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(licenseSkuId))
+            {
+                _logger.LogError("UserUpn i LicenseSkuId są wymagane.");
+                return false;
+            }
+
+            _logger.LogInformation("Przypisywanie licencji {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
+
+            try
+            {
+                var userId = await GetUserIdAsync(userUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return false;
+                }
+
+                var script = $@"
+                    $addLicenses = @(@{{SkuId='{licenseSkuId}'}})
+                    Set-MgUserLicense -UserId '{userId}' -AddLicenses $addLicenses -RemoveLicenses @() -ErrorAction Stop
+                    $true
+                ";
+
+                var results = await ExecuteScriptAsync(script);
+                var success = results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+
+                if (success)
+                {
+                    _logger.LogInformation("Pomyślnie przypisano licencję {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd przypisywania licencji {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> RemoveLicenseFromUserAsync(string userUpn, string licenseSkuId)
+        {
+            if (!ValidateRunspaceState()) return false;
+
+            if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(licenseSkuId))
+            {
+                _logger.LogError("UserUpn i LicenseSkuId są wymagane.");
+                return false;
+            }
+
+            _logger.LogInformation("Usuwanie licencji {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
+
+            try
+            {
+                var userId = await GetUserIdAsync(userUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return false;
+                }
+
+                var script = $@"
+                    $removeLicenses = @('{licenseSkuId}')
+                    Set-MgUserLicense -UserId '{userId}' -AddLicenses @() -RemoveLicenses $removeLicenses -ErrorAction Stop
+                    $true
+                ";
+
+                var results = await ExecuteScriptAsync(script);
+                var success = results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+
+                if (success)
+                {
+                    _logger.LogInformation("Pomyślnie usunięto licencję {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd usuwania licencji {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetUserLicensesAsync(string userUpn)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(userUpn))
+            {
+                _logger.LogError("UserUpn jest wymagany.");
+                return null;
+            }
+
+            _logger.LogInformation("Pobieranie licencji dla użytkownika {UserUpn}", userUpn);
+
+            try
+            {
+                var userId = await GetUserIdAsync(userUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return null;
+                }
+
+                var script = $"Get-MgUserLicenseDetail -UserId '{userId}' -ErrorAction Stop";
+                return await ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania licencji dla użytkownika {UserUpn}", userUpn);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetAllUsersAsync(string? filter = null)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            _logger.LogInformation("Pobieranie wszystkich użytkowników. Filtr: '{Filter}'", filter ?? "Brak");
+
+            try
+            {
+                // Dla 1000 użytkowników paginacja jest opcjonalna, ale dodajmy ją dla skalowalności
+                var script = new StringBuilder();
+                script.AppendLine("$allUsers = @()");
+                script.AppendLine("$pageSize = 999"); // Max dla Graph
+                script.AppendLine("$uri = 'https://graph.microsoft.com/v1.0/users?$top=' + $pageSize");
+
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    script.AppendLine($"$uri += '&$filter={Uri.EscapeDataString(filter)}'");
+                }
+
+                script.AppendLine(@"
+                    do {
+                        $response = Invoke-MgGraphRequest -Uri $uri -Method GET
+                        $allUsers += $response.value
+                        $uri = $response.'@odata.nextLink'
+                    } while ($uri)
+                    
+                    $allUsers | ForEach-Object { 
+                        [PSCustomObject]$_ 
+                    }
+                ");
+
+                return await ExecuteScriptAsync(script.ToString());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd pobierania użytkowników");
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> GetInactiveUsersAsync(int daysInactive)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            if (daysInactive < 0)
+            {
+                _logger.LogError("Liczba dni nieaktywności nie może być ujemna.");
+                return null;
+            }
+
+            _logger.LogInformation("Pobieranie użytkowników nieaktywnych przez {Days} dni", daysInactive);
+
+            try
+            {
+                // Sprawdź uprawnienia
+                var hasPermission = await CheckGraphPermissionAsync("AuditLog.Read.All");
+                if (!hasPermission)
+                {
+                    _logger.LogWarning("Brak uprawnień AuditLog.Read.All. SignInActivity może być niedostępne.");
+                }
+
+                var script = $@"
+                    $inactiveThreshold = (Get-Date).AddDays(-{daysInactive})
+                    $users = Get-MgUser -All -Property Id,UserPrincipalName,DisplayName,SignInActivity,AccountEnabled -PageSize 999
+                    
+                    $inactiveUsers = $users | Where-Object {{
+                        -not $_.SignInActivity -or 
+                        $_.SignInActivity.LastSignInDateTime -lt $inactiveThreshold
+                    }}
+                    
+                    $inactiveUsers | Select-Object Id, UserPrincipalName, DisplayName, AccountEnabled,
+                        @{{N='LastSignInDateTime'; E={{
+                            if ($_.SignInActivity) {{ 
+                                $_.SignInActivity.LastSignInDateTime 
+                            }} else {{ 
+                                'Never' 
+                            }}
+                        }}}}
+                ";
+
+                return await ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd pobierania nieaktywnych użytkowników");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza czy aplikacja ma określone uprawnienie Graph.
+        /// </summary>
+        private async Task<bool> CheckGraphPermissionAsync(string permission)
+        {
+            try
+            {
+                var script = "(Get-MgContext).Scopes -contains '" + permission + "'";
+                var results = await ExecuteScriptAsync(script);
+                return results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, bool>> BulkAddUsersToTeamAsync(
+            string teamId,
+            List<string> userUpns,
+            string role = "Member")
+        {
+            if (!ValidateRunspaceState())
+                return new Dictionary<string, bool>();
+
+            if (!userUpns?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista użytkowników jest pusta.");
+                return new Dictionary<string, bool>();
+            }
+
+            _logger.LogInformation("Masowe dodawanie {Count} użytkowników do zespołu {TeamId}",
+                userUpns!.Count, teamId);
+
+            var results = new Dictionary<string, bool>();
+
+            // Podziel na partie
+            var batches = userUpns
+                .Select((upn, index) => new { upn, index })
+                .GroupBy(x => x.index / BatchSize)
+                .Select(g => g.Select(x => x.upn).ToList());
+
+            foreach (var batch in batches)
+            {
+                await _semaphore.WaitAsync(); // Kontrola współbieżności
+                try
+                {
+                    var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
+                    foreach (var result in batchResults)
+                    {
+                        results[result.Key] = result.Value;
+                    }
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+
+                // Krótka przerwa między partiami
+                if (batch != batches.Last())
+                {
+                    await Task.Delay(1000);
+                }
+            }
+
+            _logger.LogInformation("Zakończono masowe dodawanie. Sukcesy: {Success}, Błędy: {Failed}",
+                results.Count(r => r.Value), results.Count(r => !r.Value));
+
+            // Invalidate cache dla zespołu
+            InvalidatePowerShellCache(teamId: teamId);
+
+            return results;
+        }
+
+        /// <summary>
+        /// Przetwarza pojedynczą partię użytkowników.
+        /// </summary>
+        private async Task<Dictionary<string, bool>> ProcessUserBatchAsync(
+            string teamId,
+            List<string> userUpns,
+            string role)
+        {
+            var scriptBuilder = new StringBuilder();
+            scriptBuilder.AppendLine($"$teamId = '{teamId}'");
+            scriptBuilder.AppendLine("$results = @{}");
+            scriptBuilder.AppendLine();
+
+            // Pobierz ID wszystkich użytkowników w partii
+            scriptBuilder.AppendLine("$userIds = @{}");
+            foreach (var upn in userUpns)
+            {
+                // Sprawdź cache przed dodaniem do skryptu
+                var cachedUserId = await GetUserIdAsync(upn);
+                if (!string.IsNullOrEmpty(cachedUserId))
+                {
+                    scriptBuilder.AppendLine($"$userIds['{upn.Replace("'", "''")}'] = '{cachedUserId}'");
+                }
+                else
+                {
+                    scriptBuilder.AppendLine($@"
+                        try {{
+                            $user = Get-MgUser -UserId '{upn.Replace("'", "''")}' -ErrorAction Stop
+                            $userIds['{upn.Replace("'", "''")}'] = $user.Id
+                        }} catch {{
+                            $results['{upn.Replace("'", "''")}'] = $false
+                            Write-Warning ""Użytkownik {upn} nie znaleziony""
+                        }}
+                    ");
+                }
+            }
+
+            // Dodaj użytkowników do zespołu
+            var cmdlet = role.Equals("Owner", StringComparison.OrdinalIgnoreCase)
+                ? "Add-MgTeamOwner"
+                : "Add-MgTeamMember";
+
+            scriptBuilder.AppendLine($@"
+                foreach ($upn in $userIds.Keys) {{
+                    try {{
+                        {cmdlet} -TeamId $teamId -UserId $userIds[$upn] -ErrorAction Stop
+                        $results[$upn] = $true
+                    }} catch {{
+                        $results[$upn] = $false
+                        Write-Warning ""Błąd dodawania $upn : $_""
+                    }}
+                }}
+                $results
+            ");
+
+            var scriptResults = await ExecuteScriptAsync(scriptBuilder.ToString());
+            var results = new Dictionary<string, bool>();
+
+            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            {
+                foreach (DictionaryEntry entry in hashtable)
+                {
+                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    {
+                        results[key] = value;
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, bool>> BulkArchiveTeamsAsync(List<string> teamIds)
+        {
+            if (!ValidateRunspaceState())
+                return new Dictionary<string, bool>();
+
+            if (!teamIds?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista zespołów jest pusta.");
+                return new Dictionary<string, bool>();
+            }
+
+            _logger.LogInformation("Masowa archiwizacja {Count} zespołów", teamIds!.Count);
+
+            var script = new StringBuilder();
+            script.AppendLine("$results = @{}");
+
+            foreach (var teamId in teamIds)
+            {
+                script.AppendLine($@"
+                    try {{
+                        Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
+                        $results['{teamId}'] = $true
+                    }} catch {{
+                        $results['{teamId}'] = $false
+                        Write-Warning ""Błąd archiwizacji zespołu {teamId}: $_""
+                    }}
+                ");
+            }
+
+            script.AppendLine("$results");
+
+            var scriptResults = await ExecuteScriptAsync(script.ToString());
+            var results = new Dictionary<string, bool>();
+
+            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            {
+                foreach (DictionaryEntry entry in hashtable)
+                {
+                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    {
+                        results[key] = value;
+                    }
+                }
+            }
+
+            _logger.LogInformation("Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
+                results.Count(r => r.Value), results.Count(r => !r.Value));
+
+            // Invalidate cache dla wszystkich zespołów
+            InvalidatePowerShellCache(invalidateAll: true);
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, bool>> BulkRemoveUsersFromTeamAsync(
+            string teamId,
+            List<string> userUpns)
+        {
+            if (!ValidateRunspaceState())
+                return new Dictionary<string, bool>();
+
+            if (!userUpns?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista użytkowników jest pusta.");
+                return new Dictionary<string, bool>();
+            }
+
+            _logger.LogInformation("Masowe usuwanie {Count} użytkowników z zespołu {TeamId}",
+                userUpns!.Count, teamId);
+
+            var results = new Dictionary<string, bool>();
+
+            // Podziel na partie
+            var batches = userUpns
+                .Select((upn, index) => new { upn, index })
+                .GroupBy(x => x.index / BatchSize)
+                .Select(g => g.Select(x => x.upn).ToList());
+
+            foreach (var batch in batches)
+            {
+                await _semaphore.WaitAsync();
+                try
+                {
+                    var batchResults = await ProcessUserRemovalBatchAsync(teamId, batch);
+                    foreach (var result in batchResults)
+                    {
+                        results[result.Key] = result.Value;
+                    }
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+
+                if (batch != batches.Last())
+                {
+                    await Task.Delay(1000);
+                }
+            }
+
+            _logger.LogInformation("Zakończono masowe usuwanie. Sukcesy: {Success}, Błędy: {Failed}",
+                results.Count(r => r.Value), results.Count(r => !r.Value));
+
+            // Invalidate cache dla zespołu
+            InvalidatePowerShellCache(teamId: teamId);
+
+            return results;
+        }
+
+        /// <summary>
+        /// Przetwarza pojedynczą partię użytkowników do usunięcia.
+        /// </summary>
+        private async Task<Dictionary<string, bool>> ProcessUserRemovalBatchAsync(
+            string teamId,
+            List<string> userUpns)
+        {
+            var scriptBuilder = new StringBuilder();
+            scriptBuilder.AppendLine($"$teamId = '{teamId}'");
+            scriptBuilder.AppendLine("$results = @{}");
+            scriptBuilder.AppendLine();
+
+            // Pobierz ID wszystkich użytkowników w partii
+            scriptBuilder.AppendLine("$userIds = @{}");
+            foreach (var upn in userUpns)
+            {
+                var cachedUserId = await GetUserIdAsync(upn);
+                if (!string.IsNullOrEmpty(cachedUserId))
+                {
+                    scriptBuilder.AppendLine($"$userIds['{upn.Replace("'", "''")}'] = '{cachedUserId}'");
+                }
+                else
+                {
+                    scriptBuilder.AppendLine($@"
+                        try {{
+                            $user = Get-MgUser -UserId '{upn.Replace("'", "''")}' -ErrorAction Stop
+                            $userIds['{upn.Replace("'", "''")}'] = $user.Id
+                        }} catch {{
+                            $results['{upn.Replace("'", "''")}'] = $false
+                            Write-Warning ""Użytkownik {upn} nie znaleziony""
+                        }}
+                    ");
+                }
+            }
+
+            // Usuń użytkowników z zespołu
+            scriptBuilder.AppendLine(@"
+                $teamOwners = Get-MgTeamOwner -TeamId $teamId | Select-Object -ExpandProperty Id
+                $teamMembers = Get-MgTeamMember -TeamId $teamId | Select-Object -ExpandProperty Id
+                
+                foreach ($upn in $userIds.Keys) {
+                    $userId = $userIds[$upn]
+                    try {
+                        if ($userId -in $teamOwners) {
+                            Remove-MgTeamOwner -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                            $results[$upn] = $true
+                        } elseif ($userId -in $teamMembers) {
+                            Remove-MgTeamMember -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                            $results[$upn] = $true
+                        } else {
+                            $results[$upn] = $true  # Użytkownik już nie jest członkiem
+                        }
+                    } catch {
+                        $results[$upn] = $false
+                        Write-Warning ""Błąd usuwania $upn : $_""
+                    }
+                }
+                $results
+            ");
+
+            var scriptResults = await ExecuteScriptAsync(scriptBuilder.ToString());
+            var results = new Dictionary<string, bool>();
+
+            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            {
+                foreach (DictionaryEntry entry in hashtable)
+                {
+                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    {
+                        results[key] = value;
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<Dictionary<string, bool>> BulkUpdateUserPropertiesAsync(
+            Dictionary<string, Dictionary<string, string>> userUpdates)
+        {
+            if (!ValidateRunspaceState())
+                return new Dictionary<string, bool>();
+
+            if (!userUpdates?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista aktualizacji użytkowników jest pusta.");
+                return new Dictionary<string, bool>();
+            }
+
+            _logger.LogInformation("Masowa aktualizacja właściwości dla {Count} użytkowników", userUpdates!.Count);
+
+            var script = new StringBuilder();
+            script.AppendLine("$results = @{}");
+
+            foreach (var kvp in userUpdates)
+            {
+                var userUpn = kvp.Key;
+                var properties = kvp.Value;
+
+                script.AppendLine($@"
+                    try {{
+                        $params = @{{}}
+                ");
+
+                foreach (var prop in properties)
+                {
+                    switch (prop.Key.ToLower())
+                    {
+                        case "department":
+                            script.AppendLine($"        $params['Department'] = '{prop.Value.Replace("'", "''")}'");
+                            break;
+                        case "jobtitle":
+                            script.AppendLine($"        $params['JobTitle'] = '{prop.Value.Replace("'", "''")}'");
+                            break;
+                        case "firstname":
+                        case "givenname":
+                            script.AppendLine($"        $params['GivenName'] = '{prop.Value.Replace("'", "''")}'");
+                            break;
+                        case "lastname":
+                        case "surname":
+                            script.AppendLine($"        $params['Surname'] = '{prop.Value.Replace("'", "''")}'");
+                            break;
+                    }
+                }
+
+                script.AppendLine($@"
+                        Update-MgUser -UserId '{userUpn.Replace("'", "''")}' @params -ErrorAction Stop
+                        $results['{userUpn.Replace("'", "''")}'] = $true
+                    }} catch {{
+                        $results['{userUpn.Replace("'", "''")}'] = $false
+                        Write-Warning ""Błąd aktualizacji użytkownika {userUpn}: $_""
+                    }}
+                ");
+            }
+
+            script.AppendLine("$results");
+
+            var scriptResults = await ExecuteScriptAsync(script.ToString());
+            var results = new Dictionary<string, bool>();
+
+            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            {
+                foreach (DictionaryEntry entry in hashtable)
+                {
+                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    {
+                        results[key] = value;
+                    }
+                }
+            }
+
+            _logger.LogInformation("Zakończono masową aktualizację. Sukcesy: {Success}, Błędy: {Failed}",
+                results.Count(r => r.Value), results.Count(r => !r.Value));
+
+            // Invalidate cache dla wszystkich zaktualizowanych użytkowników
+            foreach (var userUpn in userUpdates.Keys)
+            {
+                InvalidatePowerShellCache(userUpn: userUpn);
+            }
+
+            return results;
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> FindDuplicateUsersAsync()
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            _logger.LogInformation("Wyszukiwanie duplikatów użytkowników");
+
+            try
+            {
+                var script = @"
+                    $users = Get-MgUser -All -Property DisplayName,UserPrincipalName,Mail,Department -PageSize 999
+                    
+                    # Grupuj po DisplayName
+                    $duplicates = $users | Group-Object DisplayName | Where-Object { $_.Count -gt 1 }
+                    
+                    $results = $duplicates | ForEach-Object {
+                        [PSCustomObject]@{
+                            DisplayName = $_.Name
+                            Count = $_.Count
+                            Users = $_.Group | Select-Object UserPrincipalName, Mail, Department, Id
+                        }
+                    }
+                    
+                    # Dodaj też duplikaty po Mail (jeśli istnieje)
+                    $mailDuplicates = $users | Where-Object { $_.Mail } | 
+                        Group-Object Mail | Where-Object { $_.Count -gt 1 }
+                    
+                    $mailDuplicates | ForEach-Object {
+                        $results += [PSCustomObject]@{
+                            DuplicateType = 'Email'
+                            Value = $_.Name
+                            Count = $_.Count
+                            Users = $_.Group | Select-Object UserPrincipalName, DisplayName, Department, Id
+                        }
+                    }
+                    
+                    $results
+                ";
+
+                return await ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd wyszukiwania duplikatów");
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
+        {
+            if (!ValidateRunspaceState()) return false;
+
+            if (string.IsNullOrEmpty(teamId))
+            {
+                _logger.LogError("TeamID nie może być puste.");
+                return false;
+            }
+
+            _logger.LogInformation("Archiwizacja zespołu {TeamId} i dezaktywacja ekskluzywnych użytkowników", teamId);
+
+            try
+            {
+                var script = $@"
+                    $teamId = '{teamId}'
+                    $errors = @()
+                    
+                    # Pobierz członków zespołu
+                    $members = Get-MgTeamMember -TeamId $teamId -All
+                    
+                    # Archiwizuj zespół
+                    try {{
+                        Update-MgTeam -GroupId $teamId -IsArchived $true -ErrorAction Stop
+                        Write-Host ""Zespół zarchiwizowany""
+                    }} catch {{
+                        $errors += ""Błąd archiwizacji zespołu: $_""
+                    }}
+                    
+                    # Dla każdego członka sprawdź inne zespoły
+                    foreach ($member in $members) {{
+                        try {{
+                            # Pobierz wszystkie zespoły użytkownika
+                            $userTeams = Get-MgUserMemberOf -UserId $member.Id -Filter ""resourceProvisioningOptions/Any(x:x eq 'Team')""
+                            
+                            # Jeśli użytkownik jest tylko w tym zespole
+                            if ($userTeams.Count -eq 1 -and $userTeams[0].Id -eq $teamId) {{
+                                Update-MgUser -UserId $member.Id -AccountEnabled $false -ErrorAction Stop
+                                Write-Host ""Dezaktywowano użytkownika: $($member.DisplayName)""
+                            }}
+                        }} catch {{
+                            $errors += ""Błąd przetwarzania użytkownika $($member.Id): $_""
+                        }}
+                    }}
+                    
+                    @{{
+                        Success = $errors.Count -eq 0
+                        Errors = $errors
+                    }}
+                ";
+
+                var results = await ExecuteScriptAsync(script);
+                var result = results?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                var success = result?["Success"] as bool? ?? false;
+                if (!success)
+                {
+                    var errors = result?["Errors"] as object[];
+                    foreach (var error in errors ?? Array.Empty<object>())
+                    {
+                        _logger.LogError("Błąd operacji: {Error}", error);
+                    }
+                }
+
+                // Invalidate cache
+                InvalidatePowerShellCache(teamId: teamId, invalidateAll: true);
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas archiwizacji zespołu i dezaktywacji użytkowników");
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<Collection<PSObject>?> ExecuteScriptAsync(
+            string script,
+            Dictionary<string, object>? parameters = null)
+        {
+            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            {
+                _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
+                return null;
             }
 
             if (string.IsNullOrWhiteSpace(script))
             {
-                _logger.LogError("Nie można wykonać skryptu: Skrypt jest pusty.");
+                _logger.LogError("Skrypt nie może być pusty.");
                 return null;
             }
 
-            // Sanityzacja skryptu - podstawowa ochrona przed injection
+            // Podstawowa sanityzacja
             if (script.Contains("`;") || script.Contains("$(") || script.Contains("${"))
             {
-                _logger.LogWarning("Wykryto potencjalnie niebezpieczne znaki w skrypcie. Skrypt: {Script}", script);
+                _logger.LogWarning("Wykryto potencjalnie niebezpieczne znaki w skrypcie.");
             }
 
-            _logger.LogDebug("Wykonywanie skryptu PowerShell: {Script}", script.Length > 100 ? script.Substring(0, 100) + "..." : script);
+            _logger.LogDebug("Wykonywanie skryptu PowerShell ({Length} znaków)", script.Length);
 
             return await Task.Run(() =>
             {
@@ -1107,49 +2227,127 @@ namespace TeamsManager.Core.Services
 
                         var results = ps.Invoke();
 
-                        // Zbierz wszystkie strumienie dla lepszego debugowania
-                        if (ps.Streams.Error.Count > 0)
-                        {
-                            foreach (var error in ps.Streams.Error)
-                            {
-                                _logger.LogError("Błąd PowerShell: {Error}", error.ToString());
-                            }
-                        }
+                        // Logowanie strumieni
+                        LogPowerShellStreams(ps);
 
-                        if (ps.Streams.Warning.Count > 0)
-                        {
-                            foreach (var warning in ps.Streams.Warning)
-                            {
-                                _logger.LogWarning("Ostrzeżenie PowerShell: {Warning}", warning.ToString());
-                            }
-                        }
-
-                        if (ps.Streams.Information.Count > 0)
-                        {
-                            foreach (var info in ps.Streams.Information)
-                            {
-                                _logger.LogInformation("Informacja PowerShell: {Info}", info.ToString());
-                            }
-                        }
-
-                        // Zwróć null tylko jeśli były błędy krytyczne
                         if (ps.HadErrors && results.Count == 0)
                         {
-                            _logger.LogError("Skrypt zakończył się błędami i nie zwrócił żadnych wyników.");
+                            _logger.LogError("Skrypt zakończył się błędami.");
                             return null;
                         }
 
-                        _logger.LogDebug("Skrypt wykonany. Liczba zwróconych obiektów: {Count}, Błędy: {ErrorCount}",
-                            results.Count, ps.Streams.Error.Count);
+                        _logger.LogDebug("Skrypt wykonany. Wyniki: {Count}", results.Count);
                         return results;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Nie udało się wykonać skryptu PowerShell");
+                    _logger.LogError(ex, "Błąd wykonywania skryptu PowerShell");
                     return null;
                 }
             });
+        }
+
+        /// <summary>
+        /// Loguje strumienie PowerShell.
+        /// </summary>
+        private void LogPowerShellStreams(PowerShell ps)
+        {
+            foreach (var error in ps.Streams.Error)
+            {
+                _logger.LogError("PowerShell Error: {Error}", error.ToString());
+            }
+
+            foreach (var warning in ps.Streams.Warning)
+            {
+                _logger.LogWarning("PowerShell Warning: {Warning}", warning.ToString());
+            }
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                foreach (var info in ps.Streams.Information)
+                {
+                    _logger.LogDebug("PowerShell Info: {Info}", info.ToString());
+                }
+            }
+        }
+
+        /// <summary>
+        /// Unieważnia cache dla PowerShell.
+        /// </summary>
+        private void InvalidatePowerShellCache(
+            string? userId = null,
+            string? userUpn = null,
+            string? teamId = null,
+            bool invalidateAll = false)
+        {
+            _logger.LogDebug("Inwalidacja cache PowerShell. userId: {UserId}, userUpn: {UserUpn}, teamId: {TeamId}, invalidateAll: {InvalidateAll}",
+                userId, userUpn, teamId, invalidateAll);
+
+            // 1. Zresetuj CancellationTokenSource
+            var oldTokenSource = Interlocked.Exchange(ref _powerShellCacheTokenSource, new CancellationTokenSource());
+            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            {
+                oldTokenSource.Cancel();
+                oldTokenSource.Dispose();
+            }
+            _logger.LogDebug("Token cache dla PowerShell został zresetowany.");
+
+            // 2. Usuń konkretne klucze
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                _cache.Remove(UserIdCacheKeyPrefix + userId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(userUpn))
+            {
+                _cache.Remove(UserIdCacheKeyPrefix + userUpn);
+                _cache.Remove(UserUpnCacheKeyPrefix + userUpn);
+            }
+
+            if (!string.IsNullOrWhiteSpace(teamId))
+            {
+                _cache.Remove(TeamDetailsCacheKeyPrefix + teamId);
+                _cache.Remove(TeamChannelsCacheKeyPrefix + teamId);
+            }
+
+            // 3. Jeśli invalidateAll, usuń też kontekst i listy
+            if (invalidateAll)
+            {
+                _cache.Remove(GraphContextCacheKey);
+                _cache.Remove(AllTeamsCacheKey);
+                _logger.LogDebug("Usunięto wszystkie klucze cache PowerShell.");
+            }
+        }
+
+        /// <summary>
+        /// Zapisuje historię operacji.
+        /// </summary>
+        private async Task SaveOperationHistoryAsync(OperationHistory operation)
+        {
+            if (string.IsNullOrEmpty(operation.Id))
+                operation.Id = Guid.NewGuid().ToString();
+
+            if (string.IsNullOrEmpty(operation.CreatedBy))
+                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_powershell";
+
+            if (operation.StartedAt == default(DateTime))
+            {
+                operation.StartedAt = DateTime.UtcNow;
+            }
+
+            if ((operation.Status == OperationStatus.Completed ||
+                 operation.Status == OperationStatus.Failed ||
+                 operation.Status == OperationStatus.Cancelled ||
+                 operation.Status == OperationStatus.PartialSuccess) &&
+                !operation.CompletedAt.HasValue)
+            {
+                operation.CompletedAt = DateTime.UtcNow;
+                operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
+            }
+
+            await _operationHistoryRepository.AddAsync(operation);
+            _logger.LogDebug("Zapisano historię operacji ID: {OperationId} dla PowerShell.", operation.Id);
         }
 
         /// <inheritdoc />
@@ -1159,63 +2357,40 @@ namespace TeamsManager.Core.Services
             GC.SuppressFinalize(this);
         }
 
-        /// <summary>
-        /// Zwalnia zasoby zarządzane i niezarządzane.
-        /// </summary>
-        /// <param name="disposing">True, jeśli wywołane przez Dispose(); false, jeśli przez finalizator.</param>
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed) return;
+
+            if (disposing)
             {
-                if (disposing)
-                {
-                    try
-                    {
-                        if (_isConnected && _runspace != null && _runspace.RunspaceStateInfo.State == RunspaceState.Opened)
-                        {
-                            _logger.LogInformation("Próba rozłączenia z Microsoft Teams...");
-                            try
-                            {
-                                using (var ps = PowerShell.Create())
-                                {
-                                    ps.Runspace = _runspace;
-                                    ps.AddScript("Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue");
-                                    ps.Invoke();
-                                }
-                                _logger.LogInformation("Rozłączono z Microsoft Teams (lub próba rozłączenia zakończona).");
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Błąd podczas próby rozłączenia z Microsoft Teams w Dispose.");
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            if (_runspace != null)
-                            {
-                                if (_runspace.RunspaceStateInfo.State == RunspaceState.Opened)
-                                {
-                                    _runspace.Close();
-                                }
-                                _runspace.Dispose();
-                                _logger.LogInformation("Zasoby Runspace zostały zwolnione.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Błąd podczas zamykania Runspace.");
-                        }
-                        finally
-                        {
-                            _runspace = null;
-                            _isConnected = false;
-                        }
-                    }
-                }
-                _disposed = true;
+                _semaphore?.Dispose();
+                DisconnectFromGraph();
+                _runspace?.Dispose();
+            }
+
+            _disposed = true;
+        }
+
+        private void DisconnectFromGraph()
+        {
+            if (!_isConnected || _runspace == null) return;
+
+            try
+            {
+                using var ps = PowerShell.Create();
+                ps.Runspace = _runspace;
+                ps.AddScript("Disconnect-MgGraph -ErrorAction SilentlyContinue");
+                ps.Invoke();
+                _logger.LogInformation("Rozłączono z Microsoft Graph.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas rozłączania z Graph");
+            }
+            finally
+            {
+                _isConnected = false;
+                InvalidatePowerShellCache(invalidateAll: true);
             }
         }
     }
