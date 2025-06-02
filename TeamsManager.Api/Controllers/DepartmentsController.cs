@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using System;
@@ -11,45 +13,186 @@ namespace TeamsManager.Api.Controllers
     // --- Data Transfer Objects (DTO) ---
     // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
 
+    /// <summary>
+    /// Model żądania utworzenia nowego działu organizacyjnego
+    /// </summary>
+    /// <example>
+    /// {
+    ///   "name": "Informatyka",
+    ///   "description": "Wydział Informatyki i Technologii",
+    ///   "departmentCode": "IT",
+    ///   "email": "informatyka@szkola.edu.pl",
+    ///   "phone": "+48 123 456 700",
+    ///   "location": "Budynek A, piętro 2",
+    ///   "sortOrder": 10
+    /// }
+    /// </example>
     public class CreateDepartmentRequestDto
     {
+        /// <summary>
+        /// Nazwa działu (wymagana)
+        /// </summary>
+        /// <example>Informatyka</example>
         public string Name { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Opis działu i jego zadań
+        /// </summary>
+        /// <example>Wydział Informatyki i Technologii odpowiedzialny za edukację w zakresie IT</example>
         public string Description { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// ID działu nadrzędnego (opcjonalne) - dla struktury hierarchicznej
+        /// </summary>
+        /// <example>dept-main-001</example>
         public string? ParentDepartmentId { get; set; }
+        
+        /// <summary>
+        /// Krótki kod działu używany w raportach i identyfikacji
+        /// </summary>
+        /// <example>IT</example>
         public string? DepartmentCode { get; set; }
+        
+        /// <summary>
+        /// Adres email działu
+        /// </summary>
+        /// <example>informatyka@szkola.edu.pl</example>
         public string? Email { get; set; }
+        
+        /// <summary>
+        /// Numer telefonu działu
+        /// </summary>
+        /// <example>+48 123 456 700</example>
         public string? Phone { get; set; }
+        
+        /// <summary>
+        /// Lokalizacja fizyczna działu
+        /// </summary>
+        /// <example>Budynek A, piętro 2, pokoje 201-210</example>
         public string? Location { get; set; }
+        
+        /// <summary>
+        /// Kolejność sortowania dla wyświetlania na listach (domyślnie 0)
+        /// </summary>
+        /// <example>10</example>
         public int SortOrder { get; set; } = 0;
     }
 
+    /// <summary>
+    /// Model żądania aktualizacji istniejącego działu organizacyjnego
+    /// </summary>
+    /// <example>
+    /// {
+    ///   "name": "Informatyka i Robotyka",
+    ///   "description": "Rozszerzony wydział obejmujący informatykę i robotykę",
+    ///   "departmentCode": "IT-ROB",
+    ///   "email": "informatyka@szkola.edu.pl",
+    ///   "phone": "+48 123 456 700",
+    ///   "location": "Budynek A, piętro 2-3",
+    ///   "sortOrder": 15,
+    ///   "isActive": true
+    /// }
+    /// </example>
     public class UpdateDepartmentRequestDto
     {
         // Id działu będzie pobierane z URL
+        /// <summary>
+        /// Nowa nazwa działu
+        /// </summary>
+        /// <example>Informatyka i Robotyka</example>
         public string Name { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Zaktualizowany opis działu
+        /// </summary>
+        /// <example>Rozszerzony wydział obejmujący informatykę, programowanie i robotykę</example>
         public string Description { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// ID nowego działu nadrzędnego (opcjonalne)
+        /// </summary>
+        /// <example>dept-tech-001</example>
         public string? ParentDepartmentId { get; set; }
+        
+        /// <summary>
+        /// Zaktualizowany kod działu
+        /// </summary>
+        /// <example>IT-ROB</example>
         public string? DepartmentCode { get; set; }
+        
+        /// <summary>
+        /// Zaktualizowany adres email działu
+        /// </summary>
+        /// <example>informatyka.robotyka@szkola.edu.pl</example>
         public string? Email { get; set; }
+        
+        /// <summary>
+        /// Zaktualizowany numer telefonu działu
+        /// </summary>
+        /// <example>+48 123 456 701</example>
         public string? Phone { get; set; }
+        
+        /// <summary>
+        /// Zaktualizowana lokalizacja działu
+        /// </summary>
+        /// <example>Budynek A, piętro 2-3, laboratoria 201-305</example>
         public string? Location { get; set; }
+        
+        /// <summary>
+        /// Nowa kolejność sortowania
+        /// </summary>
+        /// <example>15</example>
         public int SortOrder { get; set; } = 0;
+        
+        /// <summary>
+        /// Status aktywności działu
+        /// </summary>
+        /// <example>true</example>
         public bool IsActive { get; set; } = true;
     }
 
     // --- Kontroler ---
 
+    /// <summary>
+    /// 🏢 Kontroler zarządzania działami organizacyjnymi
+    /// </summary>
+    /// <remarks>
+    /// Umożliwia pełne zarządzanie strukturą organizacyjną szkoły:
+    /// 
+    /// ## 📋 Funkcjonalności:
+    /// - **Tworzenie działów** - definiowanie nowych jednostek organizacyjnych
+    /// - **Aktualizacja działów** - modyfikacja danych i struktury
+    /// - **Przeglądanie działów** - lista wszystkich działów i szczegóły
+    /// - **Zarządzanie hierarchią** - obsługa struktury nadrzędnej/podrzędnej
+    /// - **Przypisywanie użytkowników** - związanie pracowników z działami
+    /// - **Dezaktywacja działów** - bezpieczne usuwanie z zachowaniem historii
+    /// 
+    /// ## 🔗 Struktura hierarchiczna:
+    /// Działy mogą tworzyć strukturę drzewiastą poprzez powiązania parent-child.
+    /// 
+    /// ## 👥 Integracja z użytkownikami:
+    /// Każdy użytkownik może być przypisany do działu, co wpływa na jego uprawnienia.
+    /// 
+    /// ## 🛡️ Zabezpieczenia:
+    /// Wszystkie operacje wymagają uwierzytelniania JWT Bearer Token.
+    /// </remarks>
     [ApiController]
-    [Route("api/[controller]")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize] // Wszystkie operacje na działach domyślnie wymagają autoryzacji
     public class DepartmentsController : ControllerBase
     {
         private readonly IDepartmentService _departmentService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<DepartmentsController> _logger;
 
-        public DepartmentsController(IDepartmentService departmentService, ILogger<DepartmentsController> logger)
+        public DepartmentsController(
+            IDepartmentService departmentService, 
+            ICurrentUserService currentUserService,
+            ILogger<DepartmentsController> logger)
         {
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

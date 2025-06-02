@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning; // Dla atrybutu ApiVersion
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using System;
@@ -36,16 +38,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/Subjects
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/Subjects
     [Authorize] // Wszystkie operacje na przedmiotach domyślnie wymagają autoryzacji
     public class SubjectsController : ControllerBase
     {
         private readonly ISubjectService _subjectService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SubjectsController> _logger;
 
-        public SubjectsController(ISubjectService subjectService, ILogger<SubjectsController> logger)
+        public SubjectsController(
+            ISubjectService subjectService, 
+            ICurrentUserService currentUserService,
+            ILogger<SubjectsController> logger)
         {
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

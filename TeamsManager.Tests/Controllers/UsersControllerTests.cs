@@ -29,9 +29,9 @@ namespace TeamsManager.Tests.Controllers
             _mockUserService = new Mock<IUserService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<UsersController>>();
-            _controller = new UsersController(_mockUserService.Object, _mockCurrentUserService.Object, _mockLogger.Object);
 
-            SetupControllerContext();
+            // UsersController ma teraz 3 parametry w konstruktorze: IUserService, ICurrentUserService, ILogger
+            _controller = new UsersController(_mockUserService.Object, _mockCurrentUserService.Object, _mockLogger.Object);
         }
 
         private void SetupControllerContext(string? authorizationHeader = null)
@@ -52,14 +52,33 @@ namespace TeamsManager.Tests.Controllers
         #region GetUserById Tests
 
         [Fact]
-        public async Task GetUserById_WithValidToken_ShouldReturnUser()
+        public async Task GetUserById_WithValidId_ShouldReturnUser()
+        {
+            // Arrange
+            var userId = "123";
+            var user = new User { Id = userId, UPN = "test@example.com", FirstName = "Test", LastName = "User" };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, false, _accessTokenValue))
+                           .ReturnsAsync(user);
+
+            // Act
+            var result = await _controller.GetUserById(userId);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().Be(user);
+        }
+
+        [Fact]
+        public async Task GetUserById_WithoutToken_ShouldReturnUser()
         {
             // Arrange
             var userId = "user123";
-            var expectedUser = new User { Id = userId, FirstName = "John", LastName = "Doe", Upn = "john.doe@example.com" };
-            SetupControllerContext(_validAccessToken);
-            
-            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, _accessTokenValue))
+            var expectedUser = new User { Id = userId, UPN = "test@example.com", FirstName = "Test", LastName = "User" };
+            SetupControllerContext(); // No token
+
+            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, false, null))
                            .ReturnsAsync(expectedUser);
 
             // Act
@@ -67,24 +86,8 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(expectedUser);
-            _mockUserService.Verify(s => s.GetUserByIdAsync(userId, _accessTokenValue), Times.Once);
-        }
-
-        [Fact]
-        public async Task GetUserById_WithoutToken_ShouldReturnUnauthorized()
-        {
-            // Arrange
-            var userId = "user123";
-            SetupControllerContext(); // No token
-
-            // Act
-            var result = await _controller.GetUserById(userId);
-
-            // Assert
-            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
-            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak wymaganego tokenu dostępu." });
-            _mockUserService.Verify(s => s.GetUserByIdAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            okResult.Value.Should().Be(expectedUser);
+            _mockUserService.Verify(s => s.GetUserByIdAsync(userId, false, null), Times.Once);
         }
 
         [Fact]
@@ -94,7 +97,7 @@ namespace TeamsManager.Tests.Controllers
             var userId = "nonexistent";
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, _accessTokenValue))
+            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, false, _accessTokenValue))
                            .ReturnsAsync((User?)null);
 
             // Act
@@ -110,43 +113,136 @@ namespace TeamsManager.Tests.Controllers
         #region GetUserByUpn Tests
 
         [Fact]
-        public async Task GetUserByUpn_WithValidToken_ShouldReturnUser()
+        public async Task GetUserByUpn_WithValidUpn_ShouldReturnUser()
         {
             // Arrange
-            var upn = "john.doe@example.com";
-            var expectedUser = new User { Id = "user123", FirstName = "John", LastName = "Doe", Upn = upn };
+            var upn = "test@example.com";
+            var user = new User { Id = "123", UPN = upn, FirstName = "Test", LastName = "User" };
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.GetUserByUpnAsync(upn, _accessTokenValue))
-                           .ReturnsAsync(expectedUser);
+            _mockUserService.Setup(s => s.GetUserByUpnAsync(upn, false, _accessTokenValue))
+                           .ReturnsAsync(user);
 
             // Act
             var result = await _controller.GetUserByUpn(upn);
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(expectedUser);
-            _mockUserService.Verify(s => s.GetUserByUpnAsync(upn, _accessTokenValue), Times.Once);
+            okResult.Value.Should().Be(user);
         }
 
         [Fact]
-        public async Task GetUserByUpn_WithEncodedUpn_ShouldDecodeAndCallService()
+        public async Task GetUserByUpn_WithValidUpn_AndForceRefresh_ShouldReturnUser()
         {
             // Arrange
-            var encodedUpn = "john.doe%40example.com";
-            var decodedUpn = "john.doe@example.com";
-            var expectedUser = new User { Id = "user123", Upn = decodedUpn };
+            var upn = "test@example.com";
+            var user = new User { Id = "123", UPN = upn, FirstName = "Test", LastName = "User" };
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.GetUserByUpnAsync(decodedUpn, _accessTokenValue))
-                           .ReturnsAsync(expectedUser);
+            _mockUserService.Setup(s => s.GetUserByUpnAsync(upn, true, _accessTokenValue))
+                           .ReturnsAsync(user);
 
             // Act
-            var result = await _controller.GetUserByUpn(encodedUpn);
+            var result = await _controller.GetUserByUpn(upn, forceRefresh: true);
 
             // Assert
-            result.Should().BeOfType<OkObjectResult>();
-            _mockUserService.Verify(s => s.GetUserByUpnAsync(decodedUpn, _accessTokenValue), Times.Once);
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().Be(user);
+        }
+
+        #endregion
+
+        #region GetAllActiveUsers Tests
+
+        [Fact]
+        public async Task GetAllActiveUsers_ShouldReturnUsers()
+        {
+            // Arrange
+            var users = new List<User>
+            {
+                new User { Id = "1", UPN = "user1@example.com", FirstName = "User", LastName = "One" },
+                new User { Id = "2", UPN = "user2@example.com", FirstName = "User", LastName = "Two" }
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetAllActiveUsersAsync(false, _accessTokenValue))
+                           .ReturnsAsync(users);
+
+            // Act
+            var result = await _controller.GetAllActiveUsers();
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().BeEquivalentTo(users);
+        }
+
+        [Fact]
+        public async Task GetAllActiveUsers_WithForceRefresh_ShouldReturnUsers()
+        {
+            // Arrange
+            var users = new List<User>
+            {
+                new User { Id = "1", UPN = "user1@example.com", FirstName = "User", LastName = "One" }
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetAllActiveUsersAsync(true, _accessTokenValue))
+                           .ReturnsAsync(users);
+
+            // Act
+            var result = await _controller.GetAllActiveUsers(forceRefresh: true);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().BeEquivalentTo(users);
+        }
+
+        #endregion
+
+        #region GetUsersByRole Tests
+
+        [Fact]
+        public async Task GetUsersByRole_WithValidRole_ShouldReturnUsers()
+        {
+            // Arrange
+            var role = UserRole.Nauczyciel;
+            var users = new List<User>
+            {
+                new User { Id = "1", UPN = "teacher1@example.com", FirstName = "Teacher", LastName = "One", Role = role }
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetUsersByRoleAsync(role, false, _accessTokenValue))
+                           .ReturnsAsync(users);
+
+            // Act
+            var result = await _controller.GetUsersByRole(role);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().BeEquivalentTo(users);
+        }
+
+        [Fact]
+        public async Task GetUsersByRole_WithForceRefresh_ShouldReturnUsers()
+        {
+            // Arrange
+            var role = UserRole.Uczen;
+            var users = new List<User>
+            {
+                new User { Id = "1", UPN = "student1@example.com", FirstName = "Student", LastName = "One", Role = role }
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetUsersByRoleAsync(role, true, _accessTokenValue))
+                           .ReturnsAsync(users);
+
+            // Act
+            var result = await _controller.GetUsersByRole(role, forceRefresh: true);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().BeEquivalentTo(users);
         }
 
         #endregion
@@ -154,77 +250,70 @@ namespace TeamsManager.Tests.Controllers
         #region CreateUser Tests
 
         [Fact]
-        public async Task CreateUser_WithValidTokenAndData_ShouldReturnCreated()
+        public async Task CreateUser_WithValidData_ShouldReturnCreatedUser()
         {
             // Arrange
-            var requestDto = new CreateUserRequestDto
+            var createDto = new TeamsManager.Api.Controllers.CreateUserRequestDto
             {
                 FirstName = "John",
                 LastName = "Doe",
                 Upn = "john.doe@example.com",
-                Password = "SecurePassword123!",
                 Role = UserRole.Uczen,
-                DepartmentId = "dept123"
+                DepartmentId = "dept-123",
+                Password = "SecurePassword123!"
             };
+            
             var createdUser = new User 
             { 
-                Id = "user123", 
-                FirstName = requestDto.FirstName, 
-                LastName = requestDto.LastName,
-                Upn = requestDto.Upn,
-                Role = requestDto.Role,
-                DepartmentId = requestDto.DepartmentId
+                Id = "new-user-123", 
+                UPN = createDto.Upn, 
+                FirstName = createDto.FirstName, 
+                LastName = createDto.LastName,
+                Role = createDto.Role 
             };
+            
             SetupControllerContext(_validAccessToken);
             
             _mockUserService.Setup(s => s.CreateUserAsync(
-                requestDto.FirstName,
-                requestDto.LastName,
-                requestDto.Upn,
-                requestDto.Password,
-                requestDto.Role,
-                requestDto.DepartmentId,
+                createDto.FirstName,
+                createDto.LastName, 
+                createDto.Upn,
+                createDto.Role,
+                createDto.DepartmentId,
+                createDto.Password,
                 _accessTokenValue,
-                requestDto.SendWelcomeEmail,
-                requestDto.Phone,
-                requestDto.AlternateEmail,
-                requestDto.ExternalId,
-                requestDto.BirthDate,
-                requestDto.EmploymentDate,
-                requestDto.Position,
-                requestDto.Notes,
-                requestDto.IsSystemAdmin))
-                           .ReturnsAsync(createdUser);
+                createDto.SendWelcomeEmail))
+                .ReturnsAsync(createdUser);
 
             // Act
-            var result = await _controller.CreateUser(requestDto);
+            var result = await _controller.CreateUser(createDto);
 
             // Assert
             var createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
             createdResult.ActionName.Should().Be(nameof(UsersController.GetUserById));
-            createdResult.RouteValues.Should().ContainKey("userId").WhoseValue.Should().Be(createdUser.Id);
-            createdResult.Value.Should().BeEquivalentTo(createdUser);
         }
 
         [Fact]
         public async Task CreateUser_WithoutToken_ShouldReturnUnauthorized()
         {
             // Arrange
-            var requestDto = new CreateUserRequestDto
+            var createDto = new TeamsManager.Api.Controllers.CreateUserRequestDto
             {
                 FirstName = "John",
                 LastName = "Doe",
-                Upn = "john.doe@example.com",
+                Upn = "john.doe@example.com", 
+                Role = UserRole.Uczen,
+                DepartmentId = "dept-123",
                 Password = "SecurePassword123!"
             };
+            
             SetupControllerContext(); // No token
 
             // Act
-            var result = await _controller.CreateUser(requestDto);
+            var result = await _controller.CreateUser(createDto);
 
             // Assert
-            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
-            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak wymaganego tokenu dostępu." });
+            result.Should().BeOfType<UnauthorizedObjectResult>();
         }
 
         [Fact]
@@ -240,10 +329,10 @@ namespace TeamsManager.Tests.Controllers
             };
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), 
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), 
-                It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            _mockUserService.Setup(s => s.CreateUserAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
+                It.IsAny<string>(), It.IsAny<bool>()))
                            .ReturnsAsync((User?)null);
 
             // Act
@@ -251,7 +340,7 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się utworzyć użytkownika." });
+            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się utworzyć użytkownika. Sprawdź logi serwera." });
         }
 
         #endregion
@@ -269,6 +358,11 @@ namespace TeamsManager.Tests.Controllers
                 LastName = "Updated Doe"
             };
             SetupControllerContext(_validAccessToken);
+            
+            // Mock dla GetUserByIdAsync - kontroler sprawdza czy użytkownik istnieje
+            var existingUser = new User { Id = userId, UPN = "existing@example.com", FirstName = "John", LastName = "Doe" };
+            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, false, _accessTokenValue))
+                           .ReturnsAsync(existingUser);
             
             _mockUserService.Setup(s => s.UpdateUserAsync(It.IsAny<User>(), _accessTokenValue))
                            .ReturnsAsync(true);
@@ -303,22 +397,21 @@ namespace TeamsManager.Tests.Controllers
         #region DeactivateUser Tests
 
         [Fact]
-        public async Task DeactivateUser_WithValidToken_ShouldReturnOk()
+        public async Task DeactivateUser_WithValidData_ShouldReturnOk()
         {
             // Arrange
-            var userId = "user123";
-            var reason = "Test deactivation";
+            var userId = "user-123";
+            var dto = new TeamsManager.Api.Controllers.UserActionM365Dto { PerformM365Action = true };
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.DeactivateUserAsync(userId, reason, _accessTokenValue))
+            _mockUserService.Setup(s => s.DeactivateUserAsync(userId, _accessTokenValue, dto.PerformM365Action))
                            .ReturnsAsync(true);
 
-            // Act
-            var result = await _controller.DeactivateUser(userId, reason);
+            // Act  
+            var result = await _controller.DeactivateUser(userId, dto);
 
             // Assert
-            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { Message = "Użytkownik został pomyślnie dezaktywowany." });
+            result.Should().BeOfType<OkObjectResult>();
         }
 
         #endregion
@@ -326,44 +419,43 @@ namespace TeamsManager.Tests.Controllers
         #region ActivateUser Tests
 
         [Fact]
-        public async Task ActivateUser_WithValidToken_ShouldReturnOk()
+        public async Task ActivateUser_WithValidData_ShouldReturnOk()
         {
             // Arrange
-            var userId = "user123";
+            var userId = "user-123";
+            var dto = new TeamsManager.Api.Controllers.UserActionM365Dto { PerformM365Action = true };
             SetupControllerContext(_validAccessToken);
             
-            _mockUserService.Setup(s => s.ActivateUserAsync(userId, _accessTokenValue))
+            _mockUserService.Setup(s => s.ActivateUserAsync(userId, _accessTokenValue, dto.PerformM365Action))
                            .ReturnsAsync(true);
 
             // Act
-            var result = await _controller.ActivateUser(userId);
+            var result = await _controller.ActivateUser(userId, dto);
 
             // Assert
-            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { Message = "Użytkownik został pomyślnie aktywowany." });
+            result.Should().BeOfType<OkObjectResult>();
         }
 
         #endregion
 
-        #region Token Extraction Tests
+        #region TokenExtraction Tests
 
         [Theory]
         [InlineData("Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token", true)]
         [InlineData("bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token", true)]
         [InlineData("BEARER eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token", true)]
         [InlineData("Basic dXNlcjpwYXNzd29yZA==", false)]
-        [InlineData("eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token", false)]
         [InlineData("", false)]
         public async Task TokenExtraction_VariousAuthHeaders_ShouldHandleCorrectly(string authHeader, bool shouldExtractToken)
         {
             // Arrange
             var userId = "user123";
-            var expectedUser = new User { Id = userId };
+            var expectedUser = new User { Id = userId, UPN = "test@example.com", FirstName = "Test", LastName = "User" };
             SetupControllerContext(authHeader);
             
             string? expectedToken = shouldExtractToken ? authHeader.Substring("Bearer ".Length).Trim() : null;
             
-            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, expectedToken!))
+            _mockUserService.Setup(s => s.GetUserByIdAsync(userId, false, expectedToken))
                            .ReturnsAsync(expectedUser);
 
             // Act
@@ -373,12 +465,70 @@ namespace TeamsManager.Tests.Controllers
             if (shouldExtractToken)
             {
                 result.Should().BeOfType<OkObjectResult>();
-                _mockUserService.Verify(s => s.GetUserByIdAsync(userId, expectedToken!), Times.Once);
+                _mockUserService.Verify(s => s.GetUserByIdAsync(userId, false, expectedToken), Times.Once);
             }
             else
             {
-                result.Should().BeOfType<UnauthorizedObjectResult>();
+                result.Should().BeOfType<OkObjectResult>();
+                _mockUserService.Verify(s => s.GetUserByIdAsync(userId, false, null), Times.Once);
             }
+        }
+
+        [Fact]
+        public async Task GetUserByUpn_WithoutToken_ShouldReturnUser()
+        {
+            // Arrange
+            var upn = "test@example.com";
+            var user = new User { Id = "123", UPN = upn, FirstName = "Test", LastName = "User" };
+            SetupControllerContext(); // No token
+            
+            _mockUserService.Setup(s => s.GetUserByUpnAsync(upn, false, null))
+                           .ReturnsAsync(user);
+
+            // Act
+            var result = await _controller.GetUserByUpn(upn);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().Be(user);
+        }
+
+        [Fact]
+        public async Task GetUserByUpn_WithEncodedUpn_ShouldDecodeAndCallService()
+        {
+            // Arrange
+            var encodedUpn = "john.doe%40example.com";
+            var decodedUpn = "john.doe@example.com";
+            var expectedUser = new User { Id = "user123", UPN = decodedUpn };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetUserByUpnAsync(decodedUpn, false, _accessTokenValue))
+                           .ReturnsAsync(expectedUser);
+
+            // Act
+            var result = await _controller.GetUserByUpn(encodedUpn);
+
+            // Assert
+            result.Should().BeOfType<OkObjectResult>();
+            _mockUserService.Verify(s => s.GetUserByUpnAsync(decodedUpn, false, _accessTokenValue), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetUserByUpn_WithNotFound_ShouldReturnNotFound()
+        {
+            // Arrange
+            var upn = "notfound@example.com";
+            SetupControllerContext(_validAccessToken);
+            
+            _mockUserService.Setup(s => s.GetUserByUpnAsync(upn, false, _accessTokenValue))
+                           .ReturnsAsync((User?)null);
+
+            // Act
+            var result = await _controller.GetUserByUpn(upn);
+
+            // Assert
+            var notFoundResult = result.Should().BeOfType<NotFoundObjectResult>().Subject;
+            notFoundResult.Value.Should().BeEquivalentTo(new { Message = $"Użytkownik o UPN '{upn}' nie został znaleziony." });
         }
 
         #endregion

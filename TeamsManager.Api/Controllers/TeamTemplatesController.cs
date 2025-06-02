@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using System;
@@ -62,16 +64,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/TeamTemplates
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/TeamTemplates
     [Authorize] // Wszystkie operacje na szablonach zespołów domyślnie wymagają autoryzacji
     public class TeamTemplatesController : ControllerBase
     {
         private readonly ITeamTemplateService _teamTemplateService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamTemplatesController> _logger;
 
-        public TeamTemplatesController(ITeamTemplateService teamTemplateService, ILogger<TeamTemplatesController> logger)
+        public TeamTemplatesController(
+            ITeamTemplateService teamTemplateService, 
+            ICurrentUserService currentUserService,
+            ILogger<TeamTemplatesController> logger)
         {
             _teamTemplateService = teamTemplateService ?? throw new ArgumentNullException(nameof(teamTemplateService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

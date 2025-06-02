@@ -149,7 +149,7 @@ namespace TeamsManager.Core.Models
 
         /// <summary>
         /// Czy kanał jest obecnie aktywny (operacyjnie).
-        /// Wcześniej: IsActive (z BaseEntity) && Status == ChannelStatus.Active.
+        /// Wcześniej: IsActive (z BaseEntity) &amp;&amp; Status == ChannelStatus.Active.
         /// Teraz, gdy this.IsActive jest oparte na Status, wystarczy this.IsActive.
         /// Dodatkowo, można by tu uwzględnić aktywność samego rekordu BaseEntity, jeśli miałaby ona inne znaczenie.
         /// Na potrzeby ujednolicenia, jeśli IsActive kanału zależy tylko od jego Statusu, to:

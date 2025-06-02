@@ -151,15 +151,26 @@
                             HorizontalAlignment="Center"
                             Margin="40,25,40,25">
 
-                    <!-- Ikona użytkownika -->
-                    <Border Width="80" Height="80" 
+                    <!-- Ikona użytkownika / Avatar -->
+                    <Border x:Name="UserAvatarBorder" Width="80" Height="80" 
                             CornerRadius="40"
                             Background="#FF3F3F46"
                             Margin="0,0,0,20">
-                        <TextBlock Text="👤" 
-                                   FontSize="40" 
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center"/>
+                        <Grid>
+                            <!-- Domyślna ikona użytkownika -->
+                            <TextBlock x:Name="DefaultUserIcon" Text="👤" 
+                                       FontSize="40" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center"/>
+                            <!-- Avatar użytkownika -->
+                            <Ellipse x:Name="UserAvatarImage" 
+                                     Width="80" Height="80"
+                                     Visibility="Collapsed">
+                                <Ellipse.Fill>
+                                    <ImageBrush x:Name="UserAvatarBrush" Stretch="UniformToFill"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
                     </Border>
 
                     <!-- Informacje o użytkowniku -->
@@ -168,13 +179,25 @@
                             Padding="20,15"
                             MinHeight="60"
                             Margin="0,0,0,30">
-                        <TextBlock x:Name="UserInfoTextBlock" 
-                                   Text="Niezalogowany" 
-                                   FontSize="14" 
-                                   FontFamily="Segoe UI"
-                                   Foreground="#FFECECEC"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"/>
+                        <StackPanel>
+                            <TextBlock x:Name="UserDisplayNameTextBlock" 
+                                       Text="Niezalogowany" 
+                                       FontSize="16" 
+                                       FontFamily="Segoe UI"
+                                       FontWeight="Medium"
+                                       Foreground="#FFECECEC"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,5"/>
+                            <TextBlock x:Name="UserInfoTextBlock" 
+                                       Text="" 
+                                       FontSize="12" 
+                                       FontFamily="Segoe UI"
+                                       Foreground="#FF969696"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Visibility="Collapsed"/>
+                        </StackPanel>
                     </Border>
 
                     <!-- Przyciski -->
@@ -195,12 +218,12 @@
                             IsEnabled="False"
                             Style="{StaticResource DangerButton}"/>
 
-                    <Button x:Name="TestApiButton" 
-                            Content="Testuj API (WhoAmI)" 
+                    <Button x:Name="ManualTestsButton" 
+                            Content="🧪 Testy Manualne" 
                             Width="280" 
                             Height="48" 
                             Margin="0,5" 
-                            Click="TestApiButton_Click" 
+                            Click="ManualTestsButton_Click"
                             IsEnabled="False"
                             Style="{StaticResource ModernButton}"/>
                 </StackPanel>

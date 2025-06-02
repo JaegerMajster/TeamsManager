@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization; // Dla atrybutu [Authorize]
 using Microsoft.AspNetCore.Mvc;         // Dla ControllerBase, ApiController, Route, HttpGet, IActionResult, OkObjectResult, StatusCode
+using Asp.Versioning;
 using TeamsManager.Core.Abstractions;     // Dla ICurrentUserService
 // using Microsoft.Extensions.Logging; // Już powinno być globalnie przez ImplicitUsings, ale można dodać dla jasności
 using System; // Dla ArgumentNullException
@@ -8,7 +9,8 @@ using System.Linq; // Dla User.Claims.Select
 namespace TeamsManager.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")] // Definiuje bazową trasę jako /api/TestAuth
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Definiuje bazową trasę jako /api/v1.0/TestAuth
     public class TestAuthController : ControllerBase
     {
         private readonly ICurrentUserService _currentUserService;

@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums; // Dla SettingType
@@ -45,16 +47,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/ApplicationSettings
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/ApplicationSettings
     [Authorize] // Dostęp do ustawień aplikacji zazwyczaj wymaga autoryzacji
     public class ApplicationSettingsController : ControllerBase
     {
         private readonly IApplicationSettingService _applicationSettingService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ApplicationSettingsController> _logger;
 
-        public ApplicationSettingsController(IApplicationSettingService applicationSettingService, ILogger<ApplicationSettingsController> logger)
+        public ApplicationSettingsController(
+            IApplicationSettingService applicationSettingService, 
+            ICurrentUserService currentUserService,
+            ILogger<ApplicationSettingsController> logger)
         {
             _applicationSettingService = applicationSettingService ?? throw new ArgumentNullException(nameof(applicationSettingService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

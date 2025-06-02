@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
@@ -27,16 +29,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/OperationHistories
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/OperationHistories
     [Authorize] // Dostęp do historii operacji domyślnie wymaga autoryzacji
     public class OperationHistoriesController : ControllerBase
     {
         private readonly IOperationHistoryService _operationHistoryService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<OperationHistoriesController> _logger;
 
-        public OperationHistoriesController(IOperationHistoryService operationHistoryService, ILogger<OperationHistoriesController> logger)
+        public OperationHistoriesController(
+            IOperationHistoryService operationHistoryService, 
+            ICurrentUserService currentUserService,
+            ILogger<OperationHistoriesController> logger)
         {
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

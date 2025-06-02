@@ -202,13 +202,10 @@ namespace TeamsManager.Tests.Services
         {
             // Arrange
             var service = new MsalAuthService(); // This will likely have null _pca due to missing config
-            var mockWindow = new Mock<Window>();
 
-            // Act
-            var result = await service.AcquireTokenInteractiveAsync(mockWindow.Object);
-
-            // Assert
-            result.Should().BeNull();
+            // Act & Assert - wywołanie z null window powinno rzucić ArgumentNullException
+            await Assert.ThrowsAsync<ArgumentNullException>(() => 
+                service.AcquireTokenInteractiveAsync(null!));
         }
 
         [Fact]

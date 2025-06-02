@@ -1098,41 +1098,35 @@ namespace TeamsManager.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> UpdateTeamChannelAsync(string teamId, string currentDisplayName, string? newDisplayName = null, string? newDescription = null)
+        public async Task<bool> UpdateTeamChannelAsync(
+            string teamId,
+            string channelId, // ZMIANA: Zamiast currentDisplayName
+            string? newDisplayName = null,
+            string? newDescription = null)
         {
             if (!ValidateRunspaceState()) return false;
 
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(currentDisplayName))
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelId)) // ZMIANA: Sprawdzenie channelId
             {
-                _logger.LogError("TeamID i CurrentDisplayName są wymagane.");
+                _logger.LogError("TeamID i ChannelID są wymagane do aktualizacji kanału.");
                 return false;
             }
 
-            // Sprawdzenie czy są jakiekolwiek zmiany do wprowadzenia
-            if (newDisplayName == null && newDescription == null)
+            if (string.IsNullOrWhiteSpace(newDisplayName) && newDescription == null) // newDescription może być pusty, jeśli chcemy wyczyścić
             {
-                _logger.LogInformation("Brak właściwości do aktualizacji dla kanału '{CurrentChannelName}' w zespole {TeamId}.", currentDisplayName, teamId);
+                _logger.LogInformation("Brak właściwości do aktualizacji dla kanału ID '{ChannelId}' w zespole {TeamId}.", channelId, teamId);
                 return true;
             }
 
-            _logger.LogInformation("Aktualizowanie kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
+            _logger.LogInformation("Aktualizowanie kanału ID '{ChannelId}' w zespole {TeamId}. Nowa nazwa: '{NewDisplayName}', Nowy opis: '{NewDescription}'",
+                channelId, teamId, newDisplayName ?? "bez zmian", newDescription ?? "bez zmian");
 
             try
             {
-                // Najpierw znajdź kanał
-                var channelToUpdate = await GetTeamChannelAsync(teamId, currentDisplayName);
-                if (channelToUpdate == null || channelToUpdate.Properties["Id"]?.Value == null)
-                {
-                    _logger.LogError("Nie znaleziono kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
-                    return false;
-                }
-
-                string channelId = channelToUpdate.Properties["Id"].Value.ToString()!;
-
                 var parameters = new Dictionary<string, object>
                 {
                     { "TeamId", teamId },
-                    { "ChannelId", channelId }
+                    { "ChannelId", channelId } // Używamy ChannelId
                 };
 
                 if (!string.IsNullOrWhiteSpace(newDisplayName))
@@ -1140,74 +1134,69 @@ namespace TeamsManager.Core.Services
                     parameters.Add("DisplayName", newDisplayName);
                 }
 
-                if (newDescription != null)
+                if (newDescription != null) // Pozwalamy na ustawienie pustego opisu
                 {
                     parameters.Add("Description", newDescription);
                 }
 
                 var results = await ExecuteCommandWithRetryAsync("Update-MgTeamChannel", parameters);
 
-                // Invalidate channels cache
-                InvalidatePowerShellCache(teamId: teamId);
-
-                return results != null;
+                if (results != null)
+                {
+                    InvalidatePowerShellCache(teamId: teamId); // Unieważnij cache kanałów dla tego zespołu
+                    _logger.LogInformation("Pomyślnie zaktualizowano kanał ID '{ChannelId}' w zespole {TeamId}.", channelId, teamId);
+                    return true;
+                }
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Nie udało się zaktualizować kanału '{CurrentChannelName}' w zespole {TeamId}", currentDisplayName, teamId);
+                _logger.LogError(ex, "Nie udało się zaktualizować kanału ID '{ChannelId}' w zespole {TeamId}", channelId, teamId);
                 return false;
             }
         }
 
         /// <inheritdoc />
-        public async Task<bool> RemoveTeamChannelAsync(string teamId, string channelDisplayName)
+        public async Task<bool> RemoveTeamChannelAsync(
+            string teamId,
+            string channelId) // ZMIANA: Zamiast channelDisplayName
         {
             if (!ValidateRunspaceState()) return false;
 
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelDisplayName))
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelId)) // ZMIANA: Sprawdzenie channelId
             {
-                _logger.LogError("TeamID i ChannelDisplayName są wymagane.");
+                _logger.LogError("TeamID i ChannelID są wymagane do usunięcia kanału.");
                 return false;
             }
 
-            // Ostrzeżenie przed próbą usunięcia kanału "Ogólny"
-            if (channelDisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase) ||
-                channelDisplayName.Equals("General", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning("Próba usunięcia kanału ogólnego ('{ChannelDisplayName}') dla zespołu {TeamId}. Ta operacja jest niedozwolona.", channelDisplayName, teamId);
-            }
-
-            _logger.LogInformation("Usuwanie kanału '{ChannelDisplayName}' z zespołu {TeamId}", channelDisplayName, teamId);
+            // UWAGA: Logika sprawdzająca, czy kanał jest "General" lub "Ogólny"
+            // powinna być teraz zrealizowana w serwisie wywołującym (ChannelService)
+            // przed wywołaniem tej metody, na podstawie `DisplayName` pobranego np. z `GetTeamChannelAsync`.
+            // PowerShellService operuje teraz na `channelId`.
+            _logger.LogInformation("Usuwanie kanału ID '{ChannelId}' z zespołu {TeamId}", channelId, teamId);
 
             try
             {
-                // Najpierw znajdź kanał
-                var channelToDelete = await GetTeamChannelAsync(teamId, channelDisplayName);
-                if (channelToDelete == null || channelToDelete.Properties["Id"]?.Value == null)
-                {
-                    _logger.LogError("Nie znaleziono kanału '{ChannelDisplayName}' w zespole {TeamId}", channelDisplayName, teamId);
-                    return false;
-                }
-
-                string channelId = channelToDelete.Properties["Id"].Value.ToString()!;
-
                 var parameters = new Dictionary<string, object>
                 {
                     { "TeamId", teamId },
-                    { "ChannelId", channelId },
-                    { "Confirm", false }
+                    { "ChannelId", channelId }, // Używamy ChannelId
+                    { "Confirm", false } // Pomija potwierdzenie w PowerShell
                 };
 
                 var results = await ExecuteCommandWithRetryAsync("Remove-MgTeamChannel", parameters);
 
-                // Invalidate channels cache
-                InvalidatePowerShellCache(teamId: teamId);
-
-                return results != null;
+                if (results != null)
+                {
+                    InvalidatePowerShellCache(teamId: teamId); // Unieważnij cache kanałów dla tego zespołu
+                    _logger.LogInformation("Pomyślnie usunięto kanał ID '{ChannelId}' z zespołu {TeamId}.", channelId, teamId);
+                    return true;
+                }
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Nie udało się usunąć kanału '{ChannelDisplayName}' z zespołu {TeamId}", channelDisplayName, teamId);
+                _logger.LogError(ex, "Nie udało się usunąć kanału ID '{ChannelId}' z zespołu {TeamId}", channelId, teamId);
                 return false;
             }
         }

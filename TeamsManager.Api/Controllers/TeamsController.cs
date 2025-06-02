@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
@@ -57,7 +58,8 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/Teams
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/Teams
     [Authorize] // Większość operacji na zespołach wymaga autoryzacji
     public class TeamsController : ControllerBase
     {

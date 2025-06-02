@@ -1,60 +1,57 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿// Plik: TeamsManager.Api/Controllers/ChannelsController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Management.Automation; // Dla PSObject
-using TeamsManager.Core.Models; // Dla Channel, jeśli będziemy mapować
-using TeamsManager.Core.Enums; // Dla ChannelStatus
+using System.Collections.Generic; // Dodane dla List w DTO
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class CreateChannelRequestDto
     {
         public string DisplayName { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool IsPrivate { get; set; } = false;
-        // Inne właściwości jak Owner UPN dla kanałów prywatnych można dodać
+        // Można dodać np. Owner UPN jeśli tworzymy kanał prywatny i chcemy od razu dodać właściciela
     }
 
     public class UpdateChannelRequestDto
     {
-        public string? NewDisplayName { get; set; } // Nowa nazwa kanału
-        public string? NewDescription { get; set; } // Nowy opis kanału
-        // Uwaga: Zmiana MembershipType (np. z publicznego na prywatny) nie jest trywialna i może wymagać utworzenia nowego kanału.
+        public string? NewDisplayName { get; set; }
+        public string? NewDescription { get; set; }
+        // Inne właściwości, które można aktualizować, np. IsFavoriteByDefault (jeśli Graph API na to pozwala przez to polecenie)
     }
 
 
-    // --- Kontroler ---
-
     [ApiController]
-    [Route("api/teams/{teamId}/[controller]")] // Trasa bazowa: /api/teams/{teamId}/Channels
-    [Authorize] // Wszystkie operacje na kanałach domyślnie wymagają autoryzacji
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/teams/{teamId}/[controller]")]
+    [Authorize]
     public class ChannelsController : ControllerBase
     {
-        private readonly IPowerShellService _powerShellService;
-        private readonly ITeamService _teamService; // Potrzebny do logiki związanej z Team (np. aktualizacji w lokalnej bazie)
+        private readonly IChannelService _channelService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ChannelsController> _logger;
 
         public ChannelsController(
-            IPowerShellService powerShellService,
-            ITeamService teamService,
+            IChannelService channelService,
+            ICurrentUserService currentUserService,
             ILogger<ChannelsController> logger)
         {
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
-            _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
+            _channelService = channelService ?? throw new ArgumentNullException(nameof(channelService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         private string? GetAccessTokenFromHeader()
         {
-            if (Request.Headers.ContainsKey("Authorization"))
+            if (Request.Headers.TryGetValue("Authorization", out var authHeaderValues))
             {
-                var authHeader = Request.Headers["Authorization"].ToString();
+                var authHeader = authHeaderValues.ToString();
                 if (authHeader != null && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return authHeader.Substring("Bearer ".Length).Trim();
@@ -64,170 +61,139 @@ namespace TeamsManager.Api.Controllers
             return null;
         }
 
-        private async Task<bool> ConnectToGraphWithToken(string? accessToken, string[]? scopes = null)
+        [HttpGet]
+        public async Task<IActionResult> GetTeamChannels(string teamId, [FromQuery] bool forceRefresh = false)
         {
+            _logger.LogInformation("API: Pobieranie kanałów dla lokalnego zespołu ID: {TeamId}", teamId);
+            var accessToken = GetAccessTokenFromHeader();
             if (string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogWarning("Próba połączenia z Graph bez tokenu dostępu.");
-                return false;
-            }
-            // Domyślne scopes dla operacji na kanałach, jeśli nie podano inaczej
-            var defaultScopes = scopes ?? new[] { "Group.ReadWrite.All", "Channel.ReadBasic.All", "Channel.ReadWrite.All" };
-            bool isConnected = await _powerShellService.ConnectWithAccessTokenAsync(accessToken, defaultScopes);
-            if (!isConnected)
-            {
-                _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API.");
-            }
-            return isConnected;
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetTeamChannels(string teamId)
-        {
-            _logger.LogInformation("Pobieranie kanałów dla zespołu ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader();
-            if (!await ConnectToGraphWithToken(accessToken))
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            var psObjects = await _powerShellService.GetTeamChannelsAsync(teamId);
-            if (psObjects == null)
+            var channels = await _channelService.GetTeamChannelsAsync(teamId, accessToken, forceRefresh);
+            if (channels == null)
             {
-                // Błąd został już zalogowany przez PowerShellService
-                return StatusCode(StatusCodes.Status500InternalServerError, new { Message = "Wystąpił błąd podczas pobierania kanałów." });
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie można pobrać kanałów. Problem z usługą zależną lub zespołem." });
             }
-
-            // TODO: Zmapować PSObject na Channel DTO lub model Channel, jeśli potrzebne
-            var channels = psObjects.Select(pso => new
-            {
-                Id = pso.Properties["Id"]?.Value?.ToString(),
-                DisplayName = pso.Properties["DisplayName"]?.Value?.ToString(),
-                Description = pso.Properties["Description"]?.Value?.ToString(),
-                MembershipType = pso.Properties["MembershipType"]?.Value?.ToString(), // Np. Standard, Private
-                WebUrl = pso.Properties["WebUrl"]?.Value?.ToString()
-            }).ToList();
-
             return Ok(channels);
         }
 
-        [HttpGet("{channelDisplayName}")]
-        public async Task<IActionResult> GetTeamChannel(string teamId, string channelDisplayName)
+        [HttpGet("{channelGraphId}")]
+        public async Task<IActionResult> GetTeamChannelById(string teamId, string channelGraphId, [FromQuery] bool forceRefresh = false)
+        {
+            _logger.LogInformation("API: Pobieranie kanału GraphID: {ChannelGraphId} dla lokalnego zespołu ID: {TeamId}", channelGraphId, teamId);
+            var accessToken = GetAccessTokenFromHeader();
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
+            }
+
+            var channel = await _channelService.GetTeamChannelByIdAsync(teamId, channelGraphId, accessToken, forceRefresh);
+            if (channel == null)
+            {
+                _logger.LogInformation("API: Kanał GraphID: {ChannelGraphId} w zespole ID: {TeamId} nie został znaleziony.", channelGraphId, teamId);
+                return NotFound(new { Message = $"Kanał o GraphID '{channelGraphId}' w zespole ID '{teamId}' nie został znaleziony." });
+            }
+            return Ok(channel);
+        }
+
+        [HttpGet("byName/{channelDisplayName}")]
+        public async Task<IActionResult> GetTeamChannelByDisplayName(string teamId, string channelDisplayName, [FromQuery] bool forceRefresh = false)
         {
             var decodedChannelDisplayName = System.Net.WebUtility.UrlDecode(channelDisplayName);
-            _logger.LogInformation("Pobieranie kanału '{ChannelDisplayName}' dla zespołu ID: {TeamId}", decodedChannelDisplayName, teamId);
+            _logger.LogInformation("API: Pobieranie kanału '{ChannelDisplayName}' dla zespołu ID: {TeamId} (metoda po nazwie)", decodedChannelDisplayName, teamId);
             var accessToken = GetAccessTokenFromHeader();
-            if (!await ConnectToGraphWithToken(accessToken))
+            if (string.IsNullOrEmpty(accessToken))
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            var psObject = await _powerShellService.GetTeamChannelAsync(teamId, decodedChannelDisplayName);
-            if (psObject == null)
+            var channel = await _channelService.GetTeamChannelByDisplayNameAsync(teamId, decodedChannelDisplayName, accessToken, forceRefresh);
+            if (channel == null)
             {
-                _logger.LogInformation("Kanał '{ChannelDisplayName}' w zespole ID: {TeamId} nie został znaleziony lub wystąpił błąd.", decodedChannelDisplayName, teamId);
+                _logger.LogInformation("API: Kanał '{ChannelDisplayName}' w zespole ID: {TeamId} nie został znaleziony.", decodedChannelDisplayName, teamId);
                 return NotFound(new { Message = $"Kanał '{decodedChannelDisplayName}' w zespole ID '{teamId}' nie został znaleziony." });
             }
-
-            // TODO: Zmapować PSObject na Channel DTO lub model Channel
-            var channel = new
-            {
-                Id = psObject.Properties["Id"]?.Value?.ToString(),
-                DisplayName = psObject.Properties["DisplayName"]?.Value?.ToString(),
-                Description = psObject.Properties["Description"]?.Value?.ToString(),
-                MembershipType = psObject.Properties["MembershipType"]?.Value?.ToString(),
-                WebUrl = psObject.Properties["WebUrl"]?.Value?.ToString()
-            };
             return Ok(channel);
         }
 
         [HttpPost]
         public async Task<IActionResult> CreateTeamChannel(string teamId, [FromBody] CreateChannelRequestDto requestDto)
         {
-            _logger.LogInformation("Żądanie utworzenia kanału '{DisplayName}' w zespole ID: {TeamId}", requestDto.DisplayName, teamId);
+            _logger.LogInformation("API: Żądanie utworzenia kanału '{DisplayName}' w zespole ID: {TeamId}", requestDto.DisplayName, teamId);
             var accessToken = GetAccessTokenFromHeader();
-            if (!await ConnectToGraphWithToken(accessToken))
+            if (string.IsNullOrEmpty(accessToken))
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            var psObject = await _powerShellService.CreateTeamChannelAsync(teamId, requestDto.DisplayName, requestDto.IsPrivate, requestDto.Description);
-            if (psObject == null)
+            var createdChannel = await _channelService.CreateTeamChannelAsync(teamId, requestDto.DisplayName, accessToken, requestDto.Description, requestDto.IsPrivate);
+            if (createdChannel == null)
             {
-                _logger.LogWarning("Nie udało się utworzyć kanału '{DisplayName}' w zespole ID: {TeamId}.", requestDto.DisplayName, teamId);
+                _logger.LogWarning("API: Nie udało się utworzyć kanału '{DisplayName}' w zespole ID: {TeamId}.", requestDto.DisplayName, teamId);
                 return BadRequest(new { Message = "Nie udało się utworzyć kanału. Sprawdź logi serwera." });
             }
 
-            // TODO: Zmapować PSObject na Channel DTO lub model Channel
-            var createdChannel = new
-            {
-                Id = psObject.Properties["Id"]?.Value?.ToString(),
-                DisplayName = psObject.Properties["DisplayName"]?.Value?.ToString(),
-                Description = psObject.Properties["Description"]?.Value?.ToString(),
-                MembershipType = psObject.Properties["MembershipType"]?.Value?.ToString()
-            };
-            _logger.LogInformation("Kanał '{DisplayName}' (ID: {ChannelId}) utworzony pomyślnie w zespole ID: {TeamId}.", createdChannel.DisplayName, createdChannel.Id, teamId);
-
-            // TODO: Rozważyć aktualizację lokalnej bazy danych o nowo utworzony kanał,
-            // np. poprzez wywołanie metody w ITeamService, która by to obsłużyła.
-
-            return CreatedAtAction(nameof(GetTeamChannel), new { teamId = teamId, channelDisplayName = createdChannel.DisplayName }, createdChannel);
+            _logger.LogInformation("API: Kanał '{DisplayName}' (GraphID: {ChannelGraphId}) utworzony pomyślnie w zespole ID: {TeamId}.", createdChannel.DisplayName, createdChannel.Id, teamId);
+            // Zwracamy nowy obiekt Channel z lokalnej bazy (który powinien mieć GraphID jako Id)
+            return CreatedAtAction(nameof(GetTeamChannelById), new { teamId = teamId, channelGraphId = createdChannel.Id }, createdChannel);
         }
 
-        [HttpPut("{currentChannelDisplayName}")]
-        public async Task<IActionResult> UpdateTeamChannel(string teamId, string currentChannelDisplayName, [FromBody] UpdateChannelRequestDto requestDto)
+        [HttpPut("{channelId}")] // Używamy channelId (GraphID)
+        public async Task<IActionResult> UpdateTeamChannel(string teamId, string channelId, [FromBody] UpdateChannelRequestDto requestDto)
         {
-            var decodedCurrentChannelDisplayName = System.Net.WebUtility.UrlDecode(currentChannelDisplayName);
-            _logger.LogInformation("Żądanie aktualizacji kanału '{CurrentChannelDisplayName}' w zespole ID: {TeamId}", decodedCurrentChannelDisplayName, teamId);
+            _logger.LogInformation("API: Żądanie aktualizacji kanału GraphID: {ChannelId} w zespole ID: {TeamId}", channelId, teamId);
             var accessToken = GetAccessTokenFromHeader();
-            if (!await ConnectToGraphWithToken(accessToken))
+            if (string.IsNullOrEmpty(accessToken))
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            if (string.IsNullOrWhiteSpace(requestDto.NewDisplayName) && string.IsNullOrWhiteSpace(requestDto.NewDescription))
+            if (string.IsNullOrWhiteSpace(requestDto.NewDisplayName) && requestDto.NewDescription == null) // Sprawdzamy czy NewDescription jest null, bo może być ""
             {
                 return BadRequest(new { Message = "Należy podać przynajmniej nową nazwę lub nowy opis." });
             }
 
-            var success = await _powerShellService.UpdateTeamChannelAsync(teamId, decodedCurrentChannelDisplayName, requestDto.NewDisplayName, requestDto.NewDescription);
-            if (success)
+            // Serwis UpdateTeamChannelAsync przyjmuje channelId.
+            // currentDisplayName nie jest już potrzebne w sygnaturze serwisu, jeśli operujemy na ID.
+            var updatedChannel = await _channelService.UpdateTeamChannelAsync(teamId, channelId, accessToken, requestDto.NewDisplayName, requestDto.NewDescription);
+
+            if (updatedChannel != null)
             {
-                _logger.LogInformation("Kanał '{CurrentChannelDisplayName}' w zespole ID: {TeamId} zaktualizowany pomyślnie.", decodedCurrentChannelDisplayName, teamId);
-                // TODO: Rozważyć aktualizację lokalnej bazy danych.
-                return NoContent(); // 204 No Content
+                _logger.LogInformation("API: Kanał GraphID: {ChannelId} w zespole ID: {TeamId} zaktualizowany pomyślnie.", channelId, teamId);
+                return Ok(updatedChannel);
             }
-            _logger.LogWarning("Nie udało się zaktualizować kanału '{CurrentChannelDisplayName}' w zespole ID: {TeamId}.", decodedCurrentChannelDisplayName, teamId);
+            _logger.LogWarning("API: Nie udało się zaktualizować kanału GraphID: {ChannelId} w zespole ID: {TeamId}.", channelId, teamId);
             return BadRequest(new { Message = "Nie udało się zaktualizować kanału." });
         }
 
-        [HttpDelete("{channelDisplayName}")]
-        public async Task<IActionResult> RemoveTeamChannel(string teamId, string channelDisplayName)
+        [HttpDelete("{channelId}")] // Używamy channelId (GraphID)
+        public async Task<IActionResult> RemoveTeamChannel(string teamId, string channelId)
         {
-            var decodedChannelDisplayName = System.Net.WebUtility.UrlDecode(channelDisplayName);
-            _logger.LogInformation("Żądanie usunięcia kanału '{ChannelDisplayName}' z zespołu ID: {TeamId}", decodedChannelDisplayName, teamId);
+            _logger.LogInformation("API: Żądanie usunięcia kanału GraphID: {ChannelId} z zespołu ID: {TeamId}", channelId, teamId);
             var accessToken = GetAccessTokenFromHeader();
-            if (!await ConnectToGraphWithToken(accessToken))
+            if (string.IsNullOrEmpty(accessToken))
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+                return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            if (decodedChannelDisplayName.Equals("General", StringComparison.OrdinalIgnoreCase) || decodedChannelDisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning("Próba usunięcia kanału General/Ogólny dla zespołu {TeamId}, co jest niedozwolone.", teamId);
-                return BadRequest(new { Message = "Nie można usunąć kanału General/Ogólny." });
-            }
-
-            var success = await _powerShellService.RemoveTeamChannelAsync(teamId, decodedChannelDisplayName);
+            // ChannelService.RemoveTeamChannelAsync teraz sam weryfikuje czy kanał nie jest "Generalny" na podstawie danych z DB
+            var success = await _channelService.RemoveTeamChannelAsync(teamId, channelId, accessToken);
             if (success)
             {
-                _logger.LogInformation("Kanał '{ChannelDisplayName}' usunięty pomyślnie z zespołu ID: {TeamId}.", decodedChannelDisplayName, teamId);
-                // TODO: Rozważyć aktualizację lokalnej bazy danych (oznaczenie kanału jako usunięty/nieaktywny).
+                _logger.LogInformation("API: Kanał GraphID: {ChannelId} usunięty pomyślnie z zespołu ID: {TeamId}.", channelId, teamId);
                 return Ok(new { Message = "Kanał usunięty pomyślnie." });
             }
-            _logger.LogWarning("Nie udało się usunąć kanału '{ChannelDisplayName}' z zespołu ID: {TeamId}.", decodedChannelDisplayName, teamId);
-            // PowerShellService powinien zalogować dokładniejszy błąd.
-            return BadRequest(new { Message = "Nie udało się usunąć kanału." });
+            _logger.LogWarning("API: Nie udało się usunąć kanału GraphID: {ChannelId} z zespołu ID: {TeamId}.", channelId, teamId);
+            // Serwis powinien zalogować dokładniejszy błąd (np. kanał nie znaleziony, próba usunięcia Generalnego, błąd Graph)
+            // Możemy też zwrócić NotFound jeśli serwis by to sygnalizował.
+            var channelExists = await _channelService.GetTeamChannelByIdAsync(teamId, channelId, accessToken, forceRefresh: true);
+            if (channelExists == null)
+            {
+                return NotFound(new { Message = $"Kanał o GraphID '{channelId}' w zespole '{teamId}' nie został znaleziony." });
+            }
+            return BadRequest(new { Message = "Nie udało się usunąć kanału. Sprawdź, czy kanał nie jest kanałem 'General/Ogólny' lub czy nie wystąpił inny błąd." });
         }
     }
 }

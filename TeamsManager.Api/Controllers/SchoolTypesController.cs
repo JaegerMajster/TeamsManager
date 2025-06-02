@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using System;
@@ -34,16 +36,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/SchoolTypes
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/SchoolTypes
     [Authorize] // Wszystkie operacje na typach szkół domyślnie wymagają autoryzacji
     public class SchoolTypesController : ControllerBase
     {
         private readonly ISchoolTypeService _schoolTypeService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolTypesController> _logger;
 
-        public SchoolTypesController(ISchoolTypeService schoolTypeService, ILogger<SchoolTypesController> logger)
+        public SchoolTypesController(
+            ISchoolTypeService schoolTypeService, 
+            ICurrentUserService currentUserService,
+            ILogger<SchoolTypesController> logger)
         {
             _schoolTypeService = schoolTypeService ?? throw new ArgumentNullException(nameof(schoolTypeService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

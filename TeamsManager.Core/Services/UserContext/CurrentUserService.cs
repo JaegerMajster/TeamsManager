@@ -10,11 +10,13 @@ namespace TeamsManager.Core.Services.UserContext
     {
         private readonly IHttpContextAccessor? _httpContextAccessor; // Może być null, jeśli serwis jest używany poza kontekstem HTTP
         private string? _manualUserUpn; // Do użytku w testach lub zadaniach w tle
+        private readonly string _defaultUserUpn; // Przechowuje pierwotną wartość domyślną
 
         // Konstruktor dla scenariuszy z DI (np. w API)
         public CurrentUserService(IHttpContextAccessor httpContextAccessor)
         {
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+            _defaultUserUpn = "system@teamsmanager.local";
         }
 
         // Konstruktor bez parametrów, aby umożliwić użycie w scenariuszach bez IHttpContextAccessor
@@ -24,8 +26,9 @@ namespace TeamsManager.Core.Services.UserContext
         public CurrentUserService()
         {
             _httpContextAccessor = null;
+            _defaultUserUpn = "system@teamsmanager.local";
             // Ustawienie domyślnego użytkownika dla scenariuszy nie-HTTP lub przed zalogowaniem
-            _manualUserUpn = "system@teamsmanager.local";
+            _manualUserUpn = _defaultUserUpn;
             System.Diagnostics.Debug.WriteLine("CurrentUserService: Instancja utworzona bez IHttpContextAccessor (np. dla UI lub testów). Użyje _manualUserUpn lub domyślnego.");
         }
 
@@ -61,18 +64,15 @@ namespace TeamsManager.Core.Services.UserContext
             }
 
             // Priorytet 2: Użytkownik ustawiony ręcznie (np. w testach lub w UI przed pełnym DI dla API)
-            if (!string.IsNullOrEmpty(_manualUserUpn))
+            if (_manualUserUpn != null)
             {
                 System.Diagnostics.Debug.WriteLine($"CurrentUserService (Manual): Zwracam ręcznie ustawiony UPN: {_manualUserUpn}");
                 return _manualUserUpn;
             }
 
-            // Priorytet 3 (lub domyślny, jeśli konstruktor bez parametrów został użyty i nic nie ustawiono):
-            // Wcześniej zwracałeś tu "system@teamsmanager.local" jeśli _manualUserUpn był null.
-            // Jeśli konstruktor bez parametrów ustawia _manualUserUpn na "system@teamsmanager.local", to ten fallback jest już obsłużony.
-            // Dla pewności, jeśli nic innego nie pasuje:
-            System.Diagnostics.Debug.WriteLine("CurrentUserService: Nie udało się ustalić UPN z kontekstu HTTP ani ręcznie. Zwracam wartość domyślną 'unknown@teamsmanager.local'.");
-            return "unknown@teamsmanager.local"; // Ostateczna wartość domyślna
+            // Priorytet 3: Domyślna wartość (gdy _manualUserUpn jest null po SetCurrentUserUpn(null))
+            System.Diagnostics.Debug.WriteLine($"CurrentUserService: Nie udało się ustalić UPN z kontekstu HTTP ani ręcznie. Zwracam wartość domyślną '{_defaultUserUpn}'.");
+            return _defaultUserUpn;
         }
 
         public void SetCurrentUserUpn(string? upn)
@@ -105,6 +105,6 @@ namespace TeamsManager.Core.Services.UserContext
             return null;
         }
 
-        public bool IsAuthenticated => !string.IsNullOrWhiteSpace(GetCurrentUserUpn()) && GetCurrentUserUpn() != "system@teamsmanager.local" && GetCurrentUserUpn() != "unknown@teamsmanager.local";
+        public bool IsAuthenticated => !string.IsNullOrWhiteSpace(GetCurrentUserUpn()) && GetCurrentUserUpn() != _defaultUserUpn;
     }
 }

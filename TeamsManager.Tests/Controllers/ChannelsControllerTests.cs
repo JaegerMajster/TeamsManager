@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Management.Automation;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -10,15 +8,17 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using Moq;
 using TeamsManager.Api.Controllers;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Models;
 using Xunit;
 
 namespace TeamsManager.Tests.Controllers
 {
     public class ChannelsControllerTests
     {
-        private readonly Mock<IPowerShellService> _mockPowerShellService;
-        private readonly Mock<ITeamService> _mockTeamService;
+        private readonly Mock<IChannelService> _mockChannelService;
+        private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<ChannelsController>> _mockLogger;
         private readonly ChannelsController _controller;
         private readonly string _validAccessToken = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token";
@@ -26,12 +26,12 @@ namespace TeamsManager.Tests.Controllers
 
         public ChannelsControllerTests()
         {
-            _mockPowerShellService = new Mock<IPowerShellService>();
-            _mockTeamService = new Mock<ITeamService>();
+            _mockChannelService = new Mock<IChannelService>();
+            _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<ChannelsController>>();
-            _controller = new ChannelsController(_mockPowerShellService.Object, _mockTeamService.Object, _mockLogger.Object);
 
-            SetupControllerContext();
+            // ChannelsController ma teraz 3 parametry w konstruktorze: IChannelService, ICurrentUserService, ILogger
+            _controller = new ChannelsController(_mockChannelService.Object, _mockCurrentUserService.Object, _mockLogger.Object);
         }
 
         private void SetupControllerContext(string? authorizationHeader = null)
@@ -49,18 +49,6 @@ namespace TeamsManager.Tests.Controllers
             };
         }
 
-        private PSObject CreateMockPSObject(string id, string displayName, string? description = null)
-        {
-            var psObject = new PSObject();
-            psObject.Properties.Add(new PSNoteProperty("Id", id));
-            psObject.Properties.Add(new PSNoteProperty("DisplayName", displayName));
-            if (description != null)
-            {
-                psObject.Properties.Add(new PSNoteProperty("Description", description));
-            }
-            return psObject;
-        }
-
         #region GetTeamChannels Tests
 
         [Fact]
@@ -68,27 +56,22 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
-            var channels = new Collection<PSObject>
+            var channels = new List<Channel>
             {
-                CreateMockPSObject("channel1", "General", "General channel"),
-                CreateMockPSObject("channel2", "Private Channel", "Private channel")
+                new Channel { Id = "channel1", DisplayName = "General" },
+                new Channel { Id = "channel2", DisplayName = "Random" }
             };
             SetupControllerContext(_validAccessToken);
             
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, 
-                new[] { "Group.ReadWrite.All", "Channel.ReadBasic.All", "Channel.ReadWrite.All" }))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.GetTeamChannelsAsync(teamId))
-                                  .ReturnsAsync(channels);
+            _mockChannelService.Setup(s => s.GetTeamChannelsAsync(teamId, _accessTokenValue, false))
+                              .ReturnsAsync(channels);
 
             // Act
             var result = await _controller.GetTeamChannels(teamId);
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            var returnedChannels = okResult.Value as IEnumerable<object>;
-            returnedChannels.Should().HaveCount(2);
+            okResult.Value.Should().BeEquivalentTo(channels);
         }
 
         [Fact]
@@ -102,79 +85,9 @@ namespace TeamsManager.Tests.Controllers
             var result = await _controller.GetTeamChannels(teamId);
 
             // Assert
-            var serviceUnavailableResult = result.Should().BeOfType<ObjectResult>().Subject;
-            serviceUnavailableResult.StatusCode.Should().Be(503);
-            serviceUnavailableResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
-        }
-
-        [Fact]
-        public async Task GetTeamChannels_ConnectionFails_ShouldReturnServiceUnavailable()
-        {
-            // Arrange
-            var teamId = "team123";
-            SetupControllerContext(_validAccessToken);
-            
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(false);
-
-            // Act
-            var result = await _controller.GetTeamChannels(teamId);
-
-            // Assert
-            var serviceUnavailableResult = result.Should().BeOfType<ObjectResult>().Subject;
-            serviceUnavailableResult.StatusCode.Should().Be(503);
-            serviceUnavailableResult.Value.Should().BeEquivalentTo(new { Message = "Nie można połączyć się z Microsoft Graph API." });
-        }
-
-        #endregion
-
-        #region GetTeamChannel Tests
-
-        [Fact]
-        public async Task GetTeamChannel_WithValidToken_ShouldReturnChannel()
-        {
-            // Arrange
-            var teamId = "team123";
-            var channelName = "General";
-            var channel = CreateMockPSObject("channel1", channelName, "General channel");
-            var channels = new Collection<PSObject> { channel };
-            SetupControllerContext(_validAccessToken);
-            
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.GetTeamChannelAsync(teamId, channelName))
-                                  .ReturnsAsync(channel);
-
-            // Act
-            var result = await _controller.GetTeamChannel(teamId, channelName);
-
-            // Assert
-            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().NotBeNull();
-        }
-
-        [Fact]
-        public async Task GetTeamChannel_ChannelNotFound_ShouldReturnNotFound()
-        {
-            // Arrange
-            var teamId = "team123";
-            var channelName = "NonExistent";
-            var emptyChannels = new Collection<PSObject>();
-            SetupControllerContext(_validAccessToken);
-            
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.GetTeamChannelAsync(teamId, channelName))
-                                  .ReturnsAsync((PSObject?)null);
-
-            // Act
-            var result = await _controller.GetTeamChannel(teamId, channelName);
-
-            // Assert
-            var notFoundResult = result.Should().BeOfType<NotFoundObjectResult>().Subject;
-            notFoundResult.Value.Should().BeEquivalentTo(new { Message = $"Kanał '{channelName}' nie został znaleziony w zespole o ID '{teamId}'." });
+            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak tokenu dostępu." });
+            _mockChannelService.Verify(s => s.GetTeamChannelsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
         }
 
         #endregion
@@ -186,29 +99,27 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new CreateChannelRequestDto
+            var requestDto = new TeamsManager.Api.Controllers.CreateChannelRequestDto
             {
-                DisplayName = "New Channel",
-                Description = "New channel description",
+                DisplayName = "Test Channel",
+                Description = "Test description",
                 IsPrivate = false
             };
-            var createdChannel = CreateMockPSObject("newchannel1", requestDto.DisplayName, requestDto.Description);
+            var createdChannel = new Channel { Id = "channel123", DisplayName = requestDto.DisplayName };
             SetupControllerContext(_validAccessToken);
             
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.CreateTeamChannelAsync(teamId, requestDto.DisplayName, requestDto.IsPrivate, requestDto.Description))
-                                  .ReturnsAsync(createdChannel);
+            _mockChannelService.Setup(s => s.CreateTeamChannelAsync(teamId, requestDto.DisplayName, _accessTokenValue, requestDto.Description, requestDto.IsPrivate))
+                              .ReturnsAsync(createdChannel);
 
             // Act
             var result = await _controller.CreateTeamChannel(teamId, requestDto);
 
             // Assert
             var createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
-            createdResult.ActionName.Should().Be(nameof(ChannelsController.GetTeamChannel));
+            createdResult.ActionName.Should().Be(nameof(ChannelsController.GetTeamChannelById));
             createdResult.RouteValues.Should().ContainKey("teamId").WhoseValue.Should().Be(teamId);
-            createdResult.RouteValues.Should().ContainKey("channelDisplayName").WhoseValue.Should().Be(requestDto.DisplayName);
+            createdResult.RouteValues.Should().ContainKey("channelGraphId").WhoseValue.Should().Be(createdChannel.Id);
+            createdResult.Value.Should().Be(createdChannel);
         }
 
         [Fact]
@@ -216,16 +127,16 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new CreateChannelRequestDto { DisplayName = "New Channel" };
+            var requestDto = new TeamsManager.Api.Controllers.CreateChannelRequestDto { DisplayName = "Test Channel" };
             SetupControllerContext(); // No token
 
             // Act
             var result = await _controller.CreateTeamChannel(teamId, requestDto);
 
             // Assert
-            var serviceUnavailableResult = result.Should().BeOfType<ObjectResult>().Subject;
-            serviceUnavailableResult.StatusCode.Should().Be(503);
-            serviceUnavailableResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się połączyć z usługą Microsoft Graph." });
+            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak tokenu dostępu." });
+            _mockChannelService.Verify(s => s.CreateTeamChannelAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
         }
 
         #endregion
@@ -237,38 +148,37 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
-            var channelName = "Old Channel";
-            var requestDto = new UpdateChannelRequestDto
+            var channelId = "channel123";
+            var requestDto = new TeamsManager.Api.Controllers.UpdateChannelRequestDto
             {
                 NewDisplayName = "Updated Channel",
                 NewDescription = "Updated description"
             };
+            var updatedChannel = new Channel { Id = channelId, DisplayName = requestDto.NewDisplayName };
             SetupControllerContext(_validAccessToken);
             
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.UpdateTeamChannelAsync(teamId, channelName, requestDto.NewDisplayName, requestDto.NewDescription))
-                                  .ReturnsAsync(true);
+            _mockChannelService.Setup(s => s.UpdateTeamChannelAsync(teamId, channelId, _accessTokenValue, requestDto.NewDisplayName, requestDto.NewDescription))
+                              .ReturnsAsync(updatedChannel);
 
             // Act
-            var result = await _controller.UpdateTeamChannel(teamId, channelName, requestDto);
+            var result = await _controller.UpdateTeamChannel(teamId, channelId, requestDto);
 
             // Assert
-            result.Should().BeOfType<NoContentResult>();
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().Be(updatedChannel);
         }
 
         [Fact]
-        public async Task UpdateTeamChannel_EmptyRequest_ShouldReturnBadRequest()
+        public async Task UpdateTeamChannel_WithEmptyData_ShouldReturnBadRequest()
         {
             // Arrange
             var teamId = "team123";
-            var channelName = "Channel";
-            var requestDto = new UpdateChannelRequestDto(); // Empty request
+            var channelId = "channel123";
+            var requestDto = new TeamsManager.Api.Controllers.UpdateChannelRequestDto(); // Empty data
             SetupControllerContext(_validAccessToken);
 
             // Act
-            var result = await _controller.UpdateTeamChannel(teamId, channelName, requestDto);
+            var result = await _controller.UpdateTeamChannel(teamId, channelId, requestDto);
 
             // Assert
             var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
@@ -277,54 +187,7 @@ namespace TeamsManager.Tests.Controllers
 
         #endregion
 
-        #region RemoveTeamChannel Tests
-
-        [Fact]
-        public async Task RemoveTeamChannel_ValidChannel_ShouldReturnOk()
-        {
-            // Arrange
-            var teamId = "team123";
-            var channelName = "TestChannel";
-            SetupControllerContext(_validAccessToken);
-            
-            _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(_accessTokenValue, It.IsAny<string[]>()))
-                                  .ReturnsAsync(true);
-            
-            _mockPowerShellService.Setup(s => s.RemoveTeamChannelAsync(teamId, channelName))
-                                  .ReturnsAsync(true);
-
-            // Act
-            var result = await _controller.RemoveTeamChannel(teamId, channelName);
-
-            // Assert
-            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { Message = "Kanał usunięty pomyślnie." });
-        }
-
-        [Theory]
-        [InlineData("General")]
-        [InlineData("general")]
-        [InlineData("GENERAL")]
-        [InlineData("Ogólny")]
-        [InlineData("ogólny")]
-        [InlineData("OGÓLNY")]
-        public async Task RemoveTeamChannel_GeneralChannel_ShouldReturnBadRequest(string channelName)
-        {
-            // Arrange
-            var teamId = "team123";
-            SetupControllerContext(_validAccessToken);
-
-            // Act
-            var result = await _controller.RemoveTeamChannel(teamId, channelName);
-
-            // Assert
-            var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie można usunąć kanału General/Ogólny." });
-        }
-
-        #endregion
-
-        #region Token Extraction Tests
+        #region TokenExtraction Tests
 
         [Theory]
         [InlineData("Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.token", true)]
@@ -341,28 +204,26 @@ namespace TeamsManager.Tests.Controllers
             if (shouldExtractToken)
             {
                 string expectedToken = authHeader.Substring("Bearer ".Length).Trim();
+                var channels = new List<Channel> { new Channel { Id = "channel1", DisplayName = "Test Channel" } };
                 
-                _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(expectedToken, It.IsAny<string[]>()))
-                                      .ReturnsAsync(true);
-                
-                _mockPowerShellService.Setup(s => s.GetTeamChannelsAsync(teamId))
-                                      .ReturnsAsync(new Collection<PSObject>());
-            }
+                _mockChannelService.Setup(s => s.GetTeamChannelsAsync(teamId, expectedToken, false))
+                                  .ReturnsAsync(channels);
 
-            // Act
-            var result = await _controller.GetTeamChannels(teamId);
+                // Act
+                var result = await _controller.GetTeamChannels(teamId);
 
-            // Assert
-            if (shouldExtractToken)
-            {
+                // Assert
                 result.Should().BeOfType<OkObjectResult>();
-                _mockPowerShellService.Verify(s => s.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()), Times.Once);
+                _mockChannelService.Verify(s => s.GetTeamChannelsAsync(teamId, expectedToken, false), Times.Once);
             }
             else
             {
-                var serviceUnavailableResult = result.Should().BeOfType<ObjectResult>().Subject;
-                serviceUnavailableResult.StatusCode.Should().Be(503);
-                _mockPowerShellService.Verify(s => s.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
+                // Act
+                var result = await _controller.GetTeamChannels(teamId);
+
+                // Assert
+                result.Should().BeOfType<UnauthorizedObjectResult>();
+                _mockChannelService.Verify(s => s.GetTeamChannelsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
             }
         }
 
@@ -371,40 +232,26 @@ namespace TeamsManager.Tests.Controllers
         #region Constructor Tests
 
         [Fact]
-        public void Constructor_WithNullPowerShellService_ShouldThrowArgumentNullException()
+        public void Constructor_WithNullChannelService_ShouldThrowArgumentNullException()
         {
             // Arrange & Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new ChannelsController(null!, _mockTeamService.Object, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new ChannelsController(null!, _mockCurrentUserService.Object, _mockLogger.Object));
         }
 
         [Fact]
-        public void Constructor_WithNullTeamService_ShouldThrowArgumentNullException()
+        public void Constructor_WithNullCurrentUserService_ShouldThrowArgumentNullException()
         {
             // Arrange & Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new ChannelsController(_mockPowerShellService.Object, null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new ChannelsController(_mockChannelService.Object, null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ShouldThrowArgumentNullException()
         {
             // Arrange & Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new ChannelsController(_mockPowerShellService.Object, _mockTeamService.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new ChannelsController(_mockChannelService.Object, _mockCurrentUserService.Object, null!));
         }
 
         #endregion
-    }
-
-    // DTOs for testing - these should match the actual DTOs from the controller
-    public class CreateChannelRequestDto
-    {
-        public string DisplayName { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public bool IsPrivate { get; set; } = false;
-    }
-
-    public class UpdateChannelRequestDto
-    {
-        public string? NewDisplayName { get; set; }
-        public string? NewDescription { get; set; }
     }
 } 

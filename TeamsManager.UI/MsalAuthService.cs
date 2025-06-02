@@ -28,7 +28,7 @@ public class AzureAdUiConfig
 public class MsalAuthService
 {
     private readonly IPublicClientApplication _pca;
-    private readonly string[] _scopes;
+    private readonly string[]? _scopes;
     private readonly string _clientId;
     private readonly string _tenantId;
 
@@ -42,14 +42,14 @@ public class MsalAuthService
 
         _clientId = config.AzureAd.ClientId ?? string.Empty;
         _tenantId = config.AzureAd.TenantId ?? string.Empty;
-        _scopes = new string[] { config.AzureAd.ApiScope ?? string.Empty };
+        _scopes = config.Scopes ?? new string[] { string.Empty };
 
         // Debug: Wyświetl scopes
         System.Diagnostics.Debug.WriteLine($"MSAL Config (UI): Loaded Scopes: [{string.Join(", ", _scopes)}]");
 
-        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_tenantId))
+        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_tenantId) || _scopes == null || _scopes.Length == 0 || string.IsNullOrWhiteSpace(_scopes[0]))
         {
-            HandleMissingConfiguration($"Kluczowe ustawienia Azure AD (ClientId, TenantId) nie zostały poprawnie załadowane dla MSAL. Sprawdź konfigurację aplikacji (np. w %APPDATA%\\{AppDataFolderName}\\{ConfigFileNameInAppData} lub plik deweloperski '{DeveloperConfigFileName}').");
+            HandleMissingConfiguration($"Kluczowe ustawienia Azure AD (ClientId, TenantId, Scopes) nie zostały poprawnie załadowane dla MSAL. Sprawdź konfigurację aplikacji (np. w %APPDATA%\\{AppDataFolderName}\\{ConfigFileNameInAppData} lub plik deweloperski '{DeveloperConfigFileName}').");
             // W zależności od strategii, można rzucić wyjątek lub pozostawić _pca jako null
             // Jeśli rzucisz wyjątek, aplikacja prawdopodobnie się nie uruchomi bez konfiguracji.
             // Jeśli nie, metody AcquireToken* muszą sprawdzać _pca.
@@ -164,7 +164,10 @@ public class MsalAuthService
         return config != null &&
                config.AzureAd != null &&
                !string.IsNullOrWhiteSpace(config.AzureAd.ClientId) &&
-               !string.IsNullOrWhiteSpace(config.AzureAd.TenantId);
+               !string.IsNullOrWhiteSpace(config.AzureAd.TenantId) &&
+               config.Scopes != null &&
+               config.Scopes.Length > 0 &&
+               !string.IsNullOrWhiteSpace(config.Scopes[0]);
     }
 
     private void HandleMissingConfiguration(string message)
@@ -238,5 +241,70 @@ public class MsalAuthService
             await _pca.RemoveAsync(account);
         }
         System.Diagnostics.Debug.WriteLine("MSAL: User signed out.");
+    }
+
+    public async Task<string?> AcquireGraphTokenAsync()
+    {
+        if (_pca == null)
+        {
+            System.Diagnostics.Debug.WriteLine("MSAL AcquireGraphToken: PCA not properly initialized.");
+            return null;
+        }
+
+        // Microsoft Graph scopes
+        string[] graphScopes = { "https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/User.ReadBasic.All" };
+        
+        try
+        {
+            var accounts = await _pca.GetAccountsAsync();
+            IAccount? firstAccount = accounts.FirstOrDefault();
+
+            // Spróbuj pobrać token z cache
+            var result = await _pca.AcquireTokenSilent(graphScopes, firstAccount).ExecuteAsync();
+            
+            System.Diagnostics.Debug.WriteLine($"MSAL: Graph token acquired silently. Scopes: {string.Join(", ", result.Scopes)}");
+            return result.AccessToken;
+        }
+        catch (MsalUiRequiredException)
+        {
+            System.Diagnostics.Debug.WriteLine("MSAL: Graph token requires user interaction");
+            return null; // Nie możemy w tym momencie wyświetlić UI
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"MSAL Error acquiring Graph token: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<string?> AcquireGraphTokenInteractiveAsync(Window window)
+    {
+        if (_pca == null)
+        {
+            System.Diagnostics.Debug.WriteLine("MSAL AcquireGraphTokenInteractive: PCA not properly initialized.");
+            return null;
+        }
+
+        // Microsoft Graph scopes
+        string[] graphScopes = { "https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/User.ReadBasic.All" };
+        
+        try
+        {
+            var accounts = await _pca.GetAccountsAsync();
+            IAccount? firstAccount = accounts.FirstOrDefault();
+
+            var result = await _pca.AcquireTokenInteractive(graphScopes)
+                                   .WithAccount(firstAccount)
+                                   .WithParentActivityOrWindow(new WindowInteropHelper(window).Handle)
+                                   .ExecuteAsync();
+            
+            System.Diagnostics.Debug.WriteLine($"MSAL: Graph token acquired interactively. Scopes: {string.Join(", ", result.Scopes)}");
+            return result.AccessToken;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"MSAL Error acquiring Graph token interactively: {ex.Message}");
+            return null;
+        }
     }
 }

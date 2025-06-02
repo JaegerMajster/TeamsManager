@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using System;
@@ -42,16 +44,22 @@ namespace TeamsManager.Api.Controllers
     // --- Kontroler ---
 
     [ApiController]
-    [Route("api/[controller]")] // Trasa bazowa: /api/SchoolYears
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/SchoolYears
     [Authorize] // Wszystkie operacje na latach szkolnych domyślnie wymagają autoryzacji
     public class SchoolYearsController : ControllerBase
     {
         private readonly ISchoolYearService _schoolYearService;
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolYearsController> _logger;
 
-        public SchoolYearsController(ISchoolYearService schoolYearService, ILogger<SchoolYearsController> logger)
+        public SchoolYearsController(
+            ISchoolYearService schoolYearService, 
+            ICurrentUserService currentUserService,
+            ILogger<SchoolYearsController> logger)
         {
             _schoolYearService = schoolYearService ?? throw new ArgumentNullException(nameof(schoolYearService));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

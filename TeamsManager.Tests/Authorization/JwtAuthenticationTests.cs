@@ -396,7 +396,7 @@ namespace TeamsManager.Tests.Authorization
             var claims = new List<Claim>
             {
                 new Claim("preferred_username", "test.user@test.com"),
-                new Claim("oid", "12345678-1234-1234-1234-123456789012")
+                new Claim("http://schemas.microsoft.com/identity/claims/objectidentifier", "12345678-1234-1234-1234-123456789012")
             };
 
             var identity = new ClaimsIdentity(claims, "Bearer");

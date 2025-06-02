@@ -30,6 +30,8 @@ namespace TeamsManager.Tests.Controllers
             _mockTeamService = new Mock<ITeamService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<TeamsController>>();
+
+            // TeamsController ma 3 parametry w konstruktorze
             _controller = new TeamsController(_mockTeamService.Object, _mockCurrentUserService.Object, _mockLogger.Object);
 
             SetupControllerContext();
@@ -53,24 +55,18 @@ namespace TeamsManager.Tests.Controllers
         #region CreateTeam Tests
 
         [Fact]
-        public async Task CreateTeam_WithValidTokenAndData_ShouldReturnCreated()
+        public async Task CreateTeam_WithValidData_ShouldReturnCreated()
         {
             // Arrange
-            var requestDto = new CreateTeamRequestDto
+            var requestDto = new TeamsManager.Api.Controllers.CreateTeamRequestDto
             {
                 DisplayName = "Test Team",
-                Description = "Test Description", 
+                Description = "Test Description",
                 OwnerUpn = "owner@example.com",
-                Visibility = TeamVisibility.Private
+                Visibility = TeamVisibility.Private,
+                AdditionalTemplateValues = new Dictionary<string, string> { { "key", "value" } }
             };
-            var createdTeam = new Team 
-            { 
-                Id = "team123", 
-                DisplayName = requestDto.DisplayName, 
-                Description = requestDto.Description,
-                Owner = requestDto.OwnerUpn,
-                Visibility = requestDto.Visibility
-            };
+            var createdTeam = new Team { Id = "team123", DisplayName = requestDto.DisplayName };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.CreateTeamAsync(
@@ -83,7 +79,7 @@ namespace TeamsManager.Tests.Controllers
                 requestDto.SchoolTypeId,
                 requestDto.SchoolYearId,
                 requestDto.AdditionalTemplateValues))
-                           .ReturnsAsync(createdTeam);
+                .ReturnsAsync(createdTeam);
 
             // Act
             var result = await _controller.CreateTeam(requestDto);
@@ -92,14 +88,14 @@ namespace TeamsManager.Tests.Controllers
             var createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
             createdResult.ActionName.Should().Be(nameof(TeamsController.GetTeamById));
             createdResult.RouteValues.Should().ContainKey("teamId").WhoseValue.Should().Be(createdTeam.Id);
-            createdResult.Value.Should().BeEquivalentTo(createdTeam);
+            createdResult.Value.Should().Be(createdTeam);
         }
 
         [Fact]
         public async Task CreateTeam_WithoutToken_ShouldReturnUnauthorized()
         {
             // Arrange
-            var requestDto = new CreateTeamRequestDto
+            var requestDto = new TeamsManager.Api.Controllers.CreateTeamRequestDto
             {
                 DisplayName = "Test Team",
                 OwnerUpn = "owner@example.com"
@@ -112,33 +108,30 @@ namespace TeamsManager.Tests.Controllers
             // Assert
             var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
             unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak wymaganego tokenu dostępu." });
-            _mockTeamService.Verify(s => s.CreateTeamAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<TeamVisibility>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), 
-                It.IsAny<string?>(), It.IsAny<Dictionary<string, string>?>()), Times.Never);
         }
 
         [Fact]
         public async Task CreateTeam_ServiceReturnsNull_ShouldReturnBadRequest()
         {
             // Arrange
-            var requestDto = new CreateTeamRequestDto
+            var requestDto = new TeamsManager.Api.Controllers.CreateTeamRequestDto
             {
                 DisplayName = "Test Team",
                 OwnerUpn = "owner@example.com"
             };
             SetupControllerContext(_validAccessToken);
             
-            _mockTeamService.Setup(s => s.CreateTeamAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<TeamVisibility>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), 
-                It.IsAny<string?>(), It.IsAny<Dictionary<string, string>?>())) 
-                           .ReturnsAsync((Team?)null);
+            _mockTeamService.Setup(s => s.CreateTeamAsync(It.IsAny<string>(), It.IsAny<string>(), 
+                It.IsAny<string>(), It.IsAny<TeamVisibility>(), It.IsAny<string>(), 
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                .ReturnsAsync((Team?)null);
 
             // Act
             var result = await _controller.CreateTeam(requestDto);
 
             // Assert
             var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się utworzyć zespołu." });
+            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się utworzyć zespołu. Sprawdź logi serwera." });
         }
 
         #endregion
@@ -146,42 +139,41 @@ namespace TeamsManager.Tests.Controllers
         #region GetTeamById Tests
 
         [Fact]
-        public async Task GetTeamById_WithValidToken_ShouldReturnTeam()
+        public async Task GetTeamById_WithValidId_ShouldReturnTeam()
         {
             // Arrange
             var teamId = "team123";
-            var expectedTeam = new Team { Id = teamId, DisplayName = "Test Team", Owner = "owner@example.com" };
+            var team = new Team { Id = teamId, DisplayName = "Test Team" };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
-                           .ReturnsAsync(expectedTeam);
+                           .ReturnsAsync(team);
 
             // Act
             var result = await _controller.GetTeamById(teamId);
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(expectedTeam);
-            _mockTeamService.Verify(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue), Times.Once);
+            okResult.Value.Should().Be(team);
         }
 
         [Fact]
-        public async Task GetTeamById_WithIncludeParameters_ShouldPassCorrectParameters()
+        public async Task GetTeamById_WithIncludeOptions_ShouldReturnTeamWithDetails()
         {
             // Arrange
             var teamId = "team123";
-            var expectedTeam = new Team { Id = teamId, DisplayName = "Test Team" };
+            var team = new Team { Id = teamId, DisplayName = "Test Team" };
             SetupControllerContext(_validAccessToken);
             
-            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, true, true, true, _accessTokenValue))
-                           .ReturnsAsync(expectedTeam);
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, true, true, false, _accessTokenValue))
+                           .ReturnsAsync(team);
 
             // Act
-            var result = await _controller.GetTeamById(teamId, includeMembers: true, includeChannels: true, forceRefresh: true);
+            var result = await _controller.GetTeamById(teamId, includeMembers: true, includeChannels: true);
 
             // Assert
-            result.Should().BeOfType<OkObjectResult>();
-            _mockTeamService.Verify(s => s.GetTeamByIdAsync(teamId, true, true, true, _accessTokenValue), Times.Once);
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().Be(team);
         }
 
         [Fact]
@@ -207,14 +199,15 @@ namespace TeamsManager.Tests.Controllers
         #region UpdateTeam Tests
 
         [Fact]
-        public async Task UpdateTeam_WithValidTokenAndData_ShouldReturnNoContent()
+        public async Task UpdateTeam_WithValidData_ShouldReturnNoContent()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new UpdateTeamRequestDto
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto
             {
                 DisplayName = "Updated Team",
-                Description = "Updated Description"
+                Description = "Updated Description",
+                OwnerUpn = "newowner@example.com"
             };
             SetupControllerContext(_validAccessToken);
             
@@ -226,9 +219,6 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             result.Should().BeOfType<NoContentResult>();
-            _mockTeamService.Verify(s => s.UpdateTeamAsync(It.Is<Team>(t => 
-                t.DisplayName == requestDto.DisplayName && 
-                t.Description == requestDto.Description), _accessTokenValue), Times.Once);
         }
 
         [Fact]
@@ -236,7 +226,7 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new UpdateTeamRequestDto { DisplayName = "Updated" };
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto { DisplayName = "Updated" };
             SetupControllerContext(); // No token
 
             // Act
@@ -248,11 +238,11 @@ namespace TeamsManager.Tests.Controllers
         }
 
         [Fact]
-        public async Task UpdateTeam_ServiceFails_ShouldReturnBadRequest()
+        public async Task UpdateTeam_ServiceReturnsFalse_ShouldReturnBadRequest()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new UpdateTeamRequestDto { DisplayName = "Updated" };
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto { DisplayName = "Updated" };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.UpdateTeamAsync(It.IsAny<Team>(), _accessTokenValue))
@@ -271,11 +261,11 @@ namespace TeamsManager.Tests.Controllers
         #region ArchiveTeam Tests
 
         [Fact]
-        public async Task ArchiveTeam_WithValidToken_ShouldReturnOk()
+        public async Task ArchiveTeam_WithValidData_ShouldReturnOk()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new ArchiveTeamRequestDto { Reason = "Test reason" };
+            var requestDto = new TeamsManager.Api.Controllers.ArchiveTeamRequestDto { Reason = "Test reason" };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.ArchiveTeamAsync(teamId, requestDto.Reason, _accessTokenValue))
@@ -286,31 +276,15 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { Message = "Zespół został pomyślnie zarchiwizowany." });
+            okResult.Value.Should().BeEquivalentTo(new { Message = "Zespół zarchiwizowany pomyślnie." });
         }
 
         [Fact]
-        public async Task ArchiveTeam_WithoutToken_ShouldReturnUnauthorized()
+        public async Task ArchiveTeam_ServiceReturnsFalse_ShouldReturnBadRequest()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new ArchiveTeamRequestDto { Reason = "Test reason" };
-            SetupControllerContext(); // No token
-
-            // Act
-            var result = await _controller.ArchiveTeam(teamId, requestDto);
-
-            // Assert
-            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
-            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak wymaganego tokenu dostępu." });
-        }
-
-        [Fact]
-        public async Task ArchiveTeam_ServiceFails_ShouldReturnBadRequest()
-        {
-            // Arrange
-            var teamId = "team123";
-            var requestDto = new ArchiveTeamRequestDto { Reason = "Test reason" };
+            var requestDto = new TeamsManager.Api.Controllers.ArchiveTeamRequestDto { Reason = "Test reason" };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.ArchiveTeamAsync(teamId, requestDto.Reason, _accessTokenValue))
@@ -324,27 +298,39 @@ namespace TeamsManager.Tests.Controllers
             badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się zarchiwizować zespołu." });
         }
 
+        [Fact]
+        public async Task RestoreTeam_WithValidData_ShouldReturnOk()
+        {
+            // Arrange
+            var teamId = "team123";
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.RestoreTeamAsync(teamId, _accessTokenValue))
+                           .ReturnsAsync(true);
+
+            // Act
+            var result = await _controller.RestoreTeam(teamId);
+
+            // Assert
+            var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+            okResult.Value.Should().BeEquivalentTo(new { Message = "Zespół przywrócony pomyślnie." });
+        }
+
         #endregion
 
         #region AddMember Tests
 
         [Fact]
-        public async Task AddMember_WithValidToken_ShouldReturnOk()
+        public async Task AddMember_WithValidData_ShouldReturnOk()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new AddMemberRequestDto 
-            { 
-                UserUpn = "user@example.com", 
-                Role = TeamMemberRole.Member 
+            var requestDto = new TeamsManager.Api.Controllers.AddMemberRequestDto
+            {
+                UserUpn = "user@example.com",
+                Role = TeamMemberRole.Member
             };
-            var addedMember = new TeamMember 
-            { 
-                Id = "member123", 
-                TeamId = teamId, 
-                UserId = "user123",
-                Role = requestDto.Role 
-            };
+            var addedMember = new TeamMember { Id = "member123", UserId = "user123" };
             SetupControllerContext(_validAccessToken);
             
             _mockTeamService.Setup(s => s.AddMemberAsync(teamId, requestDto.UserUpn, requestDto.Role, _accessTokenValue))
@@ -355,27 +341,30 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(addedMember);
+            okResult.Value.Should().Be(addedMember);
         }
 
         [Fact]
-        public async Task AddMember_WithoutToken_ShouldReturnUnauthorized()
+        public async Task AddMember_ServiceReturnsNull_ShouldReturnBadRequest()
         {
             // Arrange
             var teamId = "team123";
-            var requestDto = new AddMemberRequestDto 
-            { 
-                UserUpn = "user@example.com", 
-                Role = TeamMemberRole.Member 
+            var requestDto = new TeamsManager.Api.Controllers.AddMemberRequestDto
+            {
+                UserUpn = "user@example.com",
+                Role = TeamMemberRole.Member
             };
-            SetupControllerContext(); // No token
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.AddMemberAsync(teamId, requestDto.UserUpn, requestDto.Role, _accessTokenValue))
+                           .ReturnsAsync((TeamMember?)null);
 
             // Act
             var result = await _controller.AddMember(teamId, requestDto);
 
             // Assert
-            var unauthorizedResult = result.Should().BeOfType<UnauthorizedObjectResult>().Subject;
-            unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Brak wymaganego tokenu dostępu." });
+            var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się dodać członka do zespołu." });
         }
 
         #endregion

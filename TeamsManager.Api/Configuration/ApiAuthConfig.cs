@@ -31,19 +31,18 @@ namespace TeamsManager.Api.Configuration
         /// </summary>
         /// <param name="configuration">Dostawca konfiguracji ASP.NET Core.</param>
         /// <returns>Skonfigurowany obiekt ApiOAuthConfig.</returns>
-        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration configuration)
+        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration? configuration)
         {
-            if (configuration == null)
-            {
-                throw new ArgumentNullException(nameof(configuration));
-            }
-
             System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wczytywanie konfiguracji z IConfiguration (appsettings.json / User Secrets).");
 
             var apiOAuthConfig = new ApiOAuthConfig();
 
-            // Bindowanie całej sekcji "AzureAd" do obiektu apiOAuthConfig.AzureAd
-            configuration.GetSection("AzureAd").Bind(apiOAuthConfig.AzureAd);
+            // Jeśli configuration jest null, zwracamy domyślną konfigurację
+            if (configuration != null)
+            {
+                // Bindowanie całej sekcji "AzureAd" do obiektu apiOAuthConfig.AzureAd
+                configuration.GetSection("AzureAd").Bind(apiOAuthConfig.AzureAd);
+            }
 
             // Logowanie wczytanych wartości dla celów diagnostycznych (ClientSecret nie jest logowany)
             System.Diagnostics.Debug.WriteLine(
