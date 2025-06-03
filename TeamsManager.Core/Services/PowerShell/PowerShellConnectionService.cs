@@ -1,0 +1,413 @@
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
+
+namespace TeamsManager.Core.Services.PowerShell
+{
+    /// <summary>
+    /// Implementacja serwisu zarządzającego połączeniem PowerShell i Microsoft Graph
+    /// </summary>
+    public class PowerShellConnectionService : IPowerShellConnectionService
+    {
+        private readonly ILogger<PowerShellConnectionService> _logger;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly INotificationService _notificationService;
+        private readonly IPowerShellCacheService _cacheService;
+
+        private Runspace? _runspace;
+        private bool _isConnected = false;
+        private bool _disposed = false;
+
+        private const int MaxRetryAttempts = 3;
+
+        public PowerShellConnectionService(
+            ILogger<PowerShellConnectionService> logger,
+            ICurrentUserService currentUserService,
+            INotificationService notificationService,
+            IPowerShellCacheService cacheService)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
+
+            InitializeRunspace();
+        }
+
+        public bool IsConnected => _isConnected;
+
+        private void InitializeRunspace()
+        {
+            try
+            {
+                var initialSessionState = InitialSessionState.CreateDefault2();
+                _runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+                _runspace.Open();
+                _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane poprawnie.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Nie udało się zainicjalizować środowiska PowerShell. Próba inicjalizacji w trybie podstawowym.");
+                _runspace = null;
+                try
+                {
+                    _runspace = RunspaceFactory.CreateRunspace();
+                    _runspace.Open();
+                    _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane w trybie podstawowym.");
+                }
+                catch (Exception basicEx)
+                {
+                    _logger.LogError(basicEx, "Nie udało się zainicjalizować środowiska PowerShell nawet w trybie podstawowym.");
+                    _runspace = null;
+                }
+            }
+        }
+
+        public async Task<bool> ConnectWithAccessTokenAsync(string accessToken, string[]? scopes = null)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            var operationId = Guid.NewGuid().ToString();
+
+            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            {
+                _logger.LogError("Nie można połączyć z Microsoft Graph: środowisko PowerShell nie jest poprawnie zainicjalizowane.");
+                await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                    "Błąd inicjalizacji PowerShell: środowisko nie jest gotowe", "error");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                _logger.LogError("Nie można połączyć z Microsoft Graph: token dostępu nie może być pusty.");
+                await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                    "Błąd połączenia: brak tokenu dostępu", "error");
+                return false;
+            }
+
+            // Powiadomienie o rozpoczęciu połączenia
+            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5,
+                "Rozpoczynanie połączenia z Microsoft Graph API...");
+
+            return await Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation("Próba połączenia z Microsoft Graph API. Scopes: [{Scopes}]",
+                        scopes != null ? string.Join(", ", scopes) : "Brak");
+
+                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 20,
+                        "Importowanie modułów PowerShell...");
+
+                    using (var ps = PowerShell.Create())
+                    {
+                        ps.Runspace = _runspace;
+
+                        // Import modułów
+                        ps.AddScript(@"
+                            Import-Module Microsoft.Graph.Authentication -ErrorAction SilentlyContinue
+                            Import-Module Microsoft.Graph.Users -ErrorAction SilentlyContinue
+                            Import-Module Microsoft.Graph.Teams -ErrorAction SilentlyContinue
+                        ");
+                        ps.Invoke();
+                        ps.Commands.Clear();
+
+                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 50,
+                            "Uwierzytelnianie w Microsoft Graph...");
+
+                        // Połączenie
+                        var command = ps.AddCommand("Connect-MgGraph")
+                                       .AddParameter("AccessToken", accessToken)
+                                       .AddParameter("ErrorAction", "Stop");
+
+                        if (scopes?.Length > 0)
+                        {
+                            command.AddParameter("Scopes", scopes);
+                        }
+
+                        ps.Invoke();
+
+                        if (ps.HadErrors)
+                        {
+                            var errorMessages = ps.Streams.Error.Select(e => e.ToString()).ToList();
+                            foreach (var error in errorMessages)
+                            {
+                                _logger.LogError("Błąd PowerShell podczas łączenia: {Error}", error);
+                            }
+
+                            await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                                $"Błąd połączenia z Graph API: {string.Join("; ", errorMessages)}", "error");
+                            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
+                                "Połączenie zakończone niepowodzeniem");
+                            return false;
+                        }
+
+                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 80,
+                            "Weryfikacja połączenia...");
+
+                        // Weryfikacja połączenia i cache kontekstu
+                        ps.Commands.Clear();
+                        var contextCheckResult = ps.AddCommand("Get-MgContext").Invoke();
+
+                        if (!contextCheckResult.Any())
+                        {
+                            _logger.LogError("Połączenie z Microsoft Graph nie zostało ustanowione.");
+                            await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                                "Nie udało się ustanowić połączenia z Microsoft Graph", "error");
+                            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
+                                "Weryfikacja połączenia zakończona niepowodzeniem");
+                            return false;
+                        }
+
+                        _isConnected = true;
+
+                        // Cache kontekstu
+                        var context = contextCheckResult.First();
+                        _cacheService.Set("PowerShell_GraphContext", context);
+
+                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
+                            "Połączenie z Microsoft Graph ustanowione pomyślnie");
+                        await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                            "✅ Pomyślnie połączono z Microsoft Graph API", "success");
+
+                        _logger.LogInformation("Pomyślnie połączono z Microsoft Graph API.");
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Wyjątek podczas łączenia z Microsoft Graph");
+                    await _notificationService.SendNotificationToUserAsync(currentUserUpn,
+                        $"Błąd krytyczny podczas łączenia: {ex.Message}", "error");
+                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
+                        "Połączenie zakończone błędem krytycznym");
+                    return false;
+                }
+            });
+        }
+
+        public void DisconnectFromGraph()
+        {
+            if (!_isConnected || _runspace == null) return;
+
+            try
+            {
+                using var ps = PowerShell.Create();
+                ps.Runspace = _runspace;
+                ps.AddScript("Disconnect-MgGraph -ErrorAction SilentlyContinue");
+                ps.Invoke();
+                _logger.LogInformation("Rozłączono z Microsoft Graph.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas rozłączania z Graph");
+            }
+            finally
+            {
+                _isConnected = false;
+                _cacheService.InvalidateAllCache();
+            }
+        }
+
+        public bool ValidateRunspaceState()
+        {
+            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            {
+                _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
+                return false;
+            }
+
+            if (!_isConnected)
+            {
+                _logger.LogWarning("Brak aktywnego połączenia z Microsoft Graph.");
+                return false;
+            }
+
+            return true;
+        }
+
+        public async Task<Collection<PSObject>?> ExecuteScriptAsync(
+            string script,
+            Dictionary<string, object>? parameters = null)
+        {
+            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            {
+                _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(script))
+            {
+                _logger.LogError("Skrypt nie może być pusty.");
+                return null;
+            }
+
+            // Podstawowa sanityzacja
+            if (script.Contains("`;") || script.Contains("$(") || script.Contains("${"))
+            {
+                _logger.LogWarning("Wykryto potencjalnie niebezpieczne znaki w skrypcie.");
+            }
+
+            _logger.LogDebug("Wykonywanie skryptu PowerShell ({Length} znaków)", script.Length);
+
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    using (var ps = PowerShell.Create())
+                    {
+                        ps.Runspace = _runspace;
+                        ps.AddScript(script);
+
+                        if (parameters != null)
+                        {
+                            ps.AddParameters(parameters);
+                        }
+
+                        var results = ps.Invoke();
+
+                        // Logowanie strumieni
+                        LogPowerShellStreams(ps);
+
+                        if (ps.HadErrors && results.Count == 0)
+                        {
+                            _logger.LogError("Skrypt zakończył się błędami.");
+                            return null;
+                        }
+
+                        _logger.LogDebug("Skrypt wykonany. Wyniki: {Count}", results.Count);
+                        return results;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Błąd wykonywania skryptu PowerShell");
+                    return null;
+                }
+            });
+        }
+
+        public async Task<Collection<PSObject>?> ExecuteCommandWithRetryAsync(
+            string commandName,
+            Dictionary<string, object>? parameters = null,
+            int maxRetries = MaxRetryAttempts)
+        {
+            if (!ValidateRunspaceState()) return null;
+
+            int attempt = 0;
+            Exception? lastException = null;
+
+            while (attempt < maxRetries)
+            {
+                try
+                {
+                    attempt++;
+                    _logger.LogDebug("Wykonywanie komendy PowerShell: {CommandName}, próba {Attempt}/{MaxRetries}",
+                        commandName, attempt, maxRetries);
+
+                    using (var ps = PowerShell.Create())
+                    {
+                        ps.Runspace = _runspace;
+                        var command = ps.AddCommand(commandName)
+                                       .AddParameter("ErrorAction", "Stop");
+
+                        if (parameters != null)
+                        {
+                            foreach (var param in parameters)
+                            {
+                                command.AddParameter(param.Key, param.Value);
+                            }
+                        }
+
+                        var results = ps.Invoke();
+
+                        if (ps.HadErrors)
+                        {
+                            var errors = string.Join("; ", ps.Streams.Error.Select(e => e.ToString()));
+                            throw new InvalidOperationException($"PowerShell errors: {errors}");
+                        }
+
+                        _logger.LogDebug("Komenda '{CommandName}' wykonana. Wyniki: {Count}",
+                            commandName, results.Count);
+                        return results;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+
+                    if (IsTransientError(ex) && attempt < maxRetries)
+                    {
+                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)); // Exponential backoff
+                        _logger.LogWarning(ex,
+                            "Próba {Attempt}/{MaxRetries} wykonania komendy '{CommandName}' nie powiodła się. Ponawianie za {Delay}s",
+                            attempt, maxRetries, commandName, delay.TotalSeconds);
+
+                        await Task.Delay(delay);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            _logger.LogError(lastException, "Nie udało się wykonać komendy '{CommandName}' po {MaxRetries} próbach.",
+                commandName, maxRetries);
+            return null;
+        }
+
+        private bool IsTransientError(Exception ex)
+        {
+            return ex.Message.Contains("throttl", StringComparison.OrdinalIgnoreCase) ||
+                   ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                   ex.Message.Contains("temporarily", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void LogPowerShellStreams(PowerShell ps)
+        {
+            foreach (var error in ps.Streams.Error)
+            {
+                _logger.LogError("PowerShell Error: {Error}", error.ToString());
+            }
+
+            foreach (var warning in ps.Streams.Warning)
+            {
+                _logger.LogWarning("PowerShell Warning: {Warning}", warning.ToString());
+            }
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                foreach (var info in ps.Streams.Information)
+                {
+                    _logger.LogDebug("PowerShell Info: {Info}", info.ToString());
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+
+            if (disposing)
+            {
+                DisconnectFromGraph();
+                _runspace?.Dispose();
+            }
+
+            _disposed = true;
+        }
+    }
+}

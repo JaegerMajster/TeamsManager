@@ -24,6 +24,7 @@ using TeamsManager.Core.Enums; // Dla UserRole, TeamStatus, OperationType
 using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.OpenApi.Models;
 using TeamsManager.Api.Swagger; // Dla filtrów Swagger
+using TeamsManager.Core.Extensions;
 
 // --- POCZĘTEK SEKCJI DEFINICJI POMOCNICZYCH (PRZED TOP-LEVEL STATEMENTS) ---
 // --- KONIEC SEKCJI DEFINICJI POMOCNICZYCH ---
@@ -269,7 +270,7 @@ builder.Services.AddScoped<IGenericRepository<UserSchoolType>, GenericRepository
 builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<UserSubject>>();
 
 // Rejestracja Serwisów Aplikacyjnych
-builder.Services.AddScoped<IPowerShellService, PowerShellService>();
+builder.Services.AddPowerShellServices();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
