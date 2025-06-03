@@ -170,7 +170,7 @@ namespace TeamsManager.Core.Services
                     }
                     else
                     {
-                        var psTeam = await _powerShellService.GetTeamAsync(teamId);
+                        var psTeam = await _powerShellService.Teams.GetTeamAsync(teamId);
                         if (psTeam != null)
                         {
                             _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API. Informacje z Graph mogą być użyte do aktualizacji lokalnej bazy (logika niezaimplementowana).", teamId);

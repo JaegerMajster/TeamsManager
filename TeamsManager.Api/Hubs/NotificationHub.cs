@@ -1,13 +1,13 @@
 ﻿// Plik: TeamsManager.Api/Hubs/NotificationHub.cs
 using Microsoft.AspNetCore.SignalR;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 // Dodaj using Microsoft.AspNetCore.Authorization; jeśli zdecydujesz się na zabezpieczenie huba
 // Dodaj using Microsoft.Extensions.Logging; jeśli chcesz logować zdarzenia w hubie
 
 namespace TeamsManager.Api.Hubs
 {
-    // Rozważ dodanie [Authorize] jeśli chcesz, aby połączenie z hubem wymagało uwierzytelnienia
-    // np. [Authorize]
+    [Authorize]
     public class NotificationHub : Hub
     {
         private readonly ILogger<NotificationHub> _logger;

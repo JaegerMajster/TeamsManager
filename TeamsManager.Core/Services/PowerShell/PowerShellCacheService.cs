@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego cache'owaniem danych PowerShell/Graph

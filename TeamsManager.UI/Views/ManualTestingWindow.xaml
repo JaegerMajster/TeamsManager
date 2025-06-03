@@ -1,546 +1,618 @@
 <Window x:Class="TeamsManager.UI.Views.ManualTestingWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="🧪 Testy Manualne - TeamsManager" 
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Testy Manualne - TeamsManager"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
-        Background="#FF202020">
-    
-    <Window.Resources>
-        <!-- Definicje stylów dla ciemnego motywu Windows 11 -->
-        
-        <!-- Styl dla przycisków -->
-        <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF2D2D30"/>
-            <Setter Property="Foreground" Value="#FFECECEC"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Name="border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center"
-                                            Margin="15,8"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#FF3F3F46"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#FF007ACC"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#FF007ACC"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#FF656565"/>
-                                <Setter TargetName="border" Property="Background" Value="#FF2D2D30"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#FF3F3F46"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        Style="{StaticResource BaseWindowStyle}">
 
-        <!-- Styl dla przycisku głównego -->
-        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#FF0078D4"/>
-            <Setter Property="BorderBrush" Value="#FF0078D4"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF106EBE"/>
-                    <Setter Property="BorderBrush" Value="#FF106EBE"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FF005A9E"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+    <materialDesign:DialogHost DialogTheme="Inherit">
+        <Grid>
+            <!-- Grid.ColumnDefinitions MUSI być na początku -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="450" MinWidth="350" MaxWidth="600"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Tło z gradientem -->
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF202020" Offset="0"/>
+                    <GradientStop Color="#FF252526" Offset="0.5"/>
+                    <GradientStop Color="#FF2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
 
-        <!-- Styl dla przycisku Success -->
-        <Style x:Key="SuccessButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#FF107C10"/>
-            <Setter Property="BorderBrush" Value="#FF107C10"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF0E6E0E"/>
-                    <Setter Property="BorderBrush" Value="#FF0E6E0E"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FF0C5D0C"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+            <!-- Elementy dekoracyjne -->
+            <Canvas Margin="100,50,100,50" VerticalAlignment="Top" HorizontalAlignment="Right">
+                <Ellipse Width="200" Height="200" Opacity="0.03">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#FF0078D4" Offset="0"/>
+                            <GradientStop Color="Transparent" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+            </Canvas>
 
-        <!-- Styl dla przycisku Error -->
-        <Style x:Key="ErrorButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#FFD13438"/>
-            <Setter Property="BorderBrush" Value="#FFD13438"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FFE81123"/>
-                    <Setter Property="BorderBrush" Value="#FFE81123"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FFA80000"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+            <!-- Lewy panel - Kategorie testów -->
+            <!-- Zmieniono: Usunięto Style="{StaticResource InfoCardStyle}" i dodano bezpośrednie właściwości -->
+            <Border Grid.Column="0" Margin="20" Background="{StaticResource BackgroundMedium}" CornerRadius="12" Padding="24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-        <!-- Styl dla przycisku Warning -->
-        <Style x:Key="WarningButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#FFE3008C"/>
-            <Setter Property="BorderBrush" Value="#FFE3008C"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FFC5007A"/>
-                    <Setter Property="BorderBrush" Value="#FFC5007A"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FFA70068"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+                    <!-- Nagłówek z przyciskiem Hamburger -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-        <Style x:Key="TestCaseStyle" TargetType="ListBoxItem">
-            <Setter Property="Background" Value="#FF252526"/>
-            <Setter Property="Foreground" Value="#FFECECEC"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Margin" Value="2"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding Result}" Value="Pass">
-                    <Setter Property="Background" Value="#FF1A4A1A"/>
-                    <Setter Property="BorderBrush" Value="#FF107C10"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Result}" Value="Fail">
-                    <Setter Property="Background" Value="#FF4A1A1A"/>
-                    <Setter Property="BorderBrush" Value="#FFD13438"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Result}" Value="Warning">
-                    <Setter Property="Background" Value="#FF4A2A1A"/>
-                    <Setter Property="BorderBrush" Value="#FFE3008C"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Result}" Value="Skip">
-                    <Setter Property="Background" Value="#FF3A3A1A"/>
-                    <Setter Property="BorderBrush" Value="#FFAC8800"/>
-                </DataTrigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#FF007ACC"/>
-                    <Setter Property="BorderBrush" Value="#FF007ACC"/>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF3F3F46"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        
-        <Style x:Key="HeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="0,10,0,5"/>
-            <Setter Property="Foreground" Value="#FFECECEC"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-        </Style>
-        
-        <Style x:Key="ActionButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Margin" Value="5"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
+                        <Button Grid.Column="0" Name="HamburgerButton" Style="{StaticResource IconButton}"
+                                Click="HamburgerButton_Click" ToolTip="Rozwiń/zwiń wszystkie kategorie">
+                            <materialDesign:PackIcon Kind="Menu" Width="24" Height="24"/>
+                        </Button>
 
-        <!-- Styl dla TextBox -->
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#FF1E1E1E"/>
-            <Setter Property="Foreground" Value="#FFECECEC"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-        </Style>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0">
+                            <materialDesign:PackIcon Kind="TestTube" Width="24" Height="24"
+                                                     VerticalAlignment="Center" Foreground="{StaticResource AccentBlue}"/>
+                            <TextBlock Text="Testy Systemu" Style="{StaticResource PageTitleStyle}"
+                                       FontSize="20" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
 
-        <!-- Styl dla ListBox -->
-        <Style TargetType="ListBox">
-            <Setter Property="Background" Value="#FF1E1E1E"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
+                    <!-- Karta informacji o użytkowniku -->
+                    <!-- Zmieniono: Usunięto Style="{StaticResource ChipStyle}" i dodano CornerRadius -->
+                    <Border Grid.Row="1" Background="{StaticResource BackgroundDark}"
+                            Margin="0,0,0,16" Padding="16,12" CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock Name="UserInfoText" Text="Użytkownik: Niezalogowany"
+                                       Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Name="SessionInfoText" Text=""
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                       Foreground="{StaticResource TextSecondary}"/>
+                        </StackPanel>
+                    </Border>
 
-        <!-- Styl dla ProgressBar -->
-        <Style TargetType="ProgressBar">
-            <Setter Property="Background" Value="#FF3F3F46"/>
-            <Setter Property="Foreground" Value="#FF0078D4"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
+                    <!-- Karta statystyk -->
+                    <Border Grid.Row="2" Background="{StaticResource BackgroundDark}" CornerRadius="8"
+                            Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-        <!-- Styl dla ScrollViewer -->
-        <Style TargetType="ScrollViewer">
-            <Setter Property="Background" Value="#FF1E1E1E"/>
-        </Style>
+                            <TextBlock Grid.Row="0" Name="StatsText"
+                                       Text="Łącznie: 0 | ✅ 0 | ❌ 0 | ⚠️ 0 | ⏭️ 0"
+                                       Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                       FontWeight="Medium" Margin="0,0,0,8"/>
 
-        <!-- Styl dla Expander -->
-        <Style TargetType="Expander">
-            <Setter Property="Background" Value="#FF1E1E1E"/>
-            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="#FFECECEC"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Expander">
-                        <Border Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <DockPanel>
-                                <ToggleButton x:Name="HeaderSite" 
-                                              DockPanel.Dock="Top"
-                                              IsChecked="{Binding Path=IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
-                                              Background="#FF2D2D30" 
-                                              Foreground="#FFECECEC"
-                                              BorderThickness="0"
-                                              Padding="10,8"
-                                              HorizontalContentAlignment="Left">
+                            <ProgressBar Grid.Row="1" Name="ProgressBar" Height="8"
+                                         Maximum="100" Value="0"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- ScrollViewer dla kategorii testów -->
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+                                  materialDesign:ScrollViewerAssist.IsAutoHideEnabled="True">
+                        <StackPanel Name="TestCategoriesPanel">
+
+                            <!-- Kategoria Autentykacja -->
+                            <Expander Name="AuthCategoryExpander" IsExpanded="True" Margin="0,4">
+                                <Expander.Header>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="▶" x:Name="Arrow" Margin="0,0,8,0" 
-                                                   RenderTransformOrigin="0.5,0.5">
-                                            <TextBlock.RenderTransform>
-                                                <RotateTransform Angle="0"/>
-                                            </TextBlock.RenderTransform>
-                                        </TextBlock>
-                                        <ContentPresenter ContentSource="Header"/>
+                                        <materialDesign:PackIcon Kind="Lock" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Uwierzytelnianie i Autoryzacja"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
                                     </StackPanel>
-                                </ToggleButton>
-                                <ContentPresenter x:Name="ExpandSite" Visibility="Collapsed" Margin="10"/>
-                            </DockPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsExpanded" Value="True">
-                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
-                                <Setter TargetName="Arrow" Property="RenderTransform">
-                                    <Setter.Value>
-                                        <RotateTransform Angle="90"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
+                                </Expander.Header>
+                                <ListBox Name="AuthTestsList"
+                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="Auth"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,8" CornerRadius="4">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
-    <Grid>
-        <Grid.Background>
-            <!-- Gradient tła -->
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#FF1E1E1E" Offset="0"/>
-                <GradientStop Color="#FF2D2D30" Offset="1"/>
-            </LinearGradientBrush>
-        </Grid.Background>
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
+                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
+                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
+                                                        <Border Background="{StaticResource AccentBlue}"
+                                                                Padding="8,2" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
+                                                                       Foreground="White" FontWeight="Medium"/>
+                                                        </Border>
+                                                    </StackPanel>
 
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="500"/>
-            <ColumnDefinition Width="5"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
+                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Expander>
 
-        <!-- Lista testów ZMIENNA NA MENU KATEGORYCZNE -->
-        <Border Grid.Column="0" Background="#FF252526" CornerRadius="8" Margin="20" BorderBrush="#FF3F3F46" BorderThickness="1">
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Nagłówek z hamburger -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                    <Button Name="HamburgerButton" Content="☰" Width="40" Height="40" 
-                            FontSize="20" Style="{StaticResource ModernButton}" Click="HamburgerButton_Click"/>
-                    <TextBlock Text="🧪 Testy Systemu" Style="{StaticResource HeaderStyle}" 
-                               FontSize="18" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                </StackPanel>
-                
-                <!-- Informacje o użytkowniku -->
-                <StackPanel Grid.Row="1" Margin="0,10,0,10">
-                    <TextBlock Name="UserInfoText" Text="Użytkownik: Niezalogowany" 
-                               Foreground="#FF969696" FontSize="12"/>
-                    <TextBlock Name="SessionInfoText" Text="" 
-                               Foreground="#FF969696" FontSize="12"/>
-                </StackPanel>
-                
-                <!-- Statystyki -->
-                <StackPanel Grid.Row="2" Margin="0,5,0,10" Background="#FF1E1E1E">
-                    <TextBlock Name="StatsText" Text="Łącznie: 0 | ✅ 0 | ❌ 0 | ⚠️ 0 | ⏭️ 0" 
-                               FontWeight="SemiBold" Margin="10,10,10,5" Foreground="#FFECECEC"/>
-                    <ProgressBar Name="ProgressBar" Height="8" Maximum="100" Value="0" Margin="10,0,10,10"/>
-                </StackPanel>
-
-                <!-- MENU KATEGORII TESTÓW -->
-                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Name="TestCategoriesPanel">
-                        
-                        <!-- KATEGORIA: Uwierzytelnianie i Autoryzacja -->
-                        <Expander Name="AuthCategoryExpander" Header="🔐 Uwierzytelnianie i Autoryzacja" 
-                                  IsExpanded="True" Margin="0,5" Background="#FF1E1E1E" Foreground="#FFECECEC">
-                            <Expander.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" FontSize="14"/>
-                                </DataTemplate>
-                            </Expander.HeaderTemplate>
-                            <ListBox Name="AuthTestsList" Background="Transparent" BorderThickness="0" 
-                                     SelectionChanged="TestCategoryList_SelectionChanged" Tag="Auth">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="5">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ResultIcon}" FontSize="14" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Id}" FontWeight="Bold" Margin="0,0,5,0" Foreground="#FFECECEC"/>
-                                                <Border Background="#FF3F3F46" Margin="5,0" CornerRadius="2" Padding="3,1">
-                                                    <TextBlock Text="{Binding Priority}" FontSize="9" Foreground="#FF969696"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Normal" Margin="16,2,0,0" 
-                                                       Foreground="#FFECECEC" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Expander>
-
-                        <!-- KATEGORIA: API Microsoft Graph -->
-                        <Expander Name="GraphApiCategoryExpander" Header="🌐 API Microsoft Graph" 
-                                  IsExpanded="False" Margin="0,5" Background="#FF1E1E1E" Foreground="#FFECECEC">
-                            <Expander.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" FontSize="14"/>
-                                </DataTemplate>
-                            </Expander.HeaderTemplate>
-                            <ListBox Name="GraphApiTestsList" Background="Transparent" BorderThickness="0" 
-                                     SelectionChanged="TestCategoryList_SelectionChanged" Tag="GraphApi">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="5">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ResultIcon}" FontSize="14" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Id}" FontWeight="Bold" Margin="0,0,5,0" Foreground="#FFECECEC"/>
-                                                <Border Background="#FF3F3F46" Margin="5,0" CornerRadius="2" Padding="3,1">
-                                                    <TextBlock Text="{Binding Priority}" FontSize="9" Foreground="#FF969696"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Normal" Margin="16,2,0,0" 
-                                                       Foreground="#FFECECEC" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Expander>
-
-                        <!-- KATEGORIA: PowerShell i Automatyzacja -->
-                        <Expander Name="PowerShellCategoryExpander" Header="🔧 PowerShell i Automatyzacja" 
-                                  IsExpanded="False" Margin="0,5" Background="#FF1E1E1E" Foreground="#FFECECEC">
-                            <Expander.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" FontSize="14"/>
-                                </DataTemplate>
-                            </Expander.HeaderTemplate>
-                            <ListBox Name="PowerShellTestsList" Background="Transparent" BorderThickness="0" 
-                                     SelectionChanged="TestCategoryList_SelectionChanged" Tag="PowerShell">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="5">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ResultIcon}" FontSize="14" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Id}" FontWeight="Bold" Margin="0,0,5,0" Foreground="#FFECECEC"/>
-                                                <Border Background="#FF3F3F46" Margin="5,0" CornerRadius="2" Padding="3,1">
-                                                    <TextBlock Text="{Binding Priority}" FontSize="9" Foreground="#FF969696"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Normal" Margin="16,2,0,0" 
-                                                       Foreground="#FFECECEC" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Expander>
-
-                        <!-- KATEGORIA: Zarządzanie Zespołami -->
-                        <Expander Name="TeamsManagementCategoryExpander" Header="👥 Zarządzanie Zespołami" 
-                                  IsExpanded="False" Margin="0,5" Background="#FF1E1E1E" Foreground="#FFECECEC">
-                            <Expander.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" FontSize="14"/>
-                                </DataTemplate>
-                            </Expander.HeaderTemplate>
-                            <ListBox Name="TeamsManagementTestsList" Background="Transparent" BorderThickness="0" 
-                                     SelectionChanged="TestCategoryList_SelectionChanged" Tag="TeamsManagement">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="5">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ResultIcon}" FontSize="14" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Id}" FontWeight="Bold" Margin="0,0,5,0" Foreground="#FFECECEC"/>
-                                                <Border Background="#FF3F3F46" Margin="5,0" CornerRadius="2" Padding="3,1">
-                                                    <TextBlock Text="{Binding Priority}" FontSize="9" Foreground="#FF969696"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Normal" Margin="16,2,0,0" 
-                                                       Foreground="#FFECECEC" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Expander>
-
-                        <!-- KATEGORIA: Interfejs Użytkownika -->
-                        <Expander Name="UiCategoryExpander" Header="🖥️ Interfejs Użytkownika" 
-                                  IsExpanded="False" Margin="0,5" Background="#FF1E1E1E" Foreground="#FFECECEC">
-                            <Expander.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" FontSize="14"/>
-                                </DataTemplate>
-                            </Expander.HeaderTemplate>
-                            <ListBox Name="UiTestsList" Background="Transparent" BorderThickness="0" 
-                                     SelectionChanged="TestCategoryList_SelectionChanged" Tag="UI">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="5">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding ResultIcon}" FontSize="14" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Id}" FontWeight="Bold" Margin="0,0,5,0" Foreground="#FFECECEC"/>
-                                                <Border Background="#FF3F3F46" Margin="5,0" CornerRadius="2" Padding="3,1">
-                                                    <TextBlock Text="{Binding Priority}" FontSize="9" Foreground="#FF969696"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Normal" Margin="16,2,0,0" 
-                                                       Foreground="#FFECECEC" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Expander>
-
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- Przyciski akcji -->
-                <StackPanel Grid.Row="4" Orientation="Vertical" Margin="0,15,0,0">
-                    <Button Name="BackToMainBtn" Content="⬅️ Powrót do głównego okna" Click="BackToMain_Click" Style="{StaticResource PrimaryButton}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Name="LoadTestsBtn" Content="🔄 Załaduj" Click="LoadTests_Click" Style="{StaticResource ActionButtonStyle}" Margin="0,0,5,0"/>
-                        <Button Name="SaveResultsBtn" Content="💾 Zapisz" Click="SaveResults_Click" Style="{StaticResource ActionButtonStyle}" Margin="5,0,0,0"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Name="GenerateReportBtn" Content="📊 Raport" Click="GenerateReport_Click" Style="{StaticResource ActionButtonStyle}" Margin="0,0,5,0"/>
-                        <Button Name="OpenReportBtn" Content="📄 Otwórz" Click="OpenReport_Click" Style="{StaticResource ActionButtonStyle}" Margin="5,0,0,0"/>
-                    </StackPanel>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#FF3F3F46"/>
-
-        <!-- Szczegóły testu -->
-        <Border Grid.Column="2" Background="#FF252526" CornerRadius="8" Margin="20" BorderBrush="#FF3F3F46" BorderThickness="1">
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="200"/>  <!-- Większe pole na wyniki testów -->
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="120"/>  <!-- Notatki na końcu -->
-                </Grid.RowDefinitions>
-
-                <!-- Nagłówek testu -->
-                <StackPanel Grid.Row="0">
-                    <TextBlock Name="TestTitle" Text="Wybierz test z listy" Style="{StaticResource HeaderStyle}" FontSize="20"/>
-                    <TextBlock Name="TestDescription" Text="" TextWrapping="Wrap" Margin="0,5,0,10" Foreground="#FF969696"/>
-                </StackPanel>
-
-                <!-- API Endpoint (jeśli dostępny) -->
-                <StackPanel Grid.Row="1" Name="ApiEndpointPanel" Visibility="Collapsed" Margin="0,0,0,10">
-                    <TextBlock Text="🌐 Endpoint API:" FontWeight="Bold" Margin="0,0,0,5" Foreground="#FFECECEC"/>
-                    <TextBox Name="ApiEndpointText" IsReadOnly="True" Background="#FF1E1E1E" Margin="0"/>
-                </StackPanel>
-
-                <!-- Kroki testu -->
-                <StackPanel Grid.Row="2">
-                    <TextBlock Text="📝 Kroki do wykonania:" Style="{StaticResource HeaderStyle}"/>
-                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl Name="TestStepsList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                                        <TextBlock Text="{Binding StepNumber}" FontWeight="Bold" Margin="0,0,10,0" Width="25" Foreground="#FF0078D4"/>
-                                        <TextBlock Text="{Binding StepText}" TextWrapping="Wrap" Foreground="#FFECECEC"/>
+                            <!-- Kategoria API Microsoft Graph -->
+                            <Expander Name="GraphApiCategoryExpander" IsExpanded="False" Margin="0,4">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="GraphOutline" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="API Microsoft Graph"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
                                     </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                                </Expander.Header>
+                                <ListBox Name="GraphApiTestsList"
+                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="GraphApi"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,8" CornerRadius="4">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
+                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
+                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
+                                                        <Border Background="{StaticResource AccentBlue}"
+                                                                Padding="8,2" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
+                                                                       Foreground="White" FontWeight="Medium"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
+                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Expander>
+
+                            <!-- Kategoria PowerShell -->
+                            <Expander Name="PowerShellCategoryExpander" IsExpanded="False" Margin="0,4">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Powershell" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="PowerShell i Automatyzacja"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
+                                    </StackPanel>
+                                </Expander.Header>
+                                <ListBox Name="PowerShellTestsList"
+                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="PowerShell"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,8" CornerRadius="4">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
+                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
+                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
+                                                        <Border Background="{StaticResource AccentBlue}"
+                                                                Padding="8,2" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
+                                                                       Foreground="White" FontWeight="Medium"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
+                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Expander>
+
+                            <!-- Kategoria Zarządzanie Teams -->
+                            <Expander Name="TeamsManagementCategoryExpander" IsExpanded="False" Margin="0,4">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="MicrosoftTeams" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Zarządzanie Teams"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
+                                    </StackPanel>
+                                </Expander.Header>
+                                <ListBox Name="TeamsManagementTestsList"
+                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="TeamsManagement"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,8" CornerRadius="4">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
+                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
+                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
+                                                        <Border Background="{StaticResource AccentBlue}"
+                                                                Padding="8,2" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
+                                                                       Foreground="White" FontWeight="Medium"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
+                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Expander>
+
+                            <!-- Kategoria Interfejs Użytkownika -->
+                            <Expander Name="UiCategoryExpander" IsExpanded="False" Margin="0,4">
+                                <Expander.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Monitor" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Interfejs Użytkownika"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
+                                    </StackPanel>
+                                </Expander.Header>
+                                <ListBox Name="UiTestsList"
+                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="UI"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,8" CornerRadius="4">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
+                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Id}"
+                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
+                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
+                                                        <Border Background="{StaticResource AccentBlue}"
+                                                                Padding="8,2" CornerRadius="10">
+                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
+                                                                       Foreground="White" FontWeight="Medium"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
+                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                               Foreground="{StaticResource TextSecondary}"
+                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Expander>
+
+                        </StackPanel>
                     </ScrollViewer>
-                </StackPanel>
 
-                <!-- Oczekiwany rezultat -->
-                <StackPanel Grid.Row="3" Margin="0,10,0,10">
-                    <TextBlock Text="🎯 Oczekiwany rezultat:" Style="{StaticResource HeaderStyle}"/>
-                    <Border Background="#FF1E1E1E" BorderBrush="#FF007ACC" BorderThickness="1" Margin="0,5" CornerRadius="4">
-                        <TextBlock Name="ExpectedResultText" Text="" TextWrapping="Wrap" Margin="10" Foreground="#FFECECEC"/>
-                    </Border>
-                </StackPanel>
+                    <!-- Przyciski akcji -->
+                    <Grid Grid.Row="4" Margin="0,16,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                <!-- DUŻE POLE WYNIKÓW TESTÓW - NAD PRZYCISKAMI -->
-                <StackPanel Grid.Row="4" Margin="0,10,0,10">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="📊 Wynik testu:" Style="{StaticResource HeaderStyle}"/>
-                        <TextBlock Name="ExecutionStatus" Text="" Margin="20,0,0,0" 
-                                   FontWeight="Bold" Foreground="#FF0078D4"/>
+                        <Button Grid.Row="0" Name="BackToMainBtn" Style="{StaticResource PrimaryActionButton}"
+                                Click="BackToMain_Click" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ArrowLeft" Margin="0,0,8,0"/>
+                                <TextBlock Text="Powrót do głównego okna"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Grid Grid.Row="1" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button Grid.Column="0" Name="LoadTestsBtn" Style="{StaticResource SecondaryActionButton}"
+                                    Click="LoadTests_Click" Margin="0,0,4,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Reload" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Załaduj"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Grid.Column="1" Name="SaveResultsBtn" Style="{StaticResource SecondaryActionButton}"
+                                    Click="SaveResults_Click" Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="ContentSave" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Zapisz"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button Grid.Column="0" Name="GenerateReportBtn" Style="{StaticResource SecondaryActionButton}"
+                                    Click="GenerateReport_Click" Margin="0,0,4,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="ChartLine" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Raport"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Grid.Column="1" Name="OpenReportBtn" Style="{StaticResource SecondaryActionButton}"
+                                    Click="OpenReport_Click" Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FileDocument" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Otwórz"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Separator -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                          Background="{StaticResource BorderDark}" Opacity="0.5"/>
+
+            <!-- Prawy panel - Szczegóły testu -->
+            <!-- Zmieniono: Usunięto Style="{StaticResource InfoCardStyle}" i dodano bezpośrednie właściwości -->
+            <Border Grid.Column="2" Margin="20" Background="{StaticResource BackgroundMedium}" CornerRadius="12" Padding="24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="200"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="120"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Nagłówek testu -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                        <TextBlock Name="TestTitle" Text="Wybierz test z listy"
+                                   Style="{StaticResource PageTitleStyle}" FontSize="24"/>
+                        <TextBlock Name="TestDescription" Text=""
+                                   Style="{StaticResource InstructionTextStyle}"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
-                    <Border Background="#FF1E1E1E" BorderBrush="#FF007ACC" BorderThickness="2" CornerRadius="4">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="5">
-                            <TextBox Name="TestResultTextBox" Background="Transparent" BorderThickness="0" 
-                                     IsReadOnly="True" TextWrapping="Wrap" Foreground="#FFECECEC" FontFamily="Consolas"
-                                     Text="Tu pojawią się wyniki wykonanych testów automatycznych..." 
-                                     MinHeight="180" VerticalAlignment="Stretch"/>
+
+                    <!-- Karta endpointu API -->
+                    <Border Grid.Row="1" Name="ApiEndpointPanel" Visibility="Collapsed"
+                            Background="{StaticResource BackgroundDark}" CornerRadius="8"
+                            Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <materialDesign:PackIcon Kind="Api" Grid.Column="0"
+                                                     Width="20" Height="20"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="{StaticResource AccentBlue}"/>
+                            <TextBox Grid.Column="1" Name="ApiEndpointText"
+                                     IsReadOnly="True" Background="Transparent"
+                                     BorderThickness="0" Margin="12,0,0,0"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Kroki testu -->
+                    <StackPanel Grid.Row="2">
+                        <TextBlock Text="Kroki do wykonania" Style="{StaticResource SectionHeaderStyle}"/>
+                        <ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto"
+                                      materialDesign:ScrollViewerAssist.IsAutoHideEnabled="True">
+                            <ItemsControl Name="TestStepsList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource BackgroundDark}"
+                                                CornerRadius="6" Padding="16,12" Margin="0,4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Grid.Column="0" Width="28" Height="28"
+                                                        CornerRadius="14"
+                                                        Background="{StaticResource AccentBlue}"
+                                                        Margin="0,0,12,0">
+                                                    <TextBlock Text="{Binding StepNumber}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="White" FontWeight="Bold"/>
+                                                </Border>
+
+                                                <TextBlock Grid.Column="1" Text="{Binding StepText}"
+                                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </ScrollViewer>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
 
-                <!-- Przyciski wyników OCENY -->
-                <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10">
-                    <TextBlock Text="📋 Oceń wynik:" Margin="0,0,15,0" VerticalAlignment="Center" 
-                               FontWeight="Bold" Foreground="#FFECECEC"/>
-                    <Button Name="PassBtn" Content="✅ ZALICZONY" Foreground="White" 
-                            Click="MarkResult_Click" Tag="Pass" Style="{StaticResource SuccessButton}"/>
-                    <Button Name="FailBtn" Content="❌ NIEZALICZONY" Foreground="White" 
-                            Click="MarkResult_Click" Tag="Fail" Style="{StaticResource ErrorButton}"/>
-                    <Button Name="WarningBtn" Content="⚠️ Z UWAGAMI" Foreground="White" 
-                            Click="MarkResult_Click" Tag="Warning" Style="{StaticResource WarningButton}"/>
-                    <Button Name="SkipBtn" Content="⏭️ POMINIĘTY" Foreground="White" 
-                            Click="MarkResult_Click" Tag="Skip" Style="{StaticResource ModernButton}"/>
-                </StackPanel>
+                    <!-- Oczekiwany rezultat -->
+                    <StackPanel Grid.Row="3" Margin="0,16,0,16">
+                        <TextBlock Text="Oczekiwany rezultat" Style="{StaticResource SectionHeaderStyle}"/>
+                        <Border Background="{StaticResource BackgroundDark}"
+                                BorderBrush="{StaticResource AccentBlue}"
+                                BorderThickness="1" CornerRadius="8" Padding="16">
+                            <TextBlock Name="ExpectedResultText" Text=""
+                                       Style="{StaticResource MaterialDesignBody1TextBlock}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
 
-                <!-- Notatki na samym dole -->
-                <StackPanel Grid.Row="6" Margin="0,10,0,0">
-                    <TextBlock Text="📝 Notatki i obserwacje:" Style="{StaticResource HeaderStyle}"/>
-                    <Border Background="#FF1E1E1E" BorderBrush="#FF3F3F46" BorderThickness="1" CornerRadius="4">
-                        <TextBox Name="NotesTextBox" AcceptsReturn="True" TextWrapping="Wrap" 
-                                 VerticalScrollBarVisibility="Auto" Margin="5" Background="Transparent" 
-                                 BorderThickness="0" MinHeight="90" Foreground="#FFECECEC"
-                                 Text="Wpisz tutaj swoje obserwacje, uwagi lub dodatkowe informacje..."/>
-                    </Border>
+                    <!-- Wyniki testu -->
+                    <Grid Grid.Row="4" Margin="0,16,0,16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="Wynik testu"
+                                       Style="{StaticResource SectionHeaderStyle}"/>
+                            <TextBlock Grid.Column="1" Name="ExecutionStatus" Text=""
+                                       Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                       Foreground="{StaticResource AccentBlue}"
+                                       Margin="16,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <Border Grid.Row="1" Background="{StaticResource BackgroundDark}"
+                                BorderBrush="{StaticResource AccentBlue}"
+                                BorderThickness="2" CornerRadius="8">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          materialDesign:ScrollViewerAssist.IsAutoHideEnabled="True">
+                                <TextBox Name="TestResultTextBox"
+                                         Background="Transparent" BorderThickness="0"
+                                         IsReadOnly="True" TextWrapping="Wrap"
+                                         FontFamily="Consolas" FontSize="13"
+                                         Text="Tu pojawią się wyniki wykonanych testów automatycznych..."
+                                         MinHeight="160" Padding="16"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+
+                    <!-- Przyciski oceny wyniku -->
+                    <Grid Grid.Row="5" Margin="0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="Oceń wynik:"
+                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                   VerticalAlignment="Center" Margin="0,0,16,0"/>
+
+                        <UniformGrid Grid.Column="1" Rows="1" Columns="4" HorizontalAlignment="Center">
+                            <Button Name="PassBtn" Style="{StaticResource SuccessButton}"
+                                    Click="MarkResult_Click" Tag="Pass" Margin="4,0">
+                                <StackPanel>
+                                    <materialDesign:PackIcon Kind="Check" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="ZALICZONY" FontSize="10" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Name="FailBtn" Style="{StaticResource DangerButton}"
+                                    Click="MarkResult_Click" Tag="Fail" Margin="4,0">
+                                <StackPanel>
+                                    <materialDesign:PackIcon Kind="Close" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="NIEZALICZONY" FontSize="10" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Name="WarningBtn" Style="{StaticResource WarningButton}"
+                                    Click="MarkResult_Click" Tag="Warning" Margin="4,0">
+                                <StackPanel>
+                                    <materialDesign:PackIcon Kind="Alert" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Z UWAGAMI" FontSize="10" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Name="SkipBtn" Style="{StaticResource SecondaryActionButton}"
+                                    Click="MarkResult_Click" Tag="Skip" Margin="4,0">
+                                <StackPanel>
+                                    <materialDesign:PackIcon Kind="SkipNext" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="POMINIĘTY" FontSize="10" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Button>
+                        </UniformGrid>
+                    </Grid>
+
+                    <!-- Sekcja notatek -->
+                    <StackPanel Grid.Row="6">
+                        <TextBlock Text="Notatki i obserwacje" Style="{StaticResource SectionHeaderStyle}"/>
+                        <Border Background="{StaticResource BackgroundDark}"
+                                BorderBrush="{StaticResource BorderDark}"
+                                BorderThickness="1" CornerRadius="8">
+                            <TextBox Name="NotesTextBox"
+                                     Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     MinHeight="80" Margin="8"
+                                     materialDesign:HintAssist.Hint="Wpisz tutaj swoje obserwacje..."
+                                     materialDesign:HintAssist.IsFloating="False"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Nakładka ładowania -->
+            <Grid x:Name="LoadingOverlay" Grid.ColumnSpan="3"
+                  Background="{StaticResource BackgroundDark}"
+                  Opacity="0.9" Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                 IsIndeterminate="True" Width="60" Height="60"/>
+                    <TextBlock Text="Wykonywanie testu..."
+                               Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                               Foreground="{StaticResource TextPrimary}"
+                               Margin="0,16,0,0" HorizontalAlignment="Center"/>
                 </StackPanel>
             </Grid>
-        </Border>
-    </Grid>
-</Window> 
+        </Grid>
+    </materialDesign:DialogHost>
+</Window>

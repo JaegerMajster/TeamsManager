@@ -1,19 +1,12 @@
 ﻿using Microsoft.Identity.Client;
 using System;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Interop;
 using TeamsManager.UI.Views;
 using TeamsManager.UI.Services;
 
@@ -47,14 +40,15 @@ namespace TeamsManager.UI
             catch (InvalidOperationException ex)
             {
                 // Obsługa krytycznego błędu konfiguracji MSAL
-                MessageBox.Show(ex.Message + "\nAplikacja nie może kontynuować bez poprawnej konfiguracji logowania.",
-                                "Krytyczny Błąd Konfiguracji", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowErrorDialog(ex.Message + "\nAplikacja nie może kontynuować bez poprawnej konfiguracji logowania.",
+                                "Krytyczny Błąd Konfiguracji");
 
                 // Zablokowanie funkcjonalności logowania
                 LoginButton.IsEnabled = false;
                 LogoutButton.IsEnabled = false;
                 ManualTestsButton.IsEnabled = false;
-                UserDisplayNameTextBlock.Text = "Błąd konfiguracji MSAL";
+                UserDisplayNameTextBlock.Text = "Błąd konfiguracji";
+                UserInfoTextBlock.Text = "MSAL nie został poprawnie skonfigurowany";
             }
 
             // Ustaw ciemny motyw dla tego okna
@@ -83,10 +77,13 @@ namespace TeamsManager.UI
             // Sprawdzenie, czy MSALService został poprawnie zainicjowany
             if (_msalAuthService == null)
             {
-                MessageBox.Show("Serwis autentykacji MSAL nie został poprawnie zainicjowany z powodu błędu konfiguracji.",
-                                "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowErrorDialog("Serwis autentykacji MSAL nie został poprawnie zainicjowany z powodu błędu konfiguracji.",
+                                "Błąd");
                 return;
             }
+
+            // Pokaż loading overlay
+            ShowLoading(true);
 
             var startTime = DateTime.Now;
             try
@@ -99,10 +96,8 @@ namespace TeamsManager.UI
                     // Pobierz profil użytkownika z Microsoft Graph
                     await LoadUserProfileAsync();
 
-                    // Aktualizacja stanu przycisków
-                    LogoutButton.IsEnabled = true;
-                    LoginButton.IsEnabled = false;
-                    ManualTestsButton.IsEnabled = true; // Aktywuj przycisk testów po zalogowaniu
+                    // Animowana zmiana UI
+                    await AnimateLoginSuccess();
 
                     // Przekaż wynik logowania do okna testów jeśli jest otwarte
                     if (_manualTestingWindow != null)
@@ -110,19 +105,11 @@ namespace TeamsManager.UI
                         await _manualTestingWindow.SaveLoginResultToSession(true, 
                             $"Pomyślne logowanie użytkownika: {_authResult.Account?.Username}", duration);
                     }
-
-                    // Dostosuj rozmiar okna do nowej zawartości
-                    this.SizeToContent = SizeToContent.Height;
-                    await System.Threading.Tasks.Task.Delay(50);
-                    this.SizeToContent = SizeToContent.Manual;
                 }
                 else
                 {
-                    ResetUserInterface();
-                    LogoutButton.IsEnabled = false;
-                    LoginButton.IsEnabled = true;
-                    ManualTestsButton.IsEnabled = false; // Dezaktywuj przycisk testów jeśli logowanie nie powiodło się
-
+                    await AnimateLoginFailure();
+                    
                     // Przekaż wynik logowania do okna testów jeśli jest otwarte
                     if (_manualTestingWindow != null)
                     {
@@ -134,11 +121,8 @@ namespace TeamsManager.UI
             catch (Exception ex)
             {
                 var duration = DateTime.Now - startTime;
-                MessageBox.Show($"Błąd logowania: {ex.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
-                ResetUserInterface();
-                LogoutButton.IsEnabled = false;
-                LoginButton.IsEnabled = true;
-                ManualTestsButton.IsEnabled = false; // Dezaktywuj przycisk testów przy błędzie
+                ShowErrorDialog($"Błąd logowania: {ex.Message}", "Błąd");
+                await AnimateLoginFailure();
 
                 // Przekaż wynik logowania do okna testów jeśli jest otwarte
                 if (_manualTestingWindow != null)
@@ -146,6 +130,10 @@ namespace TeamsManager.UI
                     await _manualTestingWindow.SaveLoginResultToSession(false, 
                         $"Błąd podczas logowania: {ex.Message}", duration);
                 }
+            }
+            finally
+            {
+                ShowLoading(false);
             }
         }
 
@@ -175,7 +163,7 @@ namespace TeamsManager.UI
                     
                     // Fallback: użyj informacji z podstawowego tokenu MSAL
                     UserDisplayNameTextBlock.Text = _authResult.Account?.Username ?? "Użytkownik";
-                    UserInfoTextBlock.Text = "Brak dostępu do Microsoft Graph - brak odpowiedniego tokenu";
+                    UserInfoTextBlock.Text = "Zalogowano (ograniczony dostęp)";
                     return;
                 }
                 
@@ -192,7 +180,7 @@ namespace TeamsManager.UI
                     if (userProfile != null)
                     {
                         UserDisplayNameTextBlock.Text = userProfile.DisplayName ?? "Nieznany użytkownik";
-                        UserInfoTextBlock.Text = $"Zalogowano jako: {userProfile.DisplayName}";
+                        UserInfoTextBlock.Text = userProfile.Mail ?? userProfile.UserPrincipalName ?? "Zalogowano";
 
                         // Pobierz avatar użytkownika jeśli dostępny
                         if (testResult.CanAccessPhoto)
@@ -200,13 +188,18 @@ namespace TeamsManager.UI
                             var userPhoto = await _graphUserProfileService.GetUserPhotoAsync(graphToken);
                             if (userPhoto != null)
                             {
-                                DefaultUserIcon.Visibility = System.Windows.Visibility.Hidden;
-                                UserAvatarImage.Fill = new ImageBrush
+                                // Animowana zmiana avatara
+                                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.2));
+                                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3));
+                                
+                                DefaultUserIcon.BeginAnimation(OpacityProperty, fadeOut);
+                                fadeOut.Completed += (s, e) =>
                                 {
-                                    ImageSource = userPhoto,
-                                    Stretch = Stretch.UniformToFill
+                                    DefaultUserIcon.Visibility = Visibility.Collapsed;
+                                    UserAvatarBrush.ImageSource = userPhoto;
+                                    UserAvatarImage.Visibility = Visibility.Visible;
+                                    UserAvatarImage.BeginAnimation(OpacityProperty, fadeIn);
                                 };
-                                UserAvatarImage.Visibility = System.Windows.Visibility.Visible;
                             }
                         }
                         
@@ -217,7 +210,7 @@ namespace TeamsManager.UI
 
                 // Jeśli nie udało się pobrać profilu, pokaż informacje z podstawowego tokenu
                 UserDisplayNameTextBlock.Text = _authResult.Account?.Username ?? "Użytkownik";
-                UserInfoTextBlock.Text = $"Brak dostępu do Microsoft Graph. Status: /me={testResult.MeEndpointStatus}, /photo={testResult.PhotoEndpointStatus}";
+                UserInfoTextBlock.Text = "Zalogowano (ograniczony dostęp do Graph)";
                 
                 if (!string.IsNullOrEmpty(testResult.ErrorMessage))
                 {
@@ -228,22 +221,70 @@ namespace TeamsManager.UI
             {
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] Błąd podczas ładowania profilu: {ex.Message}");
                 UserDisplayNameTextBlock.Text = _authResult.Account?.Username ?? "Użytkownik";
-                UserInfoTextBlock.Text = $"Błąd podczas ładowania profilu: {ex.Message}";
+                UserInfoTextBlock.Text = "Zalogowano";
             }
+        }
+
+        private async System.Threading.Tasks.Task AnimateLoginSuccess()
+        {
+            // Pokaż status indicator
+            StatusIndicator.Visibility = Visibility.Visible;
+
+            // Animacja fade dla tekstu
+            var fadeAnimation = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3));
+
+            // Zmień przyciski z animacją
+            LoginButton.Visibility = Visibility.Collapsed;
+            
+            LogoutButton.Visibility = Visibility.Visible;
+            LogoutButton.IsEnabled = true;
+            LogoutButton.BeginAnimation(OpacityProperty, fadeAnimation);
+            
+            ManualTestsButton.Visibility = Visibility.Visible;
+            ManualTestsButton.IsEnabled = true;
+            ManualTestsButton.BeginAnimation(OpacityProperty, fadeAnimation);
+
+            await System.Threading.Tasks.Task.Delay(300);
+        }
+
+        private async System.Threading.Tasks.Task AnimateLoginFailure()
+        {
+            ResetUserInterface();
+            LogoutButton.IsEnabled = false;
+            LogoutButton.Visibility = Visibility.Collapsed;
+            LoginButton.IsEnabled = true;
+            LoginButton.Visibility = Visibility.Visible;
+            ManualTestsButton.IsEnabled = false;
+            ManualTestsButton.Visibility = Visibility.Collapsed;
+
+            // Delikatne potrząśnięcie karty
+            var shakeAnimation = new ThicknessAnimation(
+                new Thickness(0),
+                new Thickness(5, 0, -5, 0),
+                TimeSpan.FromSeconds(0.05))
+            {
+                AutoReverse = true,
+                RepeatBehavior = new RepeatBehavior(3)
+            };
+
+            UserAvatarBorder.BeginAnimation(MarginProperty, shakeAnimation);
+            await System.Threading.Tasks.Task.Delay(300);
         }
 
         private void ResetUserInterface()
         {
-            UserDisplayNameTextBlock.Text = "Niezalogowany";
-            UserInfoTextBlock.Text = "";
-            UserInfoTextBlock.Visibility = Visibility.Collapsed;
+            UserDisplayNameTextBlock.Text = "Witaj!";
+            UserInfoTextBlock.Text = "Zaloguj się, aby kontynuować";
             UserAvatarImage.Visibility = Visibility.Collapsed;
             DefaultUserIcon.Visibility = Visibility.Visible;
             UserAvatarBrush.ImageSource = null;
+            StatusIndicator.Visibility = Visibility.Collapsed;
         }
 
         private async void LogoutButton_Click(object sender, RoutedEventArgs e)
         {
+            ShowLoading(true);
+
             // Sprawdzenie, czy serwis istnieje
             if (_msalAuthService != null)
             {
@@ -251,17 +292,29 @@ namespace TeamsManager.UI
             }
 
             _authResult = null;
-            ResetUserInterface();
+            
+            // Animowana zmiana UI
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.2));
+            fadeOut.Completed += async (s, args) =>
+            {
+                ResetUserInterface();
+                
+                // Aktualizacja stanu przycisków
+                LogoutButton.IsEnabled = false;
+                LogoutButton.Visibility = Visibility.Collapsed;
+                LoginButton.IsEnabled = true;
+                LoginButton.Visibility = Visibility.Visible;
+                ManualTestsButton.IsEnabled = false;
+                ManualTestsButton.Visibility = Visibility.Collapsed;
 
-            // Aktualizacja stanu przycisków
-            LogoutButton.IsEnabled = false;
-            LoginButton.IsEnabled = true;
-            ManualTestsButton.IsEnabled = false; // Dezaktywuj przycisk testów po wylogowaniu
+                // Fade in
+                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3));
+                LoginButton.BeginAnimation(OpacityProperty, fadeIn);
+                
+                ShowLoading(false);
+            };
 
-            // Dostosuj rozmiar okna do nowej zawartości
-            this.SizeToContent = SizeToContent.Height;
-            await System.Threading.Tasks.Task.Delay(50);
-            this.SizeToContent = SizeToContent.Manual;
+            UserDisplayNameTextBlock.BeginAnimation(OpacityProperty, fadeOut);
         }
 
         private void ManualTestsButton_Click(object sender, RoutedEventArgs e)
@@ -296,9 +349,30 @@ namespace TeamsManager.UI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] Błąd podczas otwierania okna testów: {ex}");
-                MessageBox.Show($"Błąd podczas otwierania okna testów manualnych: {ex.Message}", 
-                    "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowErrorDialog($"Błąd podczas otwierania okna testów manualnych: {ex.Message}", "Błąd");
             }
+        }
+
+        private void ShowLoading(bool show)
+        {
+            if (show)
+            {
+                LoadingOverlay.Visibility = Visibility.Visible;
+                var fadeIn = new DoubleAnimation(0, 0.9, TimeSpan.FromSeconds(0.2));
+                LoadingOverlay.BeginAnimation(OpacityProperty, fadeIn);
+            }
+            else
+            {
+                var fadeOut = new DoubleAnimation(0.9, 0, TimeSpan.FromSeconds(0.2));
+                fadeOut.Completed += (s, e) => LoadingOverlay.Visibility = Visibility.Collapsed;
+                LoadingOverlay.BeginAnimation(OpacityProperty, fadeOut);
+            }
+        }
+
+        private void ShowErrorDialog(string message, string title)
+        {
+            // W przyszłości można użyć Material Design Dialog
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

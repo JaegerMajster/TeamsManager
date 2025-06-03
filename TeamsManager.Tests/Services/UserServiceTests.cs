@@ -256,7 +256,7 @@ namespace TeamsManager.Tests.Services
             // Mock dla PowerShell Service - bezpośrednie uruchomienie bez OBO
             _mockPowerShellService.Setup(ps => ps.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()))
                                  .ReturnsAsync(false); // OBO failed, więc connection też fails
-            _mockPowerShellService.Setup(ps => ps.CreateM365UserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<bool>()))
+            _mockPowerShellService.Setup(ps => ps.Users.CreateM365UserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<bool>()))
                                  .ReturnsAsync("external-user-id-12345");
 
             // Oczekujemy, że CreateUserAsync zwróci null z powodu niepowodzenia OBO

@@ -26,7 +26,7 @@ using Microsoft.OpenApi.Models;
 using TeamsManager.Api.Swagger;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
-using TeamsManager.Core.Services.PowerShell; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
+using TeamsManager.Core.Services.PowerShellServices; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -13,7 +13,7 @@ using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego użytkownikami, członkostwem w zespołach i licencjami w Microsoft 365 przez PowerShell

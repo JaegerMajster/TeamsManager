@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
-using TeamsManager.Core.Services.PowerShell;
+using TeamsManager.Core.Services.PowerShellServices;
 
 namespace TeamsManager.Core.Extensions
 {

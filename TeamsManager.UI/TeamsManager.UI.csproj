@@ -24,6 +24,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="ViewModels\Configuration\ApiConfigurationViewModel.cs">
+      <Generator>MSBuild:Compile</Generator>
+    </Compile>
+    <Compile Update="ViewModels\Configuration\ConfigurationDetectionViewModel.cs">
+      <Generator>MSBuild:Compile</Generator>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="msalconfig.developer.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

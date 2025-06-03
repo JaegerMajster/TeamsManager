@@ -11,7 +11,7 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego operacjami masowymi w Microsoft 365 przez PowerShell

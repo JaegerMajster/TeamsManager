@@ -12,8 +12,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using TeamsManager.UI.Models;
 using TeamsManager.UI.Services;
+using MaterialDesignThemes.Wpf;
 
 namespace TeamsManager.UI.Views
 {
@@ -389,14 +392,67 @@ namespace TeamsManager.UI.Views
 
         private void HamburgerButton_Click(object sender, RoutedEventArgs e)
         {
-            // Toggle wszystkich kategorii - rozwiń lub zwiń
-            bool shouldExpand = !AuthCategoryExpander.IsExpanded;
+            // Sprawdź stan wszystkich expanderów
+            var allExpanders = new List<Expander> 
+            { 
+                AuthCategoryExpander, 
+                GraphApiCategoryExpander, 
+                PowerShellCategoryExpander, 
+                TeamsManagementCategoryExpander, 
+                UiCategoryExpander 
+            };
             
-            AuthCategoryExpander.IsExpanded = shouldExpand;
-            GraphApiCategoryExpander.IsExpanded = shouldExpand;
-            PowerShellCategoryExpander.IsExpanded = shouldExpand;
-            TeamsManagementCategoryExpander.IsExpanded = shouldExpand;
-            UiCategoryExpander.IsExpanded = shouldExpand;
+            // Jeśli przynajmniej jeden jest rozwinięty, zwiń wszystkie
+            // Jeśli wszystkie są zwinięte, rozwiń wszystkie
+            bool anyExpanded = allExpanders.Any(exp => exp.IsExpanded);
+            
+            if (anyExpanded)
+            {
+                // Zwiń wszystkie z animacją
+                foreach (var expander in allExpanders)
+                {
+                    if (expander.IsExpanded)
+                    {
+                        var collapseAnimation = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.2));
+                        collapseAnimation.Completed += (s, args) => expander.IsExpanded = false;
+                        expander.BeginAnimation(OpacityProperty, collapseAnimation);
+                    }
+                }
+            }
+            else
+            {
+                // Rozwiń wszystkie z animacją kaskadową
+                double delay = 0;
+                foreach (var expander in allExpanders)
+                {
+                    expander.IsExpanded = true;
+                    
+                    var expandAnimation = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3))
+                    {
+                        BeginTime = TimeSpan.FromSeconds(delay)
+                    };
+                    expander.BeginAnimation(OpacityProperty, expandAnimation);
+                    
+                    delay += 0.05; // Kaskadowy efekt
+                }
+            }
+            
+            // Animacja obrotu ikony hamburgera
+            if (sender is Button button && button.Content is PackIcon icon)
+            {
+                var rotateAnimation = new DoubleAnimation
+                {
+                    From = anyExpanded ? 0 : 180,
+                    To = anyExpanded ? 180 : 360,
+                    Duration = TimeSpan.FromSeconds(0.3)
+                };
+                
+                var rotateTransform = new RotateTransform();
+                icon.RenderTransform = rotateTransform;
+                icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                
+                rotateTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnimation);
+            }
         }
 
         private void TestCategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -405,14 +461,32 @@ namespace TeamsManager.UI.Views
             if (listBox?.SelectedItem is TestCaseViewModel selectedViewModel)
             {
                 // Odznacz inne listy
-                if (listBox != AuthTestsList) AuthTestsList.SelectedItem = null;
-                if (listBox != GraphApiTestsList) GraphApiTestsList.SelectedItem = null;
-                if (listBox != PowerShellTestsList) PowerShellTestsList.SelectedItem = null;
-                if (listBox != TeamsManagementTestsList) TeamsManagementTestsList.SelectedItem = null;
-                if (listBox != UiTestsList) UiTestsList.SelectedItem = null;
+                var allLists = new List<ListBox> 
+                { 
+                    AuthTestsList, 
+                    GraphApiTestsList, 
+                    PowerShellTestsList, 
+                    TeamsManagementTestsList, 
+                    UiTestsList 
+                };
+                
+                foreach (var list in allLists.Where(l => l != listBox))
+                {
+                    list.SelectedItem = null;
+                }
 
                 _selectedTestCase = selectedViewModel.TestCase;
-                DisplayTestDetails(_selectedTestCase);
+                
+                // Animacja fade przy zmianie testu
+                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.1));
+                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
+                
+                TestTitle.BeginAnimation(OpacityProperty, fadeOut);
+                fadeOut.Completed += (s, args) =>
+                {
+                    DisplayTestDetails(_selectedTestCase);
+                    TestTitle.BeginAnimation(OpacityProperty, fadeIn);
+                };
             }
         }
 
@@ -444,7 +518,7 @@ namespace TeamsManager.UI.Views
             {
                 steps.Add(new TestStepViewModel
                 {
-                    StepNumber = $"{i + 1}.",
+                    StepNumber = $"{i + 1}",
                     StepText = testCase.Steps[i]
                 });
             }
@@ -486,7 +560,7 @@ namespace TeamsManager.UI.Views
                     Name = "AutoExecuteButton",
                     Content = testCase.AutoExecuteButtonText,
                     Margin = new Thickness(0, 15, 0, 0),
-                    Style = (Style)FindResource("PrimaryButton")
+                    Style = (Style)FindResource("PrimaryActionButton")
                 };
 
                 autoButton.Click += (s, e) => ExecuteAutomaticTest(testCase);
@@ -494,8 +568,34 @@ namespace TeamsManager.UI.Views
             }
         }
 
+        private void ShowLoading(bool show, string message = "Wykonywanie testu...")
+        {
+            if (show)
+            {
+                LoadingOverlay.Visibility = Visibility.Visible;
+                
+                // Znajdź TextBlock w LoadingOverlay
+                var textBlock = LoadingOverlay.Descendants<TextBlock>().FirstOrDefault();
+                if (textBlock != null)
+                {
+                    textBlock.Text = message;
+                }
+                
+                var fadeIn = new DoubleAnimation(0, 0.9, TimeSpan.FromSeconds(0.2));
+                LoadingOverlay.BeginAnimation(OpacityProperty, fadeIn);
+            }
+            else
+            {
+                var fadeOut = new DoubleAnimation(0.9, 0, TimeSpan.FromSeconds(0.2));
+                fadeOut.Completed += (s, e) => LoadingOverlay.Visibility = Visibility.Collapsed;
+                LoadingOverlay.BeginAnimation(OpacityProperty, fadeOut);
+            }
+        }
+
         private async void ExecuteAutomaticTest(TestCase testCase)
         {
+            ShowLoading(true, $"Wykonywanie testu {testCase.Id}...");
+            
             var startTime = DateTime.Now;
             TestResultTextBox.Text = $"🔄 Wykonywanie testu {testCase.Id}...\n";
             ExecutionStatus.Text = "🔄 Test w trakcie wykonania...";
@@ -564,6 +664,10 @@ namespace TeamsManager.UI.Views
                 ExecutionStatus.Text = "❌ Błąd wykonania testu";
                 
                 await SaveTestSessionToMarkdown(testCase, startTime, duration, errorMsg);
+            }
+            finally
+            {
+                ShowLoading(false);
             }
         }
 
@@ -1030,4 +1134,30 @@ namespace TeamsManager.UI.Views
         public string StepNumber { get; set; } = string.Empty;
         public string StepText { get; set; } = string.Empty;
     }
-} 
+}
+
+// Extension method helper
+public static class VisualTreeExtensions
+{
+    public static IEnumerable<T> Descendants<T>(this DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) yield break;
+        
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(parent);
+        
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            var childrenCount = VisualTreeHelper.GetChildrenCount(current);
+            
+            for (int i = 0; i < childrenCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(current, i);
+                if (child is T typedChild)
+                    yield return typedChild;
+                queue.Enqueue(child);
+            }
+        }
+    }
+}

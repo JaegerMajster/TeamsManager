@@ -9,7 +9,7 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego połączeniem PowerShell i Microsoft Graph

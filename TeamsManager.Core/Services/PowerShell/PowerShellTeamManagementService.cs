@@ -12,7 +12,7 @@ using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego zespołami i kanałami w Microsoft Teams przez PowerShell

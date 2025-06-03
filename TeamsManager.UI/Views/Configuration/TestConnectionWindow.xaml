@@ -1,0 +1,258 @@
+﻿<Window x:Class="TeamsManager.UI.Views.Configuration.TestConnectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        mc:Ignorable="d"
+        Title="Test połączenia - Krok 3/3" 
+        Height="600" Width="800"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Style="{StaticResource BaseWindowStyle}">
+
+    <materialDesign:DialogHost DialogTheme="Inherit">
+        <Grid>
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF202020" Offset="0"/>
+                    <GradientStop Color="#FF252526" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Border Style="{StaticResource InfoCardStyle}" Margin="30">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                        <TextBlock Text="Krok 3: Test połączenia i podsumowanie" 
+                                 Style="{StaticResource PageTitleStyle}"/>
+                        <ProgressBar Value="100" Height="4" Margin="0,10,0,0"/>
+                    </StackPanel>
+
+                    <!-- Content -->
+                    <Grid Grid.Row="1">
+                        <!-- Stan początkowy - przed testem -->
+                        <StackPanel x:Name="InitialStatePanel" 
+                                    Visibility="{Binding IsInitialState, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    VerticalAlignment="Center">
+                            <materialDesign:PackIcon Kind="CloudQuestion" 
+                                                   Width="80" Height="80" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{StaticResource AccentBlue}"/>
+
+                            <TextBlock Text="Gotowy do testu połączenia" 
+                                     Style="{StaticResource SectionHeaderStyle}"
+                                     HorizontalAlignment="Center" 
+                                     Margin="0,20,0,10"/>
+
+                            <TextBlock Style="{StaticResource InstructionTextStyle}"
+                                     TextAlignment="Center" MaxWidth="500">
+                                Kliknij przycisk "Testuj połączenie" aby sprawdzić czy konfiguracja jest poprawna.
+                                Test sprawdzi:
+                            </TextBlock>
+
+                            <StackPanel Margin="40,20">
+                                <TextBlock Style="{StaticResource InstructionTextStyle}">
+                                    ✓ Połączenie z Azure AD
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource InstructionTextStyle}">
+                                    ✓ Poprawność konfiguracji OAuth
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource InstructionTextStyle}">
+                                    ✓ Dostęp do Microsoft Graph API
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource InstructionTextStyle}">
+                                    ✓ Połączenie z TeamsManager API
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource InstructionTextStyle}">
+                                    ✓ Uprawnienia aplikacji
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Stan testowania -->
+                        <StackPanel x:Name="TestingStatePanel" 
+                                    Visibility="{Binding IsTesting, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    VerticalAlignment="Center">
+                            <ProgressBar IsIndeterminate="True" 
+                                       Width="80" Height="80"
+                                       HorizontalAlignment="Center"
+                                       Style="{StaticResource MaterialDesignCircularProgressBar}"/>
+
+                            <TextBlock Text="Testowanie połączenia..." 
+                                     Style="{StaticResource SectionHeaderStyle}"
+                                     HorizontalAlignment="Center" 
+                                     Margin="0,20,0,10"/>
+
+                            <TextBlock Text="{Binding CurrentTestStep}" 
+                                     Style="{StaticResource InstructionTextStyle}"
+                                     TextAlignment="Center"
+                                     Foreground="{StaticResource AccentBlue}"/>
+
+                            <!-- Progress steps -->
+                            <ItemsControl ItemsSource="{Binding TestSteps}" 
+                                        Margin="40,20"
+                                        HorizontalAlignment="Center">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,5">
+                                            <materialDesign:PackIcon Width="20" Height="20" 
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,10,0">
+                                                <materialDesign:PackIcon.Style>
+                                                    <Style TargetType="materialDesign:PackIcon">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Pending">
+                                                                <Setter Property="Kind" Value="CircleOutline"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="InProgress">
+                                                                <Setter Property="Kind" Value="ProgressClock"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource AccentBlue}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Success">
+                                                                <Setter Property="Kind" Value="CheckCircle"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource SuccessGreen}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                <Setter Property="Kind" Value="CloseCircle"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource AccentRed}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </materialDesign:PackIcon.Style>
+                                            </materialDesign:PackIcon>
+                                            <TextBlock Text="{Binding Name}" 
+                                                     Style="{StaticResource InstructionTextStyle}"
+                                                     VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Stan sukcesu -->
+                        <StackPanel x:Name="SuccessStatePanel" 
+                                    Visibility="{Binding IsSuccess, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    VerticalAlignment="Center">
+                            <materialDesign:PackIcon Kind="CheckCircle" 
+                                                   Width="80" Height="80" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{StaticResource SuccessGreen}"/>
+
+                            <TextBlock Text="Test zakończony pomyślnie!" 
+                                     Style="{StaticResource SectionHeaderStyle}"
+                                     HorizontalAlignment="Center" 
+                                     Margin="0,20,0,10"
+                                     Foreground="{StaticResource SuccessGreen}"/>
+
+                            <TextBlock Style="{StaticResource InstructionTextStyle}"
+                                     TextAlignment="Center" MaxWidth="500">
+                                Konfiguracja została zweryfikowana i zapisana.
+                                Aplikacja jest gotowa do użycia!
+                            </TextBlock>
+
+                            <!-- Podsumowanie konfiguracji -->
+                            <Border Background="{StaticResource BackgroundMedium}" 
+                                    CornerRadius="8" 
+                                    Margin="20,20" 
+                                    Padding="20">
+                                <StackPanel>
+                                    <TextBlock Text="Podsumowanie konfiguracji:" 
+                                             FontWeight="Bold" 
+                                             Margin="0,0,0,10"/>
+                                    <TextBlock Text="{Binding ConfigSummary}" 
+                                             Style="{StaticResource InstructionTextStyle}"
+                                             FontFamily="Consolas"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Stan błędu -->
+                        <StackPanel x:Name="ErrorStatePanel" 
+                                    Visibility="{Binding IsError, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    VerticalAlignment="Center">
+                            <materialDesign:PackIcon Kind="AlertCircle" 
+                                                   Width="80" Height="80" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{StaticResource AccentRed}"/>
+
+                            <TextBlock Text="Test zakończony niepowodzeniem" 
+                                     Style="{StaticResource SectionHeaderStyle}"
+                                     HorizontalAlignment="Center" 
+                                     Margin="0,20,0,10"
+                                     Foreground="{StaticResource AccentRed}"/>
+
+                            <TextBlock Style="{StaticResource InstructionTextStyle}"
+                                     TextAlignment="Center" MaxWidth="500"
+                                     Margin="0,0,0,20">
+                                Wystąpiły błędy podczas testowania połączenia.
+                                Sprawdź poniższe informacje i spróbuj ponownie.
+                            </TextBlock>
+
+                            <!-- Lista błędów -->
+                            <Border Background="{StaticResource BackgroundMedium}" 
+                                    BorderBrush="{StaticResource AccentRed}"
+                                    BorderThickness="1"
+                                    CornerRadius="8" 
+                                    Margin="20,0" 
+                                    Padding="20">
+                                <ScrollViewer MaxHeight="200" 
+                                            VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ErrorMessages}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" 
+                                                         Style="{StaticResource ErrorTextStyle}"
+                                                         Margin="0,2"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Navigation Buttons -->
+                    <Grid Grid.Row="2" Margin="0,20,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="Anuluj" 
+                                Style="{StaticResource SecondaryActionButton}"
+                                Command="{Binding CancelCommand}"
+                                HorizontalAlignment="Left"
+                                Visibility="{Binding CanCancel, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <Button Grid.Column="1" Content="Wstecz" 
+                                Style="{StaticResource SecondaryActionButton}"
+                                Command="{Binding BackCommand}"
+                                Margin="0,0,10,0"
+                                Visibility="{Binding CanGoBack, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <Button Grid.Column="2" Content="Testuj połączenie" 
+                                Style="{StaticResource PrimaryActionButton}"
+                                Command="{Binding TestConnectionCommand}"
+                                Margin="0,0,10,0"
+                                Visibility="{Binding CanTest, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <Button Grid.Column="3" Content="Zakończ" 
+                                Style="{StaticResource SuccessButton}"
+                                Command="{Binding FinishCommand}"
+                                Visibility="{Binding CanFinish, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </materialDesign:DialogHost>
+</Window>

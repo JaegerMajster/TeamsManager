@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShell
+namespace TeamsManager.Core.Services.PowerShellServices
 {
     /// <summary>
     /// Główny serwis fasadowy dla operacji PowerShell/Microsoft Graph

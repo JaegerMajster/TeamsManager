@@ -63,8 +63,8 @@ namespace TeamsManager.Api.Configuration
                                    "Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie.";
                 Console.Error.WriteLine(errorMessage);
                 System.Diagnostics.Debug.WriteLine(errorMessage);
-                // Rozważ rzucenie wyjątku, aby zatrzymać start aplikacji, jeśli te wartości są absolutnie krytyczne:
-                // throw new InvalidOperationException(errorMessage);
+                // Rzucenie wyjątku zatrzyma start aplikacji, jeśli te wartości są absolutnie krytyczne.
+                throw new InvalidOperationException(errorMessage);
             }
 
             return apiOAuthConfig;
