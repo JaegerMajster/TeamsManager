@@ -18,6 +18,13 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         Task<string?> GetUserIdAsync(string userUpn, bool forceRefresh = false);
 
         /// <summary>
+        /// Zapisuje ID użytkownika w cache
+        /// </summary>
+        /// <param name="userUpn">User Principal Name</param>
+        /// <param name="userId">ID użytkownika</param>
+        void SetUserId(string userUpn, string userId);
+
+        /// <summary>
         /// Pobiera obiekt z cache
         /// </summary>
         /// <typeparam name="T">Typ obiektu</typeparam>

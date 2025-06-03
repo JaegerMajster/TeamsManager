@@ -22,6 +22,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
     {
         private readonly IPowerShellConnectionService _connectionService;
         private readonly IPowerShellCacheService _cacheService;
+        private readonly IPowerShellUserResolverService _userResolver;
         private readonly ICurrentUserService _currentUserService;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly INotificationService _notificationService;
@@ -33,6 +34,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         public PowerShellUserManagementService(
             IPowerShellConnectionService connectionService,
             IPowerShellCacheService cacheService,
+            IPowerShellUserResolverService userResolver,
             ICurrentUserService currentUserService,
             IOperationHistoryRepository operationHistoryRepository,
             INotificationService notificationService,
@@ -40,6 +42,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
+            _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -487,7 +490,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     "Wyszukiwanie użytkownika...");
 
                 // Pobierz ID użytkownika z cache
-                var userId = await _cacheService.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     operation.MarkAsFailed($"Nie znaleziono użytkownika {userUpn}");
@@ -588,7 +591,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 40, 
                 "Wyszukiwanie użytkownika...");
 
-            var userId = await _cacheService.GetUserIdAsync(userUpn);
+            var userId = await _userResolver.GetUserIdAsync(userUpn);
             if (string.IsNullOrEmpty(userId))
             {
                 _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
@@ -702,7 +705,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                var userId = await _cacheService.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
@@ -738,7 +741,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                var userId = await _cacheService.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
@@ -782,7 +785,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                var userId = await _cacheService.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
@@ -826,7 +829,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                var userId = await _cacheService.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);

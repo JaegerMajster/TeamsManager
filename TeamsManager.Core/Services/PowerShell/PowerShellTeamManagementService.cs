@@ -21,6 +21,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
     {
         private readonly IPowerShellConnectionService _connectionService;
         private readonly IPowerShellCacheService _cacheService;
+        private readonly IPowerShellUserResolverService _userResolver;
         private readonly ICurrentUserService _currentUserService;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly INotificationService _notificationService;
@@ -35,6 +36,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         public PowerShellTeamManagementService(
             IPowerShellConnectionService connectionService,
             IPowerShellCacheService cacheService,
+            IPowerShellUserResolverService userResolver,
             ICurrentUserService currentUserService,
             IOperationHistoryRepository operationHistoryRepository,
             INotificationService notificationService,
@@ -42,6 +44,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
+            _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -109,7 +112,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     $"Wyszukiwanie właściciela zespołu: {ownerUpn}...");
 
                 // Pobierz ID właściciela z cache lub Graph
-                var ownerId = await _cacheService.GetUserIdAsync(ownerUpn);
+                var ownerId = await _userResolver.GetUserIdAsync(ownerUpn);
                 if (string.IsNullOrEmpty(ownerId))
                 {
                     operation.MarkAsFailed($"Nie znaleziono właściciela {ownerUpn}");
@@ -505,7 +508,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                var userId = await _cacheService.GetUserIdAsync(ownerUpn);
+                var userId = await _userResolver.GetUserIdAsync(ownerUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
                     _logger.LogError("Nie znaleziono użytkownika {OwnerUpn}", ownerUpn);

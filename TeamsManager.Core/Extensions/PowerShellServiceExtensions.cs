@@ -20,6 +20,7 @@ namespace TeamsManager.Core.Extensions
             // Core services - Singleton bo zarządzają stanem (runspace, cache)
             services.AddSingleton<IPowerShellConnectionService, PowerShellConnectionService>();
             services.AddSingleton<IPowerShellCacheService, PowerShellCacheService>();
+            services.AddSingleton<IPowerShellUserResolverService, PowerShellUserResolverService>();
 
             // Domain services - Scoped dla izolacji między żądaniami
             services.AddScoped<IPowerShellTeamManagementService, PowerShellTeamManagementService>();

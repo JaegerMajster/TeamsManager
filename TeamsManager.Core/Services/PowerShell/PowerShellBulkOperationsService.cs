@@ -20,6 +20,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
     {
         private readonly IPowerShellConnectionService _connectionService;
         private readonly IPowerShellCacheService _cacheService;
+        private readonly IPowerShellUserResolverService _userResolver;
         private readonly ICurrentUserService _currentUserService;
         private readonly INotificationService _notificationService;
         private readonly ILogger<PowerShellBulkOperationsService> _logger;
@@ -33,12 +34,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
         public PowerShellBulkOperationsService(
             IPowerShellConnectionService connectionService,
             IPowerShellCacheService cacheService,
+            IPowerShellUserResolverService userResolver,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
             ILogger<PowerShellBulkOperationsService> logger)
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
+            _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -589,7 +592,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             foreach (var upn in userUpns)
             {
                 // Sprawdź cache przed dodaniem do skryptu
-                var cachedUserId = await _cacheService.GetUserIdAsync(upn);
+                var cachedUserId = await _userResolver.GetUserIdAsync(upn);
                 if (!string.IsNullOrEmpty(cachedUserId))
                 {
                     scriptBuilder.AppendLine($"$userIds['{upn.Replace("'", "''")}'] = '{cachedUserId}'");
@@ -656,7 +659,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             scriptBuilder.AppendLine("$userIds = @{}");
             foreach (var upn in userUpns)
             {
-                var cachedUserId = await _cacheService.GetUserIdAsync(upn);
+                var cachedUserId = await _userResolver.GetUserIdAsync(upn);
                 if (!string.IsNullOrEmpty(cachedUserId))
                 {
                     scriptBuilder.AppendLine($"$userIds['{upn.Replace("'", "''")}'] = '{cachedUserId}'");

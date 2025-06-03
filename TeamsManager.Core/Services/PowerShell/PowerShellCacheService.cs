@@ -15,7 +15,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
     public class PowerShellCacheService : IPowerShellCacheService
     {
         private readonly IMemoryCache _cache;
-        private readonly IPowerShellConnectionService _connectionService;
         private readonly ILogger<PowerShellCacheService> _logger;
 
         // Definicje kluczy cache
@@ -34,11 +33,9 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public PowerShellCacheService(
             IMemoryCache cache,
-            IPowerShellConnectionService connectionService,
             ILogger<PowerShellCacheService> logger)
         {
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
-            _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -58,41 +55,26 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 return cachedId;
             }
 
-            _logger.LogDebug("ID użytkownika {UserUpn} nie znalezione w cache lub wymuszono odświeżenie.", userUpn);
+            _logger.LogDebug("ID użytkownika {UserUpn} nie znalezione w cache.", userUpn);
+            return null;
+        }
 
-            try
+        public void SetUserId(string userUpn, string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(userId))
             {
-                var script = $@"
-                    $user = Get-MgUser -UserId '{userUpn.Replace("'", "''")}' -ErrorAction Stop
-                    if ($user) {{ $user.Id }} else {{ $null }}
-                ";
-
-                var results = await _connectionService.ExecuteScriptAsync(script);
-                var userId = results?.FirstOrDefault()?.BaseObject?.ToString();
-
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    _cache.Set(cacheKey, userId, GetDefaultCacheEntryOptions());
-
-                    // Cache też po UPN
-                    string upnCacheKey = UserUpnCacheKeyPrefix + userUpn;
-                    _cache.Set(upnCacheKey, userId, GetDefaultCacheEntryOptions());
-
-                    _logger.LogDebug("ID użytkownika {UserUpn} zapisane w cache.", userUpn);
-                }
-                else
-                {
-                    // Cache negatywny wynik na krótko
-                    _cache.Set(cacheKey, (string?)null, TimeSpan.FromMinutes(1));
-                }
-
-                return userId;
+                _logger.LogWarning("Próba zapisania pustego UPN lub UserId w cache.");
+                return;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd podczas pobierania ID użytkownika {UserUpn}", userUpn);
-                return null;
-            }
+
+            string cacheKey = UserIdCacheKeyPrefix + userUpn;
+            _cache.Set(cacheKey, userId, GetDefaultCacheEntryOptions());
+
+            // Cache też po UPN
+            string upnCacheKey = UserUpnCacheKeyPrefix + userUpn;
+            _cache.Set(upnCacheKey, userId, GetDefaultCacheEntryOptions());
+
+            _logger.LogDebug("ID użytkownika {UserUpn} zapisane w cache.", userUpn);
         }
 
         public bool TryGetValue<T>(string key, out T? value)
