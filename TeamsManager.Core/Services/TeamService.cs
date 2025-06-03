@@ -387,7 +387,8 @@ namespace TeamsManager.Core.Services
                 }
                 operation.TargetEntityName = finalDisplayName;
 
-                string? externalTeamIdFromPS = await _powerShellService.CreateTeamAsync(finalDisplayName, description, ownerUser.UPN, visibility, template?.Id);
+                // Poprawione wywołanie
+                string? externalTeamIdFromPS = await _powerShellService.Teams.CreateTeamAsync(finalDisplayName, description, ownerUser.UPN, visibility, template?.Template);
                 bool psSuccess = !string.IsNullOrEmpty(externalTeamIdFromPS);
 
                 if (psSuccess)
@@ -478,7 +479,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.UpdateTeamPropertiesAsync(existingTeam.ExternalId ?? teamToUpdate.Id, teamToUpdate.DisplayName, teamToUpdate.Description, teamToUpdate.Visibility);
+                bool psSuccess = await _powerShellService.Teams.UpdateTeamPropertiesAsync(existingTeam.ExternalId ?? teamToUpdate.Id, teamToUpdate.DisplayName, teamToUpdate.Description, teamToUpdate.Visibility);
                 if (psSuccess)
                 {
                     existingTeam.DisplayName = teamToUpdate.DisplayName;
@@ -544,7 +545,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.ArchiveTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellService.Teams.ArchiveTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
@@ -585,7 +586,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellService.Teams.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
@@ -626,7 +627,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.DeleteTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellService.Teams.DeleteTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var oldStatus = team.Status;
@@ -673,7 +674,7 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                bool psSuccess = await _powerShellService.AddUserToTeamAsync(team.ExternalId ?? team.Id, user.UPN, role.ToString());
+                bool psSuccess = await _powerShellService.Users.AddUserToTeamAsync(team.ExternalId ?? team.Id, user.UPN, role.ToString());
                 if (psSuccess)
                 {
                     var newMember = new TeamMember { /* ... inicjalizacja pól ... */ Id = Guid.NewGuid().ToString(), UserId = user.Id, TeamId = team.Id, Role = role, AddedDate = DateTime.UtcNow, AddedBy = currentUserUpn, IsActive = true, IsApproved = !team.RequiresApproval, ApprovedDate = !team.RequiresApproval ? DateTime.UtcNow : null, ApprovedBy = !team.RequiresApproval ? currentUserUpn : null, User = user, Team = team };
@@ -717,7 +718,8 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN);
+                // Poprawione wywołanie
+                bool psSuccess = await _powerShellService.Users.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN);
                 if (psSuccess)
                 {
                     memberToRemove.RemoveFromTeam("Usunięty przez serwis", currentUserUpn);

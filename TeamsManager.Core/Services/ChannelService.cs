@@ -155,7 +155,7 @@ namespace TeamsManager.Core.Services
                 return null;
             }
 
-            var psObjects = await _powerShellService.GetTeamChannelsAsync(teamGraphId);
+            var psObjects = await _powerShellService.Teams.GetTeamChannelsAsync(teamGraphId);
             if (psObjects == null)
             {
                 _logger.LogWarning("Nie udało się pobrać kanałów z PowerShell dla zespołu GraphID {TeamGraphId}.", teamGraphId);
@@ -247,7 +247,7 @@ namespace TeamsManager.Core.Services
             // UWAGA: Zakładamy, że PowerShellService będzie miał metodę GetTeamChannelByIdAsync(string teamGraphId, string channelGraphId)
             // Jeśli nie, trzeba będzie pobrać wszystkie i filtrować (co jest nieefektywne)
             // Na razie symulujemy pobranie wszystkich i filtrowanie, jeśli nie ma dedykowanej metody
-            var allPsChannels = await _powerShellService.GetTeamChannelsAsync(teamGraphId); // To powinno być GetTeamChannelById
+            var allPsChannels = await _powerShellService.Teams.GetTeamChannelsAsync(teamGraphId);
             var psChannel = allPsChannels?.FirstOrDefault(pso => pso.Properties["Id"]?.Value?.ToString() == channelGraphId);
 
             if (psChannel == null)
@@ -338,7 +338,7 @@ namespace TeamsManager.Core.Services
                     operation.MarkAsFailed("Nie udało się połączyć z Graph w CreateTeamChannelAsync."); await SaveOperationHistoryAsync(operation); return null;
                 }
 
-                var psChannel = await _powerShellService.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description);
+                var psChannel = await _powerShellService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description);
                 if (psChannel == null)
                 {
                     operation.MarkAsFailed("Nie udało się utworzyć kanału w Microsoft Teams.");
@@ -411,7 +411,7 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Używamy channelId, zgodnie ze zmodyfikowanym IPowerShellService
-                bool psSuccess = await _powerShellService.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription);
+                bool psSuccess = await _powerShellService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription);
 
                 if (!psSuccess)
                 {
@@ -484,7 +484,7 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Używamy channelId, zgodnie ze zmodyfikowanym IPowerShellService
-                bool psSuccess = await _powerShellService.RemoveTeamChannelAsync(teamGraphId, channelId);
+                bool psSuccess = await _powerShellService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId);
 
                 if (!psSuccess)
                 {

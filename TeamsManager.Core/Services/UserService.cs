@@ -338,7 +338,7 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                string? externalUserId = await _powerShellService.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true);
+                string? externalUserId = await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true);
                 if (string.IsNullOrEmpty(externalUserId))
                 {
                     operation.MarkAsFailed("Nie udało się utworzyć użytkownika w Microsoft 365.");
@@ -420,7 +420,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.UpdateM365UserPropertiesAsync(userToUpdate.UPN, userToUpdate.Department?.Name, userToUpdate.Position, userToUpdate.FirstName, userToUpdate.LastName);
+                bool psSuccess = await _powerShellService.Users.UpdateM365UserPropertiesAsync(userToUpdate.UPN, userToUpdate.Department?.Name, userToUpdate.Position, userToUpdate.FirstName, userToUpdate.LastName);
                 if (!psSuccess)
                 {
                     operation.MarkAsFailed("Nie udało się zaktualizować użytkownika w Microsoft 365.");
@@ -430,7 +430,7 @@ namespace TeamsManager.Core.Services
                 }
                 if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
                 {
-                    bool upnUpdateSuccess = await _powerShellService.UpdateM365UserPrincipalNameAsync(existingUser.UPN, userToUpdate.UPN);
+                    bool upnUpdateSuccess = await _powerShellService.Users.UpdateM365UserPrincipalNameAsync(existingUser.UPN, userToUpdate.UPN);
                     if (!upnUpdateSuccess)
                     {
                         operation.MarkAsFailed($"Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{existingUser.UPN}' na '{userToUpdate.UPN}'.");
@@ -493,7 +493,7 @@ namespace TeamsManager.Core.Services
                         _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
                         return false;
                     }
-                    bool psSuccess = await _powerShellService.SetM365UserAccountStateAsync(user.UPN, false);
+                    bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, false);
                     if (!psSuccess) { /*...*/ operation.MarkAsFailed($"Nie udało się zdezaktywować konta użytkownika '{user.UPN}' w Microsoft 365."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie udało się zdezaktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); return false; }
                 }
 
@@ -533,7 +533,7 @@ namespace TeamsManager.Core.Services
                         _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
                         return false;
                     }
-                    bool psSuccess = await _powerShellService.SetM365UserAccountStateAsync(user.UPN, true);
+                    bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, true);
                     if (!psSuccess) { /*...*/ operation.MarkAsFailed($"Nie udało się aktywować konta użytkownika '{user.UPN}' w Microsoft 365."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie udało się aktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); return false; }
                 }
 
