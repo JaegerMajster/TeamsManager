@@ -42,6 +42,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string UserServiceByUpnPrefix = "User_Upn_";
         private const string UserServiceByRolePrefix = "Users_Role_";
         
+        // Klucze cache dla przedmiotów
+        private const string SubjectByIdCacheKeyPrefix = "Subject_Id_";
+        private const string SubjectByCodeCacheKeyPrefix = "Subject_Code_";
+        private const string AllActiveSubjectsCacheKey = "Subjects_AllActive";
+        private const string TeachersForSubjectCacheKeyPrefix = "Subject_Teachers_Id_";
+        
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
 
@@ -338,6 +344,44 @@ namespace TeamsManager.Core.Services.PowerShellServices
             _logger.LogDebug("Wykonano kompleksową inwalidację cache użytkownika. " +
                 "UserId: {UserId}, UserUpn: {UserUpn}, OldUpn: {OldUpn}, Role: {Role}, OldRole: {OldRole}", 
                 userId, userUpn, oldUpn, role, oldRole);
+        }
+
+        public void InvalidateSubjectById(string subjectId, string? subjectCode = null)
+        {
+            if (string.IsNullOrWhiteSpace(subjectId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego subjectId.");
+                return;
+            }
+
+            // Usuń cache przedmiotu po ID
+            Remove(SubjectByIdCacheKeyPrefix + subjectId);
+            _logger.LogDebug("Unieważniono cache przedmiotu po ID: {SubjectId}", subjectId);
+
+            // Usuń cache przedmiotu po kodzie jeśli podany
+            if (!string.IsNullOrWhiteSpace(subjectCode))
+            {
+                Remove(SubjectByCodeCacheKeyPrefix + subjectCode);
+                _logger.LogDebug("Unieważniono cache przedmiotu po kodzie: {SubjectCode}", subjectCode);
+            }
+        }
+
+        public void InvalidateAllActiveSubjectsList()
+        {
+            Remove(AllActiveSubjectsCacheKey);
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych przedmiotów.");
+        }
+
+        public void InvalidateTeachersForSubject(string subjectId)
+        {
+            if (string.IsNullOrWhiteSpace(subjectId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache nauczycieli dla pustego subjectId.");
+                return;
+            }
+
+            Remove(TeachersForSubjectCacheKeyPrefix + subjectId);
+            _logger.LogDebug("Unieważniono cache listy nauczycieli dla przedmiotu: {SubjectId}", subjectId);
         }
     }
 }

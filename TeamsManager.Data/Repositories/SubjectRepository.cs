@@ -22,6 +22,41 @@ namespace TeamsManager.Data.Repositories
             // _context jest już dostępne z klasy bazowej GenericRepository
         }
 
+        // UWAGA: Decyzja architektoniczna - filtrowanie po IsActive
+        // GetByIdAsync nadpisuje metodę bazową i ZAWSZE filtruje po IsActive dla spójności.
+        // Jeśli potrzebujesz nieaktywnych przedmiotów, użyj GetByIdIncludingInactiveAsync.
+        // Ta zmiana zapewnia, że domyślnie wszystkie metody zwracają tylko aktywne przedmioty.
+
+        /// <summary>
+        /// Asynchronicznie pobiera aktywny przedmiot po jego ID.
+        /// Nadpisuje metodę bazową, aby zapewnić spójne filtrowanie po IsActive.
+        /// Dla nieaktywnych przedmiotów użyj GetByIdIncludingInactiveAsync.
+        /// </summary>
+        /// <param name="id">ID przedmiotu.</param>
+        /// <returns>Znaleziony aktywny przedmiot lub null.</returns>
+        public override async Task<Subject?> GetByIdAsync(object id)
+        {
+            if (id is string stringId)
+            {
+                return await _dbSet.FirstOrDefaultAsync(s => s.Id == stringId && s.IsActive);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Asynchronicznie pobiera przedmiot po jego ID, włączając nieaktywne przedmioty.
+        /// Używać tylko gdy logika biznesowa wymaga dostępu do nieaktywnych przedmiotów.
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu.</param>
+        /// <returns>Znaleziony przedmiot (aktywny lub nieaktywny) lub null.</returns>
+        public async Task<Subject?> GetByIdIncludingInactiveAsync(string subjectId)
+        {
+            if (string.IsNullOrWhiteSpace(subjectId))
+                return null;
+                
+            return await _dbSet.FirstOrDefaultAsync(s => s.Id == subjectId);
+        }
+
         /// <summary>
         /// Asynchronicznie pobiera przedmiot na podstawie jego unikalnego kodu,
         /// dołączając domyślnie szczegóły takie jak DefaultSchoolType.
@@ -89,24 +124,5 @@ namespace TeamsManager.Data.Repositories
                          .Where(s => s.IsActive)
                          .ToListAsync();
         }
-
-        // Jeśli zdecydujemy, że standardowe GetByIdAsync z GenericRepository powinno zawsze
-        // dołączać DefaultSchoolType dla Subject, możemy je nadpisać tutaj:
-        /*
-        public override async Task<Subject?> GetByIdAsync(object id)
-        {
-            if (id is string stringId)
-            {
-                return await _dbSet
-                    .Include(s => s.DefaultSchoolType)
-                    .FirstOrDefaultAsync(s => s.Id == stringId);
-            }
-            return null;
-        }
-        */
-        // Jednakże, aby zachować spójność z IGenericRepository, które nie gwarantuje
-        // dołączania konkretnych relacji, lepiej jest mieć dedykowane metody "WithDetails",
-        // lub serwis powinien jawnie prosić o dołączenie relacji, jeśli repozytorium by to wspierało
-        // poprzez przekazanie wyrażeń Include. Na razie `GetByIdWithDetailsAsync` jest dobrym kompromisem.
     }
 }

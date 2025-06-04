@@ -149,5 +149,24 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="role">Aktualna rola użytkownika</param>
         /// <param name="oldRole">Poprzednia rola (jeśli została zmieniona)</param>
         void InvalidateUserAndRelatedData(string? userId, string? userUpn, string? oldUpn, UserRole? role, UserRole? oldRole);
+
+        /// <summary>
+        /// Unieważnia cache przedmiotu w sposób granularny.
+        /// Usuwa cache przedmiotu według ID i kodu.
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu</param>
+        /// <param name="subjectCode">Kod przedmiotu (np. "MAT")</param>
+        void InvalidateSubjectById(string subjectId, string? subjectCode = null);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych przedmiotów.
+        /// </summary>
+        void InvalidateAllActiveSubjectsList();
+
+        /// <summary>
+        /// Unieważnia cache listy nauczycieli dla danego przedmiotu.
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu</param>
+        void InvalidateTeachersForSubject(string subjectId);
     }
 }

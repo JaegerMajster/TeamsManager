@@ -40,5 +40,13 @@ namespace TeamsManager.Core.Abstractions.Data
         /// </summary>
         /// <returns>Kolekcja aktywnych przedmiotów ze szczegółami.</returns>
         Task<IEnumerable<Subject>> GetAllActiveWithDetailsAsync();
+
+        /// <summary>
+        /// Asynchronicznie pobiera przedmiot po jego ID, włączając nieaktywne przedmioty.
+        /// Używać tylko gdy logika biznesowa wymaga dostępu do nieaktywnych przedmiotów.
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu.</param>
+        /// <returns>Znaleziony przedmiot (aktywny lub nieaktywny) lub null.</returns>
+        Task<Subject?> GetByIdIncludingInactiveAsync(string subjectId);
     }
 }

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -27,6 +28,7 @@ namespace TeamsManager.Core.Services
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IPowerShellCacheService _powerShellCacheService;
         private readonly ILogger<SubjectService> _logger;
         private readonly IMemoryCache _cache;
 
@@ -37,8 +39,9 @@ namespace TeamsManager.Core.Services
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(30); // Przedmioty zmieniają się rzadziej niż użytkownicy
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5); // Dla list nauczycieli, które mogą się zmieniać częściej
 
-        // Token do zarządzania unieważnianiem wpisów cache dla przedmiotów
-        private static CancellationTokenSource _subjectsCacheTokenSource = new CancellationTokenSource();
+        // Metryki cache
+        private long _cacheHits = 0;
+        private long _cacheMisses = 0;
 
         /// <summary>
         /// Konstruktor serwisu przedmiotów.
@@ -51,6 +54,7 @@ namespace TeamsManager.Core.Services
             IOperationHistoryService operationHistoryService,
             INotificationService notificationService,
             ICurrentUserService currentUserService,
+            IPowerShellCacheService powerShellCacheService,
             ILogger<SubjectService> logger,
             IMemoryCache memoryCache)
         {
@@ -61,15 +65,9 @@ namespace TeamsManager.Core.Services
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-        }
-
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions(TimeSpan? duration = null)
-        {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(duration ?? _defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_subjectsCacheTokenSource.Token));
         }
 
         /// <inheritdoc />
@@ -85,24 +83,27 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SubjectByIdCacheKeyPrefix + subjectId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out Subject? cachedSubject))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out Subject? cachedSubject))
             {
-                _logger.LogDebug("Przedmiot ID: {SubjectId} znaleziony w cache.", subjectId);
-                // Dociągnięcie DefaultSchoolType, jeśli nie zostało załadowane z cache, jest teraz w repozytorium GetByIdWithDetailsAsync
+                Interlocked.Increment(ref _cacheHits);
+                _logger.LogDebug("Cache HIT dla przedmiotu ID: {SubjectId}. Metryki: {Hits}/{Misses}", 
+                    subjectId, _cacheHits, _cacheMisses);
                 return cachedSubject;
             }
 
-            _logger.LogDebug("Przedmiot ID: {SubjectId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", subjectId);
+            Interlocked.Increment(ref _cacheMisses);
+            _logger.LogDebug("Cache MISS dla przedmiotu ID: {SubjectId}. Metryki: {Hits}/{Misses}", 
+                subjectId, _cacheHits, _cacheMisses);
             var subjectFromDb = await _subjectRepository.GetByIdWithDetailsAsync(subjectId); // Ta metoda dołącza DefaultSchoolType
 
             if (subjectFromDb != null) // Repozytorium zwraca null jeśli nieaktywny
             {
-                _cache.Set(cacheKey, subjectFromDb, GetDefaultCacheEntryOptions());
+                _powerShellCacheService.Set(cacheKey, subjectFromDb, _defaultCacheDuration);
                 _logger.LogDebug("Przedmiot ID: {SubjectId} dodany do cache.", subjectId);
             }
             else
             {
-                _cache.Remove(cacheKey);
+                _powerShellCacheService.Remove(cacheKey);
                 _logger.LogDebug("Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny. Usunięto z cache.", subjectId);
             }
             return subjectFromDb;
@@ -114,16 +115,20 @@ namespace TeamsManager.Core.Services
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych przedmiotów. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
-            if (!forceRefresh && _cache.TryGetValue(AllSubjectsCacheKey, out IEnumerable<Subject>? cachedSubjects) && cachedSubjects != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllSubjectsCacheKey, out IEnumerable<Subject>? cachedSubjects) && cachedSubjects != null)
             {
-                _logger.LogDebug("Wszystkie aktywne przedmioty znalezione w cache.");
+                Interlocked.Increment(ref _cacheHits);
+                _logger.LogDebug("Cache HIT dla wszystkich aktywnych przedmiotów. Metryki: {Hits}/{Misses}", 
+                    _cacheHits, _cacheMisses);
                 return cachedSubjects;
             }
 
-            _logger.LogDebug("Wszystkie aktywne przedmioty nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            Interlocked.Increment(ref _cacheMisses);
+            _logger.LogDebug("Cache MISS dla wszystkich aktywnych przedmiotów. Metryki: {Hits}/{Misses}", 
+                _cacheHits, _cacheMisses);
             var subjectsFromDb = await _subjectRepository.GetAllActiveWithDetailsAsync(); // Ta metoda dołącza DefaultSchoolType i filtruje po IsActive
 
-            _cache.Set(AllSubjectsCacheKey, subjectsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(AllSubjectsCacheKey, subjectsFromDb, _defaultCacheDuration);
             _logger.LogDebug("Wszystkie aktywne przedmioty dodane do cache.");
             return subjectsFromDb;
         }
@@ -214,7 +219,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Przedmiot '{SubjectName}' pomyślnie przygotowany do zapisu. ID: {SubjectId}", name, newSubject.Id);
 
-                InvalidateCache(subjectId: newSubject.Id, invalidateAll: true);
+                InvalidateCache(subjectId: newSubject.Id, invalidateAll: false);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -365,7 +370,7 @@ namespace TeamsManager.Core.Services
 
                 _subjectRepository.Update(existingSubject);
 
-                InvalidateCache(subjectId: existingSubject.Id, invalidateAll: true);
+                InvalidateCache(subjectId: existingSubject.Id, invalidateAll: false);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -419,7 +424,7 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                var subject = await _subjectRepository.GetByIdAsync(subjectId);
+                var subject = await _subjectRepository.GetByIdIncludingInactiveAsync(subjectId);
                 if (subject == null)
                 {
                     _logger.LogWarning("Nie można usunąć przedmiotu ID {SubjectId} - nie istnieje.", subjectId);
@@ -441,7 +446,7 @@ namespace TeamsManager.Core.Services
                 if (!subject.IsActive)
                 {
                     _logger.LogInformation("Przedmiot ID {SubjectId} był już nieaktywny.", subjectId);
-                    InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: true);
+                    InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: false);
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -472,7 +477,7 @@ namespace TeamsManager.Core.Services
                 subject.MarkAsDeleted(currentUserUpn);
                 _subjectRepository.Update(subject);
 
-                InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: true);
+                InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: false);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -522,18 +527,30 @@ namespace TeamsManager.Core.Services
                 return Enumerable.Empty<User>();
             }
 
+            // ZMIANA: Najpierw sprawdź czy przedmiot istnieje używając GetByIdWithDetailsAsync
+            var subject = await _subjectRepository.GetByIdWithDetailsAsync(subjectId);
+            if (subject == null)
+            {
+                _logger.LogWarning("Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny.", subjectId);
+                return Enumerable.Empty<User>();
+            }
+
             string cacheKey = TeachersForSubjectCacheKeyPrefix + subjectId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<User>? cachedTeachers) && cachedTeachers != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<User>? cachedTeachers) && cachedTeachers != null)
             {
-                _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} znalezieni w cache.", subjectId);
+                Interlocked.Increment(ref _cacheHits);
+                _logger.LogDebug("Cache HIT dla nauczycieli przedmiotu ID: {SubjectId}. Metryki: {Hits}/{Misses}", 
+                    subjectId, _cacheHits, _cacheMisses);
                 return cachedTeachers;
             }
 
-            _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", subjectId);
+            Interlocked.Increment(ref _cacheMisses);
+            _logger.LogDebug("Cache MISS dla nauczycieli przedmiotu ID: {SubjectId}. Metryki: {Hits}/{Misses}", 
+                subjectId, _cacheHits, _cacheMisses);
             var teachersFromDb = await _subjectRepository.GetTeachersAsync(subjectId);
 
-            _cache.Set(cacheKey, teachersFromDb, GetDefaultCacheEntryOptions(_shortCacheDuration));
+            _powerShellCacheService.Set(cacheKey, teachersFromDb, _shortCacheDuration);
             _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} dodani do cache.", subjectId);
 
             return teachersFromDb;
@@ -549,7 +566,7 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogInformation("Unieważnianie cache nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
-            InvalidateCache(subjectId: subjectId, invalidateTeachersList: true);
+            _powerShellCacheService.InvalidateTeachersForSubject(subjectId);
             return Task.CompletedTask;
         }
 
@@ -558,56 +575,58 @@ namespace TeamsManager.Core.Services
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a przedmiotów.");
-            InvalidateCache(invalidateAll: true);
+            _powerShellCacheService.InvalidateAllCache();
             _logger.LogInformation("Cache przedmiotów został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;
         }
 
         /// <summary>
-        /// Unieważnia cache dla przedmiotów.
-        /// Resetuje globalny token dla przedmiotów, co unieważnia wszystkie zależne wpisy.
-        /// Dodatkowo, jawnie usuwa klucze cache'a na podstawie podanych parametrów
-        /// dla natychmiastowego efektu.
+        /// Unieważnia cache dla przedmiotów w sposób granularny.
+        /// Deleguje inwalidację do PowerShellCacheService.
         /// </summary>
         /// <param name="subjectId">ID konkretnego przedmiotu do usunięcia z cache (opcjonalnie).</param>
         /// <param name="invalidateTeachersList">Czy unieważnić cache listy nauczycieli dla konkretnego przedmiotu (opcjonalnie).</param>
         /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z przedmiotami (opcjonalnie, domyślnie false).</param>
         private void InvalidateCache(string? subjectId = null, bool invalidateTeachersList = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u przedmiotów. subjectId: {SubjectId}, invalidateTeachersList: {InvalidateTeachers}, invalidateAll: {InvalidateAll}",
+            _logger.LogDebug("Granularna inwalidacja cache przedmiotów. subjectId: {SubjectId}, invalidateTeachersList: {InvalidateTeachers}, invalidateAll: {InvalidateAll}",
                              subjectId, invalidateTeachersList, invalidateAll);
-
-            // 1. Zresetuj CancellationTokenSource - to unieważni wszystkie wpisy używające tego tokenu.
-            var oldTokenSource = Interlocked.Exchange(ref _subjectsCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
-            {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose();
-            }
-            _logger.LogDebug("Token cache'u dla przedmiotów został zresetowany.");
-
-            // 2. Jawnie usuń kluczowe listy
-            _cache.Remove(AllSubjectsCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz dla wszystkich aktywnych przedmiotów.");
-
-            // 3. Jeśli podano subjectId, usuń specyficzne klucze dla tego przedmiotu
-            if (!string.IsNullOrWhiteSpace(subjectId))
-            {
-                _cache.Remove(SubjectByIdCacheKeyPrefix + subjectId);
-                _logger.LogDebug("Usunięto z cache przedmiot o ID: {SubjectId}", subjectId);
-
-                if (invalidateTeachersList)
-                {
-                    _cache.Remove(TeachersForSubjectCacheKeyPrefix + subjectId);
-                    _logger.LogDebug("Usunięto z cache listę nauczycieli dla przedmiotu o ID: {SubjectId}", subjectId);
-                }
-            }
 
             if (invalidateAll)
             {
-                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u przedmiotów.");
-                // Reset tokenu już załatwia globalną inwalidację, ale można tu dodać dodatkowe operacje, jeśli potrzebne
+                _logger.LogDebug("Globalna inwalidacja cache przedmiotów.");
+                _powerShellCacheService.InvalidateAllCache();
+                return;
             }
+
+            // Zawsze inwaliduj listę wszystkich przedmiotów przy każdej zmianie
+            _powerShellCacheService.InvalidateAllActiveSubjectsList();
+            
+            if (!string.IsNullOrWhiteSpace(subjectId))
+            {
+                // Pobierz przedmiot, aby znać jego kod - używamy GetByIdIncludingInactiveAsync
+                // bo może być już nieaktywny (np. w DeleteSubjectAsync)
+                var subject = _subjectRepository.GetByIdIncludingInactiveAsync(subjectId).Result;
+                string? subjectCode = subject?.Code;
+                
+                _powerShellCacheService.InvalidateSubjectById(subjectId, subjectCode);
+                
+                if (invalidateTeachersList)
+                {
+                    _powerShellCacheService.InvalidateTeachersForSubject(subjectId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Zwraca statystyki cache'a dla SubjectService.
+        /// </summary>
+        /// <returns>Tuple zawierający liczbę trafień, chybień i współczynnik trafień.</returns>
+        public (long hits, long misses, double hitRate) GetCacheMetrics()
+        {
+            var total = _cacheHits + _cacheMisses;
+            var hitRate = total > 0 ? (double)_cacheHits / total : 0;
+            return (_cacheHits, _cacheMisses, hitRate);
         }
     }
 }
