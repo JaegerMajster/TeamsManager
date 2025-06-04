@@ -2,14 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -26,16 +24,12 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ApplicationSettingService> _logger;
-        private readonly IMemoryCache _cache;
+        private readonly IPowerShellCacheService _powerShellCacheService;
 
         // Definicje kluczy cache
         private const string AllSettingsCacheKey = "ApplicationSettings_AllActive";
         private const string SettingsByCategoryCacheKeyPrefix = "ApplicationSettings_Category_";
         private const string SettingByKeyCacheKeyPrefix = "ApplicationSetting_Key_";
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
-
-        // Token do zarządzania unieważnianiem wpisów cache dla ustawień
-        private static CancellationTokenSource _settingsCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu ustawień aplikacji.
@@ -46,23 +40,17 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ApplicationSettingService> logger,
-            IMemoryCache memoryCache)
+            IPowerShellCacheService powerShellCacheService)
         {
             _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
         }
 
-        // Generuje domyślne opcje dla wpisu w pamięci podręcznej.
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_settingsCacheTokenSource.Token));
-        }
+
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
@@ -77,7 +65,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingByKeyCacheKeyPrefix + key;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
             {
                 _logger.LogDebug("Ustawienie '{Key}' znalezione w cache.", key); //
                 return cachedSetting;
@@ -88,12 +76,12 @@ namespace TeamsManager.Core.Services
 
             if (settingFromDb != null)
             {
-                _cache.Set(cacheKey, settingFromDb, GetDefaultCacheEntryOptions());
+                _powerShellCacheService.Set(cacheKey, settingFromDb);
                 _logger.LogDebug("Ustawienie '{Key}' dodane do cache.", key); //
             }
             else
             {
-                _cache.Remove(cacheKey);
+                _powerShellCacheService.Remove(cacheKey);
             }
 
             return settingFromDb;
@@ -158,7 +146,7 @@ namespace TeamsManager.Core.Services
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh); //
 
-            if (!forceRefresh && _cache.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
                 _logger.LogDebug("Wszystkie aktywne ustawienia znalezione w cache."); //
                 return cachedSettings;
@@ -167,7 +155,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszystkie aktywne ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium."); //
             var settingsFromDb = await _settingsRepository.FindAsync(s => s.IsActive); //
 
-            _cache.Set(AllSettingsCacheKey, settingsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(AllSettingsCacheKey, settingsFromDb);
             _logger.LogDebug("Wszystkie aktywne ustawienia dodane do cache."); //
 
             return settingsFromDb;
@@ -186,7 +174,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingsByCategoryCacheKeyPrefix + category;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
                 _logger.LogDebug("Ustawienia dla kategorii '{Category}' znalezione w cache.", category); //
                 return cachedSettings;
@@ -195,7 +183,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", category); //
             var settingsFromDb = await _settingsRepository.GetSettingsByCategoryAsync(category);
 
-            _cache.Set(cacheKey, settingsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, settingsFromDb);
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' dodane do cache.", category); //
 
             return settingsFromDb;
@@ -403,7 +391,7 @@ namespace TeamsManager.Core.Services
                 InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory);
                 if (oldKey != null && oldKey != existingSetting.Key)
                 {
-                    _cache.Remove(SettingByKeyCacheKeyPrefix + oldKey);
+                    _powerShellCacheService.InvalidateSettingByKey(oldKey);
                 }
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
@@ -550,10 +538,8 @@ namespace TeamsManager.Core.Services
         }
 
         /// <summary>
-        /// Unieważnia cache dla ustawień aplikacji.
-        /// Resetuje globalny token dla ustawień, co unieważnia wszystkie zależne wpisy.
-        /// Dodatkowo, jawnie usuwa klucze cache'a na podstawie podanych parametrów
-        /// dla natychmiastowego efektu.
+        /// Unieważnia cache dla ustawień aplikacji w sposób granularny.
+        /// Deleguje inwalidację do PowerShellCacheService.
         /// </summary>
         /// <param name="key">Klucz konkretnego ustawienia do usunięcia z cache (opcjonalnie).</param>
         /// <param name="category">Kategoria, dla której ustawienia mają być usunięte z cache (opcjonalnie).</param>
@@ -561,50 +547,38 @@ namespace TeamsManager.Core.Services
         /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z ustawieniami (opcjonalnie, domyślnie false).</param>
         private void InvalidateSettingCache(string? key = null, string? category = null, string? oldCategory = null, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u ustawień. Klucz: {Key}, Kategoria: {Category}, Stara kategoria: {OldCategory}, Inwaliduj wszystko: {InvalidateAll}", //
+            _logger.LogDebug("Inwalidacja cache'u ustawień. Klucz: {Key}, Kategoria: {Category}, Stara kategoria: {OldCategory}, Inwaliduj wszystko: {InvalidateAll}",
                              key, category, oldCategory, invalidateAll);
-
-            // 1. Zresetuj CancellationTokenSource - to unieważni wszystkie wpisy używające tego tokenu.
-            var oldTokenSource = Interlocked.Exchange(ref _settingsCacheTokenSource, new CancellationTokenSource()); //
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
-            {
-                oldTokenSource.Cancel(); //
-                oldTokenSource.Dispose(); //
-            }
-            _logger.LogDebug("Token cache'u dla ustawień aplikacji został zresetowany."); //
-
-            // 2. Jawnie usuń klucze dla natychmiastowego efektu.
-            // Jeśli invalidateAll jest true, wystarczy usunąć globalny klucz.
-            // W pozostałych przypadkach, token załatwi sprawę dla innych powiązanych kluczy,
-            // ale jawne usunięcie kluczowych list i konkretnego elementu jest dobrą praktyką.
 
             if (invalidateAll)
             {
-                _cache.Remove(AllSettingsCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz dla wszystkich ustawień aplikacji (invalidateAll=true)."); //
-                // Można by tu również iterować i usuwać wszystkie klucze z prefiksami, ale reset tokenu jest bardziej efektywny globalnie.
+                // TYLKO dla RefreshCacheAsync() - globalne resetowanie
+                _powerShellCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
+                return;
             }
-            else // Jeśli nie invalidateAll, usuwaj bardziej granularnie + zawsze listę wszystkich
-            {
-                _cache.Remove(AllSettingsCacheKey); // Zawsze usuwaj listę wszystkich, bo każda zmiana może na nią wpłynąć
-                _logger.LogDebug("Usunięto z cache klucz dla wszystkich ustawień aplikacji."); //
 
-                if (!string.IsNullOrWhiteSpace(key))
-                {
-                    _cache.Remove(SettingByKeyCacheKeyPrefix + key); //
-                    _logger.LogDebug("Usunięto z cache ustawienie o kluczu: {Key}", key); //
-                }
-                if (!string.IsNullOrWhiteSpace(category))
-                {
-                    _cache.Remove(SettingsByCategoryCacheKeyPrefix + category); //
-                    _logger.LogDebug("Usunięto z cache ustawienia dla kategorii: {Category}", category); //
-                }
-                // Jeśli kategoria została zmieniona, usuń cache także dla starej kategorii
-                if (!string.IsNullOrWhiteSpace(oldCategory) && oldCategory != category)
-                {
-                    _cache.Remove(SettingsByCategoryCacheKeyPrefix + oldCategory); //
-                    _logger.LogDebug("Usunięto z cache ustawienia dla starej kategorii: {OldCategory}", oldCategory); //
-                }
+            // GRANULARNA inwalidacja przez PowerShellCacheService
+            _powerShellCacheService.InvalidateAllActiveSettingsList();
+            _logger.LogDebug("Unieważniono listę wszystkich aktywnych ustawień.");
+
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                _powerShellCacheService.InvalidateSettingByKey(key);
+                _logger.LogDebug("Unieważniono cache ustawienia o kluczu: {Key}", key);
+            }
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                _powerShellCacheService.InvalidateSettingsByCategory(category);
+                _logger.LogDebug("Unieważniono cache ustawień dla kategorii: {Category}", category);
+            }
+
+            // Jeśli kategoria została zmieniona, usuń cache także dla starej kategorii
+            if (!string.IsNullOrWhiteSpace(oldCategory) && oldCategory != category)
+            {
+                _powerShellCacheService.InvalidateSettingsByCategory(oldCategory);
+                _logger.LogDebug("Unieważniono cache ustawień dla starej kategorii: {OldCategory}", oldCategory);
             }
         }
     }

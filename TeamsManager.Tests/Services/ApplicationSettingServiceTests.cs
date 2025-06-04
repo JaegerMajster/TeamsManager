@@ -3,16 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -28,7 +26,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<ApplicationSettingService>> _mockLogger;
-        private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly IApplicationSettingService _applicationSettingService;
 
@@ -54,7 +52,7 @@ namespace TeamsManager.Tests.Services
             _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<ApplicationSettingService>>();
-            _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
@@ -71,25 +69,13 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>()))
                 .ReturnsAsync(mockOperationHistory);
 
-            var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
-            mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
-            mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
-
-            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
-                           .Returns(mockCacheEntry.Object);
-
-
             _applicationSettingService = new ApplicationSettingService(
                 _mockSettingsRepository.Object,
                 _mockOperationHistoryService.Object,
                 _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object
+                _mockPowerShellCacheService.Object
             );
         }
 
@@ -100,9 +86,8 @@ namespace TeamsManager.Tests.Services
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            object? outItem = item;
-            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
-                           .Returns(foundInCache);
+            _mockPowerShellCacheService.Setup(m => m.TryGetValue(cacheKey, out item))
+                                      .Returns(foundInCache);
         }
 
         private void AssertCacheInvalidationByReFetchingAll(List<ApplicationSetting> expectedDbSettingsAfterOperation)
@@ -116,7 +101,7 @@ namespace TeamsManager.Tests.Services
 
             _mockSettingsRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<ApplicationSetting, bool>>>()), Times.Once, "GetAllSettingsAsync powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbSettingsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllSettingsCacheKey), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
+            _mockPowerShellCacheService.Verify(m => m.Set(AllSettingsCacheKey, It.IsAny<IEnumerable<ApplicationSetting>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
         }
 
 
@@ -132,7 +117,7 @@ namespace TeamsManager.Tests.Services
 
             var result = await _applicationSettingService.GetSettingValueAsync<string>(key);
             result.Should().Be(expectedValue);
-            _mockMemoryCache.Verify(m => m.CreateEntry(SettingByKeyCacheKeyPrefix + key), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(SettingByKeyCacheKeyPrefix + key, It.IsAny<ApplicationSetting>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetSettingByKeyAsync ---
@@ -148,7 +133,7 @@ namespace TeamsManager.Tests.Services
             result.Should().NotBeNull();
             result.Should().BeEquivalentTo(expectedSetting);
             _mockSettingsRepository.Verify(r => r.GetSettingByKeyAsync(key), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(SettingByKeyCacheKeyPrefix + key), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(SettingByKeyCacheKeyPrefix + key, It.IsAny<ApplicationSetting>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -178,7 +163,7 @@ namespace TeamsManager.Tests.Services
             result.Should().NotBeNull();
             result!.Value.Should().Be("New Value From DB");
             _mockSettingsRepository.Verify(s => s.GetSettingByKeyAsync(key), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(SettingByKeyCacheKeyPrefix + key), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(SettingByKeyCacheKeyPrefix + key, It.IsAny<ApplicationSetting>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetAllSettingsAsync ---
@@ -198,7 +183,7 @@ namespace TeamsManager.Tests.Services
             result.Should().NotBeNull();
             result.Should().HaveCount(2);
             result.Should().BeEquivalentTo(activeSettings);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllSettingsCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllSettingsCacheKey, It.IsAny<IEnumerable<ApplicationSetting>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetSettingsByCategoryAsync ---
@@ -217,7 +202,7 @@ namespace TeamsManager.Tests.Services
             var result = await _applicationSettingService.GetSettingsByCategoryAsync(category);
             result.Should().NotBeNull().And.ContainSingle();
             result.Should().BeEquivalentTo(settingsInCategory);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<IEnumerable<ApplicationSetting>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
 
@@ -245,9 +230,9 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == key && op.Type == OperationType.ApplicationSettingCreated)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never); // Upewniamy się, że Update nie jest wołane
 
-            _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + key), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + category), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(key), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(category), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSettingsList(), Times.AtLeastOnce);
 
             var expectedSettingsAfterCreate = new List<ApplicationSetting> { newSetting };
             AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterCreate);
@@ -280,11 +265,11 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingId && op.Type == OperationType.ApplicationSettingUpdated)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + newKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + oldKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + newCategory), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + oldCategory), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(newKey), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(oldKey), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(newCategory), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(oldCategory), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSettingsList(), Times.AtLeastOnce);
 
             var expectedSettingsAfterUpdate = new List<ApplicationSetting>
             {
@@ -318,9 +303,9 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingToDelete.Id && op.Type == OperationType.ApplicationSettingDeleted)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(SettingByKeyCacheKeyPrefix + key), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SettingsByCategoryCacheKeyPrefix + category), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(AllSettingsCacheKey), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(key), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(category), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSettingsList(), Times.AtLeastOnce);
 
             var expectedSettingsAfterDelete = new List<ApplicationSetting>();
             AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterDelete);
