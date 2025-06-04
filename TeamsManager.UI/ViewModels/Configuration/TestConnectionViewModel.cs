@@ -248,12 +248,12 @@ namespace TeamsManager.UI.ViewModels.Configuration
         private async Task<AuthenticationResult?> TestAzureADLogin()
         {
             var app = PublicClientApplicationBuilder
-                .Create(_oauthConfig!.ClientId)
-                .WithAuthority($"{_oauthConfig.Instance}{_oauthConfig.TenantId}")
-                .WithRedirectUri(_oauthConfig.RedirectUri)
+                .Create(_oauthConfig!.AzureAd.ClientId)
+                .WithAuthority($"{_oauthConfig.AzureAd.Instance}{_oauthConfig.AzureAd.TenantId}")
+                .WithRedirectUri(_oauthConfig.AzureAd.RedirectUri)
                 .Build();
 
-            var scopes = new[] { _oauthConfig.ApiScope };
+            var scopes = new[] { _oauthConfig.AzureAd.ApiScope };
 
             try
             {
@@ -301,7 +301,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
             try
             {
-                var response = await httpClient.GetAsync($"{_apiConfig!.ApiBaseUrl}/api/configuration/test");
+                var response = await httpClient.GetAsync($"{_oauthConfig!.AzureAd.ApiBaseUrl}/api/configuration/test");
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -311,7 +311,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
             }
             catch (HttpRequestException ex)
             {
-                throw new Exception($"Nie można połączyć się z API pod adresem {_apiConfig!.ApiBaseUrl}. Upewnij się, że API jest uruchomione.", ex);
+                throw new Exception($"Nie można połączyć się z API pod adresem {_oauthConfig!.AzureAd.ApiBaseUrl}. Upewnij się, że API jest uruchomione.", ex);
             }
         }
 
@@ -321,7 +321,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
             httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-            var response = await httpClient.PostAsync($"{_apiConfig!.ApiBaseUrl}/api/configuration/validate-obo", null);
+            var response = await httpClient.PostAsync($"{_oauthConfig!.AzureAd.ApiBaseUrl}/api/configuration/validate-obo", null);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -334,15 +334,13 @@ namespace TeamsManager.UI.ViewModels.Configuration
         private void GenerateConfigSummary()
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"Tenant ID: {_oauthConfig?.TenantId}");
-            sb.AppendLine($"UI Client ID: {_oauthConfig?.ClientId}");
-            sb.AppendLine($"API Client ID: {_apiConfig?.ApiClientId}");
-            sb.AppendLine($"API URL: {_apiConfig?.ApiBaseUrl}");
-            sb.AppendLine($"Redirect URI: {_oauthConfig?.RedirectUri}");
-            sb.AppendLine($"API Scope: {_oauthConfig?.ApiScope}");
+            sb.AppendLine($"Tenant ID: {_oauthConfig?.AzureAd.TenantId}");
+            sb.AppendLine($"UI Client ID: {_oauthConfig?.AzureAd.ClientId}");
+            sb.AppendLine($"API Base URL: {_oauthConfig?.AzureAd.ApiBaseUrl}");
+            sb.AppendLine($"Redirect URI: {_oauthConfig?.AzureAd.RedirectUri}");
+            sb.AppendLine($"API Scope: {_oauthConfig?.AzureAd.ApiScope}");
             sb.AppendLine($"\nKonfiguracja zapisana w:");
             sb.AppendLine($"  %APPDATA%\\TeamsManager\\oauth_config.json");
-            sb.AppendLine($"  %APPDATA%\\TeamsManager\\api_config.json");
 
             ConfigSummary = sb.ToString();
         }

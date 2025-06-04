@@ -23,6 +23,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
         private string _redirectUri = "http://localhost";
         private string? _apiScope;
         private string _instance = "https://login.microsoftonline.com/";
+        private string _apiBaseUrl = "https://localhost:7037";
 
         public event EventHandler<bool>? RequestClose;
         public event EventHandler? RequestNavigateBack;
@@ -102,6 +103,17 @@ namespace TeamsManager.UI.ViewModels.Configuration
             }
         }
 
+        public string ApiBaseUrl
+        {
+            get => _apiBaseUrl;
+            set
+            {
+                _apiBaseUrl = value;
+                OnPropertyChanged();
+                Validate();
+            }
+        }
+
         #endregion
 
         #region Methods
@@ -115,9 +127,9 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        ClientId = config.ClientId;
-                        RedirectUri = config.RedirectUri;
-                        Instance = config.Instance;
+                        ClientId = config.AzureAd.ClientId;
+                        RedirectUri = config.AzureAd.RedirectUri;
+                        Instance = config.AzureAd.Instance;
                         // TenantId i ApiScope pozostają z wartości przekazanych
                     });
                 }
@@ -197,14 +209,19 @@ namespace TeamsManager.UI.ViewModels.Configuration
         {
             try
             {
-                // Zapisz konfigurację OAuth (UI)
+                // Zapisz konfigurację OAuth (UI) używając nowej struktury
                 var oauthConfig = new OAuthConfiguration
                 {
-                    TenantId = TenantId!,
-                    ClientId = ClientId!,
-                    Instance = Instance,
-                    RedirectUri = RedirectUri,
-                    ApiScope = ApiScope!
+                    Scopes = new List<string> { ApiScope! },
+                    AzureAd = new AzureAdConfiguration
+                    {
+                        TenantId = TenantId!,
+                        ClientId = ClientId!,
+                        Instance = Instance,
+                        RedirectUri = RedirectUri,
+                        ApiScope = ApiScope!,
+                        ApiBaseUrl = ApiBaseUrl
+                    }
                 };
 
                 await _configManager.SaveOAuthConfigAsync(oauthConfig);

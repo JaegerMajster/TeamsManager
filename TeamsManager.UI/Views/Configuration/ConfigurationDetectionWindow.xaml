@@ -6,7 +6,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="Konfiguracja TeamsManager" 
-        Height="450" Width="550"
+        Height="580" Width="550"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Style="{StaticResource BaseWindowStyle}">
@@ -88,7 +88,7 @@
                         <!-- Main error message -->
                         <Border Background="{StaticResource BackgroundDark}" 
                                 CornerRadius="8" 
-                                Padding="20,16"
+                                Padding="20,20"
                                 Margin="0,0,0,20">
                             <TextBlock Style="{StaticResource InstructionTextStyle}"
                                      TextAlignment="Center"
@@ -113,19 +113,18 @@
                         <Border Background="{StaticResource AccentBlue}" 
                                 CornerRadius="6" 
                                 Padding="12,8"
-                                Margin="0,20,0,0"
-                                Opacity="0.1">
+                                Margin="0,20,0,0">
                             <StackPanel>
                                 <TextBlock Text="Będziesz potrzebować:" 
                                          Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                         Foreground="{StaticResource AccentBlue}"
+                                         Foreground="White"
                                          FontWeight="Medium"
                                          Margin="0,0,0,4"/>
                                 <TextBlock Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                         Foreground="{StaticResource TextSecondary}"
+                                         Foreground="LightGray"
                                          Text="• Dostępu do Azure Portal z uprawnieniami administratora"/>
                                 <TextBlock Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                         Foreground="{StaticResource TextSecondary}"
+                                         Foreground="LightGray"
                                          Text="• Około 10-15 minut na konfigurację"/>
                             </StackPanel>
                         </Border>
@@ -142,18 +141,15 @@
                         <Button Grid.Column="0" 
                                 Content="Zamknij" 
                                 Style="{StaticResource SecondaryActionButton}"
-                                Command="{Binding CloseCommand}"/>
+                                Command="{Binding CloseCommand}"
+                                MinWidth="120"/>
 
                         <Button Grid.Column="2" 
+                                Content="Rozpocznij konfigurację"
                                 Style="{StaticResource PrimaryActionButton}"
-                                Command="{Binding StartConfigurationCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Rozpocznij konfigurację" VerticalAlignment="Center"/>
-                                <materialDesign:PackIcon Kind="ArrowRight" 
-                                                       VerticalAlignment="Center" 
-                                                       Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </Button>
+                                Command="{Binding StartConfigurationCommand}"
+                                FontFamily="Segoe UI"
+                                MinWidth="180"/>
                     </Grid>
                 </Grid>
             </Border>

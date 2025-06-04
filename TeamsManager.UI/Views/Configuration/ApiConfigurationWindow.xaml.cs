@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Navigation;
 using TeamsManager.UI.ViewModels.Configuration;
+using TeamsManager.UI.Services.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TeamsManager.UI.Views.Configuration
 {
@@ -16,7 +18,10 @@ namespace TeamsManager.UI.Views.Configuration
         public ApiConfigurationWindow()
         {
             InitializeComponent();
-            _viewModel = new ApiConfigurationViewModel();
+            
+            // Pobierz ConfigurationManager z DI
+            var configManager = App.ServiceProvider.GetRequiredService<ConfigurationManager>();
+            _viewModel = new ApiConfigurationViewModel(configManager);
             DataContext = _viewModel;
 
             _viewModel.RequestClose += (sender, e) =>

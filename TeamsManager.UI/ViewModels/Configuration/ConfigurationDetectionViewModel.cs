@@ -53,7 +53,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
         {
             ErrorMessage = _validationResult.Status switch
             {
-                ConfigurationStatus.Missing => "Nie znaleziono plików konfiguracyjnych.",
+                ConfigurationStatus.Missing => "Nie znaleziono wymaganych plików konfiguracyjnych (oauth_config.json i/lub api_config.json).",
                 ConfigurationStatus.Invalid => "Konfiguracja zawiera błędy i wymaga poprawy.",
                 ConfigurationStatus.ConnectionError => "Nie można połączyć się z usługami Microsoft. Sprawdź połączenie internetowe.",
                 ConfigurationStatus.Unauthorized => "Brak uprawnień do zasobów. Wymagana ponowna konfiguracja.",
@@ -74,14 +74,14 @@ namespace TeamsManager.UI.ViewModels.Configuration
         {
             try
             {
-                // Ustaw DialogResult na true, co oznacza że użytkownik chce kontynuować
+                // Ustaw DialogResult na true i zamknij okno normalnie
                 _window.DialogResult = true;
                 _window.Close();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Błąd podczas rozpoczynania konfiguracji: {ex.Message}",
+                    $"Błąd podczas rozpoczynania konfiguracji: {ex.Message}\n\nStack trace: {ex.StackTrace}",
                     "Błąd",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error
@@ -100,7 +100,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 _window.DialogResult = false;
                 _window.Close();
             }
-            catch (Exception ex)
+            catch
             {
                 // Jeśli nie możemy ustawić DialogResult (np. okno nie jest dialogiem), po prostu zamknij
                 _window.Close();

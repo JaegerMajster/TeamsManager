@@ -14,6 +14,84 @@
     <Window.Resources>
         <!-- Definicje stylów dla ciemnego motywu -->
 
+        <!-- Styl dla menu -->
+        <Style x:Key="DarkMenuStyle" TargetType="Menu">
+            <Setter Property="Background" Value="#FF2D2D30"/>
+            <Setter Property="Foreground" Value="#FFECECEC"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <Style x:Key="DarkMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Background" Value="#FF2D2D30"/>
+            <Setter Property="Foreground" Value="#FFECECEC"/>
+            <Setter Property="BorderBrush" Value="#FF3F3F46"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut"/>
+                                    <ColumnDefinition Width="13"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="Icon" Content="{TemplateBinding Icon}" ContentSource="Icon" HorizontalAlignment="Center" Height="16" Width="16" Margin="6,0,6,0" VerticalAlignment="Center"/>
+                                <ContentPresenter x:Name="HeaderHost" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" Margin="0,4"/>
+                                <ContentPresenter x:Name="InputGestureText" Grid.Column="2" Content="{TemplateBinding InputGestureText}" Margin="5,2,0,2" DockPanel.Dock="Right"/>
+                                <Path x:Name="SubMenuIndicator" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 0 7 L 4 3.5 Z" Fill="#FF969696" Visibility="Collapsed"/>
+                                <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                    <Border x:Name="SubmenuBorder" SnapsToDevicePixels="True" Background="#FF1E1E1E" BorderBrush="#FF3F3F46" BorderThickness="1">
+                                        <ScrollViewer CanContentScroll="True" Style="{DynamicResource {ComponentResourceKey ResourceId=MenuScrollViewer, TypeInTargetAssembly={x:Type FrameworkElement}}}">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Icon" Value="{x:Null}">
+                                <Setter TargetName="Icon" Property="Visibility" Value="Hidden"/>
+                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF3F3F46"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FF656565"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsHighlighted" Value="True"/>
+                                    <Condition Property="IsSubmenuOpen" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Border" Property="Background" Value="#FF007ACC"/>
+                            </MultiTrigger>
+                            <Trigger Property="Role" Value="TopLevelHeader">
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter TargetName="Popup" Property="Placement" Value="Bottom"/>
+                                <Setter TargetName="SubMenuIndicator" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="Role" Value="TopLevelItem">
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter TargetName="Popup" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="SubMenuIndicator" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="Role" Value="SubmenuHeader">
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter TargetName="SubMenuIndicator" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="Role" Value="SubmenuItem">
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter TargetName="SubMenuIndicator" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Styl dla przycisków -->
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="#FF2D2D30"/>
@@ -93,218 +171,282 @@
     </Window.Resources>
 
     <Grid>
-        <Grid.Background>
-            <!-- Gradient tła -->
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#FF1E1E1E" Offset="0"/>
-                <GradientStop Color="#FF2D2D30" Offset="1"/>
-            </LinearGradientBrush>
-        </Grid.Background>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- Główny kontener z cieniem -->
-        <Border Margin="30" 
-                Background="#FF252526"
-                CornerRadius="12"
-                BorderBrush="#FF3F3F46"
-                BorderThickness="1"
-                MaxWidth="500">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" 
-                                  Direction="270" 
-                                  BlurRadius="15" 
-                                  ShadowDepth="3" 
-                                  Opacity="0.3"/>
-            </Border.Effect>
+        <!-- Menu bar -->
+        <Menu Grid.Row="0" Style="{StaticResource DarkMenuStyle}">
+            <MenuItem Header="_Plik" Style="{StaticResource DarkMenuItemStyle}">
+                <MenuItem Header="Zaloguj się" Click="LoginButton_Click" IsEnabled="{Binding ElementName=LoginButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="🔑" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Wyloguj" Click="LogoutButton_Click" IsEnabled="{Binding ElementName=LogoutButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="🚪" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator Background="#FF3F3F46" Height="1" Margin="0,4"/>
+                <MenuItem Header="Wyjście" Click="MenuItem_Exit_Click" InputGestureText="Alt+F4">
+                    <MenuItem.Icon>
+                        <TextBlock Text="❌" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
 
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <MenuItem Header="_Narzędzia" Style="{StaticResource DarkMenuItemStyle}">
+                <MenuItem Header="Testy manualne" Click="ManualTestsButton_Click" IsEnabled="{Binding ElementName=ManualTestsButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="🧪" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator Background="#FF3F3F46" Height="1" Margin="0,4"/>
+                <MenuItem Header="Zmień konfigurację..." Click="MenuItem_Reconfigure_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="⚙️" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
 
-                <!-- Nagłówek -->
-                <Border Grid.Row="0" 
-                        Background="#FF2D2D30" 
-                        CornerRadius="12,12,0,0"
-                        Padding="30,35,30,25">
-                    <StackPanel>
-                        <TextBlock Text="Teams Manager" 
-                                   FontSize="28" 
-                                   FontWeight="Light"
-                                   FontFamily="Segoe UI"
-                                   Foreground="#FFECECEC"
-                                   HorizontalAlignment="Center"/>
-                        <TextBlock Text="Microsoft Teams Integration" 
-                                   FontSize="14" 
-                                   FontWeight="Normal"
-                                   FontFamily="Segoe UI"
-                                   Foreground="#FF969696"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,5,0,0"/>
-                    </StackPanel>
-                </Border>
+            <MenuItem Header="_Pomoc" Style="{StaticResource DarkMenuItemStyle}">
+                <MenuItem Header="O programie..." Click="MenuItem_About_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="ℹ️" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
 
-                <!-- Obszar główny -->
-                <StackPanel Grid.Row="1" 
-                            VerticalAlignment="Center" 
-                            HorizontalAlignment="Center"
-                            Margin="40,25,40,25">
+        <!-- Główna zawartość -->
+        <Grid Grid.Row="1">
+            <Grid.Background>
+                <!-- Gradient tła -->
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF1E1E1E" Offset="0"/>
+                    <GradientStop Color="#FF2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
 
-                    <!-- Ikona użytkownika / Avatar -->
-                    <Border x:Name="UserAvatarBorder" Width="80" Height="80" 
-                            CornerRadius="40"
-                            Background="#FF3F3F46"
-                            Margin="0,0,0,20">
-                        <Grid>
-                            <!-- Domyślna ikona użytkownika -->
-                            <TextBlock x:Name="DefaultUserIcon" Text="👤" 
-                                       FontSize="40" 
-                                       HorizontalAlignment="Center" 
-                                       VerticalAlignment="Center"/>
-                            <!-- Avatar użytkownika -->
-                            <Ellipse x:Name="UserAvatarImage" 
-                                     Width="80" Height="80"
-                                     Visibility="Collapsed">
-                                <Ellipse.Fill>
-                                    <ImageBrush x:Name="UserAvatarBrush" Stretch="UniformToFill"/>
-                                </Ellipse.Fill>
-                            </Ellipse>
-                        </Grid>
-                    </Border>
+            <!-- Główny kontener z cieniem -->
+            <Border Margin="30" 
+                    Background="#FF252526"
+                    CornerRadius="12"
+                    BorderBrush="#FF3F3F46"
+                    BorderThickness="1"
+                    MaxWidth="500">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" 
+                                      Direction="270" 
+                                      BlurRadius="15" 
+                                      ShadowDepth="3" 
+                                      Opacity="0.3"/>
+                </Border.Effect>
 
-                    <!-- Informacje o użytkowniku -->
-                    <Border Background="#FF1E1E1E" 
-                            CornerRadius="8" 
-                            Padding="20,15"
-                            MinHeight="60"
-                            Margin="0,0,0,30">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Nagłówek -->
+                    <Border Grid.Row="0" 
+                            Background="#FF2D2D30" 
+                            CornerRadius="12,12,0,0"
+                            Padding="30,35,30,25">
                         <StackPanel>
-                            <TextBlock x:Name="UserDisplayNameTextBlock" 
-                                       Text="Witaj!" 
-                                       FontSize="16" 
+                            <TextBlock Text="Teams Manager" 
+                                       FontSize="28" 
+                                       FontWeight="Light"
                                        FontFamily="Segoe UI"
-                                       FontWeight="Medium"
                                        Foreground="#FFECECEC"
-                                       TextAlignment="Center"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,5"/>
-                            <TextBlock x:Name="UserInfoTextBlock" 
-                                       Text="Zaloguj się, aby kontynuować" 
-                                       FontSize="12" 
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Microsoft Teams Integration" 
+                                       FontSize="14" 
+                                       FontWeight="Normal"
                                        FontFamily="Segoe UI"
                                        Foreground="#FF969696"
-                                       TextAlignment="Center"
-                                       TextWrapping="Wrap"/>
-                            <!-- Status Indicator - ikona połączenia -->
-                            <Border x:Name="StatusIndicator" 
-                                    Width="16" Height="16" 
-                                    Background="#FF00AA00"
-                                    CornerRadius="8"
-                                    Margin="0,8,0,0"
-                                    HorizontalAlignment="Center"
-                                    Visibility="Collapsed">
-                                <TextBlock Text="✓" 
-                                           FontSize="10" 
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
+                                       HorizontalAlignment="Center"
+                                       Margin="0,5,0,0"/>
                         </StackPanel>
                     </Border>
 
-                    <!-- Przyciski -->
-                    <Button x:Name="LoginButton" 
-                            Content="Zaloguj się przez Microsoft" 
-                            Width="280" 
-                            Height="48" 
-                            Margin="0,5" 
-                            Click="LoginButton_Click"
-                            Style="{StaticResource PrimaryButton}"/>
+                    <!-- Obszar główny -->
+                    <StackPanel Grid.Row="1" 
+                                VerticalAlignment="Center" 
+                                HorizontalAlignment="Center"
+                                Margin="40,25,40,25">
 
-                    <Button x:Name="LogoutButton" 
-                            Content="Wyloguj" 
-                            Width="280" 
-                            Height="48" 
-                            Margin="0,5" 
-                            Click="LogoutButton_Click" 
-                            IsEnabled="False"
-                            Style="{StaticResource DangerButton}"/>
-
-                    <Button x:Name="ManualTestsButton" 
-                            Content="🧪 Testy Manualne" 
-                            Width="280" 
-                            Height="48" 
-                            Margin="0,5" 
-                            Click="ManualTestsButton_Click"
-                            IsEnabled="False"
-                            Style="{StaticResource ModernButton}"/>
-                </StackPanel>
-
-                <!-- Stopka -->
-                <Border Grid.Row="2" 
-                        Background="#FF1E1E1E" 
-                        CornerRadius="0,0,12,12"
-                        Padding="20,15">
-                    <TextBlock Text="© 2024 Teams Manager" 
-                               FontSize="12" 
-                               FontFamily="Segoe UI"
-                               Foreground="#FF656565"
-                               HorizontalAlignment="Center"/>
-                </Border>
-            </Grid>
-        </Border>
-
-        <!-- Loading Overlay -->
-        <Border x:Name="LoadingOverlay"
-                Background="#AA000000"
-                Visibility="Collapsed"
-                Opacity="0">
-            <Grid>
-                <Border Background="#FF2D2D30"
-                        BorderBrush="#FF3F3F46"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="30,20"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        MaxWidth="300">
-                    <StackPanel HorizontalAlignment="Center">
-                        <!-- Animowany spinner -->
-                        <Border Width="40" Height="40"
-                                Background="Transparent"
-                                Margin="0,0,0,15">
-                            <Border.Resources>
-                                <Storyboard x:Key="SpinAnimation" RepeatBehavior="Forever">
-                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                   From="0" To="360" Duration="0:0:1"/>
-                                </Storyboard>
-                            </Border.Resources>
-                            <Border.RenderTransform>
-                                <RotateTransform CenterX="20" CenterY="20"/>
-                            </Border.RenderTransform>
-                            <Border.Triggers>
-                                <EventTrigger RoutedEvent="Loaded">
-                                    <BeginStoryboard Storyboard="{StaticResource SpinAnimation}"/>
-                                </EventTrigger>
-                            </Border.Triggers>
-                            <Ellipse Width="40" Height="40"
-                                     Stroke="#FF0078D4"
-                                     StrokeThickness="4"
-                                     StrokeDashArray="10,5"
-                                     Fill="Transparent"/>
+                        <!-- Ikona użytkownika / Avatar -->
+                        <Border x:Name="UserAvatarBorder" Width="80" Height="80" 
+                                CornerRadius="40"
+                                Background="#FF3F3F46"
+                                Margin="0,0,0,20">
+                            <Grid>
+                                <!-- Domyślna ikona użytkownika -->
+                                <TextBlock x:Name="DefaultUserIcon" Text="👤" 
+                                           FontSize="40" 
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center"/>
+                                <!-- Avatar użytkownika -->
+                                <Ellipse x:Name="UserAvatarImage" 
+                                         Width="80" Height="80"
+                                         Visibility="Collapsed">
+                                    <Ellipse.Fill>
+                                        <ImageBrush x:Name="UserAvatarBrush" Stretch="UniformToFill"/>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
                         </Border>
-                        
-                        <TextBlock Text="Ładowanie..."
-                                   FontSize="14"
-                                   FontFamily="Segoe UI"
-                                   Foreground="#FFECECEC"
-                                   HorizontalAlignment="Center"
-                                   FontWeight="Medium"/>
+
+                        <!-- Informacje o użytkowniku -->
+                        <Border Background="#FF1E1E1E" 
+                                CornerRadius="8" 
+                                Padding="20,15"
+                                MinHeight="60"
+                                Margin="0,0,0,30">
+                            <StackPanel>
+                                <TextBlock x:Name="UserDisplayNameTextBlock" 
+                                           Text="Witaj!" 
+                                           FontSize="16" 
+                                           FontFamily="Segoe UI"
+                                           FontWeight="Medium"
+                                           Foreground="#FFECECEC"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,5"/>
+                                <TextBlock x:Name="UserInfoTextBlock" 
+                                           Text="Zaloguj się, aby kontynuować" 
+                                           FontSize="12" 
+                                           FontFamily="Segoe UI"
+                                           Foreground="#FF969696"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"/>
+                                <!-- Status Indicator - ikona połączenia -->
+                                <Border x:Name="StatusIndicator" 
+                                        Width="16" Height="16" 
+                                        Background="#FF00AA00"
+                                        CornerRadius="8"
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Center"
+                                        Visibility="Collapsed">
+                                    <TextBlock Text="✓" 
+                                               FontSize="10" 
+                                               FontWeight="Bold"
+                                               Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Przyciski -->
+                        <Button x:Name="LoginButton" 
+                                Content="Zaloguj się przez Microsoft" 
+                                Width="280" 
+                                Height="48" 
+                                Margin="0,5" 
+                                Click="LoginButton_Click"
+                                Style="{StaticResource PrimaryButton}"/>
+
+                        <Button x:Name="LogoutButton" 
+                                Content="Wyloguj" 
+                                Width="280" 
+                                Height="48" 
+                                Margin="0,5" 
+                                Click="LogoutButton_Click" 
+                                IsEnabled="False"
+                                Visibility="Collapsed"
+                                Style="{StaticResource DangerButton}"/>
+
+                        <Button x:Name="ManualTestsButton" 
+                                Content="🧪 Testy Manualne" 
+                                Width="280" 
+                                Height="48" 
+                                Margin="0,5" 
+                                Click="ManualTestsButton_Click"
+                                IsEnabled="False"
+                                Visibility="Collapsed"
+                                Style="{StaticResource ModernButton}"/>
+
+                        <Button x:Name="DashboardButton" 
+                                Content="📊 Dashboard" 
+                                Width="280" 
+                                Height="48" 
+                                Margin="0,5" 
+                                Click="DashboardButton_Click"
+                                IsEnabled="False"
+                                Visibility="Collapsed"
+                                Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
+
+                    <!-- Stopka -->
+                    <Border Grid.Row="2" 
+                            Background="#FF1E1E1E" 
+                            CornerRadius="0,0,12,12"
+                            Padding="20,15">
+                        <TextBlock Text="© 2024 Teams Manager" 
+                                   FontSize="12" 
+                                   FontFamily="Segoe UI"
+                                   Foreground="#FF656565"
+                                   HorizontalAlignment="Center"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Loading Overlay -->
+            <Border x:Name="LoadingOverlay"
+                    Background="#AA000000"
+                    Visibility="Collapsed"
+                    Opacity="0">
+                <Grid>
+                    <Border Background="#FF2D2D30"
+                            BorderBrush="#FF3F3F46"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="30,20"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="300">
+                        <StackPanel HorizontalAlignment="Center">
+                            <!-- Animowany spinner -->
+                            <Border Width="40" Height="40"
+                                    Background="Transparent"
+                                    Margin="0,0,0,15">
+                                <Border.Resources>
+                                    <Storyboard x:Key="SpinAnimation" RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                       From="0" To="360" Duration="0:0:1"/>
+                                    </Storyboard>
+                                </Border.Resources>
+                                <Border.RenderTransform>
+                                    <RotateTransform CenterX="20" CenterY="20"/>
+                                </Border.RenderTransform>
+                                <Border.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard Storyboard="{StaticResource SpinAnimation}"/>
+                                    </EventTrigger>
+                                </Border.Triggers>
+                                <Ellipse Width="40" Height="40"
+                                         Stroke="#FF0078D4"
+                                         StrokeThickness="4"
+                                         StrokeDashArray="10,5"
+                                         Fill="Transparent"/>
+                            </Border>
+
+                            <TextBlock Text="Ładowanie..."
+                                       FontSize="14"
+                                       FontFamily="Segoe UI"
+                                       Foreground="#FFECECEC"
+                                       HorizontalAlignment="Center"
+                                       FontWeight="Medium"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.Models.Configuration
 {
@@ -9,11 +10,29 @@ namespace TeamsManager.UI.Models.Configuration
     public class OAuthConfiguration
     {
         /// <summary>
-        /// Identyfikator dzierżawy (tenant) Azure AD
-        /// Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        /// Lista zakresów (scopes) dostępu
         /// </summary>
-        public string TenantId { get; set; } = string.Empty;
+        public List<string> Scopes { get; set; } = new List<string>();
 
+        /// <summary>
+        /// Konfiguracja Azure AD
+        /// </summary>
+        public AzureAdConfiguration AzureAd { get; set; } = new AzureAdConfiguration();
+
+        /// <summary>
+        /// Sprawdza czy wszystkie wymagane pola są wypełnione
+        /// </summary>
+        public bool IsComplete()
+        {
+            return Scopes.Count > 0 && AzureAd.IsComplete();
+        }
+    }
+
+    /// <summary>
+    /// Konfiguracja Azure AD
+    /// </summary>
+    public class AzureAdConfiguration
+    {
         /// <summary>
         /// Identyfikator aplikacji (client ID) dla UI w Azure AD
         /// Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -21,10 +40,15 @@ namespace TeamsManager.UI.Models.Configuration
         public string ClientId { get; set; } = string.Empty;
 
         /// <summary>
-        /// Adres URL instancji Azure AD
-        /// Domyślnie: https://login.microsoftonline.com/
+        /// URL bazowy API
         /// </summary>
-        public string Instance { get; set; } = "https://login.microsoftonline.com/";
+        public string ApiBaseUrl { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Identyfikator dzierżawy (tenant) Azure AD
+        /// Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        /// </summary>
+        public string TenantId { get; set; } = string.Empty;
 
         /// <summary>
         /// URI przekierowania po zalogowaniu
@@ -33,20 +57,16 @@ namespace TeamsManager.UI.Models.Configuration
         public string RedirectUri { get; set; } = "http://localhost";
 
         /// <summary>
+        /// Adres URL instancji Azure AD
+        /// Domyślnie: https://login.microsoftonline.com/
+        /// </summary>
+        public string Instance { get; set; } = "https://login.microsoftonline.com/";
+
+        /// <summary>
         /// Zakres (scope) API do którego aplikacja potrzebuje dostępu
         /// Format: api://[CLIENT-ID-API]/access_as_user
         /// </summary>
         public string ApiScope { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Data ostatniej modyfikacji konfiguracji
-        /// </summary>
-        public DateTime LastModified { get; set; }
-
-        /// <summary>
-        /// Wersja formatu konfiguracji
-        /// </summary>
-        public string Version { get; set; } = "1.0";
 
         /// <summary>
         /// Sprawdza czy wszystkie wymagane pola są wypełnione
@@ -57,7 +77,8 @@ namespace TeamsManager.UI.Models.Configuration
                    !string.IsNullOrWhiteSpace(ClientId) &&
                    !string.IsNullOrWhiteSpace(ApiScope) &&
                    !string.IsNullOrWhiteSpace(Instance) &&
-                   !string.IsNullOrWhiteSpace(RedirectUri);
+                   !string.IsNullOrWhiteSpace(RedirectUri) &&
+                   !string.IsNullOrWhiteSpace(ApiBaseUrl);
         }
     }
 }

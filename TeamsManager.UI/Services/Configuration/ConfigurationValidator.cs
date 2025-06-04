@@ -49,7 +49,7 @@ namespace TeamsManager.UI.Services.Configuration
                     result.Errors.AddRange(oauthResult.Errors);
                 }
 
-                // Waliduj konfigurację API
+                // Waliduj konfigurację API (potrzebną dla przepływu OBO)
                 var apiResult = await ValidateApiConfigurationAsync();
                 if (!apiResult.IsValid)
                 {
@@ -105,50 +105,75 @@ namespace TeamsManager.UI.Services.Configuration
                     return result;
                 }
 
+                // Waliduj Scopes
+                if (config.Scopes == null || config.Scopes.Count == 0)
+                {
+                    result.Errors.Add("Brak Scopes w konfiguracji OAuth");
+                }
+
+                // Waliduj AzureAd sekcję
+                if (config.AzureAd == null)
+                {
+                    result.Errors.Add("Brak sekcji AzureAd w konfiguracji OAuth");
+                    result.IsValid = false;
+                    result.Status = ConfigurationStatus.Invalid;
+                    return result;
+                }
+
                 // Waliduj TenantId
-                if (string.IsNullOrWhiteSpace(config.TenantId))
+                if (string.IsNullOrWhiteSpace(config.AzureAd.TenantId))
                 {
                     result.Errors.Add("Brak Tenant ID w konfiguracji OAuth");
                 }
-                else if (!IsValidGuid(config.TenantId) && config.TenantId != "common" && config.TenantId != "organizations")
+                else if (!IsValidGuid(config.AzureAd.TenantId) && config.AzureAd.TenantId != "common" && config.AzureAd.TenantId != "organizations")
                 {
                     result.Errors.Add("Nieprawidłowy format Tenant ID");
                 }
 
                 // Waliduj ClientId
-                if (string.IsNullOrWhiteSpace(config.ClientId))
+                if (string.IsNullOrWhiteSpace(config.AzureAd.ClientId))
                 {
                     result.Errors.Add("Brak Client ID aplikacji UI");
                 }
-                else if (!IsValidGuid(config.ClientId))
+                else if (!IsValidGuid(config.AzureAd.ClientId))
                 {
                     result.Errors.Add("Nieprawidłowy format Client ID aplikacji UI");
                 }
 
                 // Waliduj ApiScope
-                if (string.IsNullOrWhiteSpace(config.ApiScope))
+                if (string.IsNullOrWhiteSpace(config.AzureAd.ApiScope))
                 {
                     result.Errors.Add("Brak API Scope");
                 }
-                else if (!IsValidApiScope(config.ApiScope))
+                else if (!IsValidApiScope(config.AzureAd.ApiScope))
                 {
                     result.Errors.Add("Nieprawidłowy format API Scope (oczekiwany: api://[guid]/scope)");
                 }
 
                 // Waliduj Instance
-                if (string.IsNullOrWhiteSpace(config.Instance))
+                if (string.IsNullOrWhiteSpace(config.AzureAd.Instance))
                 {
                     result.Errors.Add("Brak Instance URL");
                 }
-                else if (!IsValidUri(config.Instance))
+                else if (!IsValidUri(config.AzureAd.Instance))
                 {
                     result.Errors.Add("Nieprawidłowy format Instance URL");
                 }
 
                 // Waliduj RedirectUri
-                if (string.IsNullOrWhiteSpace(config.RedirectUri))
+                if (string.IsNullOrWhiteSpace(config.AzureAd.RedirectUri))
                 {
                     result.Errors.Add("Brak Redirect URI");
+                }
+
+                // Waliduj ApiBaseUrl
+                if (string.IsNullOrWhiteSpace(config.AzureAd.ApiBaseUrl))
+                {
+                    result.Errors.Add("Brak API Base URL");
+                }
+                else if (!IsValidUri(config.AzureAd.ApiBaseUrl))
+                {
+                    result.Errors.Add("Nieprawidłowy format API Base URL");
                 }
 
                 if (result.Errors.Count > 0)
@@ -168,7 +193,7 @@ namespace TeamsManager.UI.Services.Configuration
         }
 
         /// <summary>
-        /// Waliduje konfigurację API
+        /// Waliduje konfigurację API (potrzebną dla przepływu OBO)
         /// </summary>
         private async Task<ConfigurationValidationResult> ValidateApiConfigurationAsync()
         {
@@ -190,30 +215,14 @@ namespace TeamsManager.UI.Services.Configuration
                     return result;
                 }
 
-                // Waliduj TenantId
-                if (string.IsNullOrWhiteSpace(config.TenantId))
+                // Waliduj ApiScope
+                if (string.IsNullOrWhiteSpace(config.ApiScope))
                 {
-                    result.Errors.Add("Brak Tenant ID w konfiguracji API");
+                    result.Errors.Add("Brak API Scope");
                 }
-                else if (!IsValidGuid(config.TenantId) && config.TenantId != "common" && config.TenantId != "organizations")
+                else if (!IsValidApiScope(config.ApiScope))
                 {
-                    result.Errors.Add("Nieprawidłowy format Tenant ID w konfiguracji API");
-                }
-
-                // Waliduj ApiClientId
-                if (string.IsNullOrWhiteSpace(config.ApiClientId))
-                {
-                    result.Errors.Add("Brak Client ID aplikacji API");
-                }
-                else if (!IsValidGuid(config.ApiClientId))
-                {
-                    result.Errors.Add("Nieprawidłowy format Client ID aplikacji API");
-                }
-
-                // Waliduj ApiClientSecretEncrypted
-                if (string.IsNullOrWhiteSpace(config.ApiClientSecretEncrypted))
-                {
-                    result.Errors.Add("Brak Client Secret aplikacji API");
+                    result.Errors.Add("Nieprawidłowy format API Scope (oczekiwany: api://[guid]/scope)");
                 }
 
                 // Waliduj ApiAudience
@@ -224,12 +233,6 @@ namespace TeamsManager.UI.Services.Configuration
                 else if (!IsValidApiAudience(config.ApiAudience))
                 {
                     result.Errors.Add("Nieprawidłowy format API Audience (oczekiwany: api://[guid])");
-                }
-
-                // Waliduj ApiScope
-                if (string.IsNullOrWhiteSpace(config.ApiScope))
-                {
-                    result.Errors.Add("Brak API Scope w konfiguracji API");
                 }
 
                 // Waliduj ApiBaseUrl

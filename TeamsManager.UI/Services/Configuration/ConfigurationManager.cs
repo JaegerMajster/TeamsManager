@@ -30,8 +30,7 @@ namespace TeamsManager.UI.Services.Configuration
             // Konfiguracja serializacji JSON
             _jsonOptions = new JsonSerializerOptions
             {
-                WriteIndented = true,  // Ładne formatowanie JSON
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                WriteIndented = true  // Ładne formatowanie JSON
             };
 
             // Upewnij się że folder istnieje
@@ -68,13 +67,30 @@ namespace TeamsManager.UI.Services.Configuration
             try
             {
                 var json = await File.ReadAllTextAsync(filePath);
+                System.Diagnostics.Debug.WriteLine($"Odczytano JSON z pliku: {filePath}");
+                System.Diagnostics.Debug.WriteLine($"Zawartość: {json}");
+                
                 var config = JsonSerializer.Deserialize<OAuthConfiguration>(json, _jsonOptions);
+                System.Diagnostics.Debug.WriteLine($"Deserializacja - sukces: {config != null}");
+                
+                if (config != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"AzureAd sekcja: {config.AzureAd != null}");
+                    if (config.AzureAd != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"ClientId: '{config.AzureAd.ClientId}'");
+                        System.Diagnostics.Debug.WriteLine($"TenantId: '{config.AzureAd.TenantId}'");
+                    }
+                    System.Diagnostics.Debug.WriteLine($"Scopes count: {config.Scopes?.Count ?? 0}");
+                }
+                
                 System.Diagnostics.Debug.WriteLine($"Wczytano konfigurację OAuth z: {filePath}");
                 return config;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Błąd wczytywania konfiguracji OAuth: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Szczegóły błędu: {ex}");
                 return null;
             }
         }
@@ -86,8 +102,6 @@ namespace TeamsManager.UI.Services.Configuration
         {
             if (config == null)
                 throw new ArgumentNullException(nameof(config));
-
-            config.LastModified = DateTime.Now;
 
             var filePath = Path.Combine(_appDataPath, "oauth_config.json");
             var json = JsonSerializer.Serialize(config, _jsonOptions);
@@ -174,7 +188,8 @@ namespace TeamsManager.UI.Services.Configuration
         {
             var oauthPath = Path.Combine(_appDataPath, "oauth_config.json");
             var apiPath = Path.Combine(_appDataPath, "api_config.json");
-
+            
+            // Dla przepływu OBO potrzebujemy OBUS plików
             return File.Exists(oauthPath) && File.Exists(apiPath);
         }
 
@@ -199,6 +214,30 @@ namespace TeamsManager.UI.Services.Configuration
             }
 
             await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Usuwa wszystkie pliki konfiguracyjne (wersja synchroniczna)
+        /// </summary>
+        public void DeleteConfiguration()
+        {
+            try
+            {
+                var oauthPath = Path.Combine(_appDataPath, "oauth_config.json");
+                var apiPath = Path.Combine(_appDataPath, "api_config.json");
+
+                if (File.Exists(oauthPath))
+                    File.Delete(oauthPath);
+
+                if (File.Exists(apiPath))
+                    File.Delete(apiPath);
+
+                System.Diagnostics.Debug.WriteLine("Usunięto pliki konfiguracyjne");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Nie można usunąć plików konfiguracyjnych", ex);
+            }
         }
 
         /// <summary>

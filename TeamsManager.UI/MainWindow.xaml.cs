@@ -2,6 +2,7 @@
 using System;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -9,6 +10,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Interop;
 using TeamsManager.UI.Views;
 using TeamsManager.UI.Services;
+using TeamsManager.UI.Services.Configuration;
+using TeamsManager.UI.Views.Configuration;
 
 namespace TeamsManager.UI
 {
@@ -23,6 +26,7 @@ namespace TeamsManager.UI
         private AuthenticationResult? _authResult;
         private readonly HttpClient _httpClient = new HttpClient();
         private ManualTestingWindow? _manualTestingWindow;
+        private DashboardWindow? _dashboardWindow;
         private readonly GraphUserProfileService _graphUserProfileService;
 
         public MainWindow()
@@ -102,18 +106,18 @@ namespace TeamsManager.UI
                     // Przekaż wynik logowania do okna testów jeśli jest otwarte
                     if (_manualTestingWindow != null)
                     {
-                        await _manualTestingWindow.SaveLoginResultToSession(true, 
+                        await _manualTestingWindow.SaveLoginResultToSession(true,
                             $"Pomyślne logowanie użytkownika: {_authResult.Account?.Username}", duration);
                     }
                 }
                 else
                 {
                     await AnimateLoginFailure();
-                    
+
                     // Przekaż wynik logowania do okna testów jeśli jest otwarte
                     if (_manualTestingWindow != null)
                     {
-                        await _manualTestingWindow.SaveLoginResultToSession(false, 
+                        await _manualTestingWindow.SaveLoginResultToSession(false,
                             "Logowanie zostało anulowane lub nie powiodło się", duration);
                     }
                 }
@@ -127,7 +131,7 @@ namespace TeamsManager.UI
                 // Przekaż wynik logowania do okna testów jeśli jest otwarte
                 if (_manualTestingWindow != null)
                 {
-                    await _manualTestingWindow.SaveLoginResultToSession(false, 
+                    await _manualTestingWindow.SaveLoginResultToSession(false,
                         $"Błąd podczas logowania: {ex.Message}", duration);
                 }
             }
@@ -146,27 +150,27 @@ namespace TeamsManager.UI
             {
                 // POPRAWKA: Pobierz osobny token dla Microsoft Graph API
                 string? graphToken = null;
-                
+
                 // Najpierw spróbuj pobrać token Graph z cache (silent)
                 graphToken = await _msalAuthService.AcquireGraphTokenAsync();
-                
+
                 if (string.IsNullOrEmpty(graphToken))
                 {
                     // Jeśli nie udało się pobrać z cache, spróbuj interactywnie
                     System.Diagnostics.Debug.WriteLine($"[MainWindow] Pobieranie Graph token interactywnie...");
                     graphToken = await _msalAuthService.AcquireGraphTokenInteractiveAsync(this);
                 }
-                
+
                 if (string.IsNullOrEmpty(graphToken))
                 {
                     System.Diagnostics.Debug.WriteLine($"[MainWindow] Nie udało się pobrać Graph token. Używam podstawowych informacji z MSAL.");
-                    
+
                     // Fallback: użyj informacji z podstawowego tokenu MSAL
                     UserDisplayNameTextBlock.Text = _authResult.Account?.Username ?? "Użytkownik";
                     UserInfoTextBlock.Text = "Zalogowano (ograniczony dostęp)";
                     return;
                 }
-                
+
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] Używam dedykowany Graph token");
 
                 // Wykonaj test Graph API z dedykowanym tokenem Graph
@@ -191,7 +195,7 @@ namespace TeamsManager.UI
                                 // Animowana zmiana avatara
                                 var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.2));
                                 var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3));
-                                
+
                                 DefaultUserIcon.BeginAnimation(OpacityProperty, fadeOut);
                                 fadeOut.Completed += (s, e) =>
                                 {
@@ -202,7 +206,7 @@ namespace TeamsManager.UI
                                 };
                             }
                         }
-                        
+
                         System.Diagnostics.Debug.WriteLine($"[MainWindow] Profil załadowany: {userProfile.DisplayName}");
                         return;
                     }
@@ -211,7 +215,7 @@ namespace TeamsManager.UI
                 // Jeśli nie udało się pobrać profilu, pokaż informacje z podstawowego tokenu
                 UserDisplayNameTextBlock.Text = _authResult.Account?.Username ?? "Użytkownik";
                 UserInfoTextBlock.Text = "Zalogowano (ograniczony dostęp do Graph)";
-                
+
                 if (!string.IsNullOrEmpty(testResult.ErrorMessage))
                 {
                     System.Diagnostics.Debug.WriteLine($"[MainWindow] Graph API Error: {testResult.ErrorMessage}");
@@ -235,14 +239,18 @@ namespace TeamsManager.UI
 
             // Zmień przyciski z animacją
             LoginButton.Visibility = Visibility.Collapsed;
-            
+
             LogoutButton.Visibility = Visibility.Visible;
             LogoutButton.IsEnabled = true;
             LogoutButton.BeginAnimation(OpacityProperty, fadeAnimation);
-            
+
             ManualTestsButton.Visibility = Visibility.Visible;
             ManualTestsButton.IsEnabled = true;
             ManualTestsButton.BeginAnimation(OpacityProperty, fadeAnimation);
+
+            DashboardButton.Visibility = Visibility.Visible;
+            DashboardButton.IsEnabled = true;
+            DashboardButton.BeginAnimation(OpacityProperty, fadeAnimation);
 
             await System.Threading.Tasks.Task.Delay(300);
         }
@@ -256,6 +264,9 @@ namespace TeamsManager.UI
             LoginButton.Visibility = Visibility.Visible;
             ManualTestsButton.IsEnabled = false;
             ManualTestsButton.Visibility = Visibility.Collapsed;
+
+            DashboardButton.IsEnabled = false;
+            DashboardButton.Visibility = Visibility.Collapsed;
 
             // Delikatne potrząśnięcie karty
             var shakeAnimation = new ThicknessAnimation(
@@ -292,13 +303,13 @@ namespace TeamsManager.UI
             }
 
             _authResult = null;
-            
+
             // Animowana zmiana UI
             var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.2));
             fadeOut.Completed += async (s, args) =>
             {
                 ResetUserInterface();
-                
+
                 // Aktualizacja stanu przycisków
                 LogoutButton.IsEnabled = false;
                 LogoutButton.Visibility = Visibility.Collapsed;
@@ -307,10 +318,13 @@ namespace TeamsManager.UI
                 ManualTestsButton.IsEnabled = false;
                 ManualTestsButton.Visibility = Visibility.Collapsed;
 
+                DashboardButton.IsEnabled = false;
+                DashboardButton.Visibility = Visibility.Collapsed;
+
                 // Fade in
                 var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.3));
                 LoginButton.BeginAnimation(OpacityProperty, fadeIn);
-                
+
                 ShowLoading(false);
             };
 
@@ -327,14 +341,14 @@ namespace TeamsManager.UI
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Tworzenie nowego okna testów");
                     // Przekaż kontekst użytkownika i serwis MSAL do okna testów
                     _manualTestingWindow = new ManualTestingWindow(_authResult, _msalAuthService);
-                    
+
                     // Obsługa zamknięcia okna
-                    _manualTestingWindow.Closed += (s, args) => 
+                    _manualTestingWindow.Closed += (s, args) =>
                     {
                         System.Diagnostics.Debug.WriteLine("[MainWindow] Okno testów zostało zamknięte");
                         _manualTestingWindow = null;
                     };
-                    
+
                     _manualTestingWindow.Show();
                 }
                 else
@@ -350,6 +364,41 @@ namespace TeamsManager.UI
             {
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] Błąd podczas otwierania okna testów: {ex}");
                 ShowErrorDialog($"Błąd podczas otwierania okna testów manualnych: {ex.Message}", "Błąd");
+            }
+        }
+
+        private void DashboardButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Sprawdź czy okno Dashboard już istnieje i jest otwarte
+                if (_dashboardWindow == null || !_dashboardWindow.IsVisible)
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Tworzenie nowego okna Dashboard");
+                    _dashboardWindow = new DashboardWindow();
+
+                    // Obsługa zamknięcia okna
+                    _dashboardWindow.Closed += (s, args) =>
+                    {
+                        System.Diagnostics.Debug.WriteLine("[MainWindow] Okno Dashboard zostało zamknięte");
+                        _dashboardWindow = null;
+                    };
+
+                    _dashboardWindow.Show();
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Aktywowanie istniejącego okna Dashboard");
+                    // Przenieś okno na pierwszy plan
+                    _dashboardWindow.WindowState = WindowState.Normal;
+                    _dashboardWindow.Activate();
+                    _dashboardWindow.Focus();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Błąd podczas otwierania okna Dashboard: {ex}");
+                ShowErrorDialog($"Błąd podczas otwierania Dashboard'a: {ex.Message}", "Błąd");
             }
         }
 
@@ -373,6 +422,68 @@ namespace TeamsManager.UI
         {
             // W przyszłości można użyć Material Design Dialog
             MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        /// <summary>
+        /// Metoda do rekonfiguracji aplikacji - usuwa konfigurację i restartuje
+        /// </summary>
+        private void ReconfigureApplication()
+        {
+            var result = MessageBox.Show(
+                "Czy chcesz zmienić konfigurację aplikacji?\n\nAplikacja zostanie zrestartowana.",
+                "Zmiana konfiguracji",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    // Usuń pliki konfiguracyjne
+                    var configManager = new Services.Configuration.ConfigurationManager();
+                    configManager.DeleteConfiguration();
+
+                    // Restart aplikacji
+                    System.Diagnostics.Process.Start(Application.ResourceAssembly.Location);
+                    Application.Current.Shutdown();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        $"Błąd podczas usuwania konfiguracji: {ex.Message}",
+                        "Błąd",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+        }
+
+        // Handler dla menu item (dodaj do MainWindow.xaml)
+        private void MenuItem_Reconfigure_Click(object sender, RoutedEventArgs e)
+        {
+            ReconfigureApplication();
+        }
+
+        // Handler dla menu Exit
+        private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+
+        // Handler dla menu About
+        private void MenuItem_About_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Teams Manager v1.0\n\n" +
+                "Aplikacja do zarządzania Microsoft Teams\n" +
+                "© 2024 Teams Manager\n\n" +
+                "Powered by:\n" +
+                "• Microsoft Graph API\n" +
+                "• Azure Active Directory\n" +
+                "• MSAL.NET",
+                "O programie",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
     }
 }

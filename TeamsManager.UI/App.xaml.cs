@@ -7,6 +7,8 @@ using TeamsManager.Core.Services.UserContext;
 using TeamsManager.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using TeamsManager.UI.Services.Configuration;
+using TeamsManager.UI.Views.Configuration;
 
 namespace TeamsManager.UI
 {
@@ -33,6 +35,11 @@ namespace TeamsManager.UI
             // po zalogowaniu i odczytanie go w dowolnym miejscu.
             services.AddSingleton<ICurrentUserService, CurrentUserService>();
 
+            // --- Rejestracja serwisów konfiguracji ---
+            services.AddSingleton<ConfigurationManager>();
+            services.AddSingleton<ConfigurationValidator>();
+            services.AddSingleton<EncryptionService>();
+
             // --- (Opcjonalnie) Konfiguracja TeamsManagerDbContext ---
             // W docelowej architekturze z API, klient WPF raczej nie powinien mieć
             // bezpośredniego dostępu do DbContext. Komunikacja z danymi powinna
@@ -56,44 +63,111 @@ namespace TeamsManager.UI
             // services.AddTransient<MainWindow>();
         }
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // Po skonfigurowaniu DI, możesz utworzyć i pokazać główne okno aplikacji.
-            // Przykład (odkomentuj i dostosuj, gdy będziesz miał MainWindow i MainViewModel):
+            // Ustaw ShutdownMode na Manual żeby aplikacja nie zamykała się automatycznie
+            Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            /*
-            var mainWindow = new MainWindow(); // Lub pobierz z ServiceProvider, jeśli zarejestrowane
-            var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>(); // Przykład
-            mainWindow.DataContext = mainViewModel;
-            mainWindow.Show();
-            */
-
-            // Na razie, dla testu, możemy po prostu uruchomić aplikację bez głównego okna,
-            // aby sprawdzić, czy DI się poprawnie konfiguruje.
-            // Lub, jeśli masz już jakieś proste okno startowe, możesz je tutaj uruchomić.
-
-            // Przykład: Sprawdzenie, czy serwis ICurrentUserService jest dostępny
-            var currentUserService = ServiceProvider.GetRequiredService<ICurrentUserService>();
-            System.Diagnostics.Debug.WriteLine($"[UI DI Test] Current User UPN: {currentUserService.GetCurrentUserUpn()}");
-
-            // Przykład: Sprawdzenie, czy DbContext jest dostępny (jeśli go rejestrowałeś)
             try
             {
-                var dbContext = ServiceProvider.GetRequiredService<TeamsManagerDbContext>();
-                // Możesz spróbować wykonać prostą operację, np. dbContext.Database.EnsureCreated();
-                // lub dbContext.Database.CanConnect();
-                // Pamiętaj, że jeśli plik teamsmanager_ui.db nie istnieje, 
-                // EF Core spróbuje go utworzyć przy pierwszym użyciu, jeśli migracje są skonfigurowane
-                // lub jeśli użyjesz EnsureCreated(). Na razie można to pominąć.
-                System.Diagnostics.Debug.WriteLine($"[UI DI Test] DbContext instance created: {dbContext != null}");
+                // Sprawdź konfigurację przy starcie
+                var configManager = ServiceProvider.GetRequiredService<ConfigurationManager>();
+                var validator = ServiceProvider.GetRequiredService<ConfigurationValidator>();
+
+                var validationResult = await validator.ValidateFullConfigurationAsync();
+
+                if (!validationResult.IsValid)
+                {
+                    // Pokaż okno wykrycia problemu z konfiguracją
+                    var detectionWindow = new ConfigurationDetectionWindow();
+                    detectionWindow.SetValidationResult(validationResult);
+                    var result = detectionWindow.ShowDialog();
+                    
+                    if (result == true)
+                    {
+                        // Użytkownik chce rozpocząć konfigurację - pokaż pierwsze okno konfiguracji (API)
+                        try
+                        {
+                            var apiConfigWindow = new ApiConfigurationWindow();
+                            var configResult = apiConfigWindow.ShowDialog();
+                            
+                            if (configResult == true)
+                            {
+                                // Konfiguracja zakończona pomyślnie - restart aplikacji
+                                MessageBox.Show(
+                                    "Konfiguracja została zakończona pomyślnie!\n\nAplikacja zostanie teraz zrestartowana.",
+                                    "Sukces",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Information);
+                                    
+                                var currentExe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                                if (!string.IsNullOrEmpty(currentExe))
+                                {
+                                    System.Diagnostics.Process.Start(currentExe);
+                                }
+                                Application.Current.Shutdown();
+                                return;
+                            }
+                            else
+                            {
+                                // Użytkownik anulował konfigurację - zamknij aplikację
+                                Application.Current.Shutdown();
+                                return;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(
+                                $"Błąd podczas otwierania okna konfiguracji API:\n\n{ex.Message}",
+                                "Błąd",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
+                            Application.Current.Shutdown();
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Użytkownik anulował - zamknij aplikację
+                        Application.Current.Shutdown();
+                        return;
+                    }
+                }
+                else
+                {
+                    // Konfiguracja jest poprawna - przywróć normalny ShutdownMode i uruchom główne okno
+                    Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
+                    
+                    var mainWindow = new MainWindow();
+                    mainWindow.Show();
+
+                    // Sprawdzenie serwisów dla debugowania
+                    var currentUserService = ServiceProvider.GetRequiredService<ICurrentUserService>();
+                    System.Diagnostics.Debug.WriteLine($"[UI DI Test] Current User UPN: {currentUserService.GetCurrentUserUpn()}");
+
+                    // Sprawdzenie DbContext
+                    try
+                    {
+                        var dbContext = ServiceProvider.GetRequiredService<TeamsManagerDbContext>();
+                        System.Diagnostics.Debug.WriteLine($"[UI DI Test] DbContext instance created: {dbContext != null}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[UI DI Test] Error creating DbContext: {ex.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[UI DI Test] Error creating DbContext: {ex.Message}");
-                // Możesz tutaj wyświetlić MessageBox z błędem, jeśli chcesz.
-                // MessageBox.Show($"Error initializing DbContext: {ex.Message}", "DI Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Wystąpił błąd podczas uruchamiania aplikacji:\n\n{ex.Message}",
+                    "Błąd",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+
+                Application.Current.Shutdown();
             }
         }
     }

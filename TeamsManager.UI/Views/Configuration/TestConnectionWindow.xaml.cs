@@ -30,7 +30,7 @@ namespace TeamsManager.UI.Views.Configuration
                 var oauthConfig = configManager.LoadOAuthConfigAsync().Result;
                 if (oauthConfig != null)
                 {
-                    var uiConfigWindow = new UiConfigurationWindow(oauthConfig.TenantId, oauthConfig.ApiScope);
+                    var uiConfigWindow = new UiConfigurationWindow(oauthConfig.AzureAd.TenantId, oauthConfig.AzureAd.ApiScope);
                     uiConfigWindow.Show();
                     Close();
                 }

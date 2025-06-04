@@ -24,16 +24,15 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
         public event EventHandler<bool>? RequestClose;
 
-        public ApiConfigurationViewModel()
+        public ApiConfigurationViewModel(ConfigurationManager configManager)
         {
-            _configManager = new ConfigurationManager();
+            _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
 
             NextCommand = new RelayCommand(async _ => await NextAsync(), _ => IsValid);
             CancelCommand = new RelayCommand(_ => Cancel());
             ShowTenantIdHelpCommand = new RelayCommand(_ => ShowTenantIdHelp());
 
-            // Załaduj istniejącą konfigurację jeśli istnieje
-            Task.Run(async () => await LoadExistingConfiguration());
+            // Nie ładuj konfiguracji w konstruktorze - może to powodować problemy
         }
 
         #region Properties
@@ -112,22 +111,19 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
         #region Methods
 
-        private async Task LoadExistingConfiguration()
+        private async Task LoadExistingConfigurationAsync()
         {
             try
             {
                 var config = await _configManager.LoadApiConfigAsync();
                 if (config != null)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        TenantId = config.TenantId;
-                        ApiClientId = config.ApiClientId;
-                        ApiAudience = config.ApiAudience;
-                        ApiScope = config.ApiScope;
-                        ApiBaseUrl = config.ApiBaseUrl;
-                        // Secret nie jest ładowany ze względów bezpieczeństwa
-                    });
+                    TenantId = config.TenantId;
+                    ApiClientId = config.ApiClientId;
+                    ApiAudience = config.ApiAudience;
+                    ApiScope = config.ApiScope;
+                    ApiBaseUrl = config.ApiBaseUrl;
+                    // Secret nie jest ładowany ze względów bezpieczeństwa
                 }
             }
             catch (Exception ex)
@@ -238,12 +234,16 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 await _configManager.SaveApiConfigAsync(apiConfig, ApiClientSecret!);
 
                 // Przejdź do następnego kroku - UI Configuration
-                Application.Current.Dispatcher.Invoke(() =>
+                var uiConfigWindow = new UiConfigurationWindow(TenantId!, ApiScope!);
+                var uiResult = uiConfigWindow.ShowDialog();
+                
+                // Tylko zamknij to okno jeśli konfiguracja została ukończona pomyślnie
+                // Jeśli user kliknął "Wstecz", UiConfigurationWindow już otworzyło nowe ApiConfigurationWindow
+                if (uiResult == true)
                 {
-                    var uiConfigWindow = new UiConfigurationWindow(TenantId!, ApiScope!);
-                    uiConfigWindow.Show();
                     RequestClose?.Invoke(this, true);
-                });
+                }
+                // Jeśli uiResult == false/null (Wstecz lub Anuluj), nie rób nic - pozwól oknu zostać otwarte
             }
             catch (Exception ex)
             {

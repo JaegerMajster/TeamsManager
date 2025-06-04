@@ -24,9 +24,8 @@ namespace TeamsManager.UI.Views.Configuration
 
             _viewModel.RequestNavigateBack += (sender, e) =>
             {
-                // Powrót do poprzedniego okna
-                var apiConfigWindow = new ApiConfigurationWindow();
-                apiConfigWindow.Show();
+                // Po prostu zamknij okno z null - ApiConfigurationWindow pozostanie otwarte
+                DialogResult = null;
                 Close();
             };
         }
