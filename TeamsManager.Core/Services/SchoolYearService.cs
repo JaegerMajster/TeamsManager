@@ -147,40 +147,42 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> SetCurrentSchoolYearAsync(string schoolYearId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_set_current_sy";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolYearSetAsCurrent,
-                TargetEntityType = nameof(SchoolYear),
-                TargetEntityId = schoolYearId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie ustawiania roku szkolnego ID: {SchoolYearId} jako bieżący, przez {User}", schoolYearId, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie ustawiania roku szkolnego ID: {SchoolYearId} jako bieżący", schoolYearId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolYearSetAsCurrent,
+                nameof(SchoolYear),
+                targetEntityId: schoolYearId
+            );
 
             string? oldCurrentYearIdToInvalidate = null;
-            // bool wasAnythingChanged = false; // Nie jest już potrzebne do logiki inwalidacji
 
             try
             {
                 var newCurrentSchoolYear = await _schoolYearRepository.GetByIdAsync(schoolYearId);
                 if (newCurrentSchoolYear == null || !newCurrentSchoolYear.IsActive)
                 {
-                    operation.MarkAsFailed($"Rok szkolny o ID '{schoolYearId}' nie istnieje lub jest nieaktywny.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można ustawić roku szkolnego ID {SchoolYearId} jako bieżący - nie istnieje lub nieaktywny.", schoolYearId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Rok szkolny o ID '{schoolYearId}' nie istnieje lub jest nieaktywny."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = newCurrentSchoolYear.Name;
 
                 if (newCurrentSchoolYear.IsCurrent)
                 {
-                    operation.MarkAsCompleted($"Rok szkolny '{newCurrentSchoolYear.Name}' (ID: {schoolYearId}) był już bieżący. Brak zmian.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogInformation("Rok szkolny ID {SchoolYearId} był już ustawiony jako bieżący.", schoolYearId);
                     InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: true, invalidateAll: false);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Rok szkolny '{newCurrentSchoolYear.Name}' (ID: {schoolYearId}) był już bieżący. Brak zmian."
+                    );
                     return true;
                 }
 
@@ -189,17 +191,15 @@ namespace TeamsManager.Core.Services
                 {
                     oldCurrentYearIdToInvalidate = oldCurrentYear.Id;
                     oldCurrentYear.IsCurrent = false;
-                    oldCurrentYear.MarkAsModified(currentUserUpn);
+                    oldCurrentYear.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
                     _schoolYearRepository.Update(oldCurrentYear);
                     _logger.LogInformation("Rok szkolny {OldSchoolYearName} (ID: {OldSchoolYearId}) został odznaczony jako bieżący.", oldCurrentYear.Name, oldCurrentYear.Id);
                 }
 
                 newCurrentSchoolYear.IsCurrent = true;
-                newCurrentSchoolYear.MarkAsModified(currentUserUpn);
+                newCurrentSchoolYear.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
                 _schoolYearRepository.Update(newCurrentSchoolYear);
                 _logger.LogInformation("Rok szkolny {NewSchoolYearName} (ID: {NewSchoolYearId}) został ustawiony jako bieżący.", newCurrentSchoolYear.Name, newCurrentSchoolYear.Id);
-
-                operation.MarkAsCompleted($"Rok szkolny '{newCurrentSchoolYear.Name}' (ID: {schoolYearId}) ustawiony jako bieżący. Poprzednie odznaczone (jeśli były).");
 
                 InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: true, invalidateAll: true);
                 if (oldCurrentYearIdToInvalidate != null)
@@ -207,17 +207,26 @@ namespace TeamsManager.Core.Services
                     InvalidateCache(schoolYearId: oldCurrentYearIdToInvalidate, wasOrIsCurrent: false, invalidateAll: false);
                 }
 
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Rok szkolny '{newCurrentSchoolYear.Name}' (ID: {schoolYearId}) ustawiony jako bieżący. Poprzednie odznaczone (jeśli były)."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas ustawiania roku szkolnego ID {SchoolYearId} jako bieżący. Wiadomość: {ErrorMessage}", schoolYearId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -232,43 +241,50 @@ namespace TeamsManager.Core.Services
             DateTime? secondSemesterStart = null,
             DateTime? secondSemesterEnd = null)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolYearCreated,
-                TargetEntityType = nameof(SchoolYear),
-                TargetEntityName = name,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            _logger.LogInformation("Rozpoczynanie tworzenia roku szkolnego: {Name}", name);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolYearCreated,
+                nameof(SchoolYear),
+                targetEntityName: name
+            );
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie tworzenia roku szkolnego: {Name} przez {User}", name, currentUserUpn);
-
                 if (string.IsNullOrWhiteSpace(name))
                 {
-                    operation.MarkAsFailed("Nazwa roku szkolnego nie może być pusta.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć roku szkolnego: Nazwa jest pusta.");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nazwa roku szkolnego nie może być pusta."
+                    );
                     return null;
                 }
                 if (startDate.Date >= endDate.Date)
                 {
-                    operation.MarkAsFailed("Data rozpoczęcia musi być wcześniejsza niż data zakończenia.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć roku szkolnego: Data rozpoczęcia ({StartDate}) nie jest wcześniejsza niż data zakończenia ({EndDate}).", startDate, endDate);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Data rozpoczęcia musi być wcześniejsza niż data zakończenia."
+                    );
                     return null;
                 }
 
                 var existing = await _schoolYearRepository.GetSchoolYearByNameAsync(name);
                 if (existing != null && existing.IsActive)
                 {
-                    operation.MarkAsFailed($"Aktywny rok szkolny o nazwie '{name}' już istnieje.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Aktywny rok szkolny o nazwie '{Name}' już istnieje.", name);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Aktywny rok szkolny o nazwie '{name}' już istnieje."
+                    );
                     return null;
                 }
 
@@ -290,22 +306,30 @@ namespace TeamsManager.Core.Services
 
                 await _schoolYearRepository.AddAsync(newSchoolYear);
 
-                operation.TargetEntityId = newSchoolYear.Id;
-                operation.MarkAsCompleted($"Rok szkolny '{newSchoolYear.Name}' (ID: {newSchoolYear.Id}) przygotowany do utworzenia.");
                 _logger.LogInformation("Rok szkolny '{Name}' pomyślnie przygotowany do zapisu. ID: {SchoolYearId}", name, newSchoolYear.Id);
 
                 InvalidateCache(schoolYearId: newSchoolYear.Id, wasOrIsCurrent: newSchoolYear.IsCurrent, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Rok szkolny '{newSchoolYear.Name}' (ID: {newSchoolYear.Id}) przygotowany do utworzenia."
+                );
                 return newSchoolYear;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia roku szkolnego {Name}. Wiadomość: {ErrorMessage}", name, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return null;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -318,18 +342,14 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(schoolYearToUpdate), "Obiekt roku szkolnego lub jego ID nie może być null/pusty.");
             }
 
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolYearUpdated,
-                TargetEntityType = nameof(SchoolYear),
-                TargetEntityId = schoolYearToUpdate.Id,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie aktualizacji roku szkolnego ID: {SchoolYearId} przez {User}", schoolYearToUpdate.Id, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie aktualizacji roku szkolnego ID: {SchoolYearId}", schoolYearToUpdate.Id);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolYearUpdated,
+                nameof(SchoolYear),
+                targetEntityId: schoolYearToUpdate.Id
+            );
 
             bool wasCurrentBeforeUpdate = false;
 
@@ -340,20 +360,27 @@ namespace TeamsManager.Core.Services
                 {
                     // Jeśli chcemy aktualizować także nieaktywne, repozytorium nie powinno ich filtrować w GetByIdAsync
                     // lub powinniśmy użyć FindAsync
-                    operation.MarkAsFailed($"Rok szkolny o ID '{schoolYearToUpdate.Id}' nie istnieje.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można zaktualizować roku szkolnego ID {SchoolYearId} - nie istnieje.", schoolYearToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Rok szkolny o ID '{schoolYearToUpdate.Id}' nie istnieje."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = existingSchoolYear.Name;
                 wasCurrentBeforeUpdate = existingSchoolYear.IsCurrent;
 
                 if (string.IsNullOrWhiteSpace(schoolYearToUpdate.Name) || schoolYearToUpdate.StartDate.Date >= schoolYearToUpdate.EndDate.Date)
                 {
-                    operation.MarkAsFailed("Niepoprawne dane wejściowe (nazwa, daty). Nazwa nie może być pusta, a data rozpoczęcia musi być wcześniejsza niż data zakończenia.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Błąd walidacji przy aktualizacji roku szkolnego: {SchoolYearId}. Nazwa: '{Name}', Start: {StartDate}, Koniec: {EndDate}",
                         schoolYearToUpdate.Id, schoolYearToUpdate.Name, schoolYearToUpdate.StartDate, schoolYearToUpdate.EndDate);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Niepoprawne dane wejściowe (nazwa, daty). Nazwa nie może być pusta, a data rozpoczęcia musi być wcześniejsza niż data zakończenia."
+                    );
                     return false;
                 }
 
@@ -362,9 +389,13 @@ namespace TeamsManager.Core.Services
                     var conflicting = await _schoolYearRepository.GetSchoolYearByNameAsync(schoolYearToUpdate.Name);
                     if (conflicting != null && conflicting.Id != existingSchoolYear.Id && conflicting.IsActive)
                     {
-                        operation.MarkAsFailed($"Aktywny rok szkolny o nazwie '{schoolYearToUpdate.Name}' już istnieje.");
-                        await SaveOperationHistoryAsync(operation);
                         _logger.LogWarning("Rok szkolny o nazwie '{Name}' już istnieje (inny ID) i jest aktywny.", schoolYearToUpdate.Name);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Aktywny rok szkolny o nazwie '{schoolYearToUpdate.Name}' już istnieje."
+                        );
                         return false;
                     }
                 }
@@ -385,43 +416,47 @@ namespace TeamsManager.Core.Services
                     // Nie zmieniamy IsCurrent, aby wymusić użycie dedykowanej metody
                 }
 
-                existingSchoolYear.MarkAsModified(currentUserUpn);
+                existingSchoolYear.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
                 _schoolYearRepository.Update(existingSchoolYear);
 
-                operation.TargetEntityName = existingSchoolYear.Name;
-                operation.MarkAsCompleted($"Rok szkolny ID: {existingSchoolYear.Id} przygotowany do aktualizacji.");
                 _logger.LogInformation("Rok szkolny ID: {SchoolYearId} pomyślnie przygotowany do aktualizacji.", existingSchoolYear.Id);
 
                 InvalidateCache(schoolYearId: existingSchoolYear.Id, wasOrIsCurrent: wasCurrentBeforeUpdate || existingSchoolYear.IsCurrent, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Rok szkolny ID: {existingSchoolYear.Id} przygotowany do aktualizacji."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji roku szkolnego ID {SchoolYearId}. Wiadomość: {ErrorMessage}", schoolYearToUpdate.Id, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteSchoolYearAsync(string schoolYearId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolYearDeleted,
-                TargetEntityType = nameof(SchoolYear),
-                TargetEntityId = schoolYearId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie usuwania (dezaktywacji) roku szkolnego ID: {SchoolYearId} przez {User}", schoolYearId, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie usuwania (dezaktywacji) roku szkolnego ID: {SchoolYearId}", schoolYearId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolYearDeleted,
+                nameof(SchoolYear),
+                targetEntityId: schoolYearId
+            );
 
             SchoolYear? schoolYear = null;
             try
@@ -432,27 +467,38 @@ namespace TeamsManager.Core.Services
 
                 if (schoolYear == null)
                 {
-                    operation.MarkAsFailed($"Rok szkolny o ID '{schoolYearId}' nie istnieje.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można usunąć roku szkolnego ID {SchoolYearId} - nie istnieje.", schoolYearId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Rok szkolny o ID '{schoolYearId}' nie istnieje."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = schoolYear.Name;
 
                 if (!schoolYear.IsActive)
                 {
-                    operation.MarkAsCompleted($"Rok szkolny '{schoolYear.Name}' był już nieaktywny.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogInformation("Rok szkolny ID {SchoolYearId} był już nieaktywny.", schoolYearId);
                     InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: schoolYear.IsCurrent, invalidateAll: true);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Rok szkolny '{schoolYear.Name}' był już nieaktywny."
+                    );
                     return true;
                 }
 
                 if (schoolYear.IsCurrent)
                 {
-                    operation.MarkAsFailed("Nie można usunąć (dezaktywować) bieżącego roku szkolnego. Najpierw ustaw inny rok jako bieżący.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można usunąć/dezaktywować bieżącego roku szkolnego ID {SchoolYearId}.", schoolYearId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie można usunąć (dezaktywować) bieżącego roku szkolnego. Najpierw ustaw inny rok jako bieżący."
+                    );
                     return false;
                 }
 
@@ -460,30 +506,43 @@ namespace TeamsManager.Core.Services
                 var teamsUsingYear = await _teamRepository.FindAsync(t => t.SchoolYearId == schoolYearId && t.IsActive);
                 if (teamsUsingYear.Any())
                 {
-                    operation.MarkAsFailed($"Nie można usunąć roku szkolnego '{schoolYear.Name}', ponieważ jest nadal używany przez {teamsUsingYear.Count()} aktywnych zespołów (Team.Status = Active).");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogWarning("Nie można usunąć roku szkolnego ID {SchoolYearId} - jest używany przez {Count} aktywnych zespołów (Status=Active).", schoolYearId, teamsUsingYear.Count());
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Nie można usunąć roku szkolnego '{schoolYear.Name}', ponieważ jest nadal używany przez {teamsUsingYear.Count()} aktywnych zespołów (Team.Status = Active)."
+                    );
                     return false;
                 }
 
-                schoolYear.MarkAsDeleted(currentUserUpn); // To ustawi IsActive = false w BaseEntity
+                schoolYear.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system"); // To ustawi IsActive = false w BaseEntity
                 _schoolYearRepository.Update(schoolYear);
 
-                operation.MarkAsCompleted($"Rok szkolny '{schoolYear.Name}' (ID: {schoolYearId}) oznaczony jako usunięty.");
                 _logger.LogInformation("Rok szkolny ID {SchoolYearId} pomyślnie oznaczony jako usunięty.", schoolYearId);
 
                 InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: false, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Rok szkolny '{schoolYear.Name}' (ID: {schoolYearId}) oznaczony jako usunięty."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania roku szkolnego ID {SchoolYearId}. Wiadomość: {ErrorMessage}", schoolYearId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -523,29 +582,6 @@ namespace TeamsManager.Core.Services
                 _cache.Remove(SchoolYearByIdCacheKeyPrefix + schoolYearId);
                 _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", SchoolYearByIdCacheKeyPrefix, schoolYearId);
             }
-        }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
-
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess))
-            {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue && operation.StartedAt != default(DateTime))
-                    {
-                        operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-                    }
-                }
-            }
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla roku szkolnego.", operation.Id);
         }
     }
 }
