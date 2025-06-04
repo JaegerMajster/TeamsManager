@@ -1,14 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -26,16 +24,11 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolTypeService> _logger;
-        private readonly IMemoryCache _cache;
+        private readonly IPowerShellCacheService _powerShellCacheService;
 
         // Definicje kluczy cache
         private const string AllSchoolTypesCacheKey = "SchoolTypes_AllActive";
         private const string SchoolTypeByIdCacheKeyPrefix = "SchoolType_Id_";
-        // Jeśli w przyszłości dodamy cache dla np. SchoolTypeByShortNameCacheKeyPrefix, trzeba będzie go tu uwzględnić
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(30); // Typy szkół zmieniają się stosunkowo rzadko
-
-        // Token do zarządzania unieważnianiem wpisów cache dla typów szkół
-        private static CancellationTokenSource _schoolTypesCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu typów szkół.
@@ -47,7 +40,7 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<SchoolTypeService> logger,
-            IMemoryCache memoryCache)
+            IPowerShellCacheService powerShellCacheService)
         {
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -55,15 +48,10 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
         }
 
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_schoolTypesCacheTokenSource.Token));
-        }
+
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
@@ -78,7 +66,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SchoolTypeByIdCacheKeyPrefix + schoolTypeId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out SchoolType? cachedSchoolType))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out SchoolType? cachedSchoolType))
             {
                 _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} znaleziony w cache.", schoolTypeId);
                 return cachedSchoolType;
@@ -92,13 +80,13 @@ namespace TeamsManager.Core.Services
 
             if (schoolTypeFromDb != null && schoolTypeFromDb.IsActive) // Cache'ujemy tylko aktywne typy po ID
             {
-                _cache.Set(cacheKey, schoolTypeFromDb, GetDefaultCacheEntryOptions());
+                _powerShellCacheService.Set(cacheKey, schoolTypeFromDb);
                 _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} dodany do cache.", schoolTypeId);
             }
             else
             {
                 // Jeśli typ szkoły nie istnieje lub jest nieaktywny, usuwamy go z cache.
-                _cache.Remove(cacheKey);
+                _powerShellCacheService.Remove(cacheKey);
                 if (schoolTypeFromDb != null && !schoolTypeFromDb.IsActive)
                 {
                     _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} jest nieaktywny, nie zostanie zcache'owany po ID.", schoolTypeId);
@@ -115,7 +103,7 @@ namespace TeamsManager.Core.Services
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych typów szkół. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
-            if (!forceRefresh && _cache.TryGetValue(AllSchoolTypesCacheKey, out IEnumerable<SchoolType>? cachedSchoolTypes) && cachedSchoolTypes != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllSchoolTypesCacheKey, out IEnumerable<SchoolType>? cachedSchoolTypes) && cachedSchoolTypes != null)
             {
                 _logger.LogDebug("Wszystkie aktywne typy szkół znalezione w cache.");
                 return cachedSchoolTypes;
@@ -124,7 +112,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszystkie aktywne typy szkół nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
             var schoolTypesFromDb = await _schoolTypeRepository.FindAsync(st => st.IsActive);
 
-            _cache.Set(AllSchoolTypesCacheKey, schoolTypesFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(AllSchoolTypesCacheKey, schoolTypesFromDb);
             _logger.LogDebug("Wszystkie aktywne typy szkół dodane do cache.");
 
             return schoolTypesFromDb;
@@ -198,7 +186,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Typ szkoły '{FullName}' pomyślnie przygotowany do zapisu. ID: {SchoolTypeId}", fullName, newSchoolType.Id);
 
-                InvalidateCache(schoolTypeId: newSchoolType.Id, shortNameToInvalidate: newSchoolType.ShortName, invalidateAll: true);
+                InvalidateCache(schoolTypeId: newSchoolType.Id);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -334,7 +322,7 @@ namespace TeamsManager.Core.Services
                 _schoolTypeRepository.Update(existingSchoolType);
                 _logger.LogInformation("Typ szkoły ID: {SchoolTypeId} pomyślnie przygotowany do aktualizacji.", existingSchoolType.Id);
 
-                InvalidateCache(schoolTypeId: existingSchoolType.Id, shortNameToInvalidate: oldShortName, newShortNameIfChanged: existingSchoolType.ShortName, invalidateAll: true);
+                InvalidateCache(schoolTypeId: existingSchoolType.Id);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -410,7 +398,7 @@ namespace TeamsManager.Core.Services
                 if (!schoolType.IsActive)
                 {
                     _logger.LogInformation("Typ szkoły ID {SchoolTypeId} był już nieaktywny.", schoolTypeId);
-                    InvalidateCache(schoolTypeId: schoolTypeId, shortNameToInvalidate: schoolType.ShortName, invalidateAll: true);
+                    InvalidateCache(schoolTypeId: schoolTypeId);
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -431,7 +419,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Typ szkoły ID {SchoolTypeId} pomyślnie oznaczony jako usunięty.", schoolTypeId);
 
-                InvalidateCache(schoolTypeId: schoolTypeId, shortNameToInvalidate: schoolType.ShortName, invalidateAll: true);
+                InvalidateCache(schoolTypeId: schoolTypeId);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -596,42 +584,31 @@ namespace TeamsManager.Core.Services
         }
 
         /// <summary>
-        /// Unieważnia cache dla typów szkół.
-        /// Resetuje globalny token dla typów szkół, co unieważnia wszystkie zależne wpisy.
-        /// Jawnie usuwa klucz dla listy wszystkich aktywnych typów szkół.
-        /// Opcjonalnie usuwa klucz dla konkretnego typu szkoły, jeśli podano ID.
+        /// Unieważnia cache dla typów szkół używając granularnej inwalidacji PowerShellCacheService.
         /// </summary>
-        /// <param name="schoolTypeId">ID typu szkoły, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
-        /// <param name="shortNameToInvalidate">Skrócona nazwa typu szkoły, używana w niektórych kluczach (opcjonalnie, obecnie nieużywane do jawnego usuwania).</param>
-        /// <param name="newShortNameIfChanged">Nowa skrócona nazwa, jeśli uległa zmianie (opcjonalnie, obecnie nieużywane do jawnego usuwania).</param>
-        /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z typami szkół (opcjonalnie, domyślnie false).</param>
-        private void InvalidateCache(string? schoolTypeId = null, string? shortNameToInvalidate = null, string? newShortNameIfChanged = null, bool invalidateAll = false)
+        /// <param name="schoolTypeId">ID typu szkoły do granularnej inwalidacji</param>
+        /// <param name="invalidateAll">Czy wykonać globalne resetowanie (tylko dla RefreshCacheAsync)</param>
+        private void InvalidateCache(string? schoolTypeId = null, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u typów szkół. schoolTypeId: {SchoolTypeId}, shortName: {ShortName}, invalidateAll: {InvalidateAll}", schoolTypeId, shortNameToInvalidate, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u typów szkół. schoolTypeId: {SchoolTypeId}, invalidateAll: {InvalidateAll}", schoolTypeId, invalidateAll);
 
-            // 1. Zresetuj CancellationTokenSource
-            var oldTokenSource = Interlocked.Exchange(ref _schoolTypesCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            if (invalidateAll)
             {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose();
+                // TYLKO dla RefreshCacheAsync() - globalne resetowanie
+                _powerShellCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
+                return;
             }
-            _logger.LogDebug("Token cache'u dla typów szkół został zresetowany.");
 
-            // 2. Zawsze usuń klucz dla listy wszystkich aktywnych typów
-            _cache.Remove(AllSchoolTypesCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllSchoolTypesCacheKey);
+            // GRANULARNA inwalidacja przez PowerShellCacheService
+            _powerShellCacheService.InvalidateAllActiveSchoolTypesList();
+            _logger.LogDebug("Unieważniono listę wszystkich aktywnych typów szkół.");
 
-            // 3. Jeśli podano schoolTypeId, usuń specyficzny klucz dla tego ID
             if (!string.IsNullOrWhiteSpace(schoolTypeId))
             {
-                _cache.Remove(SchoolTypeByIdCacheKeyPrefix + schoolTypeId);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", SchoolTypeByIdCacheKeyPrefix, schoolTypeId);
+                _powerShellCacheService.InvalidateSchoolTypeById(schoolTypeId);
+                _logger.LogDebug("Unieważniono cache typu szkoły ID: {SchoolTypeId}", schoolTypeId);
             }
-
-            // Parametry shortNameToInvalidate i newShortNameIfChanged są obecnie nieużywane do jawnego usuwania specyficznych kluczy opartych na ShortName,
-            // ponieważ główny mechanizm opiera się na ID oraz tokenie. Jeśli powstaną klucze cache zależne bezpośrednio od ShortName,
-            // należałoby tu dodać logikę ich usuwania.
         }
     }
 }

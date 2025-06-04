@@ -2,16 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -27,7 +25,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<SchoolTypeService>> _mockLogger;
-        private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly ISchoolTypeService _schoolTypeService;
         private readonly string _currentLoggedInUserUpn = "test.schooltype.admin@example.com";
@@ -44,7 +42,7 @@ namespace TeamsManager.Tests.Services
             _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<SchoolTypeService>>();
-            _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
 
@@ -58,17 +56,6 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>()))
                 .ReturnsAsync(mockOperationHistory);
 
-            var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
-            mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
-            mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
-
-            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
-                           .Returns(mockCacheEntry.Object);
-
             _schoolTypeService = new SchoolTypeService(
                 _mockSchoolTypeRepository.Object,
                 _mockUserRepository.Object,
@@ -76,15 +63,14 @@ namespace TeamsManager.Tests.Services
                 _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object
+                _mockPowerShellCacheService.Object
             );
         }
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            object? outItem = item;
-            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
-                           .Returns(foundInCache);
+            _mockPowerShellCacheService.Setup(m => m.TryGetValue(cacheKey, out item))
+                                      .Returns(foundInCache);
         }
 
         private void ResetCapturedOperationHistory()
@@ -120,7 +106,7 @@ namespace TeamsManager.Tests.Services
             result.Should().NotBeNull();
             result.Should().BeEquivalentTo(expectedSchoolType);
             _mockSchoolTypeRepository.Verify(r => r.GetByIdAsync(schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<SchoolType>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -155,7 +141,7 @@ namespace TeamsManager.Tests.Services
             result.Should().NotBeNull();
             result.Should().BeEquivalentTo(dbSchoolType);
             _mockSchoolTypeRepository.Verify(r => r.GetByIdAsync(schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<SchoolType>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
 
@@ -175,7 +161,7 @@ namespace TeamsManager.Tests.Services
 
             result.Should().NotBeNull().And.BeEquivalentTo(activeSchoolTypes);
             _mockSchoolTypeRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<SchoolType, bool>>>()), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllSchoolTypesCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllSchoolTypesCacheKey, It.IsAny<IEnumerable<SchoolType>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -206,7 +192,7 @@ namespace TeamsManager.Tests.Services
 
             result.Should().NotBeNull().And.BeEquivalentTo(dbSchoolTypes);
             _mockSchoolTypeRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<SchoolType, bool>>>()), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllSchoolTypesCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllSchoolTypesCacheKey, It.IsAny<IEnumerable<SchoolType>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -236,8 +222,8 @@ namespace TeamsManager.Tests.Services
                 It.IsAny<string>(),
                 It.IsAny<string>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllSchoolTypesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SchoolTypeByIdCacheKeyPrefix + result.Id), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSchoolTypeById(It.IsAny<string>()), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSchoolTypesList(), Times.AtLeastOnce);
 
             AssertCacheInvalidationByReFetchingAll(new List<SchoolType> { result });
 
@@ -272,8 +258,8 @@ namespace TeamsManager.Tests.Services
                 It.IsAny<string>(),
                 It.IsAny<string>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllSchoolTypesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SchoolTypeByIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSchoolTypeById(It.IsAny<string>()), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSchoolTypesList(), Times.AtLeastOnce);
 
             var expectedAfterUpdate = new SchoolType { Id = schoolTypeId, ShortName = "NEW", FullName = "New Name", IsActive = true, CreatedBy = existingSchoolType.CreatedBy, CreatedDate = existingSchoolType.CreatedDate };
             AssertCacheInvalidationByReFetchingAll(new List<SchoolType> { expectedAfterUpdate });
@@ -306,8 +292,8 @@ namespace TeamsManager.Tests.Services
                 It.IsAny<string>(),
                 It.IsAny<string>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllSchoolTypesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SchoolTypeByIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateSchoolTypeById(It.IsAny<string>()), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllActiveSchoolTypesList(), Times.AtLeastOnce);
 
             AssertCacheInvalidationByReFetchingAll(new List<SchoolType>());
 
@@ -321,7 +307,7 @@ namespace TeamsManager.Tests.Services
         {
             await _schoolTypeService.RefreshCacheAsync();
 
-            _mockMemoryCache.Verify(m => m.Remove(AllSchoolTypesCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllCache(), Times.Once);
 
             SetupCacheTryGetValue(AllSchoolTypesCacheKey, (IEnumerable<SchoolType>?)null, false);
             _mockSchoolTypeRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolType, bool>>>()))
