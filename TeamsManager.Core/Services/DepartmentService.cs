@@ -9,6 +9,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -26,6 +27,7 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<DepartmentService> _logger;
         private readonly IMemoryCache _cache;
+        private readonly IPowerShellCacheService _powerShellCacheService;
 
         // Klucze cache
         private const string AllDepartmentsRootOnlyCacheKey = "Departments_AllActive_RootOnly";
@@ -34,9 +36,6 @@ namespace TeamsManager.Core.Services
         private const string SubDepartmentsByParentIdCacheKeyPrefix = "Department_Sub_ParentId_";
         private const string UsersInDepartmentCacheKeyPrefix = "Department_UsersIn_Id_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(30);
-
-        // Token do unieważniania cache'u dla działów
-        private static CancellationTokenSource _departmentsCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu działów.
@@ -47,7 +46,8 @@ namespace TeamsManager.Core.Services
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
             ILogger<DepartmentService> logger,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IPowerShellCacheService powerShellCacheService)
         {
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -55,13 +55,12 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_departmentsCacheTokenSource.Token));
+            return _powerShellCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
@@ -259,7 +258,11 @@ namespace TeamsManager.Core.Services
                 operation.MarkAsCompleted($"Dział ID: {newDepartment.Id} przygotowany do utworzenia."); //
                 _logger.LogInformation("Dział '{DepartmentName}' pomyślnie przygotowany do zapisu. ID: {DepartmentId}", name, newDepartment.Id); //
 
-                InvalidateCache(departmentId: newDepartment.Id, parentId: newDepartment.ParentDepartmentId, invalidateAll: true);
+                _powerShellCacheService.InvalidateAllDepartmentLists();
+                if (!string.IsNullOrEmpty(newDepartment.ParentDepartmentId))
+                {
+                    _powerShellCacheService.InvalidateSubDepartments(newDepartment.ParentDepartmentId);
+                }
                 return newDepartment;
             }
             catch (Exception ex)
@@ -363,10 +366,18 @@ namespace TeamsManager.Core.Services
                 operation.TargetEntityName = existingDepartment.Name;
                 operation.MarkAsCompleted("Dział przygotowany do aktualizacji."); //
 
-                InvalidateCache(departmentId: existingDepartment.Id, parentId: oldParentId, invalidateAll: true);
-                if (existingDepartment.ParentDepartmentId != oldParentId && !string.IsNullOrWhiteSpace(existingDepartment.ParentDepartmentId))
+                _powerShellCacheService.InvalidateDepartment(existingDepartment.Id);
+                _powerShellCacheService.InvalidateAllDepartmentLists();
+
+                if (!string.IsNullOrEmpty(oldParentId))
                 {
-                    InvalidateCache(parentId: existingDepartment.ParentDepartmentId, invalidateAll: true);
+                    _powerShellCacheService.InvalidateSubDepartments(oldParentId);
+                }
+
+                if (!string.IsNullOrEmpty(existingDepartment.ParentDepartmentId) && 
+                    existingDepartment.ParentDepartmentId != oldParentId)
+                {
+                    _powerShellCacheService.InvalidateSubDepartments(existingDepartment.ParentDepartmentId);
                 }
                 return true;
             }
@@ -414,7 +425,13 @@ namespace TeamsManager.Core.Services
                 {
                     operation.MarkAsCompleted($"Dział '{department.Name}' był już nieaktywny."); //
                     _logger.LogInformation("Dział ID {DepartmentId} był już nieaktywny.", departmentId); //
-                    InvalidateCache(departmentId, department.ParentDepartmentId, invalidateAll: true);
+                    _powerShellCacheService.InvalidateDepartment(departmentId);
+                    _powerShellCacheService.InvalidateAllDepartmentLists();
+
+                    if (!string.IsNullOrEmpty(department.ParentDepartmentId))
+                    {
+                        _powerShellCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
+                    }
                     return true;
                 }
 
@@ -440,7 +457,13 @@ namespace TeamsManager.Core.Services
                 _departmentRepository.Update(department); //
 
                 operation.MarkAsCompleted("Dział oznaczony jako usunięty."); //
-                InvalidateCache(departmentId: departmentId, parentId: department.ParentDepartmentId, invalidateAll: true);
+                _powerShellCacheService.InvalidateDepartment(departmentId);
+                _powerShellCacheService.InvalidateAllDepartmentLists();
+
+                if (!string.IsNullOrEmpty(department.ParentDepartmentId))
+                {
+                    _powerShellCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
+                }
                 return true;
             }
             catch
@@ -458,57 +481,9 @@ namespace TeamsManager.Core.Services
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a działów."); //
-            InvalidateCache(invalidateAll: true); //
+            _powerShellCacheService.InvalidateAllCache();
             _logger.LogInformation("Cache działów został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu."); //
             return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Unieważnia cache dla działów.
-        /// Resetuje globalny token dla działów, co unieważnia wszystkie zależne wpisy.
-        /// Dodatkowo, jawnie usuwa klucze cache'a na podstawie podanych parametrów
-        /// dla natychmiastowego efektu oraz klucze globalne.
-        /// </summary>
-        /// <param name="departmentId">ID działu, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
-        /// <param name="parentId">ID działu nadrzędnego, którego cache poddziałów ma być usunięty (opcjonalnie).</param>
-        /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z działami (opcjonalnie, domyślnie false).</param>
-        private void InvalidateCache(string? departmentId = null, string? parentId = null, bool invalidateAll = false)
-        {
-            _logger.LogDebug("Inwalidacja cache'u działów. departmentId: {DepartmentId}, parentId: {ParentId}, invalidateAll: {InvalidateAll}", //
-                departmentId, parentId, invalidateAll);
-
-            // 1. Zresetuj CancellationTokenSource
-            var oldTokenSource = Interlocked.Exchange(ref _departmentsCacheTokenSource, new CancellationTokenSource()); //
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
-            {
-                oldTokenSource.Cancel(); //
-                oldTokenSource.Dispose(); //
-            }
-            _logger.LogDebug("Token cache'u dla działów został zresetowany."); //
-
-            // 2. Jawnie usuń globalne klucze cache
-            _cache.Remove(AllDepartmentsRootOnlyCacheKey); //
-            _cache.Remove(AllDepartmentsAllCacheKey); //
-            _logger.LogDebug("Usunięto z cache klucze: {Key1}, {Key2}", AllDepartmentsRootOnlyCacheKey, AllDepartmentsAllCacheKey);
-
-            // 3. Jawnie usuń klucze dla specyficznych elementów, jeśli dotyczy
-            if (!string.IsNullOrWhiteSpace(departmentId))
-            {
-                _cache.Remove(DepartmentByIdCacheKeyPrefix + departmentId); //
-                _cache.Remove(UsersInDepartmentCacheKeyPrefix + departmentId);
-                _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + departmentId);
-                _logger.LogDebug("Usunięto z cache wpisy specyficzne dla działu ID: {DepartmentId}", departmentId); //
-            }
-            if (!string.IsNullOrWhiteSpace(parentId))
-            {
-                _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + parentId);
-                _logger.LogDebug("Usunięto z cache wpisy dla poddziałów rodzica ID: {ParentId}", parentId); //
-            }
-
-            // Jeśli invalidateAll jest true, powyższe jawne usunięcie globalnych kluczy już to pokryło.
-            // Jeśli invalidateAll jest false, a dokonano modyfikacji (np. departmentId nie jest null),
-            // globalne klucze i tak zostały usunięte powyżej, co jest pożądane,
-            // gdyż każda modyfikacja działu może wpłynąć na listy wszystkich lub głównych działów.
         }
 
         private async Task SaveOperationHistoryAsync(OperationHistory operation)

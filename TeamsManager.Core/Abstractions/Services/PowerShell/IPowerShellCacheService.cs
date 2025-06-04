@@ -94,5 +94,35 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="teamId">ID zespołu</param>
         /// <param name="channelId">ID kanału</param>
         void InvalidateChannelAndTeam(string teamId, string channelId);
+
+        /// <summary>
+        /// Unieważnia cache dla konkretnego działu po ID.
+        /// </summary>
+        /// <param name="departmentId">ID działu.</param>
+        void InvalidateDepartment(string departmentId);
+
+        /// <summary>
+        /// Unieważnia cache dla poddziałów danego działu nadrzędnego.
+        /// </summary>
+        /// <param name="parentId">ID działu nadrzędnego.</param>
+        void InvalidateSubDepartments(string parentId);
+
+        /// <summary>
+        /// Unieważnia cache dla użytkowników w danym dziale.
+        /// </summary>
+        /// <param name="departmentId">ID działu.</param>
+        void InvalidateUsersInDepartment(string departmentId);
+
+        /// <summary>
+        /// Unieważnia globalne listy działów (wszystkie i root-only).
+        /// To powinno być wywoływane po każdej zmianie w strukturze działów,
+        /// co może wpłynąć na te listy.
+        /// </summary>
+        void InvalidateAllDepartmentLists();
+
+        /// <summary>
+        /// Unieważnia cache listy użytkowników.
+        /// </summary>
+        void InvalidateUserListCache();
     }
 }

@@ -28,6 +28,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string M365UsersAccountEnabledCacheKeyPrefix = "PowerShell_M365Users_AccountEnabled_";
         private const string ChannelByGraphIdCacheKeyPrefix = "PowerShell_Channel_GraphId_";
         
+        // Klucze cache dla działów
+        private const string AllDepartmentsRootOnlyCacheKey = "Departments_AllActive_RootOnly";
+        private const string AllDepartmentsAllCacheKey = "Departments_AllActive_All";
+        private const string DepartmentByIdCacheKeyPrefix = "Department_Id_";
+        private const string SubDepartmentsByParentIdCacheKeyPrefix = "Department_Sub_ParentId_";
+        private const string UsersInDepartmentCacheKeyPrefix = "Department_UsersIn_Id_";
+        
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
 
@@ -220,6 +227,49 @@ namespace TeamsManager.Core.Services.PowerShellServices
             InvalidateChannelsForTeam(teamId);
             
             _logger.LogDebug("Unieważniono cache kanału {ChannelId} i listy kanałów zespołu {TeamId}", channelId, teamId);
+        }
+
+        public void InvalidateDepartment(string departmentId)
+        {
+            if (string.IsNullOrWhiteSpace(departmentId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego departmentId.");
+                return;
+            }
+            
+            Remove(DepartmentByIdCacheKeyPrefix + departmentId);
+            _logger.LogDebug("Unieważniono cache dla działu ID: {DepartmentId}", departmentId);
+        }
+
+        public void InvalidateSubDepartments(string parentId)
+        {
+            if (string.IsNullOrWhiteSpace(parentId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache poddziałów dla pustego parentId.");
+                return;
+            }
+            
+            Remove(SubDepartmentsByParentIdCacheKeyPrefix + parentId);
+            _logger.LogDebug("Unieważniono cache poddziałów dla rodzica ID: {ParentId}", parentId);
+        }
+
+        public void InvalidateUsersInDepartment(string departmentId)
+        {
+            if (string.IsNullOrWhiteSpace(departmentId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache użytkowników dla pustego departmentId.");
+                return;
+            }
+            
+            Remove(UsersInDepartmentCacheKeyPrefix + departmentId);
+            _logger.LogDebug("Unieważniono cache użytkowników w dziale ID: {DepartmentId}", departmentId);
+        }
+
+        public void InvalidateAllDepartmentLists()
+        {
+            Remove(AllDepartmentsAllCacheKey);
+            Remove(AllDepartmentsRootOnlyCacheKey);
+            _logger.LogDebug("Unieważniono globalne listy działów (wszystkie i root-only).");
         }
     }
 }
