@@ -4,9 +4,12 @@ using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
 namespace TeamsManager.Core.Services.PowerShellServices
@@ -20,6 +23,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private readonly ICurrentUserService _currentUserService;
         private readonly INotificationService _notificationService;
         private readonly IPowerShellCacheService _cacheService;
+        private readonly ITokenManager _tokenManager;
+        private readonly IConfiguration _configuration;
+
+        // Dla śledzenia ostatniego kontekstu połączenia
+        private string? _lastConnectedUserUpn;
+        private string? _lastApiAccessToken;
 
         // Współdzielony stan między instancjami Scoped
         private static Runspace? _sharedRunspace;
@@ -33,17 +42,70 @@ namespace TeamsManager.Core.Services.PowerShellServices
             ILogger<PowerShellConnectionService> logger,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
-            IPowerShellCacheService cacheService)
+            IPowerShellCacheService cacheService,
+            ITokenManager tokenManager,
+            IConfiguration configuration)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
+            _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
 
             InitializeRunspace();
         }
 
         public bool IsConnected => _sharedIsConnected;
+
+        /// <summary>
+        /// Sprawdza stan połączenia i automatycznie łączy się ponownie jeśli to konieczne
+        /// </summary>
+        private async Task<bool> ConnectIfNotConnectedAsync()
+        {
+            // Sprawdź czy mamy aktywne połączenie
+            if (_sharedIsConnected && _sharedRunspace?.RunspaceStateInfo.State == RunspaceState.Opened)
+            {
+                _logger.LogDebug("Połączenie z Microsoft Graph jest aktywne");
+                return true;
+            }
+
+            _logger.LogInformation("Brak aktywnego połączenia z Microsoft Graph, próba automatycznego połączenia");
+
+            // Sprawdź czy mamy kontekst do ponownego połączenia
+            if (string.IsNullOrWhiteSpace(_lastConnectedUserUpn) || string.IsNullOrWhiteSpace(_lastApiAccessToken))
+            {
+                _logger.LogWarning("Brak kontekstu do automatycznego ponownego połączenia (brak zapisanych danych użytkownika)");
+                return false;
+            }
+
+            try
+            {
+                // Pobierz świeży token
+                var freshToken = await _tokenManager.GetValidAccessTokenAsync(_lastConnectedUserUpn, _lastApiAccessToken);
+                
+                // Użyj istniejącej metody ConnectWithAccessTokenAsync
+                var connected = await ConnectWithAccessTokenAsync(freshToken);
+                
+                if (connected)
+                {
+                    _logger.LogInformation("Automatyczne ponowne połączenie z Microsoft Graph zakończone sukcesem");
+                }
+                else
+                {
+                    _logger.LogError("Automatyczne ponowne połączenie z Microsoft Graph nie powiodło się");
+                }
+                
+                return connected;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas automatycznego ponownego łączenia z Microsoft Graph");
+                await _notificationService.SendNotificationToUserAsync(_lastConnectedUserUpn, 
+                    "Błąd automatycznego połączenia z Microsoft Graph", "error");
+                return false;
+            }
+        }
 
         private void InitializeRunspace()
         {
@@ -178,6 +240,26 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                         _sharedIsConnected = true;
 
+                        // Zapisz kontekst dla automatycznego reconnect
+                        _lastConnectedUserUpn = currentUserUpn;
+                        _lastApiAccessToken = accessToken;
+
+                        // Zapisz token w TokenManager dla przyszłego użycia
+                        var authResult = new AuthenticationResult(
+                            accessToken,
+                            false, // isExtendedLifeTimeToken
+                            null,  // uniqueId
+                            DateTimeOffset.UtcNow.AddHours(1), // Zakładamy 1h ważności
+                            DateTimeOffset.UtcNow.AddHours(1),
+                            currentUserUpn, // tenantId jako upn (tymczasowo)
+                            null, // account
+                            null, // idToken
+                            scopes ?? new[] { "https://graph.microsoft.com/.default" }, // scopes
+                            Guid.NewGuid(), // correlationId
+                            "Bearer" // tokenType
+                        );
+                        await _tokenManager.StoreAuthenticationResultAsync(currentUserUpn, authResult);
+
                         // Cache kontekstu
                         var context = contextCheckResult.First();
                         _cacheService.Set("PowerShell_GraphContext", context);
@@ -222,7 +304,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
             finally
             {
                 _sharedIsConnected = false;
+                _lastConnectedUserUpn = null;
+                _lastApiAccessToken = null;
                 _cacheService.InvalidateAllCache();
+                
+                // Wyczyść tokeny z TokenManager jeśli był zapisany użytkownik
+                if (!string.IsNullOrWhiteSpace(_lastConnectedUserUpn))
+                {
+                    _tokenManager.ClearUserTokens(_lastConnectedUserUpn);
+                }
             }
         }
 
@@ -315,6 +405,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Dictionary<string, object>? parameters = null,
             int maxRetries = MaxRetryAttempts)
         {
+            // Automatyczne połączenie jeśli nie ma aktywnego
+            if (!await ConnectIfNotConnectedAsync())
+            {
+                _logger.LogError("Nie można wykonać komendy '{CommandName}' - brak połączenia z Microsoft Graph", commandName);
+                return null;
+            }
+
             if (!ValidateRunspaceState()) return null;
 
             int attempt = 0;
@@ -399,7 +496,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 _logger.LogWarning("PowerShell Warning: {Warning}", warning.ToString());
             }
 
-            if (_logger.IsEnabled(LogLevel.Debug))
+            if (_logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
             {
                 foreach (var info in ps.Streams.Information)
                 {
@@ -425,6 +522,60 @@ namespace TeamsManager.Core.Services.PowerShellServices
             }
 
             _disposed = true;
+        }
+
+        public async Task<T?> ExecuteWithAutoConnectAsync<T>(Func<Task<T>> operation) where T : class
+        {
+            // Najpierw spróbuj połączyć się jeśli nie ma połączenia
+            if (!await ConnectIfNotConnectedAsync())
+            {
+                _logger.LogError("Nie można wykonać operacji - brak połączenia z Microsoft Graph");
+                return null;
+            }
+
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas wykonywania operacji PowerShell");
+                
+                // Jeśli błąd związany z połączeniem, spróbuj ponownie po reconnect
+                if (IsConnectionError(ex))
+                {
+                    _logger.LogInformation("Wykryto błąd połączenia, próba ponownego połączenia i wykonania operacji");
+                    _sharedIsConnected = false; // Wymuś reconnect
+                    
+                    if (await ConnectIfNotConnectedAsync())
+                    {
+                        try
+                        {
+                            return await operation();
+                        }
+                        catch (Exception retryEx)
+                        {
+                            _logger.LogError(retryEx, "Błąd podczas ponownej próby wykonania operacji");
+                        }
+                    }
+                }
+                
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza czy błąd jest związany z połączeniem
+        /// </summary>
+        private bool IsConnectionError(Exception ex)
+        {
+            var message = ex.Message?.ToLowerInvariant() ?? "";
+            return message.Contains("unauthorized") ||
+                   message.Contains("token") ||
+                   message.Contains("expired") ||
+                   message.Contains("invalid_grant") ||
+                   message.Contains("not connected") ||
+                   message.Contains("connect-mggraph");
         }
     }
 }

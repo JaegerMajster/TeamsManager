@@ -4,6 +4,7 @@ using Asp.Versioning;
 using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.Auth;
 
 namespace TeamsManager.Api.Controllers
 {
@@ -14,7 +15,7 @@ namespace TeamsManager.Api.Controllers
     {
         private readonly IPowerShellService _powerShellService;
         private readonly ICurrentUserService _currentUserService;
-        private readonly IConfidentialClientApplication _confidentialClientApplication;
+        private readonly ITokenManager _tokenManager;
         private readonly ILogger<PowerShellController> _logger;
         
         // Scopes dla PowerShell Microsoft Graph
@@ -27,17 +28,17 @@ namespace TeamsManager.Api.Controllers
         public PowerShellController(
             IPowerShellService powerShellService,
             ICurrentUserService currentUserService,
-            IConfidentialClientApplication confidentialClientApplication,
+            ITokenManager tokenManager,
             ILogger<PowerShellController> logger)
         {
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication));
+            _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
-        /// Metoda pomocnicza do uzyskania tokenu Graph przez OBO (On-Behalf-Of)
+        /// Metoda pomocnicza do uzyskania tokenu Graph przez TokenManager
         /// </summary>
         private async Task<string?> GetGraphTokenOnBehalfOfUserAsync(string apiAccessToken)
         {
@@ -49,31 +50,17 @@ namespace TeamsManager.Api.Controllers
 
             try
             {
-                var userAssertion = new UserAssertion(apiAccessToken);
-                _logger.LogDebug("GetGraphTokenOnBehalfOfUserAsync: Próba uzyskania tokenu OBO dla Graph PowerShell. Scopes: {Scopes}", 
-                    string.Join(", ", _graphPowerShellScopes));
-
-                var authResult = await _confidentialClientApplication
-                    .AcquireTokenOnBehalfOf(_graphPowerShellScopes, userAssertion)
-                    .ExecuteAsync();
-
-                if (string.IsNullOrEmpty(authResult.AccessToken))
+                var userUpn = _currentUserService.GetCurrentUserUpn();
+                if (string.IsNullOrEmpty(userUpn))
                 {
-                    _logger.LogError("GetGraphTokenOnBehalfOfUserAsync: Nie udało się uzyskać tokenu Graph w przepływie OBO.");
+                    _logger.LogWarning("GetGraphTokenOnBehalfOfUserAsync: Nie można określić UPN bieżącego użytkownika.");
                     return null;
                 }
-
-                _logger.LogInformation("GetGraphTokenOnBehalfOfUserAsync: Pomyślnie uzyskano token Graph OBO dla PowerShell.");
-                return authResult.AccessToken;
-            }
-            catch (MsalUiRequiredException ex)
-            {
-                _logger.LogError(ex, "GetGraphTokenOnBehalfOfUserAsync: Wymagana zgoda administratora dla PowerShell Graph scopes. Error: {Error}", ex.Message);
-                return null;
+                return await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "GetGraphTokenOnBehalfOfUserAsync: Błąd podczas uzyskiwania tokenu Graph OBO.");
+                _logger.LogError(ex, "Błąd podczas uzyskiwania tokenu przez TokenManager");
                 return null;
             }
         }

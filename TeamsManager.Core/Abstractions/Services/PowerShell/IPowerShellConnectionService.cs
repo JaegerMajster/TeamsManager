@@ -53,5 +53,13 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
             string commandName,
             Dictionary<string, object>? parameters = null,
             int maxRetries = 3);
+
+        /// <summary>
+        /// Wykonuje operację z automatycznym połączeniem jeśli to konieczne
+        /// </summary>
+        /// <typeparam name="T">Typ wyniku operacji</typeparam>
+        /// <param name="operation">Operacja do wykonania</param>
+        /// <returns>Wynik operacji lub domyślna wartość w przypadku błędu</returns>
+        Task<T?> ExecuteWithAutoConnectAsync<T>(Func<Task<T>> operation) where T : class;
     }
 }

@@ -14,8 +14,10 @@ using TeamsManager.Api.Configuration;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
+using TeamsManager.Core.Services.Auth;
 using TeamsManager.Core.Services.UserContext;
 using TeamsManager.Data;
 using TeamsManager.Data.Repositories;
@@ -221,6 +223,9 @@ builder.Services.AddScoped<IOperationHistoryService, OperationHistoryService>();
 builder.Services.AddScoped<IApplicationSettingService, ApplicationSettingService>();
 builder.Services.AddScoped<IChannelService, ChannelService>();
 
+// Rejestracja TokenManager
+builder.Services.AddScoped<ITokenManager, TokenManager>();
+
 builder.Services.AddScoped<IConfidentialClientApplication>(provider =>
 {
     var authority = $"{oauthApiConfig.AzureAd.Instance?.TrimEnd('/')}/{oauthApiConfig.AzureAd.TenantId}";
@@ -325,7 +330,8 @@ using (var scope = app.Services.CreateScope())
         ("IApplicationSettingService", typeof(IApplicationSettingService)),
         ("ISchoolTypeService", typeof(ISchoolTypeService)),
         ("ISchoolYearService", typeof(ISchoolYearService)),
-        ("ITeamTemplateService", typeof(ITeamTemplateService))
+        ("ITeamTemplateService", typeof(ITeamTemplateService)),
+        ("ITokenManager", typeof(ITokenManager))
     };
 
     var allServicesOk = true;
