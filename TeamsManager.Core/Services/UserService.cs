@@ -462,6 +462,51 @@ namespace TeamsManager.Core.Services
                 existingUser.IsSystemAdmin = userToUpdate.IsSystemAdmin;
                 existingUser.IsActive = userToUpdate.IsActive;
 
+                // Aktualizacja użytkownika w M365 używając ExecuteWithAutoConnectAsync
+                var m365UpdateSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () =>
+                    {
+                        // Aktualizuj podstawowe właściwości użytkownika
+                        var updateResult = await _powerShellService.Users.UpdateM365UserPropertiesAsync(
+                            existingUser.UPN,
+                            department: department.Name,
+                            jobTitle: existingUser.Position,
+                            firstName: existingUser.FirstName,
+                            lastName: existingUser.LastName
+                        );
+
+                        // Jeśli UPN się zmienił, zaktualizuj go
+                        if (!string.Equals(oldUpn, existingUser.UPN, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var upnUpdateResult = await _powerShellService.Users.UpdateM365UserPrincipalNameAsync(oldUpn!, existingUser.UPN);
+                            return updateResult && upnUpdateResult;
+                        }
+
+                        return updateResult;
+                    },
+                    $"Update user {existingUser.UPN}"
+                );
+
+                if (!m365UpdateSuccess)
+                {
+                    _logger.LogError("Nie udało się zaktualizować użytkownika {UPN} w Microsoft 365.", existingUser.UPN);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się zaktualizować użytkownika w Microsoft 365."
+                    );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie udało się zaktualizować użytkownika {existingUser.FullName} w Microsoft 365.",
+                        "error"
+                    );
+                    
+                    return false;
+                }
+
                 existingUser.MarkAsModified(currentUserUpn);
                 _userRepository.Update(existingUser);
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);

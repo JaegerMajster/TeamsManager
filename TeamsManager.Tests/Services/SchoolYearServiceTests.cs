@@ -10,6 +10,7 @@ using Microsoft.Extensions.Primitives;
 using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
+using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
 using TeamsManager.Core.Enums;
@@ -20,41 +21,47 @@ namespace TeamsManager.Tests.Services
     public class SchoolYearServiceTests
     {
         private readonly Mock<ISchoolYearRepository> _mockSchoolYearRepository;
-        private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
+        private readonly Mock<ITeamRepository> _mockTeamRepository;
+        private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
+        private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<SchoolYearService>> _mockLogger;
-        private readonly Mock<ITeamRepository> _mockTeamRepository; // Dodane dla testu DeleteSchoolYearAsync
         private readonly Mock<IMemoryCache> _mockMemoryCache;
 
-        private readonly SchoolYearService _schoolYearService;
-        private readonly string _currentLoggedInUserUpn = "test.admin@example.com";
+        private readonly ISchoolYearService _schoolYearService;
+        private readonly string _currentLoggedInUserUpn = "test.schoolyear.admin@example.com";
         private OperationHistory? _capturedOperationHistory;
 
-        // Klucze cache
+        // Klucze cache'u
         private const string AllSchoolYearsCacheKey = "SchoolYears_AllActive";
-        private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
         private const string SchoolYearByIdCacheKeyPrefix = "SchoolYear_Id_";
+        private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
 
         public SchoolYearServiceTests()
         {
             _mockSchoolYearRepository = new Mock<ISchoolYearRepository>();
-            _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
+            _mockTeamRepository = new Mock<ITeamRepository>();
+            _mockOperationHistoryService = new Mock<IOperationHistoryService>();
+            _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<SchoolYearService>>();
-            _mockTeamRepository = new Mock<ITeamRepository>(); // Inicjalizacja mocka
             _mockMemoryCache = new Mock<IMemoryCache>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op)
-                                         .Returns(Task.CompletedTask);
+
+            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
 
             var mockCacheEntry = new Mock<ICacheEntry>();
-            var changeTokens = new List<IChangeToken>();
-            var postEvictionCallbacks = new List<PostEvictionCallbackRegistration>();
-
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(changeTokens);
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(postEvictionCallbacks);
+            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
+            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
             mockCacheEntry.SetupProperty(e => e.Value);
             mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
             mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
@@ -65,10 +72,11 @@ namespace TeamsManager.Tests.Services
 
             _schoolYearService = new SchoolYearService(
                 _mockSchoolYearRepository.Object,
-                _mockOperationHistoryRepository.Object,
+                _mockOperationHistoryService.Object,
+                _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockTeamRepository.Object, // Przekazanie mocka
+                _mockTeamRepository.Object,
                 _mockMemoryCache.Object
             );
         }

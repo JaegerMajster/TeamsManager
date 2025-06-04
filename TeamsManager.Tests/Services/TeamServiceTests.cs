@@ -12,6 +12,7 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -29,12 +30,16 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ITeamTemplateRepository> _mockTeamTemplateRepository;
         private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
+        private readonly Mock<IPowerShellTeamManagementService> _mockPowerShellTeamService;
+        private readonly Mock<IPowerShellUserManagementService> _mockPowerShellUserService;
+        private readonly Mock<IPowerShellBulkOperationsService> _mockPowerShellBulkOps;
         private readonly Mock<IPowerShellService> _mockPowerShellService;
+        private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ILogger<TeamService>> _mockLogger;
         private readonly Mock<IGenericRepository<SchoolType>> _mockSchoolTypeRepository;
         private readonly Mock<ISchoolYearRepository> _mockSchoolYearRepository;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
-        private readonly Mock<IConfidentialClientApplication> _mockConfidentialClientApplication;
+        private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
 
         private readonly TeamService _teamService;
         private readonly User _testOwnerUser;
@@ -57,18 +62,32 @@ namespace TeamsManager.Tests.Services
             _mockTeamTemplateRepository = new Mock<ITeamTemplateRepository>();
             _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
+            _mockPowerShellTeamService = new Mock<IPowerShellTeamManagementService>();
+            _mockPowerShellUserService = new Mock<IPowerShellUserManagementService>();
+            _mockPowerShellBulkOps = new Mock<IPowerShellBulkOperationsService>();
             _mockPowerShellService = new Mock<IPowerShellService>();
+            _mockNotificationService = new Mock<INotificationService>();
             _mockLogger = new Mock<ILogger<TeamService>>();
             _mockSchoolTypeRepository = new Mock<IGenericRepository<SchoolType>>();
             _mockSchoolYearRepository = new Mock<ISchoolYearRepository>();
             _mockMemoryCache = new Mock<IMemoryCache>();
-            _mockConfidentialClientApplication = new Mock<IConfidentialClientApplication>();
+            _mockOperationHistoryService = new Mock<IOperationHistoryService>();
 
             _testOwnerUser = new User { Id = "owner-guid-123", UPN = "owner@example.com", FirstName = "Test", LastName = "Owner", Role = UserRole.Nauczyciel, IsActive = true };
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
                                          .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
                                          .Returns(Task.CompletedTask);
+
+            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -83,12 +102,22 @@ namespace TeamsManager.Tests.Services
 
 
             _teamService = new TeamService(
-                _mockTeamRepository.Object, _mockUserRepository.Object, _mockTeamMemberRepository.Object,
-                _mockTeamTemplateRepository.Object, _mockOperationHistoryRepository.Object,
-                _mockCurrentUserService.Object, _mockPowerShellService.Object, _mockLogger.Object,
-                _mockSchoolTypeRepository.Object, _mockSchoolYearRepository.Object,
+                _mockTeamRepository.Object,
+                _mockUserRepository.Object,
+                _mockTeamMemberRepository.Object,
+                _mockTeamTemplateRepository.Object,
+                _mockOperationHistoryRepository.Object,
+                _mockCurrentUserService.Object,
+                _mockPowerShellTeamService.Object,
+                _mockPowerShellUserService.Object,
+                _mockPowerShellBulkOps.Object,
+                _mockPowerShellService.Object,
+                _mockNotificationService.Object,
+                _mockLogger.Object,
+                _mockSchoolTypeRepository.Object,
+                _mockSchoolYearRepository.Object,
                 _mockMemoryCache.Object,
-                _mockConfidentialClientApplication.Object
+                _mockOperationHistoryService.Object
             );
         }
 

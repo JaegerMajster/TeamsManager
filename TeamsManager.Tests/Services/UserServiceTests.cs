@@ -35,6 +35,8 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ISubjectService> _mockSubjectService;
         private readonly Mock<IPowerShellService> _mockPowerShellService;
         private readonly Mock<IConfidentialClientApplication> _mockConfidentialClientApplication;
+        private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
+        private readonly Mock<INotificationService> _mockNotificationService;
 
         private readonly UserService _userService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -61,6 +63,8 @@ namespace TeamsManager.Tests.Services
             _mockSubjectService = new Mock<ISubjectService>();
             _mockPowerShellService = new Mock<IPowerShellService>();
             _mockConfidentialClientApplication = new Mock<IConfidentialClientApplication>();
+            _mockOperationHistoryService = new Mock<IOperationHistoryService>();
+            _mockNotificationService = new Mock<INotificationService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
@@ -92,7 +96,8 @@ namespace TeamsManager.Tests.Services
                 _mockMemoryCache.Object,
                 _mockSubjectService.Object,
                 _mockPowerShellService.Object,
-                _mockConfidentialClientApplication.Object
+                _mockOperationHistoryService.Object,
+                _mockNotificationService.Object
             );
         }
 
@@ -482,6 +487,311 @@ namespace TeamsManager.Tests.Services
             var result = await _userService.GetUserByIdAsync(userId);
 
             result.Should().NotBeNull().And.BeEquivalentTo(expectedUser);
+        }
+
+        [Fact]
+        public async Task CreateUserAsync_WithAutoReconnect_ShouldSucceed()
+        {
+            // Arrange
+            var newUser = new User 
+            { 
+                UPN = "new@example.com", 
+                FirstName = "New", 
+                LastName = "User", 
+                Role = UserRole.Uczen,
+                DepartmentId = "dept1"
+            };
+            
+            var department = new Department { Id = "dept1", IsActive = true };
+            
+            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newUser.UPN))
+                               .ReturnsAsync((User?)null);
+            
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("dept1"))
+                                    .ReturnsAsync(department);
+            
+            // Mock PowerShellService z ExecuteWithAutoConnectAsync
+            _mockPowerShellService.Setup(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<string>>>(),
+                It.IsAny<string>()))
+                .ReturnsAsync("external-user-id");
+            
+            _mockUserRepository.Setup(r => r.AddAsync(It.IsAny<User>()))
+                               .Callback<User>(u => u.Id = "new-user-id")
+                               .Returns(Task.CompletedTask);
+
+            // Act
+            var result = await _userService.CreateUserAsync(
+                newUser.FirstName, 
+                newUser.LastName, 
+                newUser.UPN, 
+                newUser.Role, 
+                "dept1", 
+                "password123", 
+                "mock-token"
+            );
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Id.Should().Be("new-user-id");
+            
+            // Verify że nie było próby ręcznego połączenia przez OBO
+            _mockConfidentialClientApplication.Verify(app => app.AcquireTokenOnBehalfOf(
+                It.IsAny<string[]>(), It.IsAny<UserAssertion>()), Times.Never);
+            
+            // Verify że użyto ExecuteWithAutoConnectAsync
+            _mockPowerShellService.Verify(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<string>>>(),
+                It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateUserAsync_WithAutoReconnect_ShouldSucceed()
+        {
+            // Arrange
+            var userId = "user-123";
+            var existingUser = new User
+            {
+                Id = userId,
+                UPN = "old@example.com",
+                FirstName = "Old",
+                LastName = "Name",
+                DepartmentId = "dept-1",
+                Role = UserRole.Uczen,
+                IsActive = true
+            };
+
+            var updatedUser = new User
+            {
+                Id = userId,
+                UPN = "new@example.com",
+                FirstName = "New",
+                LastName = "Name",
+                DepartmentId = "dept-1",
+                Role = UserRole.Nauczyciel,
+                IsActive = true
+            };
+
+            var department = new Department { Id = "dept-1", IsActive = true };
+            var mockOperationHistory = new OperationHistory { Id = "test-operation-id", Status = OperationStatus.InProgress };
+
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId))
+                               .ReturnsAsync(existingUser);
+            
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("dept-1"))
+                                    .ReturnsAsync(department);
+            
+            // Setup IOperationHistoryService
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
+            
+            _mockOperationHistoryService.Setup(s => s.UpdateOperationStatusAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<OperationStatus>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(true);
+            
+            // Setup INotificationService
+            _mockNotificationService.Setup(s => s.SendNotificationToUserAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .Returns(Task.CompletedTask);
+            
+            // Mock ExecuteWithAutoConnectAsync dla update operacji
+            _mockPowerShellService.Setup(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<bool>>>(),
+                It.IsAny<string>()))
+                .ReturnsAsync(true);
+            
+            _mockUserRepository.Setup(r => r.Update(It.IsAny<User>()));
+
+            // Act
+            var result = await _userService.UpdateUserAsync(updatedUser, "test-token");
+
+            // Assert
+            result.Should().BeTrue();
+            
+            // Verify że nie było próby ręcznego połączenia
+            _mockConfidentialClientApplication.Verify(app => app.AcquireTokenOnBehalfOf(
+                It.IsAny<string[]>(), It.IsAny<UserAssertion>()), Times.Never);
+            
+            // Verify że użyto ExecuteWithAutoConnectAsync
+            _mockPowerShellService.Verify(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<bool>>>(),
+                It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeactivateUserAsync_WithAutoReconnect_ShouldSucceed()
+        {
+            // Arrange
+            var userId = "user-123";
+            var activeUser = new User
+            {
+                Id = userId,
+                UPN = "test@example.com",
+                FirstName = "Test",
+                LastName = "User",
+                IsActive = true,
+                Role = UserRole.Uczen
+            };
+
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
+                               .ReturnsAsync(new List<User> { activeUser });
+
+            // Mock ExecuteWithAutoConnectAsync dla deactivate operacji
+            _mockPowerShellService.Setup(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<bool>>>(),
+                It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            // Act
+            var result = await _userService.DeactivateUserAsync(userId, "test-token", deactivateM365Account: true);
+
+            // Assert
+            result.Should().BeTrue();
+            
+            // Verify że użyto ExecuteWithAutoConnectAsync
+            _mockPowerShellService.Verify(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<bool>>>(),
+                It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateUserAsync_WhenAutoReconnectFails_ShouldReturnNull()
+        {
+            // Arrange
+            var newUser = new User 
+            { 
+                UPN = "new@example.com", 
+                FirstName = "New", 
+                LastName = "User", 
+                Role = UserRole.Uczen,
+                DepartmentId = "dept1"
+            };
+            
+            var department = new Department { Id = "dept1", IsActive = true };
+            
+            _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newUser.UPN))
+                               .ReturnsAsync((User?)null);
+            
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("dept1"))
+                                    .ReturnsAsync(department);
+            
+            // Mock ExecuteWithAutoConnectAsync to return null (failure)
+            _mockPowerShellService.Setup(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<string>>>(),
+                It.IsAny<string>()))
+                .ReturnsAsync((string?)null);
+
+            // Act
+            var result = await _userService.CreateUserAsync(
+                newUser.FirstName, 
+                newUser.LastName, 
+                newUser.UPN, 
+                newUser.Role, 
+                "dept1", 
+                "password123", 
+                "mock-token"
+            );
+
+            // Assert
+            result.Should().BeNull();
+            
+            // Verify że nie dodano użytkownika do bazy gdy PowerShell operation nie powiodło się
+            _mockUserRepository.Verify(r => r.AddAsync(It.IsAny<User>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateUserAsync_WhenAutoReconnectFails_ShouldReturnFalse()
+        {
+            // Arrange
+            var userId = "user-123";
+            var existingUser = new User
+            {
+                Id = userId,
+                UPN = "test@example.com",
+                FirstName = "Test",
+                LastName = "User",
+                DepartmentId = "dept-1",
+                Role = UserRole.Uczen,
+                IsActive = true
+            };
+
+            var updatedUser = new User
+            {
+                Id = userId,
+                UPN = "updated@example.com",
+                FirstName = "Updated",
+                LastName = "User",
+                DepartmentId = "dept-1",
+                Role = UserRole.Nauczyciel,
+                IsActive = true
+            };
+
+            var department = new Department { Id = "dept-1", IsActive = true };
+            var mockOperationHistory = new OperationHistory { Id = "test-operation-id", Status = OperationStatus.InProgress };
+
+            _mockUserRepository.Setup(r => r.GetByIdAsync(userId))
+                               .ReturnsAsync(existingUser);
+            
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync("dept-1"))
+                                    .ReturnsAsync(department);
+            
+            // Setup IOperationHistoryService
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
+            
+            _mockOperationHistoryService.Setup(s => s.UpdateOperationStatusAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<OperationStatus>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(true);
+            
+            // Setup INotificationService
+            _mockNotificationService.Setup(s => s.SendNotificationToUserAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .Returns(Task.CompletedTask);
+            
+            // Mock ExecuteWithAutoConnectAsync to return false (failure)
+            _mockPowerShellService.Setup(ps => ps.ExecuteWithAutoConnectAsync(
+                It.IsAny<string>(), // apiAccessToken
+                It.IsAny<Func<Task<bool>>>(),
+                It.IsAny<string>()))
+                .ReturnsAsync(false);
+
+            // Act
+            var result = await _userService.UpdateUserAsync(updatedUser, "test-token");
+
+            // Assert
+            result.Should().BeFalse();
+            
+            // Verify że nie zaktualizowano bazy gdy PowerShell operation nie powiodło się
+            _mockUserRepository.Verify(r => r.Update(It.IsAny<User>()), Times.Never);
         }
     }
 }

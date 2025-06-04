@@ -24,6 +24,8 @@ namespace TeamsManager.Tests.Services
     {
         private readonly Mock<IApplicationSettingRepository> _mockSettingsRepository;
         private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
+        private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
+        private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<ApplicationSettingService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
@@ -48,21 +50,26 @@ namespace TeamsManager.Tests.Services
         {
             _mockSettingsRepository = new Mock<IApplicationSettingRepository>();
             _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
+            _mockOperationHistoryService = new Mock<IOperationHistoryService>();
+            _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<ApplicationSettingService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-
-            // Setup AddAsync dla OperationHistoryRepository, aby przechwytywać dodawany obiekt
             _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op)
+                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
                                          .Returns(Task.CompletedTask);
-            // Update nie powinno być już wywoływane przez uproszczoną metodę SaveOperationHistoryAsync
-            // w tym serwisie, więc ten setup może nie być potrzebny dla wszystkich testów.
-            _mockOperationHistoryRepository.Setup(r => r.Update(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op);
 
+            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -78,7 +85,8 @@ namespace TeamsManager.Tests.Services
 
             _applicationSettingService = new ApplicationSettingService(
                 _mockSettingsRepository.Object,
-                _mockOperationHistoryRepository.Object,
+                _mockOperationHistoryService.Object,
+                _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
                 _mockMemoryCache.Object

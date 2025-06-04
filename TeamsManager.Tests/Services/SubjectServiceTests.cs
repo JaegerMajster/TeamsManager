@@ -25,20 +25,21 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IGenericRepository<SchoolType>> _mockSchoolTypeRepository;
         private readonly Mock<IGenericRepository<UserSubject>> _mockUserSubjectRepository;
         private readonly Mock<IUserRepository> _mockUserRepository;
-        private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
+        private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
+        private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<SubjectService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
 
-        private readonly SubjectService _subjectService;
-        private readonly string _currentLoggedInUserUpn = "test.moderator@example.com";
+        private readonly ISubjectService _subjectService;
+        private readonly string _currentLoggedInUserUpn = "test.subject.admin@example.com";
         private OperationHistory? _capturedOperationHistory;
 
         // Klucze cache'u
         private const string AllSubjectsCacheKey = "Subjects_AllActive";
-        private const string SubjectByIdCacheKeyPrefix = "Subject_Id_";
+        private const string SubjectsBySchoolTypeCacheKeyPrefix = "Subjects_BySchoolType_Id_";
         private const string TeachersForSubjectCacheKeyPrefix = "Subject_Teachers_Id_";
-
+        private const string SubjectByIdCacheKeyPrefix = "Subject_Id_";
 
         public SubjectServiceTests()
         {
@@ -46,16 +47,23 @@ namespace TeamsManager.Tests.Services
             _mockSchoolTypeRepository = new Mock<IGenericRepository<SchoolType>>();
             _mockUserSubjectRepository = new Mock<IGenericRepository<UserSubject>>();
             _mockUserRepository = new Mock<IUserRepository>();
-            _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
+            _mockOperationHistoryService = new Mock<IOperationHistoryService>();
+            _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<SubjectService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op)
-                                         .Returns(Task.CompletedTask);
-            // Celowo nie mockujemy Update dla OperationHistory, aby upewnić się, że nie jest wołane przez SaveOperationHistoryAsync
+
+            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                    It.IsAny<OperationType>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .ReturnsAsync(mockOperationHistory);
 
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
@@ -73,7 +81,8 @@ namespace TeamsManager.Tests.Services
                 _mockSchoolTypeRepository.Object,
                 _mockUserSubjectRepository.Object,
                 _mockUserRepository.Object,
-                _mockOperationHistoryRepository.Object,
+                _mockOperationHistoryService.Object,
+                _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
                 _mockMemoryCache.Object
@@ -278,8 +287,13 @@ namespace TeamsManager.Tests.Services
             var result = await _subjectService.CreateSubjectAsync(newSubjectName, code: newSubjectCode);
             result.Should().NotBeNull();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == newSubjectName && op.Type == OperationType.SubjectCreated)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
+                It.Is<OperationType>(op => op == OperationType.SubjectCreated),
+                It.Is<string>(targetEntityName => targetEntityName == $"{newSubjectName} - {newSubjectCode}"),
+                It.Is<string>(type => type == OperationType.SubjectCreated.ToString()),
+                It.Is<string>(description => description == "opis"),
+                It.Is<string>(createdBy => createdBy == _currentLoggedInUserUpn),
+                It.IsAny<string>()), Times.Once);
 
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
             _mockMemoryCache.Verify(m => m.Remove(TeachersForSubjectCacheKeyPrefix + result!.Id), Times.Never);
@@ -331,8 +345,13 @@ namespace TeamsManager.Tests.Services
             var updateResult = await _subjectService.UpdateSubjectAsync(updatedSubjectData);
             updateResult.Should().BeTrue();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectUpdated)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
+                    It.Is<OperationType>(op => op == OperationType.SubjectUpdated),
+                    It.IsAny<string>(),
+                    It.Is<string>(targetEntityId => targetEntityId == subjectId),
+                    It.Is<string>(targetEntityName => targetEntityName == updatedSubjectData.Name),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()), Times.Once);
 
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);
             // Klucz TeachersForSubjectCacheKeyPrefix nie jest jawnie usuwany gdy invalidateAll: true - serwis polega na CancellationTokenSource
@@ -371,8 +390,13 @@ namespace TeamsManager.Tests.Services
             var deleteResult = await _subjectService.DeleteSubjectAsync(subjectId);
             deleteResult.Should().BeTrue();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == subjectId && op.Type == OperationType.SubjectDeleted)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
+                    It.Is<OperationType>(op => op == OperationType.SubjectDeleted),
+                    It.IsAny<string>(), // targetEntityType
+                    It.Is<string>(targetEntityId => targetEntityId == subjectId),
+                    It.Is<string>(targetEntityName => targetEntityName == subjectToDelete.Name),
+                    It.IsAny<string>(), // details
+                    It.IsAny<string>()), Times.Once); // parentOperationId
 
             // Klucz TeachersForSubjectCacheKeyPrefix nie jest jawnie usuwany gdy invalidateAll: true - serwis polega na CancellationTokenSource
             _mockMemoryCache.Verify(m => m.Remove(AllSubjectsCacheKey), Times.AtLeastOnce);

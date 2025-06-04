@@ -472,6 +472,7 @@ namespace TeamsManager.Data
                 entity.HasIndex(oh => oh.CreatedBy);
                 entity.HasIndex(oh => oh.ParentOperationId);
 
+                // Ignorujemy tylko właściwości obliczeniowe
                 entity.Ignore(oh => oh.IsInProgress);
                 entity.Ignore(oh => oh.IsCompleted);
                 entity.Ignore(oh => oh.IsSuccessful);
@@ -480,10 +481,7 @@ namespace TeamsManager.Data
                 entity.Ignore(oh => oh.StatusDescription);
                 entity.Ignore(oh => oh.ShortDescription);
                 
-                // Dodaj ignorowanie pól zarządzanych przez serwis
-                entity.Ignore(oh => oh.StartedAt);
-                entity.Ignore(oh => oh.CompletedAt);
-                entity.Ignore(oh => oh.Duration);
+                // StartedAt, CompletedAt i Duration SĄ mapowane do bazy danych - nie ignorujemy
             });
 
             // ===== KONFIGURACJA USTAWIEŃ APLIKACJI =====
