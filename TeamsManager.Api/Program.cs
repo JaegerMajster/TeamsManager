@@ -27,6 +27,8 @@ using TeamsManager.Api.Swagger;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
 using TeamsManager.Core.Services.PowerShellServices; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
+using TeamsManager.Api.HealthChecks; // <-- Dodane dla DependencyInjectionHealthCheck
+using TeamsManager.Core.Abstractions.Services.PowerShell; // <-- Dodane dla interfejsów PowerShell
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +48,11 @@ if (string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.TenantId) ||
 
 // ----- POCZĘTEK SEKCJI REJESTRACJI SERWISÓW -----
 builder.Services.AddControllers();
+
+// ========== DODANIE HEALTH CHECKS ==========
+builder.Services.AddHealthChecks()
+    .AddCheck<DependencyInjectionHealthCheck>("di_check");
+// ==========================================
 
 // ========== NOWA LINIA - Dodanie usług SignalR ==========
 builder.Services.AddSignalR();
@@ -296,6 +303,68 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// ========== DODANIE WERYFIKACJI DI PODCZAS STARTU ==========
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    logger.LogInformation("=== Weryfikacja konfiguracji DI ===");
+    
+    // Sprawdź krytyczne serwisy
+    var criticalServices = new[]
+    {
+        ("IOperationHistoryService", typeof(IOperationHistoryService)),
+        ("INotificationService", typeof(INotificationService)),
+        ("ICurrentUserService", typeof(ICurrentUserService)),
+        ("IPowerShellBulkOperationsService", typeof(IPowerShellBulkOperationsService)),
+        ("ITeamService", typeof(ITeamService)),
+        ("IUserService", typeof(IUserService)),
+        ("IDepartmentService", typeof(IDepartmentService)),
+        ("IChannelService", typeof(IChannelService)),
+        ("ISubjectService", typeof(ISubjectService)),
+        ("IApplicationSettingService", typeof(IApplicationSettingService)),
+        ("ISchoolTypeService", typeof(ISchoolTypeService)),
+        ("ISchoolYearService", typeof(ISchoolYearService)),
+        ("ITeamTemplateService", typeof(ITeamTemplateService))
+    };
+
+    var allServicesOk = true;
+    
+    foreach (var (name, type) in criticalServices)
+    {
+        try
+        {
+            var service = scope.ServiceProvider.GetService(type);
+            if (service != null)
+            {
+                logger.LogInformation($"✅ {name} - OK");
+            }
+            else
+            {
+                logger.LogError($"❌ {name} - NOT REGISTERED");
+                allServicesOk = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"❌ {name} - ERROR");
+            allServicesOk = false;
+        }
+    }
+    
+    if (!allServicesOk)
+    {
+        logger.LogError("KRYTYCZNY BŁĄD: Nie wszystkie wymagane serwisy są zarejestrowane!");
+    }
+    else
+    {
+        logger.LogInformation("✅ Wszystkie krytyczne serwisy są poprawnie zarejestrowane");
+    }
+    
+    logger.LogInformation("=== Koniec weryfikacji DI ===");
+}
+// ============================================================
+
 // ----- POCZĘTEK SEKCJI KONFIGURACJI HTTP PIPELINE -----
 if (app.Environment.IsDevelopment())
 {
@@ -329,6 +398,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// ========== MAPOWANIE HEALTH CHECKS ==========
+app.MapHealthChecks("/health");
+// =============================================
+
 // ========== NOWA LINIA - Mapowanie Huba SignalR ==========
 app.MapHub<NotificationHub>("/notificationHub");
 // =========================================================
