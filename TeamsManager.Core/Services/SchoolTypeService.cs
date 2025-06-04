@@ -26,6 +26,7 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolTypeService> _logger;
         private readonly IMemoryCache _cache;
+        private readonly IOperationHistoryService _operationHistoryService;
 
         // Definicje kluczy cache
         private const string AllSchoolTypesCacheKey = "SchoolTypes_AllActive";
@@ -45,7 +46,8 @@ namespace TeamsManager.Core.Services
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
             ILogger<SchoolTypeService> logger,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IOperationHistoryService operationHistoryService)
         {
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -53,6 +55,7 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
@@ -135,34 +138,33 @@ namespace TeamsManager.Core.Services
             string? colorCode = null,
             int sortOrder = 0)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-            var operation = new OperationHistory
+            _logger.LogInformation("Rozpoczynanie tworzenia typu szkoły: {ShortName} - {FullName}", shortName, fullName);
+
+            if (string.IsNullOrWhiteSpace(shortName) || string.IsNullOrWhiteSpace(fullName))
             {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolTypeCreated,
-                TargetEntityType = nameof(SchoolType),
-                TargetEntityName = $"{shortName} - {fullName}",
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+                _logger.LogError("Nie można utworzyć typu szkoły: Skrócona nazwa lub pełna nazwa są puste.");
+                return null;
+            }
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolTypeCreated,
+                nameof(SchoolType),
+                targetEntityName: $"{shortName} - {fullName}"
+            );
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie tworzenia typu szkoły: {ShortName} - {FullName} przez {User}", shortName, fullName, currentUserUpn);
-
-                if (string.IsNullOrWhiteSpace(shortName) || string.IsNullOrWhiteSpace(fullName))
-                {
-                    operation.MarkAsFailed("Skrócona nazwa i pełna nazwa typu szkoły są wymagane.");
-                    _logger.LogError("Nie można utworzyć typu szkoły: Skrócona nazwa lub pełna nazwa są puste.");
-                    return null;
-                }
-
                 var existingSchoolType = (await _schoolTypeRepository.FindAsync(st => st.ShortName == shortName && st.IsActive)).FirstOrDefault();
                 if (existingSchoolType != null)
                 {
-                    operation.MarkAsFailed($"Typ szkoły o skróconej nazwie '{shortName}' już istnieje i jest aktywny.");
                     _logger.LogError("Nie można utworzyć typu szkoły: Aktywny typ szkoły o skróconej nazwie {ShortName} już istnieje.", shortName);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Typ szkoły o skróconej nazwie '{shortName}' już istnieje i jest aktywny."
+                    );
                     return null;
                 }
 
@@ -174,29 +176,37 @@ namespace TeamsManager.Core.Services
                     Description = description,
                     ColorCode = colorCode,
                     SortOrder = sortOrder,
-                    CreatedBy = currentUserUpn,
+                    CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system",
                     IsActive = true
                 };
 
                 await _schoolTypeRepository.AddAsync(newSchoolType);
                 // Zapis zmian (SaveChangesAsync) powinien być wywołany na wyższym poziomie (np. przez UnitOfWork lub w kontrolerze API po zakończeniu operacji serwisowej)
 
-                operation.TargetEntityId = newSchoolType.Id;
-                operation.MarkAsCompleted($"Typ szkoły ID: {newSchoolType.Id} ('{newSchoolType.ShortName}') przygotowany do utworzenia.");
                 _logger.LogInformation("Typ szkoły '{FullName}' pomyślnie przygotowany do zapisu. ID: {SchoolTypeId}", fullName, newSchoolType.Id);
 
                 InvalidateCache(schoolTypeId: newSchoolType.Id, shortNameToInvalidate: newSchoolType.ShortName, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Typ szkoły ID: {newSchoolType.Id} ('{newSchoolType.ShortName}') przygotowany do utworzenia."
+                );
                 return newSchoolType;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia typu szkoły '{FullName}'. Wiadomość: {ErrorMessage}", fullName, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return null; // Lub rzuć wyjątek, jeśli preferowane jest, aby kontroler to obsłużył
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -209,37 +219,43 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(schoolTypeToUpdate), "Obiekt typu szkoły lub jego ID nie może być null/pusty.");
             }
 
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolTypeUpdated,
-                TargetEntityType = nameof(SchoolType),
-                TargetEntityId = schoolTypeToUpdate.Id,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie aktualizacji typu szkoły ID: {SchoolTypeId} przez {User}", schoolTypeToUpdate.Id, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie aktualizacji typu szkoły ID: {SchoolTypeId}", schoolTypeToUpdate.Id);
 
-            string? oldShortName = null;
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolTypeUpdated,
+                nameof(SchoolType),
+                targetEntityId: schoolTypeToUpdate.Id
+            );
 
             try
             {
+                string? oldShortName = null;
+
                 var existingSchoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeToUpdate.Id);
                 if (existingSchoolType == null)
                 {
-                    operation.MarkAsFailed($"Typ szkoły o ID '{schoolTypeToUpdate.Id}' nie istnieje.");
                     _logger.LogWarning("Nie można zaktualizować typu szkoły ID {SchoolTypeId} - nie istnieje.", schoolTypeToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Typ szkoły o ID '{schoolTypeToUpdate.Id}' nie istnieje."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = existingSchoolType.FullName; // Nazwa przed modyfikacją
+
                 oldShortName = existingSchoolType.ShortName;
 
                 if (string.IsNullOrWhiteSpace(schoolTypeToUpdate.ShortName) || string.IsNullOrWhiteSpace(schoolTypeToUpdate.FullName))
                 {
-                    operation.MarkAsFailed("Skrócona nazwa i pełna nazwa są wymagane.");
                     _logger.LogError("Błąd aktualizacji typu szkoły {SchoolTypeId}: Skrócona lub pełna nazwa jest pusta.", schoolTypeToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Skrócona nazwa i pełna nazwa są wymagane."
+                    );
                     return false;
                 }
 
@@ -249,8 +265,13 @@ namespace TeamsManager.Core.Services
                     var conflicting = (await _schoolTypeRepository.FindAsync(st => st.Id != existingSchoolType.Id && st.ShortName == schoolTypeToUpdate.ShortName && st.IsActive)).FirstOrDefault();
                     if (conflicting != null)
                     {
-                        operation.MarkAsFailed($"Typ szkoły o skróconej nazwie '{schoolTypeToUpdate.ShortName}' już istnieje i jest aktywny.");
                         _logger.LogError("Nie można zaktualizować typu szkoły: Skrócona nazwa '{ShortName}' już istnieje dla innego aktywnego typu szkoły.", schoolTypeToUpdate.ShortName);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Typ szkoły o skróconej nazwie '{schoolTypeToUpdate.ShortName}' już istnieje i jest aktywny."
+                        );
                         return false;
                     }
                 }
@@ -261,61 +282,73 @@ namespace TeamsManager.Core.Services
                 existingSchoolType.ColorCode = schoolTypeToUpdate.ColorCode;
                 existingSchoolType.SortOrder = schoolTypeToUpdate.SortOrder;
                 existingSchoolType.IsActive = schoolTypeToUpdate.IsActive; // Pozwalamy na zmianę IsActive
-                existingSchoolType.MarkAsModified(currentUserUpn);
+                existingSchoolType.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
 
                 _schoolTypeRepository.Update(existingSchoolType);
-                operation.TargetEntityName = existingSchoolType.FullName; // Nazwa po modyfikacji
-                operation.MarkAsCompleted($"Typ szkoły ID: {existingSchoolType.Id} przygotowany do aktualizacji.");
                 _logger.LogInformation("Typ szkoły ID: {SchoolTypeId} pomyślnie przygotowany do aktualizacji.", existingSchoolType.Id);
 
                 InvalidateCache(schoolTypeId: existingSchoolType.Id, shortNameToInvalidate: oldShortName, newShortNameIfChanged: existingSchoolType.ShortName, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Typ szkoły ID: {existingSchoolType.Id} przygotowany do aktualizacji."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji typu szkoły ID {SchoolTypeId}. Wiadomość: {ErrorMessage}", schoolTypeToUpdate.Id, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteSchoolTypeAsync(string schoolTypeId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SchoolTypeDeleted,
-                TargetEntityType = nameof(SchoolType),
-                TargetEntityId = schoolTypeId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie usuwania (dezaktywacji) typu szkoły ID: {SchoolTypeId} przez {User}", schoolTypeId, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie usuwania (dezaktywacji) typu szkoły ID: {SchoolTypeId}", schoolTypeId);
 
-            SchoolType? schoolType = null;
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SchoolTypeDeleted,
+                nameof(SchoolType),
+                targetEntityId: schoolTypeId
+            );
+
             try
             {
-                schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
+                var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
                 if (schoolType == null)
                 {
-                    operation.MarkAsFailed($"Typ szkoły o ID '{schoolTypeId}' nie istnieje.");
                     _logger.LogWarning("Nie można usunąć typu szkoły ID {SchoolTypeId} - nie istnieje.", schoolTypeId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Typ szkoły o ID '{schoolTypeId}' nie istnieje."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = schoolType.FullName;
 
                 if (!schoolType.IsActive)
                 {
-                    operation.MarkAsCompleted($"Typ szkoły '{schoolType.FullName}' był już nieaktywny.");
                     _logger.LogInformation("Typ szkoły ID {SchoolTypeId} był już nieaktywny.", schoolTypeId);
                     InvalidateCache(schoolTypeId: schoolTypeId, shortNameToInvalidate: schoolType.ShortName, invalidateAll: true);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Typ szkoły '{schoolType.FullName}' był już nieaktywny."
+                    );
                     return true;
                 }
 
@@ -323,83 +356,81 @@ namespace TeamsManager.Core.Services
                 // Jeśli jest używany, operacja powinna być zablokowana lub wymagać potwierdzenia.
                 // if (await _teamRepository.ExistsAsync(t => t.SchoolTypeId == schoolTypeId && t.IsActive)) { /* log/fail */ }
 
-                schoolType.MarkAsDeleted(currentUserUpn);
+                schoolType.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system");
                 _schoolTypeRepository.Update(schoolType);
 
-                operation.MarkAsCompleted($"Typ szkoły '{schoolType.FullName}' (ID: {schoolTypeId}) oznaczony jako usunięty.");
                 _logger.LogInformation("Typ szkoły ID {SchoolTypeId} pomyślnie oznaczony jako usunięty.", schoolTypeId);
 
                 InvalidateCache(schoolTypeId: schoolTypeId, shortNameToInvalidate: schoolType.ShortName, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Typ szkoły '{schoolType.FullName}' (ID: {schoolTypeId}) oznaczony jako usunięty."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania typu szkoły ID {SchoolTypeId}. Wiadomość: {ErrorMessage}", schoolTypeId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> AssignViceDirectorToSchoolTypeAsync(string viceDirectorUserId, string schoolTypeId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_assign_vd";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.UserAssignedToSchoolType, // Lub bardziej specyficzny, np. ViceDirectorAssignedToSchoolType
-                TargetEntityType = "UserSchoolTypeSupervision",
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserAssignedToSchoolType, // Lub bardziej specyficzny, np. ViceDirectorAssignedToSchoolType
+                "UserSchoolTypeSupervision"
+            );
 
             try
             {
-                _logger.LogInformation("Przypisywanie wicedyrektora {ViceDirectorUserId} do typu szkoły {SchoolTypeId} przez {User}", viceDirectorUserId, schoolTypeId, currentUserUpn);
+                _logger.LogInformation("Przypisywanie wicedyrektora {ViceDirectorUserId} do typu szkoły {SchoolTypeId}", viceDirectorUserId, schoolTypeId);
 
                 var viceDirector = await _userRepository.GetByIdAsync(viceDirectorUserId); // Pobierz pełny obiekt użytkownika
                 var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
 
                 if (viceDirector == null || !viceDirector.IsActive)
                 {
-                    operation.MarkAsFailed($"Użytkownik (wicedyrektor) o ID '{viceDirectorUserId}' nie istnieje lub jest nieaktywny.");
                     _logger.LogWarning("Nie można przypisać wicedyrektora: Użytkownik ID {ViceDirectorUserId} nie istnieje lub nieaktywny.", viceDirectorUserId);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, $"Użytkownik (wicedyrektor) o ID '{viceDirectorUserId}' nie istnieje lub jest nieaktywny.");
                     return false;
                 }
                 if (viceDirector.Role != UserRole.Wicedyrektor && viceDirector.Role != UserRole.Dyrektor && !viceDirector.IsSystemAdmin)
                 {
-                    operation.MarkAsFailed($"Użytkownik '{viceDirector.UPN}' nie ma uprawnień wicedyrektora, dyrektora ani administratora systemu.");
                     _logger.LogWarning("Nie można przypisać wicedyrektora: Użytkownik {ViceDirectorUPN} nie ma odpowiednich uprawnień.", viceDirector.UPN);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, $"Użytkownik '{viceDirector.UPN}' nie ma uprawnień wicedyrektora, dyrektora ani administratora systemu.");
                     return false;
                 }
                 if (schoolType == null || !schoolType.IsActive)
                 {
-                    operation.MarkAsFailed($"Typ szkoły o ID '{schoolTypeId}' nie istnieje lub jest nieaktywny.");
                     _logger.LogWarning("Nie można przypisać wicedyrektora: Typ szkoły ID {SchoolTypeId} nie istnieje lub nieaktywny.", schoolTypeId);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, $"Typ szkoły o ID '{schoolTypeId}' nie istnieje lub jest nieaktywny.");
                     return false;
                 }
 
-                operation.TargetEntityType = nameof(SchoolType);
-                operation.TargetEntityId = schoolTypeId;
-                operation.TargetEntityName = $"Nadzór {viceDirector.UPN} nad {schoolType.ShortName}";
-
-
                 if (viceDirector.SupervisedSchoolTypes.Any(st => st.Id == schoolTypeId))
                 {
-                    operation.MarkAsCompleted("Wicedyrektor był już przypisany do nadzoru tego typu szkoły.");
                     _logger.LogInformation("Wicedyrektor {ViceDirectorUPN} był już przypisany do nadzoru typu szkoły {SchoolTypeName}", viceDirector.UPN, schoolType.ShortName);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Completed, "Wicedyrektor był już przypisany do nadzoru tego typu szkoły.");
                     return true;
                 }
 
                 viceDirector.SupervisedSchoolTypes.Add(schoolType); // EF Core zajmie się tabelą pośrednią
                 _userRepository.Update(viceDirector); // Zapisz zmiany w użytkowniku (w jego kolekcji)
 
-                operation.MarkAsCompleted("Wicedyrektor pomyślnie przypisany do nadzoru typu szkoły.");
                 _logger.LogInformation("Wicedyrektor {ViceDirectorUPN} pomyślnie przypisany do nadzoru typu szkoły {SchoolTypeName}", viceDirector.UPN, schoolType.ShortName);
 
                 // Inwalidacja cache dla zmodyfikowanego typu szkoły (jeśli cache'uje listę nadzorujących)
@@ -408,77 +439,65 @@ namespace TeamsManager.Core.Services
                 // Potrzebna by była metoda w UserService do inwalidacji cache użytkownika
                 // await _userService.InvalidateUserCacheAsync(viceDirectorUserId); (hipotetyczne)
                 // Na razie zakładamy, że zmiana w SupervisedSchoolTypes nie jest bezpośrednio cache'owana przez GetSchoolTypeByIdAsync
+
+                await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Completed, "Wicedyrektor pomyślnie przypisany do nadzoru typu szkoły.");
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas przypisywania wicedyrektora {ViceDirectorUserId} do typu szkoły {SchoolTypeId}. Wiadomość: {ErrorMessage}", viceDirectorUserId, schoolTypeId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, $"Krytyczny błąd: {ex.Message}", ex.StackTrace);
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> RemoveViceDirectorFromSchoolTypeAsync(string viceDirectorUserId, string schoolTypeId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_vd";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.UserRemovedFromSchoolType, // Lub bardziej specyficzny
-                TargetEntityType = "UserSchoolTypeSupervision",
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserRemovedFromSchoolType, // Lub bardziej specyficzny
+                "UserSchoolTypeSupervision"
+            );
+
             try
             {
-                _logger.LogInformation("Usuwanie nadzoru wicedyrektora {ViceDirectorUserId} z typu szkoły {SchoolTypeId} przez {User}", viceDirectorUserId, schoolTypeId, currentUserUpn);
+                _logger.LogInformation("Usuwanie nadzoru wicedyrektora {ViceDirectorUserId} z typu szkoły {SchoolTypeId}", viceDirectorUserId, schoolTypeId);
 
                 var viceDirector = await _userRepository.GetByIdAsync(viceDirectorUserId); // Upewnij się, że repozytorium Usera dołącza SupervisedSchoolTypes
                 var schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
 
                 if (viceDirector == null || schoolType == null)
                 {
-                    operation.MarkAsFailed("Wicedyrektor lub typ szkoły nie istnieje.");
                     _logger.LogWarning("Nie można usunąć nadzoru: Wicedyrektor ID {ViceDirectorUserId} lub Typ Szkoły ID {SchoolTypeId} nie istnieje.", viceDirectorUserId, schoolTypeId);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, "Wicedyrektor lub typ szkoły nie istnieje.");
                     return false;
                 }
-                operation.TargetEntityType = nameof(SchoolType);
-                operation.TargetEntityId = schoolTypeId;
-                operation.TargetEntityName = $"Usunięcie nadzoru {viceDirector.UPN} nad {schoolType.ShortName}";
 
                 var supervisedSchoolTypeToRemove = viceDirector.SupervisedSchoolTypes.FirstOrDefault(st => st.Id == schoolTypeId);
                 if (supervisedSchoolTypeToRemove == null)
                 {
-                    operation.MarkAsCompleted("Wicedyrektor nie nadzorował tego typu szkoły.");
                     _logger.LogInformation("Wicedyrektor {ViceDirectorUPN} nie nadzorował typu szkoły {SchoolTypeName}.", viceDirector.UPN, schoolType.ShortName);
+                    await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Completed, "Wicedyrektor nie nadzorował tego typu szkoły.");
                     return true;
                 }
 
                 viceDirector.SupervisedSchoolTypes.Remove(supervisedSchoolTypeToRemove);
                 _userRepository.Update(viceDirector);
 
-                operation.MarkAsCompleted("Pomyślnie usunięto przypisanie wicedyrektora z nadzoru typu szkoły.");
                 _logger.LogInformation("Pomyślnie usunięto nadzór wicedyrektora {ViceDirectorUPN} z typu szkoły {SchoolTypeName}.", viceDirector.UPN, schoolType.ShortName);
 
                 InvalidateCache(schoolTypeId: schoolTypeId);
                 // await _userService.InvalidateUserCacheAsync(viceDirectorUserId); (hipotetyczne)
+
+                await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Completed, "Pomyślnie usunięto przypisanie wicedyrektora z nadzoru typu szkoły.");
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania nadzoru wicedyrektora {ViceDirectorUserId} z typu szkoły {SchoolTypeId}. Wiadomość: {ErrorMessage}", viceDirectorUserId, schoolTypeId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                await _operationHistoryService.UpdateOperationStatusAsync(operation.Id, OperationStatus.Failed, $"Krytyczny błąd: {ex.Message}", ex.StackTrace);
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -529,27 +548,6 @@ namespace TeamsManager.Core.Services
             // Parametry shortNameToInvalidate i newShortNameIfChanged są obecnie nieużywane do jawnego usuwania specyficznych kluczy opartych na ShortName,
             // ponieważ główny mechanizm opiera się na ID oraz tokenie. Jeśli powstaną klucze cache zależne bezpośrednio od ShortName,
             // należałoby tu dodać logikę ich usuwania.
-        }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
-
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
-            {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-                }
-            }
-
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla typu szkoły.", operation.Id);
         }
     }
 }

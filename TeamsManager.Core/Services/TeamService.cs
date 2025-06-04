@@ -34,6 +34,7 @@ namespace TeamsManager.Core.Services
         private readonly ISchoolYearRepository _schoolYearRepository;
         private readonly IMemoryCache _cache;
         private readonly IConfidentialClientApplication _confidentialClientApplication; // NOWE
+        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to pole
 
         // Definicje kluczy cache
         private const string AllActiveTeamsCacheKey = "Teams_AllActive";
@@ -64,13 +65,14 @@ namespace TeamsManager.Core.Services
             IGenericRepository<SchoolType> schoolTypeRepository,
             ISchoolYearRepository schoolYearRepository,
             IMemoryCache memoryCache,
-            IConfidentialClientApplication confidentialClientApplication) // NOWE
+            IConfidentialClientApplication confidentialClientApplication, // NOWE
+            IOperationHistoryService operationHistoryService) // Dodaj to do konstruktora
         {
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _teamMemberRepository = teamMemberRepository ?? throw new ArgumentNullException(nameof(teamMemberRepository));
             _teamTemplateRepository = teamTemplateRepository ?? throw new ArgumentNullException(nameof(teamTemplateRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository)); // Zachowaj to dla specjalnych operacji
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -78,6 +80,7 @@ namespace TeamsManager.Core.Services
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication)); // NOWE
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
