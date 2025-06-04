@@ -26,6 +26,7 @@ namespace TeamsManager.Core.Services
         private readonly ILogger<SchoolYearService> _logger;
         private readonly ITeamRepository _teamRepository; // Potrzebne do sprawdzania zależności przy usuwaniu
         private readonly IMemoryCache _cache;
+        private readonly IOperationHistoryService _operationHistoryService;
 
         // Klucze cache
         private const string AllSchoolYearsCacheKey = "SchoolYears_AllActive";
@@ -45,7 +46,8 @@ namespace TeamsManager.Core.Services
             ICurrentUserService currentUserService,
             ILogger<SchoolYearService> logger,
             ITeamRepository teamRepository,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IOperationHistoryService operationHistoryService)
         {
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
@@ -53,6 +55,7 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
