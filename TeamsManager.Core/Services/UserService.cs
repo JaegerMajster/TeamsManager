@@ -12,7 +12,6 @@ using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
-using Microsoft.Identity.Client; // NOWE: Dla IConfidentialClientApplication i UserAssertion
 
 namespace TeamsManager.Core.Services
 {
@@ -34,7 +33,6 @@ namespace TeamsManager.Core.Services
         private readonly IMemoryCache _cache;
         private readonly ISubjectService _subjectService;
         private readonly IPowerShellService _powerShellService;
-        private readonly IConfidentialClientApplication _confidentialClientApplication; // NOWE
         private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
         private readonly INotificationService _notificationService; // NOWE: Dodane pole
 
@@ -46,11 +44,6 @@ namespace TeamsManager.Core.Services
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
         private static CancellationTokenSource _usersCacheTokenSource = new CancellationTokenSource();
-
-        // NOWE: Domyślne zakresy dla Microsoft Graph dla operacji na użytkownikach
-        private readonly string[] _graphUserReadScopes = new[] { "User.Read.All" };
-        private readonly string[] _graphUserReadWriteScopes = new[] { "User.ReadWrite.All", "Directory.ReadWrite.All" };
-
 
         /// <summary>
         /// Konstruktor serwisu użytkowników.
@@ -68,7 +61,6 @@ namespace TeamsManager.Core.Services
             IMemoryCache memoryCache,
             ISubjectService subjectService,
             IPowerShellService powerShellService,
-            IConfidentialClientApplication confidentialClientApplication, // NOWE
             IOperationHistoryService operationHistoryService, // Dodaj to do konstruktora
             INotificationService notificationService) // NOWE: Dodane pole
         {
@@ -84,7 +76,6 @@ namespace TeamsManager.Core.Services
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
-            _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication)); // NOWE
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService)); // NOWE: Dodane pole
         }
@@ -94,49 +85,6 @@ namespace TeamsManager.Core.Services
             return new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(_defaultCacheDuration)
                 .AddExpirationToken(new CancellationChangeToken(_usersCacheTokenSource.Token));
-        }
-
-        // NOWE: Metoda pomocnicza do obsługi OBO i połączenia z Graph przez PowerShellService
-        private async Task<bool> ConnectToGraphOnBehalfOfUserAsync(string? apiAccessToken, string[] scopes)
-        {
-            if (string.IsNullOrEmpty(apiAccessToken))
-            {
-                _logger.LogWarning("ConnectToGraphOnBehalfOfUserAsync: Token dostępu API (apiAccessToken) jest pusty lub null.");
-                return false;
-            }
-
-            try
-            {
-                var userAssertion = new UserAssertion(apiAccessToken);
-                _logger.LogDebug("ConnectToGraphOnBehalfOfUserAsync: Próba uzyskania tokenu OBO dla zakresów: {Scopes}", string.Join(", ", scopes));
-
-                var authResult = await _confidentialClientApplication.AcquireTokenOnBehalfOf(scopes, userAssertion)
-                    .ExecuteAsync();
-
-                if (string.IsNullOrEmpty(authResult.AccessToken))
-                {
-                    _logger.LogError("ConnectToGraphOnBehalfOfUserAsync: Nie udało się uzyskać tokenu dostępu do Graph w przepływie OBO (authResult.AccessToken jest pusty).");
-                    return false;
-                }
-                _logger.LogInformation("ConnectToGraphOnBehalfOfUserAsync: Pomyślnie uzyskano token OBO dla Graph.");
-                return await _powerShellService.ConnectWithAccessTokenAsync(authResult.AccessToken, scopes);
-            }
-            // POPRAWKA BŁĘDU CS1061 (linia 120): Zamiast ex.SubError używamy ex.Classification
-            catch (MsalUiRequiredException ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Wymagana interakcja użytkownika lub zgoda (MsalUiRequiredException) w przepływie OBO. Scopes: {Scopes}. Błąd: {Classification}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.Classification, ex.Message);
-                return false;
-            }
-            catch (MsalServiceException ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Błąd usługi MSAL podczas próby uzyskania tokenu OBO dla scopes: {Scopes}. Kod błędu: {MsalErrorCode}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.ErrorCode, ex.Message);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Nieoczekiwany błąd podczas uzyskiwania tokenu OBO dla scopes: {Scopes}.", string.Join(", ", scopes));
-                return false;
-            }
         }
 
         /// <inheritdoc />
@@ -156,22 +104,6 @@ namespace TeamsManager.Core.Services
                 return cachedUser;
             }
             _logger.LogDebug("Użytkownik ID: {UserId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", userId);
-
-            // ZMIANA: Logika połączenia z Graph przez OBO
-            if (!string.IsNullOrEmpty(apiAccessToken))
-            {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadScopes))
-                {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUserByIdAsync.");
-                    // Kontynuujemy próbę pobrania z lokalnej bazy
-                }
-                else
-                {
-                    // Opcjonalnie: Zaktualizuj lokalną bazę danych na podstawie danych z Graph
-                    // var psUser = await _powerShellService.GetM365UserAsync(userId); // PowerShellService powinien przyjmować ID lub UPN
-                    // if (psUser != null) { /* logika aktualizacji lokalnego użytkownika */ }
-                }
-            }
 
             var userFromDb = await _userRepository.GetByIdAsync(userId);
             if (userFromDb != null && userFromDb.IsActive)
@@ -216,16 +148,6 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Użytkownik UPN: {UPN} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", upn);
 
-            // ZMIANA: Logika połączenia z Graph przez OBO
-            if (!string.IsNullOrEmpty(apiAccessToken))
-            {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadScopes))
-                {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUserByUpnAsync.");
-                }
-                // Opcjonalna synchronizacja z Graph
-            }
-
             var userFromDbBase = await _userRepository.GetUserByUpnAsync(upn);
             if (userFromDbBase == null)
             {
@@ -248,16 +170,6 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Wszyscy aktywni użytkownicy nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
 
-            // ZMIANA: Logika połączenia z Graph przez OBO
-            if (!string.IsNullOrEmpty(apiAccessToken))
-            {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadScopes))
-                {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetAllActiveUsersAsync.");
-                }
-                // Opcjonalna synchronizacja wszystkich użytkowników
-            }
-
             var usersFromDb = await _userRepository.FindAsync(u => u.IsActive);
             _cache.Set(AllActiveUsersCacheKey, usersFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Wszyscy aktywni użytkownicy dodani do cache.");
@@ -276,16 +188,6 @@ namespace TeamsManager.Core.Services
                 return cachedUsers;
             }
             _logger.LogDebug("Użytkownicy o roli {Role} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", role);
-
-            // ZMIANA: Logika połączenia z Graph przez OBO
-            if (!string.IsNullOrEmpty(apiAccessToken))
-            {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadScopes))
-                {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetUsersByRoleAsync.");
-                }
-                // Opcjonalna synchronizacja użytkowników po roli
-            }
 
             var usersFromDb = await _userRepository.GetUsersByRoleAsync(role);
             _cache.Set(cacheKey, usersFromDb, GetDefaultCacheEntryOptions());
@@ -374,15 +276,15 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
+                // Najpierw połącz się z Graph używając przekazanego tokenu
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można utworzyć użytkownika: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można utworzyć użytkownika: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync."
                     );
                     
                     await _notificationService.SendNotificationToUserAsync(
@@ -394,6 +296,7 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
+                // Używamy bezpośrednio metod PowerShell po zapewnieniu połączenia
                 string? externalUserId = await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true);
                 if (string.IsNullOrEmpty(externalUserId))
                 {
@@ -541,68 +444,6 @@ namespace TeamsManager.Core.Services
                     );
                     
                     return false;
-                }
-
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
-                {
-                    _logger.LogError("Nie można zaktualizować użytkownika: Nie udało się połączyć z Microsoft Graph API (OBO).");
-                    
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateUserAsync (OBO)."
-                    );
-                    
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        "Nie udało się zaktualizować użytkownika: Błąd połączenia z Microsoft Graph API.",
-                        "error"
-                    );
-                    
-                    return false;
-                }
-
-                bool psSuccess = await _powerShellService.Users.UpdateM365UserPropertiesAsync(userToUpdate.UPN, userToUpdate.Department?.Name, userToUpdate.Position, userToUpdate.FirstName, userToUpdate.LastName);
-                if (!psSuccess)
-                {
-                    _logger.LogError("Nie udało się zaktualizować użytkownika {UPN} w Microsoft 365.", userToUpdate.UPN);
-                    
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się zaktualizować użytkownika w Microsoft 365."
-                    );
-                    
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        $"Nie udało się zaktualizować użytkownika {userToUpdate.FirstName} {userToUpdate.LastName} w Microsoft 365.",
-                        "error"
-                    );
-                    
-                    return false;
-                }
-                if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
-                {
-                    bool upnUpdateSuccess = await _powerShellService.Users.UpdateM365UserPrincipalNameAsync(existingUser.UPN, userToUpdate.UPN);
-                    if (!upnUpdateSuccess)
-                    {
-                        _logger.LogError("Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{OldUpn}' na '{NewUpn}'.", existingUser.UPN, userToUpdate.UPN);
-                        
-                        await _operationHistoryService.UpdateOperationStatusAsync(
-                            operation.Id,
-                            OperationStatus.Failed,
-                            $"Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{existingUser.UPN}' na '{userToUpdate.UPN}'."
-                        );
-                        
-                        await _notificationService.SendNotificationToUserAsync(
-                            currentUserUpn,
-                            $"Nie udało się zaktualizować UPN użytkownika z '{existingUser.UPN}' na '{userToUpdate.UPN}'.",
-                            "error"
-                        );
-                        
-                        return false;
-                    }
                 }
 
                 existingUser.FirstName = userToUpdate.FirstName;
@@ -1320,15 +1161,15 @@ namespace TeamsManager.Core.Services
 
                 if (deactivateM365Account)
                 {
-                    // ZMIANA: Użycie nowej metody pomocniczej
-                    if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
+                    // Najpierw połącz się z Graph używając przekazanego tokenu
+                    if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                     {
-                        _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                        _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
                         
                         await _operationHistoryService.UpdateOperationStatusAsync(
                             operation.Id,
                             OperationStatus.Failed,
-                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync (OBO)."
+                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync."
                         );
                         
                         await _notificationService.SendNotificationToUserAsync(
@@ -1471,15 +1312,15 @@ namespace TeamsManager.Core.Services
 
                 if (activateM365Account)
                 {
-                    // ZMIANA: Użycie nowej metody pomocniczej
-                    if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
+                    // Najpierw połącz się z Graph używając przekazanego tokenu
+                    if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                     {
-                        _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                        _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
                         
                         await _operationHistoryService.UpdateOperationStatusAsync(
                             operation.Id,
                             OperationStatus.Failed,
-                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync (OBO)."
+                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync."
                         );
                         
                         await _notificationService.SendNotificationToUserAsync(
