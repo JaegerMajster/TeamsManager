@@ -25,6 +25,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private readonly IPowerShellUserResolverService _userResolver;
         private readonly ICurrentUserService _currentUserService;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
         private readonly INotificationService _notificationService;
         private readonly ILogger<PowerShellUserManagementService> _logger;
 
@@ -37,6 +38,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             IPowerShellUserResolverService userResolver,
             ICurrentUserService currentUserService,
             IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
             INotificationService notificationService,
             ILogger<PowerShellUserManagementService> logger)
         {
@@ -45,6 +47,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -520,17 +523,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_add_user";
             var operationId = Guid.NewGuid().ToString();
-            var operation = new OperationHistory
-            {
-                Id = operationId,
-                Type = OperationType.MemberAdded,
-                TargetEntityType = "TeamMember",
-                TargetEntityId = teamId,
-                TargetEntityName = $"{userUpn} -> Team {teamId}",
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.MemberAdded,
+                "TeamMember",
+                targetEntityId: teamId,
+                targetEntityName: $"{userUpn} -> Team {teamId}"
+            );
 
             await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
                 "Rozpoczynanie dodawania użytkownika...");
@@ -539,7 +539,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
             {
                 if (!_connectionService.ValidateRunspaceState())
                 {
-                    operation.MarkAsFailed("Środowisko PowerShell nie jest gotowe.");
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Środowisko PowerShell nie jest gotowe."
+                    );
                     await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                         "❌ Środowisko PowerShell nie jest gotowe", "error");
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
@@ -552,8 +556,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                 if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(userUpn) || string.IsNullOrEmpty(role))
                 {
-                    operation.MarkAsFailed("TeamID, UserUPN i Role są wymagane.");
                     _logger.LogError("TeamID, UserUPN i Role są wymagane.");
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "TeamID, UserUPN i Role są wymagane."
+                    );
                     await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                         "❌ ID zespołu, UPN użytkownika i rola są wymagane", "error");
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
@@ -564,8 +572,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 if (!role.Equals("Owner", StringComparison.OrdinalIgnoreCase) &&
                     !role.Equals("Member", StringComparison.OrdinalIgnoreCase))
                 {
-                    operation.MarkAsFailed($"Nieprawidłowa rola '{role}'.");
                     _logger.LogError("Nieprawidłowa rola '{Role}'. Dozwolone: Owner, Member.", role);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Nieprawidłowa rola '{role}'."
+                    );
                     await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                         $"❌ Nieprawidłowa rola '{role}'. Dozwolone: Owner, Member", "error");
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
@@ -580,8 +592,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 var userId = await _userResolver.GetUserIdAsync(userUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    operation.MarkAsFailed($"Nie znaleziono użytkownika {userUpn}");
                     _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Nie znaleziono użytkownika {userUpn}"
+                    );
                     await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                         $"❌ Nie znaleziono użytkownika {userUpn}", "error");
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
@@ -604,12 +620,18 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                 if (results != null)
                 {
-                    operation.MarkAsCompleted("Użytkownik dodany do zespołu.");
                     _logger.LogInformation("Pomyślnie dodano użytkownika {UserUpn} do zespołu {TeamId}",
                         userUpn, teamId);
 
                     // Invalidate team cache
                     _cacheService.InvalidateTeamCache(teamId);
+
+                    // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        "Użytkownik dodany do zespołu."
+                    );
 
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
                         "Użytkownik dodany pomyślnie!");
@@ -620,7 +642,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 }
                 else
                 {
-                    operation.MarkAsFailed("Błąd podczas dodawania użytkownika.");
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Błąd podczas dodawania użytkownika."
+                    );
                     await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                         "❌ Nie udało się dodać użytkownika do zespołu", "error");
                     await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
@@ -632,16 +658,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
             {
                 _logger.LogError(ex, "Błąd dodawania użytkownika {UserUpn} do zespołu {TeamId}",
                     userUpn, teamId);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+                
                 await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
                     $"❌ Błąd krytyczny podczas dodawania użytkownika: {ex.Message}", "error");
                 await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
                     "Operacja zakończona błędem krytycznym");
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -975,33 +1005,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
             {
                 return false;
             }
-        }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id))
-                operation.Id = Guid.NewGuid().ToString();
-
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_powershell";
-
-            if (operation.StartedAt == default(DateTime))
-            {
-                operation.StartedAt = DateTime.UtcNow;
-            }
-
-            if ((operation.Status == OperationStatus.Completed ||
-                 operation.Status == OperationStatus.Failed ||
-                 operation.Status == OperationStatus.Cancelled ||
-                 operation.Status == OperationStatus.PartialSuccess) &&
-                !operation.CompletedAt.HasValue)
-            {
-                operation.CompletedAt = DateTime.UtcNow;
-                operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-            }
-
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano historię operacji ID: {OperationId} dla PowerShell.", operation.Id);
         }
 
         #endregion
