@@ -13,7 +13,6 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
-using Microsoft.Identity.Client; // NOWE: Dla IConfidentialClientApplication i UserAssertion
 
 namespace TeamsManager.Core.Services
 {
@@ -32,13 +31,13 @@ namespace TeamsManager.Core.Services
         private readonly IPowerShellTeamManagementService _powerShellTeamService;
         private readonly IPowerShellUserManagementService _powerShellUserService;
         private readonly IPowerShellBulkOperationsService _powerShellBulkOps;
+        private readonly IPowerShellService _powerShellService;
         private readonly INotificationService _notificationService;
         private readonly ILogger<TeamService> _logger;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly ISchoolYearRepository _schoolYearRepository;
         private readonly IMemoryCache _cache;
-        private readonly IConfidentialClientApplication _confidentialClientApplication; // NOWE
-        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to pole
+        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
 
         // Definicje kluczy cache
         private const string AllActiveTeamsCacheKey = "Teams_AllActive";
@@ -49,10 +48,6 @@ namespace TeamsManager.Core.Services
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
         private static CancellationTokenSource _teamsCacheTokenSource = new CancellationTokenSource();
-
-        // NOWE: Domyślne zakresy dla Microsoft Graph
-        private readonly string[] _graphReadScopes = new[] { "Group.Read.All", "User.Read.All" };
-        private readonly string[] _graphReadWriteScopes = new[] { "Group.ReadWrite.All", "User.Read.All", "Directory.Read.All" }; // Directory.Read.All może być potrzebne do weryfikacji użytkowników i grup
 
         /// <summary>
         /// Konstruktor serwisu zespołów.
@@ -67,12 +62,12 @@ namespace TeamsManager.Core.Services
             IPowerShellTeamManagementService powerShellTeamService,
             IPowerShellUserManagementService powerShellUserService,
             IPowerShellBulkOperationsService powerShellBulkOps,
+            IPowerShellService powerShellService,
             INotificationService notificationService,
             ILogger<TeamService> logger,
             IGenericRepository<SchoolType> schoolTypeRepository,
             ISchoolYearRepository schoolYearRepository,
             IMemoryCache memoryCache,
-            IConfidentialClientApplication confidentialClientApplication, // NOWE
             IOperationHistoryService operationHistoryService) // Dodaj to do konstruktora
         {
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
@@ -84,12 +79,12 @@ namespace TeamsManager.Core.Services
             _powerShellTeamService = powerShellTeamService ?? throw new ArgumentNullException(nameof(powerShellTeamService));
             _powerShellUserService = powerShellUserService ?? throw new ArgumentNullException(nameof(powerShellUserService));
             _powerShellBulkOps = powerShellBulkOps ?? throw new ArgumentNullException(nameof(powerShellBulkOps));
+            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication)); // NOWE
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
         }
 
@@ -99,51 +94,6 @@ namespace TeamsManager.Core.Services
                 .SetAbsoluteExpiration(_defaultCacheDuration)
                 .AddExpirationToken(new CancellationChangeToken(_teamsCacheTokenSource.Token));
         }
-
-        // NOWE: Metoda pomocnicza do obsługi OBO i połączenia z Graph przez PowerShellService
-        private async Task<bool> ConnectToGraphOnBehalfOfUserAsync(string? apiAccessToken, string[] scopes)
-        {
-            if (string.IsNullOrEmpty(apiAccessToken))
-            {
-                _logger.LogWarning("ConnectToGraphOnBehalfOfUserAsync: Token dostępu API (apiAccessToken) jest pusty lub null.");
-                return false;
-            }
-
-            try
-            {
-                var userAssertion = new UserAssertion(apiAccessToken);
-                _logger.LogDebug("ConnectToGraphOnBehalfOfUserAsync: Próba uzyskania tokenu OBO dla zakresów: {Scopes}", string.Join(", ", scopes));
-
-                var authResult = await _confidentialClientApplication.AcquireTokenOnBehalfOf(scopes, userAssertion)
-                    .ExecuteAsync();
-
-                if (string.IsNullOrEmpty(authResult.AccessToken))
-                {
-                    _logger.LogError("ConnectToGraphOnBehalfOfUserAsync: Nie udało się uzyskać tokenu dostępu do Graph w przepływie OBO (authResult.AccessToken jest pusty).");
-                    return false;
-                }
-                _logger.LogInformation("ConnectToGraphOnBehalfOfUserAsync: Pomyślnie uzyskano token OBO dla Graph.");
-                // Powiadamianie usług PowerShell o nowym tokenie zostanie zaimplementowane w przyszłości
-                return true;
-            }
-            // POPRAWKA BŁĘDU CS1061 (linia 117): Zamiast ex.SubError używamy ex.Classification
-            catch (MsalUiRequiredException ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Wymagana interakcja użytkownika lub zgoda (MsalUiRequiredException) w przepływie OBO. Scopes: {Scopes}. Błąd: {Classification}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.Classification, ex.Message);
-                return false;
-            }
-            catch (MsalServiceException ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Błąd usługi MSAL podczas próby uzyskania tokenu OBO dla scopes: {Scopes}. Kod błędu: {MsalErrorCode}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.ErrorCode, ex.Message);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync: Nieoczekiwany błąd podczas uzyskiwania tokenu OBO dla scopes: {Scopes}.", string.Join(", ", scopes));
-                return false;
-            }
-        }
-
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache. Zwraca zespół tylko jeśli jego Status to Active.</remarks>
@@ -173,26 +123,25 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogDebug("Zespół ID: {TeamId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", teamId);
 
-                // ZMIANA: Logika połączenia z Graph przez OBO
+                // Synchronizacja z Graph jeśli podano token
                 if (!string.IsNullOrEmpty(apiAccessToken))
                 {
-                    if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadScopes)) // Użycie _graphReadScopes
-                    {
-                        _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetTeamByIdAsync.");
-                        // Rozważ, czy w tym przypadku zwrócić błąd, czy próbować tylko z lokalnej bazy
-                        // Na razie, jeśli połączenie z Graph się nie powiedzie, nadal próbujemy z lokalnej bazy.
-                    }
-                    else
+                    // Użyj PowerShellService do połączenia i pobrania danych z Graph
+                    if (await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                     {
                         var psTeam = await _powerShellTeamService.GetTeamAsync(teamId);
                         if (psTeam != null)
                         {
-                            _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API. Informacje z Graph mogą być użyte do aktualizacji lokalnej bazy (logika niezaimplementowana).", teamId);
+                            _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API. Synchronizacja z lokalną bazą (niezaimplementowana).", teamId);
                         }
                         else
                         {
                             _logger.LogWarning("Zespół ID: {TeamId} nie znaleziony w Graph API.", teamId);
                         }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Nie udało się połączyć z Microsoft Graph API w GetTeamByIdAsync.");
                     }
                 }
 
@@ -231,9 +180,9 @@ namespace TeamsManager.Core.Services
 
             if (!string.IsNullOrEmpty(apiAccessToken))
             {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadScopes)) // Użycie _graphReadScopes
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetAllTeamsAsync.");
+                    _logger.LogWarning("Nie udało się połączyć z Microsoft Graph API w GetAllTeamsAsync.");
                 }
                 // Można dodać logikę synchronizacji wszystkich zespołów z Graph
             }
@@ -259,9 +208,9 @@ namespace TeamsManager.Core.Services
 
             if (!string.IsNullOrEmpty(apiAccessToken))
             {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadScopes))
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetActiveTeamsAsync.");
+                    _logger.LogWarning("Nie udało się połączyć z Microsoft Graph API w GetActiveTeamsAsync.");
                 }
             }
 
@@ -286,9 +235,9 @@ namespace TeamsManager.Core.Services
 
             if (!string.IsNullOrEmpty(apiAccessToken))
             {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadScopes))
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetArchivedTeamsAsync.");
+                    _logger.LogWarning("Nie udało się połączyć z Microsoft Graph API w GetArchivedTeamsAsync.");
                 }
             }
             var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync();
@@ -317,9 +266,9 @@ namespace TeamsManager.Core.Services
 
             if (!string.IsNullOrEmpty(apiAccessToken))
             {
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadScopes))
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie GetTeamsByOwnerAsync.");
+                    _logger.LogWarning("Nie udało się połączyć z Microsoft Graph API w GetTeamsByOwnerAsync.");
                 }
             }
             var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn);
@@ -377,19 +326,26 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadWriteScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można utworzyć zespołu: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można utworzyć zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateTeamAsync."
                     );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        _currentUserService.GetCurrentUserUpn() ?? "system",
+                        "Nie udało się utworzyć zespołu: Błąd połączenia z Microsoft Graph API.",
+                        "error"
+                    );
+                    
                     return null;
                 }
-                // Reszta logiki tworzenia zespołu jak wcześniej...
+
                 string finalDisplayName = displayName;
                 TeamTemplate? template = null;
                 SchoolType? schoolType = null;
@@ -562,16 +518,23 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Próba zmiany statusu zespołu ID {TeamId} z {OldStatus} na {NewStatus} za pomocą metody UpdateTeamAsync jest ignorowana. Użyj ArchiveTeamAsync/RestoreTeamAsync do zmiany statusu.", existingTeam.Id, existingTeam.Status, teamToUpdate.Status);
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadWriteScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można zaktualizować zespołu: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można zaktualizować zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateTeamAsync."
                     );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        _currentUserService.GetCurrentUserUpn() ?? "system",
+                        "Nie udało się zaktualizować zespołu: Błąd połączenia z Microsoft Graph API.",
+                        "error"
+                    );
+                    
                     return false;
                 }
 
@@ -673,15 +636,15 @@ namespace TeamsManager.Core.Services
                     return true; 
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadWriteScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można zarchiwizować zespołu: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można zarchiwizować zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ArchiveTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ArchiveTeamAsync."
                     );
                     return false;
                 }
@@ -810,15 +773,15 @@ namespace TeamsManager.Core.Services
                     return true; 
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadWriteScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można przywrócić zespołu: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można przywrócić zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RestoreTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RestoreTeamAsync."
                     );
                     return false;
                 }
@@ -896,15 +859,15 @@ namespace TeamsManager.Core.Services
                     return false; 
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphReadWriteScopes)) // Potrzebne Group.ReadWrite.All do usunięcia
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można usunąć zespołu: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można usunąć zespołu: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeleteTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeleteTeamAsync."
                     );
                     return false;
                 }
@@ -1020,17 +983,15 @@ namespace TeamsManager.Core.Services
                     return null; 
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                // Zakresy dla dodawania członka
-                var memberAddScopes = new[] { "GroupMember.ReadWrite.All", "User.Read.All" }; // User.Read.All do weryfikacji UPN jeśli PowerShellService tego wymaga
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, memberAddScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można dodać członka: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można dodać członka: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddMemberAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddMemberAsync."
                     );
                     return null;
                 }
@@ -1131,16 +1092,15 @@ namespace TeamsManager.Core.Services
                     return false; 
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                var memberRemoveScopes = new[] { "GroupMember.ReadWrite.All", "User.Read.All" };
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, memberRemoveScopes))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można usunąć członka: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można usunąć członka: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveMemberAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveMemberAsync."
                     );
                     return false;
                 }
@@ -1272,15 +1232,15 @@ namespace TeamsManager.Core.Services
                     return new Dictionary<string, bool>();
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, new[] { "GroupMember.ReadWrite.All", "User.Read.All" }))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można dodać użytkowników: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można dodać użytkowników: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddUsersToTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddUsersToTeamAsync."
                     );
                     return new Dictionary<string, bool>();
                 }
@@ -1445,15 +1405,15 @@ namespace TeamsManager.Core.Services
                     return new Dictionary<string, bool>();
                 }
 
-                // ZMIANA: Użycie nowej metody pomocniczej
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, new[] { "GroupMember.ReadWrite.All", "User.Read.All" }))
+                // Połącz się z Microsoft Graph
+                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
                 {
-                    _logger.LogError("Nie można usunąć użytkowników: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    _logger.LogError("Nie można usunąć użytkowników: Nie udało się połączyć z Microsoft Graph API.");
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveUsersFromTeamAsync (OBO)."
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveUsersFromTeamAsync."
                     );
                     return new Dictionary<string, bool>();
                 }
