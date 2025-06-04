@@ -301,71 +301,107 @@ namespace TeamsManager.Core.Services
             string apiAccessToken, // ZMIANA: accessToken -> apiAccessToken
             bool sendWelcomeEmail = false)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-            var operation = new OperationHistory { /* ... */ Id = Guid.NewGuid().ToString(), Type = OperationType.UserCreated, TargetEntityType = nameof(User), TargetEntityName = $"{firstName} {lastName} ({upn})", CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            _logger.LogInformation("Rozpoczynanie tworzenia użytkownika: {FirstName} {LastName} ({UPN})", firstName, lastName, upn);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserCreated,
+                nameof(User),
+                targetEntityName: $"{firstName} {lastName} ({upn})"
+            );
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie tworzenia użytkownika: {FirstName} {LastName} ({UPN}) przez {User}", firstName, lastName, upn, currentUserUpn);
                 if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(upn) || string.IsNullOrWhiteSpace(password))
                 {
-                    operation.MarkAsFailed("Imię, nazwisko, UPN i hasło są wymagane.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć użytkownika: Imię, nazwisko, UPN lub hasło są puste.");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Imię, nazwisko, UPN i hasło są wymagane."
+                    );
                     return null;
                 }
                 var existingUser = await _userRepository.GetUserByUpnAsync(upn);
                 if (existingUser != null)
                 {
-                    operation.MarkAsFailed($"Użytkownik o UPN '{upn}' już istnieje.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć użytkownika: Użytkownik o UPN {UPN} już istnieje.", upn);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik o UPN '{upn}' już istnieje."
+                    );
                     return null;
                 }
                 var department = await _departmentRepository.GetByIdAsync(departmentId);
                 if (department == null || !department.IsActive)
                 {
-                    operation.MarkAsFailed($"Dział o ID '{departmentId}' nie istnieje lub jest nieaktywny.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć użytkownika: Dział o ID {DepartmentId} nie istnieje lub jest nieaktywny.", departmentId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Dział o ID '{departmentId}' nie istnieje lub jest nieaktywny."
+                    );
                     return null;
                 }
 
                 // ZMIANA: Użycie nowej metody pomocniczej
                 if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
                 {
-                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync (OBO).");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można utworzyć użytkownika: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync (OBO)."
+                    );
                     return null;
                 }
 
                 string? externalUserId = await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true);
                 if (string.IsNullOrEmpty(externalUserId))
                 {
-                    operation.MarkAsFailed("Nie udało się utworzyć użytkownika w Microsoft 365.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie udało się utworzyć użytkownika {UPN} w Microsoft 365.", upn);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się utworzyć użytkownika w Microsoft 365."
+                    );
                     return null;
                 }
 
+                var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
                 var newUser = new User { /* ... inicjalizacja pól ... */ Id = Guid.NewGuid().ToString(), FirstName = firstName, LastName = lastName, UPN = upn, Role = role, DepartmentId = departmentId, Department = department, ExternalId = externalUserId, CreatedBy = currentUserUpn, IsActive = true };
                 await _userRepository.AddAsync(newUser);
-                operation.TargetEntityId = newUser.Id;
-                operation.MarkAsCompleted($"Użytkownik ID: {newUser.Id} utworzony lokalnie i w M365. External ID: {externalUserId}");
                 _logger.LogInformation("Użytkownik {FirstName} {LastName} ({UPN}) pomyślnie utworzony. ID: {UserId}, External ID: {ExternalUserId}", firstName, lastName, upn, newUser.Id, externalUserId);
                 InvalidateUserCache(userId: newUser.Id, upn: newUser.UPN, role: newUser.Role, invalidateAllGlobalLists: true);
                 if (sendWelcomeEmail) { _logger.LogInformation("TODO: Wysłanie emaila powitalnego do {UPN}", upn); }
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Użytkownik ID: {newUser.Id} utworzony lokalnie i w M365. External ID: {externalUserId}"
+                );
                 return newUser;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia użytkownika {UPN}.", upn);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return null;
             }
-            finally { await SaveOperationHistoryAsync(operation); }
         }
 
         public async Task<bool> UpdateUserAsync(User userToUpdate, string apiAccessToken) // ZMIANA: accessToken -> apiAccessToken
@@ -375,23 +411,32 @@ namespace TeamsManager.Core.Services
                 _logger.LogError("Próba aktualizacji użytkownika z nieprawidłowymi danymi (null lub brak ID).");
                 throw new ArgumentNullException(nameof(userToUpdate));
             }
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory { /*...*/ Id = Guid.NewGuid().ToString(), Type = OperationType.UserUpdated, TargetEntityType = nameof(User), TargetEntityId = userToUpdate.Id, CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+
+            _logger.LogInformation("Rozpoczynanie aktualizacji użytkownika ID: {UserId}", userToUpdate.Id);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserUpdated,
+                nameof(User),
+                targetEntityId: userToUpdate.Id
+            );
+
             string? oldUpn = null; UserRole? oldRole = null; bool oldIsActive = false;
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie aktualizacji użytkownika ID: {UserId} przez {User}", userToUpdate.Id, currentUserUpn);
                 var existingUser = await _userRepository.GetByIdAsync(userToUpdate.Id);
                 if (existingUser == null)
                 {
-                    operation.MarkAsFailed($"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można zaktualizować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik o ID '{userToUpdate.Id}' nie został znaleziony."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = $"{existingUser.FirstName} {existingUser.LastName} ({existingUser.UPN})";
                 oldUpn = existingUser.UPN; oldRole = existingUser.Role; oldIsActive = existingUser.IsActive;
 
                 if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
@@ -399,36 +444,52 @@ namespace TeamsManager.Core.Services
                     var userWithSameUpn = await _userRepository.GetUserByUpnAsync(userToUpdate.UPN);
                     if (userWithSameUpn != null && userWithSameUpn.Id != userToUpdate.Id)
                     {
-                        operation.MarkAsFailed($"UPN '{userToUpdate.UPN}' już istnieje w systemie.");
-                        await SaveOperationHistoryAsync(operation);
                         _logger.LogError("Nie można zaktualizować użytkownika: UPN {UPN} już istnieje.", userToUpdate.UPN);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"UPN '{userToUpdate.UPN}' już istnieje w systemie."
+                        );
                         return false;
                     }
                 }
                 var department = await _departmentRepository.GetByIdAsync(userToUpdate.DepartmentId);
                 if (department == null || !department.IsActive)
                 {
-                    operation.MarkAsFailed($"Dział o ID '{userToUpdate.DepartmentId}' nie istnieje lub jest nieaktywny.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można zaktualizować użytkownika: Dział o ID {DepartmentId} nie istnieje lub jest nieaktywny.", userToUpdate.DepartmentId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Dział o ID '{userToUpdate.DepartmentId}' nie istnieje lub jest nieaktywny."
+                    );
                     return false;
                 }
 
                 // ZMIANA: Użycie nowej metody pomocniczej
                 if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
                 {
-                    operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateUserAsync (OBO).");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie można zaktualizować użytkownika: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateUserAsync (OBO)."
+                    );
                     return false;
                 }
 
                 bool psSuccess = await _powerShellService.Users.UpdateM365UserPropertiesAsync(userToUpdate.UPN, userToUpdate.Department?.Name, userToUpdate.Position, userToUpdate.FirstName, userToUpdate.LastName);
                 if (!psSuccess)
                 {
-                    operation.MarkAsFailed("Nie udało się zaktualizować użytkownika w Microsoft 365.");
-                    await SaveOperationHistoryAsync(operation);
                     _logger.LogError("Nie udało się zaktualizować użytkownika {UPN} w Microsoft 365.", userToUpdate.UPN);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się zaktualizować użytkownika w Microsoft 365."
+                    );
                     return false;
                 }
                 if (!string.Equals(existingUser.UPN, userToUpdate.UPN, StringComparison.OrdinalIgnoreCase))
@@ -436,13 +497,18 @@ namespace TeamsManager.Core.Services
                     bool upnUpdateSuccess = await _powerShellService.Users.UpdateM365UserPrincipalNameAsync(existingUser.UPN, userToUpdate.UPN);
                     if (!upnUpdateSuccess)
                     {
-                        operation.MarkAsFailed($"Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{existingUser.UPN}' na '{userToUpdate.UPN}'.");
-                        await SaveOperationHistoryAsync(operation);
                         _logger.LogError("Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{OldUpn}' na '{NewUpn}'.", existingUser.UPN, userToUpdate.UPN);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Nie udało się zaktualizować UPN użytkownika w Microsoft 365 z '{existingUser.UPN}' na '{userToUpdate.UPN}'."
+                        );
                         return false;
                     }
                 }
 
+                var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
                 existingUser.FirstName = userToUpdate.FirstName; /* ... pozostałe pola ... */
                 existingUser.LastName = userToUpdate.LastName;
                 existingUser.UPN = userToUpdate.UPN;
@@ -461,95 +527,227 @@ namespace TeamsManager.Core.Services
 
                 existingUser.MarkAsModified(currentUserUpn);
                 _userRepository.Update(existingUser);
-                operation.TargetEntityName = $"{existingUser.FirstName} {existingUser.LastName} ({existingUser.UPN})";
-                operation.MarkAsCompleted("Użytkownik zaktualizowany lokalnie i w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);
                 InvalidateUserCache(userId: existingUser.Id, upn: existingUser.UPN, role: existingUser.Role, oldUpnIfChanged: oldUpn, oldRoleIfChanged: oldRole, isActiveChanged: oldIsActive != existingUser.IsActive, invalidateAllGlobalLists: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Użytkownik zaktualizowany lokalnie i w M365."
+                );
                 return true;
             }
-            catch (Exception ex) { /* ... */ _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji użytkownika ID {UserId}.", userToUpdate.Id); operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return false; }
-            finally { await SaveOperationHistoryAsync(operation); }
+            catch (Exception ex) 
+            { 
+                _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji użytkownika ID {UserId}.", userToUpdate.Id); 
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+                return false; 
+            }
         }
 
         public async Task<bool> DeactivateUserAsync(string userId, string apiAccessToken, bool deactivateM365Account = true) // ZMIANA: accessToken -> apiAccessToken
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_deactivate";
-            var operation = new OperationHistory { /*...*/ Id = Guid.NewGuid().ToString(), Type = OperationType.UserDeactivated, TargetEntityType = nameof(User), TargetEntityId = userId, CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            _logger.LogInformation("Rozpoczynanie dezaktywacji użytkownika ID: {UserId}", userId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserDeactivated,
+                nameof(User),
+                targetEntityId: userId
+            );
+
             User? user = null;
             try
             {
-                _logger.LogInformation("Rozpoczynanie dezaktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
                 var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
                 user = foundUsers.FirstOrDefault();
-                if (user == null) { /*...*/ operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId); return false; }
-                operation.TargetEntityName = user.FullName;
-                if (!user.IsActive) { /*...*/ operation.MarkAsCompleted($"Użytkownik o ID '{userId}' był już nieaktywny."); await SaveOperationHistoryAsync(operation); _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId); InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); return true; }
+                if (user == null) 
+                { 
+                    _logger.LogError("Nie można zdezaktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik o ID '{userId}' nie został znaleziony."
+                    );
+                    return false; 
+                }
+                
+                if (!user.IsActive) 
+                { 
+                    _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId); 
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Użytkownik o ID '{userId}' był już nieaktywny."
+                    );
+                    return true; 
+                }
 
                 if (deactivateM365Account)
                 {
                     // ZMIANA: Użycie nowej metody pomocniczej
                     if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
                     {
-                        operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync (OBO).");
-                        await SaveOperationHistoryAsync(operation);
                         _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync (OBO)."
+                        );
                         return false;
                     }
                     bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, false);
-                    if (!psSuccess) { /*...*/ operation.MarkAsFailed($"Nie udało się zdezaktywować konta użytkownika '{user.UPN}' w Microsoft 365."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie udało się zdezaktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); return false; }
+                    if (!psSuccess) 
+                    { 
+                        _logger.LogError("Nie udało się zdezaktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); 
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Nie udało się zdezaktywować konta użytkownika '{user.UPN}' w Microsoft 365."
+                        );
+                        return false; 
+                    }
                 }
 
+                var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_deactivate";
                 user.MarkAsDeleted(currentUserUpn);
                 _userRepository.Update(user);
-                operation.MarkAsCompleted("Użytkownik zdezaktywowany lokalnie i opcjonalnie w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zdezaktywowany.", userId);
                 InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Użytkownik zdezaktywowany lokalnie i opcjonalnie w M365."
+                );
                 return true;
             }
-            catch (Exception ex) { /*...*/ _logger.LogError(ex, "Krytyczny błąd podczas dezaktywacji użytkownika ID {UserId}.", userId); operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return false; }
-            finally { await SaveOperationHistoryAsync(operation); }
+            catch (Exception ex) 
+            { 
+                _logger.LogError(ex, "Krytyczny błąd podczas dezaktywacji użytkownika ID {UserId}.", userId); 
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+                return false; 
+            }
         }
 
         public async Task<bool> ActivateUserAsync(string userId, string apiAccessToken, bool activateM365Account = true) // ZMIANA: accessToken -> apiAccessToken
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_activate";
-            var operation = new OperationHistory { /*...*/ Id = Guid.NewGuid().ToString(), Type = OperationType.UserActivated, TargetEntityType = nameof(User), TargetEntityId = userId, CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            _logger.LogInformation("Rozpoczynanie aktywacji użytkownika ID: {UserId}", userId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserActivated,
+                nameof(User),
+                targetEntityId: userId
+            );
+
             User? user = null;
             try
             {
-                _logger.LogInformation("Rozpoczynanie aktywacji użytkownika ID: {UserId} przez {User}", userId, currentUserUpn);
                 var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
                 user = foundUsers.FirstOrDefault();
-                if (user == null) { /*...*/ operation.MarkAsFailed($"Użytkownik o ID '{userId}' nie został znaleziony."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie można aktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId); return false; }
-                operation.TargetEntityName = user.FullName;
-                if (user.IsActive) { /*...*/ operation.MarkAsCompleted("Użytkownik był już aktywny."); await SaveOperationHistoryAsync(operation); _logger.LogInformation("Użytkownik o ID {UserId} był już aktywny.", userId); InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); return true; }
+                if (user == null) 
+                { 
+                    _logger.LogError("Nie można aktywować użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik o ID '{userId}' nie został znaleziony."
+                    );
+                    return false; 
+                }
+                
+                if (user.IsActive) 
+                { 
+                    _logger.LogInformation("Użytkownik o ID {UserId} był już aktywny.", userId); 
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        "Użytkownik był już aktywny."
+                    );
+                    return true; 
+                }
 
                 if (activateM365Account)
                 {
                     // ZMIANA: Użycie nowej metody pomocniczej
                     if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphUserReadWriteScopes))
                     {
-                        operation.MarkAsFailed("Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync (OBO).");
-                        await SaveOperationHistoryAsync(operation);
                         _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync (OBO)."
+                        );
                         return false;
                     }
                     bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, true);
-                    if (!psSuccess) { /*...*/ operation.MarkAsFailed($"Nie udało się aktywować konta użytkownika '{user.UPN}' w Microsoft 365."); await SaveOperationHistoryAsync(operation); _logger.LogError("Nie udało się aktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); return false; }
+                    if (!psSuccess) 
+                    { 
+                        _logger.LogError("Nie udało się aktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); 
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Nie udało się aktywować konta użytkownika '{user.UPN}' w Microsoft 365."
+                        );
+                        return false; 
+                    }
                 }
 
+                var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_activate";
                 user.IsActive = true;
                 user.MarkAsModified(currentUserUpn);
                 _userRepository.Update(user);
-                operation.MarkAsCompleted("Użytkownik aktywowany lokalnie i opcjonalnie w M365.");
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie aktywowany.", userId);
                 InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Użytkownik aktywowany lokalnie i opcjonalnie w M365."
+                );
                 return true;
             }
-            catch (Exception ex) { /*...*/ _logger.LogError(ex, "Krytyczny błąd podczas aktywacji użytkownika ID {UserId}.", userId); operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return false; }
-            finally { await SaveOperationHistoryAsync(operation); }
+            catch (Exception ex) 
+            { 
+                _logger.LogError(ex, "Krytyczny błąd podczas aktywacji użytkownika ID {UserId}.", userId); 
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+                return false; 
+            }
         }
 
         // Metody AssignUserToSchoolTypeAsync, RemoveUserFromSchoolTypeAsync,
@@ -682,31 +880,74 @@ namespace TeamsManager.Core.Services
 
         private void InvalidateUserCache(string? userId = null, string? upn = null, UserRole? role = null, string? oldUpnIfChanged = null, UserRole? oldRoleIfChanged = null, bool isActiveChanged = false, bool invalidateAllGlobalLists = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u użytkowników. userId: {UserId}, upn: {UPN}, role: {Role}, oldUpn: {OldUpn}, oldRole: {OldRole}, isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists}, invalidateAll: {InvalidateAll}", userId, upn, role, oldUpnIfChanged, oldRoleIfChanged, isActiveChanged, invalidateAllGlobalLists, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u użytkowników. UserId: {UserId}, UPN: {UPN}, Role: {Role}, oldUpnIfChanged: {OldUpnIfChanged}, oldRoleIfChanged: {OldRoleIfChanged}, isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists}, invalidateAll: {InvalidateAll}",
+                userId, upn, role, oldUpnIfChanged, oldRoleIfChanged, isActiveChanged, invalidateAllGlobalLists, invalidateAll);
+
             var oldTokenSource = Interlocked.Exchange(ref _usersCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested) { oldTokenSource.Cancel(); oldTokenSource.Dispose(); }
-            _logger.LogDebug("Token cache'u dla użytkowników został zresetowany.");
-            if (invalidateAll)
+            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
             {
-                _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllActiveUsersCacheKey);
-                foreach (UserRole enumRole in Enum.GetValues(typeof(UserRole))) { _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString()); }
-                _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAll=true).");
+                oldTokenSource.Cancel();
+                oldTokenSource.Dispose();
             }
-            if (!string.IsNullOrWhiteSpace(userId)) { _cache.Remove(UserByIdCacheKeyPrefix + userId); _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", UserByIdCacheKeyPrefix, userId); }
-            if (!string.IsNullOrWhiteSpace(upn)) { _cache.Remove(UserByUpnCacheKeyPrefix + upn); _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Upn}", UserByUpnCacheKeyPrefix, upn); }
-            if (!string.IsNullOrWhiteSpace(oldUpnIfChanged) && oldUpnIfChanged != upn) { _cache.Remove(UserByUpnCacheKeyPrefix + oldUpnIfChanged); _logger.LogDebug("Usunięto z cache klucz dla starego UPN: {CacheKey}{OldUpn}", UserByUpnCacheKeyPrefix, oldUpnIfChanged); }
-            if (invalidateAllGlobalLists || isActiveChanged)
+
+            if (invalidateAll || invalidateAllGlobalLists)
             {
                 _cache.Remove(AllActiveUsersCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey} (z powodu invalidateAllGlobalLists lub isActiveChanged).", AllActiveUsersCacheKey);
-                foreach (UserRole enumRole in Enum.GetValues(typeof(UserRole))) { _cache.Remove(UsersByRoleCacheKeyPrefix + enumRole.ToString()); }
-                _logger.LogDebug("Usunięto z cache wszystkie klucze dla ról użytkowników (z powodu invalidateAllGlobalLists lub isActiveChanged).");
+                if (invalidateAll)
+                {
+                    // Inwaliduj wszystkie wpisy cache
+                    var fieldsToRemove = new[]
+                    {
+                        UserByIdCacheKeyPrefix,
+                        UserByUpnCacheKeyPrefix,
+                        UsersByRoleCacheKeyPrefix
+                    };
+                    foreach (var prefix in fieldsToRemove)
+                    {
+                        // Uwaga: W rzeczywistości, MemoryCache nie posiada metody GetAllKeys(), więc nie można bezpośrednio usunąć wszystkich kluczy zaczynających się od prefiksu
+                        // Jest to uproszczenie - w praktyce używamy CancellationToken do inwalidacji grupowej
+                        _logger.LogDebug("Inwalidacja wszystkich wpisów cache dla prefiksu: {Prefix}", prefix);
+                    }
+                }
             }
             else
             {
-                if (role.HasValue) { _cache.Remove(UsersByRoleCacheKeyPrefix + role.Value.ToString()); _logger.LogDebug("Usunięto z cache klucz dla roli: {CacheKey}{Role}", UsersByRoleCacheKeyPrefix, role.Value); }
-                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role) { _cache.Remove(UsersByRoleCacheKeyPrefix + oldRoleIfChanged.Value.ToString()); _logger.LogDebug("Usunięto z cache klucz dla starej roli: {CacheKey}{OldRole}", UsersByRoleCacheKeyPrefix, oldRoleIfChanged.Value); }
+                // Granularna inwalidacja specyficznych wpisów
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    string userIdCacheKey = UserByIdCacheKeyPrefix + userId;
+                    _cache.Remove(userIdCacheKey);
+                }
+                if (!string.IsNullOrEmpty(upn))
+                {
+                    string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
+                    _cache.Remove(upnCacheKey);
+                }
+                if (!string.IsNullOrEmpty(oldUpnIfChanged) && oldUpnIfChanged != upn)
+                {
+                    string oldUpnCacheKey = UserByUpnCacheKeyPrefix + oldUpnIfChanged;
+                    _cache.Remove(oldUpnCacheKey);
+                }
+                if (role.HasValue)
+                {
+                    string roleCacheKey = UsersByRoleCacheKeyPrefix + role.Value.ToString();
+                    _cache.Remove(roleCacheKey);
+                }
+                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role)
+                {
+                    string oldRoleCacheKey = UsersByRoleCacheKeyPrefix + oldRoleIfChanged.Value.ToString();
+                    _cache.Remove(oldRoleCacheKey);
+                }
+                if (isActiveChanged || invalidateAllGlobalLists)
+                {
+                    _cache.Remove(AllActiveUsersCacheKey);
+                }
+                if (role.HasValue && (role.Value == UserRole.Nauczyciel || role.Value == UserRole.Wicedyrektor || role.Value == UserRole.Dyrektor))
+                {
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Nauczyciel.ToString());
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Wicedyrektor.ToString());
+                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Dyrektor.ToString());
+                }
             }
         }
 
