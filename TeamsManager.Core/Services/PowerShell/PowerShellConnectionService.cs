@@ -11,6 +11,7 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Utilities;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -29,6 +30,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
         // Dla śledzenia ostatniego kontekstu połączenia
         private string? _lastConnectedUserUpn;
         private string? _lastApiAccessToken;
+
+        // Nowe pola dla resilience
+        private readonly CircuitBreaker _connectionCircuitBreaker;
+        private readonly int _maxRetryAttempts;
+        private readonly TimeSpan _initialRetryDelay;
+        private readonly TimeSpan _maxRetryDelay;
+        private DateTime? _lastConnectionAttempt;
+        private DateTime? _lastSuccessfulConnection;
 
         // Współdzielony stan między instancjami Scoped
         private static Runspace? _sharedRunspace;
@@ -52,6 +61,19 @@ namespace TeamsManager.Core.Services.PowerShellServices
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
             _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+
+            // Konfiguracja resilience
+            var resilienceConfig = configuration.GetSection("PowerShellServiceConfig:ConnectionResilience");
+            
+            _maxRetryAttempts = int.Parse(resilienceConfig["RetryPolicy:MaxAttempts"] ?? "3");
+            _initialRetryDelay = TimeSpan.FromSeconds(int.Parse(resilienceConfig["RetryPolicy:InitialDelaySeconds"] ?? "1"));
+            _maxRetryDelay = TimeSpan.FromSeconds(int.Parse(resilienceConfig["RetryPolicy:MaxDelaySeconds"] ?? "30"));
+            
+            var cbFailureThreshold = int.Parse(resilienceConfig["CircuitBreaker:FailureThreshold"] ?? "5");
+            var cbOpenDuration = TimeSpan.FromSeconds(int.Parse(resilienceConfig["CircuitBreaker:OpenDurationSeconds"] ?? "60"));
+            var cbSamplingDuration = TimeSpan.FromSeconds(int.Parse(resilienceConfig["CircuitBreaker:SamplingDurationSeconds"] ?? "10"));
+            
+            _connectionCircuitBreaker = new CircuitBreaker(cbFailureThreshold, cbOpenDuration, cbSamplingDuration);
 
             InitializeRunspace();
         }
@@ -81,28 +103,38 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                // Pobierz świeży token
-                var freshToken = await _tokenManager.GetValidAccessTokenAsync(_lastConnectedUserUpn, _lastApiAccessToken);
-                
-                // Użyj istniejącej metody ConnectWithAccessTokenAsync
-                var connected = await ConnectWithAccessTokenAsync(freshToken);
-                
-                if (connected)
+                return await _connectionCircuitBreaker.ExecuteAsync(async () =>
                 {
-                    _logger.LogInformation("Automatyczne ponowne połączenie z Microsoft Graph zakończone sukcesem");
-                }
-                else
-                {
-                    _logger.LogError("Automatyczne ponowne połączenie z Microsoft Graph nie powiodło się");
-                }
-                
-                return connected;
+                    _logger.LogInformation("Circuit Breaker State: {State}. Attempting to connect...", 
+                        _connectionCircuitBreaker.State);
+                    
+                    // Pobierz świeży token
+                    var token = await _tokenManager.GetValidAccessTokenAsync(_lastConnectedUserUpn, _lastApiAccessToken);
+                    
+                    // Użyj istniejącej metody ConnectWithAccessTokenAsync
+                    var result = await ConnectWithAccessTokenAsync(token, 
+                        _configuration.GetSection("PowerShellServiceConfig:DefaultScopesForGraph").GetChildren().Select(x => x.Value).Where(v => v != null).ToArray());
+                    
+                    if (!result)
+                    {
+                        throw new InvalidOperationException("Failed to establish connection to Microsoft Graph");
+                    }
+                    
+                    return result;
+                });
+            }
+            catch (CircuitBreakerOpenException ex)
+            {
+                _logger.LogWarning(ex, "Circuit breaker is open. Connection attempts are temporarily suspended.");
+                await _notificationService.SendNotificationToUserAsync(
+                    _currentUserService.GetCurrentUserUpn() ?? "system",
+                    "⚠️ Połączenie z Microsoft Graph jest tymczasowo niedostępne. Spróbuj ponownie za chwilę.",
+                    "warning");
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas automatycznego ponownego łączenia z Microsoft Graph");
-                await _notificationService.SendNotificationToUserAsync(_lastConnectedUserUpn, 
-                    "Błąd automatycznego połączenia z Microsoft Graph", "error");
+                _logger.LogError(ex, "Failed to connect to Microsoft Graph");
                 return false;
             }
         }
@@ -147,6 +179,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             var operationId = Guid.NewGuid().ToString();
+
+            _lastConnectionAttempt = DateTime.UtcNow;
 
             if (_sharedRunspace == null || _sharedRunspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
@@ -239,6 +273,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         }
 
                         _sharedIsConnected = true;
+                        _lastSuccessfulConnection = DateTime.UtcNow;
 
                         // Zapisz kontekst dla automatycznego reconnect
                         _lastConnectedUserUpn = currentUserUpn;
@@ -403,16 +438,19 @@ namespace TeamsManager.Core.Services.PowerShellServices
         public async Task<Collection<PSObject>?> ExecuteCommandWithRetryAsync(
             string commandName,
             Dictionary<string, object>? parameters = null,
-            int maxRetries = MaxRetryAttempts)
+            int? maxRetries = null)
         {
-            // Automatyczne połączenie jeśli nie ma aktywnego
-            if (!await ConnectIfNotConnectedAsync())
+            maxRetries ??= _maxRetryAttempts; // Użyj konfiguracji zamiast stałej
+            
+            if (!ValidateRunspaceState()) 
             {
-                _logger.LogError("Nie można wykonać komendy '{CommandName}' - brak połączenia z Microsoft Graph", commandName);
-                return null;
+                // Spróbuj auto-reconnect przed rezygnacją
+                if (!await ConnectIfNotConnectedAsync())
+                {
+                    _logger.LogError("Cannot execute command: PowerShell is not connected and reconnection failed.");
+                    return null;
+                }
             }
-
-            if (!ValidateRunspaceState()) return null;
 
             int attempt = 0;
             Exception? lastException = null;
@@ -422,7 +460,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 try
                 {
                     attempt++;
-                    _logger.LogDebug("Wykonywanie komendy PowerShell: {CommandName}, próba {Attempt}/{MaxRetries}",
+                    _logger.LogDebug("Executing PowerShell command: {CommandName}, attempt {Attempt}/{MaxRetries}",
                         commandName, attempt, maxRetries);
 
                     using (var ps = PowerShell.Create())
@@ -447,7 +485,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                             throw new InvalidOperationException($"PowerShell errors: {errors}");
                         }
 
-                        _logger.LogDebug("Komenda '{CommandName}' wykonana. Wyniki: {Count}",
+                        _logger.LogDebug("Command '{CommandName}' executed successfully. Results: {Count}",
                             commandName, results.Count);
                         return results;
                     }
@@ -456,11 +494,25 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 {
                     lastException = ex;
 
-                    if (IsTransientError(ex) && attempt < maxRetries)
+                    // Sprawdź czy to błąd związany z połączeniem
+                    if (IsConnectionError(ex))
                     {
-                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)); // Exponential backoff
+                        _logger.LogWarning("Connection error detected. Attempting to reconnect...");
+                        _sharedIsConnected = false; // Force reconnection
+                        
+                        if (!await ConnectIfNotConnectedAsync())
+                        {
+                            _logger.LogError("Failed to reconnect after connection error.");
+                            break;
+                        }
+                    }
+                    else if (IsTransientError(ex) && attempt < maxRetries)
+                    {
+                        // Oblicz delay z uwzględnieniem konfiguracji
+                        var delay = CalculateRetryDelay(attempt);
+                        
                         _logger.LogWarning(ex,
-                            "Próba {Attempt}/{MaxRetries} wykonania komendy '{CommandName}' nie powiodła się. Ponawianie za {Delay}s",
+                            "Attempt {Attempt}/{MaxRetries} failed for command '{CommandName}'. Retrying in {Delay}s",
                             attempt, maxRetries, commandName, delay.TotalSeconds);
 
                         await Task.Delay(delay);
@@ -472,9 +524,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 }
             }
 
-            _logger.LogError(lastException, "Nie udało się wykonać komendy '{CommandName}' po {MaxRetries} próbach.",
+            _logger.LogError(lastException, "Failed to execute command '{CommandName}' after {MaxRetries} attempts.",
                 commandName, maxRetries);
             return null;
+        }
+
+        private TimeSpan CalculateRetryDelay(int attemptNumber)
+        {
+            // Exponential backoff z jitter
+            var exponentialDelay = _initialRetryDelay.TotalMilliseconds * Math.Pow(2, attemptNumber - 1);
+            var jitter = new Random().Next(0, 1000); // 0-1s jitter
+            var totalDelay = TimeSpan.FromMilliseconds(exponentialDelay + jitter);
+            
+            // Cap at max delay
+            return totalDelay > _maxRetryDelay ? _maxRetryDelay : totalDelay;
         }
 
         private bool IsTransientError(Exception ex)
@@ -576,6 +639,21 @@ namespace TeamsManager.Core.Services.PowerShellServices
                    message.Contains("invalid_grant") ||
                    message.Contains("not connected") ||
                    message.Contains("connect-mggraph");
+        }
+
+        public async Task<ConnectionHealthInfo> GetConnectionHealthAsync()
+        {
+            return new ConnectionHealthInfo
+            {
+                IsConnected = _sharedIsConnected,
+                RunspaceState = _sharedRunspace?.RunspaceStateInfo.State.ToString() ?? "Not initialized",
+                CircuitBreakerState = _connectionCircuitBreaker.State.ToString(),
+                LastConnectionAttempt = _lastConnectionAttempt,
+                LastSuccessfulConnection = _lastSuccessfulConnection,
+                TokenValid = _lastConnectedUserUpn != null && _lastApiAccessToken != null 
+                    ? _tokenManager.HasValidToken(_lastConnectedUserUpn)
+                    : false
+            };
         }
     }
 }

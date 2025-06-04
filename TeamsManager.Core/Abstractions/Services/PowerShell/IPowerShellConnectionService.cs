@@ -47,12 +47,12 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// </summary>
         /// <param name="commandName">Nazwa komendy</param>
         /// <param name="parameters">Parametry komendy</param>
-        /// <param name="maxRetries">Maksymalna liczba prób</param>
+        /// <param name="maxRetries">Maksymalna liczba prób (opcjonalne)</param>
         /// <returns>Kolekcja wyników lub null w przypadku błędu</returns>
         Task<Collection<PSObject>?> ExecuteCommandWithRetryAsync(
             string commandName,
             Dictionary<string, object>? parameters = null,
-            int maxRetries = 3);
+            int? maxRetries = null);
 
         /// <summary>
         /// Wykonuje operację z automatycznym połączeniem jeśli to konieczne
@@ -61,5 +61,24 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="operation">Operacja do wykonania</param>
         /// <returns>Wynik operacji lub domyślna wartość w przypadku błędu</returns>
         Task<T?> ExecuteWithAutoConnectAsync<T>(Func<Task<T>> operation) where T : class;
+
+        /// <summary>
+        /// Pobiera informacje o stanie połączenia i odporności systemu
+        /// </summary>
+        /// <returns>Szczegółowe informacje o stanie połączenia</returns>
+        Task<ConnectionHealthInfo> GetConnectionHealthAsync();
+    }
+
+    /// <summary>
+    /// Informacje o stanie połączenia PowerShell
+    /// </summary>
+    public class ConnectionHealthInfo
+    {
+        public bool IsConnected { get; set; }
+        public string RunspaceState { get; set; } = "";
+        public string CircuitBreakerState { get; set; } = "";
+        public DateTime? LastConnectionAttempt { get; set; }
+        public DateTime? LastSuccessfulConnection { get; set; }
+        public bool TokenValid { get; set; }
     }
 }
