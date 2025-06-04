@@ -44,30 +44,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
             List<string> userUpns,
             string role = "Member")
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowego dodawania {userUpns?.Count ?? 0} użytkowników do zespołu...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masowe dodawanie użytkowników do zespołu", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpns?.Any() ?? true)
             {
                 _logger.LogWarning("Lista użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista użytkowników jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
@@ -83,20 +68,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 .Select(g => g.Select(x => x.upn).ToList())
                 .ToList();
 
-            var totalBatches = batches.Count;
-            var processedBatches = 0;
-
             foreach (var batch in batches)
             {
                 await _semaphore.WaitAsync(); // Kontrola współbieżności
                 try
                 {
-                    processedBatches++;
-                    var progress = 5 + (int)((processedBatches / (float)totalBatches) * 85);
-                    
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                        $"Przetwarzanie partii {processedBatches}/{totalBatches} ({batch.Count} użytkowników)...");
-
                     var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
                     foreach (var result in batchResults)
                     {
@@ -124,12 +100,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
             // Invalidate cache dla zespołu
             _cacheService.InvalidateTeamCache(teamId);
 
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} sukcesów, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowe dodawanie zakończone: {successCount} użytkowników dodanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
             return results;
         }
 
@@ -137,30 +107,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
             string teamId,
             List<string> userUpns)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowego usuwania {userUpns?.Count ?? 0} użytkowników z zespołu...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masowe usuwanie użytkowników z zespołu", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpns?.Any() ?? true)
             {
                 _logger.LogWarning("Lista użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista użytkowników jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
@@ -176,20 +131,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 .Select(g => g.Select(x => x.upn).ToList())
                 .ToList();
 
-            var totalBatches = batches.Count;
-            var processedBatches = 0;
-
             foreach (var batch in batches)
             {
                 await _semaphore.WaitAsync();
                 try
                 {
-                    processedBatches++;
-                    var progress = 5 + (int)((processedBatches / (float)totalBatches) * 85);
-                    
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                        $"Przetwarzanie partii {processedBatches}/{totalBatches} ({batch.Count} użytkowników)...");
-
                     var batchResults = await ProcessUserRemovalBatchAsync(teamId, batch);
                     foreach (var result in batchResults)
                     {
@@ -217,41 +163,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
             // Invalidate cache
             _cacheService.InvalidateTeamCache(teamId);
 
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} sukcesów, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowe usuwanie zakończone: {successCount} użytkowników usuniętych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
             return results;
         }
 
         public async Task<Dictionary<string, bool>> BulkArchiveTeamsAsync(List<string> teamIds)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowej archiwizacji {teamIds?.Count ?? 0} zespołów...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masową archiwizację zespołów", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!teamIds?.Any() ?? true)
             {
                 _logger.LogWarning("Lista zespołów jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista zespołów jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak zespołów do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
@@ -260,17 +185,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
             var script = new StringBuilder();
             script.AppendLine("$results = @{}");
 
-            var totalTeams = teamIds.Count;
-            var processedTeams = 0;
-
             foreach (var teamId in teamIds)
             {
-                processedTeams++;
-                var progress = 30 + (int)((processedTeams / (float)totalTeams) * 50);
-                
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                    $"Archiwizacja zespołu {processedTeams}/{totalTeams}...");
-
                 script.AppendLine($@"
                     try {{
                         Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
@@ -307,42 +223,21 @@ namespace TeamsManager.Core.Services.PowerShellServices
             // Invalidate cache dla wszystkich zespołów
             _cacheService.InvalidateAllCache();
 
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} zarchiwizowanych, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowa archiwizacja zakończona: {successCount} zespołów zarchiwizowanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
             return results;
         }
 
         public async Task<Dictionary<string, bool>> BulkUpdateUserPropertiesAsync(
             Dictionary<string, Dictionary<string, string>> userUpdates)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowej aktualizacji właściwości {userUpdates?.Count ?? 0} użytkowników...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masową aktualizację właściwości użytkowników", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpdates?.Any() ?? true)
             {
                 _logger.LogWarning("Lista aktualizacji użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista aktualizacji jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
@@ -351,19 +246,10 @@ namespace TeamsManager.Core.Services.PowerShellServices
             var script = new StringBuilder();
             script.AppendLine("$results = @{}");
 
-            var totalUsers = userUpdates.Count;
-            var processedUsers = 0;
-
             foreach (var kvp in userUpdates)
             {
                 var userUpn = kvp.Key;
                 var properties = kvp.Value;
-
-                processedUsers++;
-                var progress = 20 + (int)((processedUsers / (float)totalUsers) * 60);
-                
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                    $"Aktualizacja użytkownika {processedUsers}/{totalUsers}: {userUpn}...");
 
                 script.AppendLine($@"
                     try {{
@@ -429,41 +315,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 _cacheService.InvalidateUserCache(userUpn: userUpn);
             }
 
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} zaktualizowanych, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowa aktualizacja zakończona: {successCount} użytkowników zaktualizowanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
             return results;
         }
 
         public async Task<bool> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                "Rozpoczynanie archiwizacji zespołu i dezaktywacji ekskluzywnych użytkowników...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto archiwizację zespołu i dezaktywację ekskluzywnych użytkowników", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return false;
             }
 
             if (string.IsNullOrEmpty(teamId))
             {
                 _logger.LogError("TeamID nie może być puste.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ ID zespołu nie może być puste", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - brak ID zespołu");
                 return false;
             }
 
@@ -471,9 +336,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 20, 
-                    "Pobieranie członków zespołu...");
-
                 var script = $@"
                     $teamId = '{teamId}'
                     $errors = @()
@@ -521,9 +383,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     }}
                 ";
 
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 50, 
-                    "Archiwizacja zespołu...");
-
                 var results = await _connectionService.ExecuteScriptAsync(script);
                 var result = results?.FirstOrDefault()?.BaseObject as Hashtable;
 
@@ -537,32 +396,19 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     {
                         _logger.LogError("Błąd operacji: {Error}", error);
                     }
-                    
-                    await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                        $"⚠️ Operacja zakończona z błędami. Dezaktywowano {deactivatedCount} użytkowników", "warning");
                 }
-                else
-                {
-                    await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                        $"✅ Zespół zarchiwizowany. Dezaktywowano {deactivatedCount} ekskluzywnych użytkowników", "success");
-                }
+
+                _logger.LogInformation("Zespół zarchiwizowany. Dezaktywowano {Count} użytkowników", deactivatedCount);
 
                 // Invalidate cache
                 _cacheService.InvalidateTeamCache(teamId);
                 _cacheService.InvalidateAllCache();
-
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    $"Operacja zakończona. Dezaktywowano {deactivatedCount} użytkowników");
 
                 return success;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas archiwizacji zespołu i dezaktywacji użytkowników");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    $"❌ Błąd krytyczny podczas operacji: {ex.Message}", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona błędem krytycznym");
                 return false;
             }
         }
