@@ -2,7 +2,9 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
 namespace TeamsManager.Core.Services.PowerShellServices
@@ -15,6 +17,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
     {
         private readonly IPowerShellConnectionService _connectionService;
         private readonly ILogger<PowerShellService> _logger;
+        private readonly ITokenManager _tokenManager;
+        private readonly ICurrentUserService _currentUserService;
 
         // Lazy initialization dla serwisów domenowych
         private readonly Lazy<IPowerShellTeamManagementService> _teamService;
@@ -29,10 +33,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
         public PowerShellService(
             IPowerShellConnectionService connectionService,
             IServiceProvider serviceProvider,
-            ILogger<PowerShellService> logger)
+            ILogger<PowerShellService> logger,
+            ITokenManager tokenManager,
+            ICurrentUserService currentUserService)
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
 
             // Lazy initialization pozwala uniknąć cyklicznych zależności
             // i ładuje serwisy tylko gdy są rzeczywiście potrzebne
@@ -80,8 +88,61 @@ namespace TeamsManager.Core.Services.PowerShellServices
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas łączenia z Microsoft Graph");
-                throw;
+                _logger.LogError(ex, "Błąd podczas łączenia z Microsoft Graph przez fasadę PowerShell");
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<T?> ExecuteWithAutoConnectAsync<T>(string apiAccessToken, Func<Task<T>> operation, string? operationDescription = null)
+        {
+            if (string.IsNullOrEmpty(apiAccessToken))
+            {
+                _logger.LogWarning("ExecuteWithAutoConnectAsync: Token dostępu API jest pusty.");
+                return default(T);
+            }
+
+            var userUpn = _currentUserService.GetCurrentUserUpn();
+            if (string.IsNullOrEmpty(userUpn))
+            {
+                _logger.LogWarning("ExecuteWithAutoConnectAsync: Nie można określić UPN bieżącego użytkownika.");
+                return default(T);
+            }
+
+            _logger.LogDebug("ExecuteWithAutoConnectAsync: {Operation} dla użytkownika {UserUpn}", 
+                operationDescription ?? "Nieznana operacja", userUpn);
+
+            try
+            {
+                // Pobierz Graph token przez TokenManager (OBO flow)
+                var graphToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
+                
+                if (string.IsNullOrEmpty(graphToken))
+                {
+                    _logger.LogError("ExecuteWithAutoConnectAsync: Nie udało się uzyskać Graph token dla operacji: {Operation}", 
+                        operationDescription ?? "Nieznana operacja");
+                    return default(T);
+                }
+
+                // Upewnij się że mamy połączenie z Graph token
+                if (!_connectionService.IsConnected)
+                {
+                    var connected = await _connectionService.ConnectWithAccessTokenAsync(graphToken);
+                    if (!connected)
+                    {
+                        _logger.LogError("ExecuteWithAutoConnectAsync: Nie udało się połączyć z Microsoft Graph");
+                        return default(T);
+                    }
+                }
+                
+                // Wykonaj operację bezpośrednio
+                return await operation();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ExecuteWithAutoConnectAsync: Błąd podczas wykonania operacji {Operation}", 
+                    operationDescription ?? "Nieznana operacja");
+                return default(T);
             }
         }
 

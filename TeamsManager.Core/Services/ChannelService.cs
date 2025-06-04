@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
-using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
@@ -21,7 +20,6 @@ namespace TeamsManager.Core.Services
     public class ChannelService : IChannelService
     {
         private readonly IPowerShellService _powerShellService;
-        private readonly IConfidentialClientApplication _confidentialClientApplication;
         private readonly IGenericRepository<Channel> _channelRepository;
         private readonly ITeamRepository _teamRepository;
         private readonly IOperationHistoryService _operationHistoryService;
@@ -31,16 +29,12 @@ namespace TeamsManager.Core.Services
         private readonly IMemoryCache _cache;
         private readonly IPowerShellCacheService _powerShellCacheService;
 
-        private readonly string[] _graphChannelReadScopes = new[] { "Group.Read.All", "Channel.ReadBasic.All", "ChannelSettings.Read.All" };
-        private readonly string[] _graphChannelWriteScopes = new[] { "Group.ReadWrite.All", "Channel.Create", "ChannelSettings.ReadWrite.All", "ChannelMember.ReadWrite.All" };
-
         private const string TeamChannelsCacheKeyPrefix = "Channels_TeamId_";
         private const string ChannelByGraphIdCacheKeyPrefix = "Channel_GraphId_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
         public ChannelService(
             IPowerShellService powerShellService,
-            IConfidentialClientApplication confidentialClientApplication,
             IGenericRepository<Channel> channelRepository,
             ITeamRepository teamRepository,
             IOperationHistoryService operationHistoryService,
@@ -51,7 +45,6 @@ namespace TeamsManager.Core.Services
             IPowerShellCacheService powerShellCacheService)
         {
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
-            _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication));
             _channelRepository = channelRepository ?? throw new ArgumentNullException(nameof(channelRepository));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
@@ -65,32 +58,6 @@ namespace TeamsManager.Core.Services
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
             return _powerShellCacheService.GetDefaultCacheEntryOptions();
-        }
-
-        private async Task<bool> ConnectToGraphOnBehalfOfUserAsync(string? apiAccessToken, string[] scopes)
-        {
-            if (string.IsNullOrEmpty(apiAccessToken))
-            {
-                _logger.LogWarning("ConnectToGraphOnBehalfOfUserAsync (ChannelService): Token dostępu API (apiAccessToken) jest pusty lub null.");
-                return false;
-            }
-            try
-            {
-                var userAssertion = new UserAssertion(apiAccessToken);
-                _logger.LogDebug("ConnectToGraphOnBehalfOfUserAsync (ChannelService): Próba uzyskania tokenu OBO dla zakresów: {Scopes}", string.Join(", ", scopes));
-                var authResult = await _confidentialClientApplication.AcquireTokenOnBehalfOf(scopes, userAssertion).ExecuteAsync();
-                if (string.IsNullOrEmpty(authResult.AccessToken))
-                {
-                    _logger.LogError("ConnectToGraphOnBehalfOfUserAsync (ChannelService): Nie udało się uzyskać tokenu dostępu do Graph w przepływie OBO.");
-                    return false;
-                }
-                _logger.LogInformation("ConnectToGraphOnBehalfOfUserAsync (ChannelService): Pomyślnie uzyskano token OBO dla Graph.");
-                return await _powerShellService.ConnectWithAccessTokenAsync(authResult.AccessToken, scopes);
-            }
-            // POPRAWKA BŁĘDU CS1061: Zamiast ex.SubError używamy ex.Classification
-            catch (MsalUiRequiredException ex) { _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync (ChannelService): Wymagana interakcja użytkownika lub zgoda (MsalUiRequiredException) w przepływie OBO. Scopes: {Scopes}. Błąd: {Classification}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.Classification, ex.Message); return false; }
-            catch (MsalServiceException ex) { _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync (ChannelService): Błąd usługi MSAL (OBO). Scopes: {Scopes}. Kod błędu: {MsalErrorCode}. Szczegóły: {MsalErrorMessage}", string.Join(", ", scopes), ex.ErrorCode, ex.Message); return false; }
-            catch (Exception ex) { _logger.LogError(ex, "ConnectToGraphOnBehalfOfUserAsync (ChannelService): Nieoczekiwany błąd (OBO). Scopes: {Scopes}.", string.Join(", ", scopes)); return false; }
         }
 
         private Channel MapPsObjectToLocalChannel(PSObject psChannel, string localTeamId)
@@ -161,13 +128,12 @@ namespace TeamsManager.Core.Services
                 return cachedChannels;
             }
 
-            if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelReadScopes))
-            {
-                _logger.LogError("Nie udało się połączyć z Graph w GetTeamChannelsAsync dla zespołu GraphID {TeamGraphId}.", teamGraphId);
-                return null;
-            }
+            var psObjects = await _powerShellService.ExecuteWithAutoConnectAsync(
+                apiAccessToken,
+                async () => await _powerShellService.Teams.GetTeamChannelsAsync(teamGraphId),
+                $"GetTeamChannelsAsync dla zespołu {teamGraphId}"
+            );
 
-            var psObjects = await _powerShellService.Teams.GetTeamChannelsAsync(teamGraphId);
             if (psObjects == null)
             {
                 _logger.LogWarning("Nie udało się pobrać kanałów z PowerShell dla zespołu GraphID {TeamGraphId}.", teamGraphId);
@@ -284,14 +250,11 @@ namespace TeamsManager.Core.Services
                 }
             }
 
-            if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelReadScopes))
-            {
-                _logger.LogError("Nie udało się połączyć z Graph w GetTeamChannelByIdAsync dla kanału {ChannelGraphId} w zespole {TeamGraphId}.", channelGraphId, teamGraphId);
-                return null;
-            }
-
-            // Używamy nowej metody GetTeamChannelByIdAsync zamiast pobierania wszystkich kanałów
-            var psChannel = await _powerShellService.Teams.GetTeamChannelByIdAsync(teamGraphId, channelGraphId);
+            var psChannel = await _powerShellService.ExecuteWithAutoConnectAsync(
+                apiAccessToken,
+                async () => await _powerShellService.Teams.GetTeamChannelByIdAsync(teamGraphId, channelGraphId),
+                $"GetTeamChannelByIdAsync dla kanału {channelGraphId} w zespole {teamGraphId}"
+            );
 
             if (psChannel == null)
             {
@@ -389,24 +352,11 @@ namespace TeamsManager.Core.Services
                 }
                 string teamGraphId = team.ExternalId;
 
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
-                {
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się połączyć z Microsoft Graph"
-                    );
-
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        "Nie udało się połączyć z Microsoft Graph",
-                        "error"
-                    );
-
-                    return null;
-                }
-
-                var psChannel = await _powerShellService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description);
+                var psChannel = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _powerShellService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description),
+                    $"CreateTeamChannelAsync dla kanału '{displayName}' w zespole {teamGraphId}"
+                );
                 if (psChannel == null)
                 {
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -541,23 +491,11 @@ namespace TeamsManager.Core.Services
                     return localChannel;
                 }
 
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
-                {
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się połączyć z Graph w UpdateTeamChannelAsync."
-                    );
-
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        "Nie udało się połączyć z Microsoft Graph",
-                        "error"
-                    );
-                    return null;
-                }
-
-                bool psSuccess = await _powerShellService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription);
+                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _powerShellService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription),
+                    $"UpdateTeamChannelAsync dla kanału {channelId} w zespole {teamGraphId}"
+                );
 
                 if (!psSuccess)
                 {
@@ -678,23 +616,11 @@ namespace TeamsManager.Core.Services
                     }
                 }
 
-                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
-                {
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się połączyć z Graph w RemoveTeamChannelAsync."
-                    );
-
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        "Nie udało się połączyć z Microsoft Graph",
-                        "error"
-                    );
-                    return false;
-                }
-
-                bool psSuccess = await _powerShellService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId);
+                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _powerShellService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId),
+                    $"RemoveTeamChannelAsync dla kanału {channelId} w zespole {teamGraphId}"
+                );
 
                 if (!psSuccess)
                 {

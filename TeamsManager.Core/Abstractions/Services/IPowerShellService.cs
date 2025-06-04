@@ -23,6 +23,16 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> ConnectWithAccessTokenAsync(string accessToken, string[]? scopes = null);
 
         /// <summary>
+        /// Wykonuje operację z automatycznym połączeniem i obsługą tokenu OBO
+        /// </summary>
+        /// <typeparam name="T">Typ wyniku operacji</typeparam>
+        /// <param name="apiAccessToken">Token dostępu API (dla przepływu OBO)</param>
+        /// <param name="operation">Operacja do wykonania</param>
+        /// <param name="operationDescription">Opis operacji do logowania</param>
+        /// <returns>Wynik operacji lub domyślna wartość w przypadku błędu</returns>
+        Task<T?> ExecuteWithAutoConnectAsync<T>(string apiAccessToken, Func<Task<T>> operation, string? operationDescription = null);
+
+        /// <summary>
         /// Serwis zarządzający zespołami i kanałami
         /// </summary>
         IPowerShellTeamManagementService Teams { get; }
