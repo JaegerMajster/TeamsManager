@@ -6,9 +6,15 @@ using TeamsManager.Core.Enums;
 namespace TeamsManager.Core.Models
 {
     /// <summary>
-    /// Zespół Microsoft Teams.
-    /// Reprezentuje grupę edukacyjną, klasę, kurs lub inną jednostkę dydaktyczną.
-    /// Dziedziczy z BaseEntity dla wspólnych pól audytu i flagi aktywności.
+    /// Reprezentuje zespół Microsoft Teams z pełną funkcjonalnością biznesową, członkami i kanałami.
+    /// Implementuje wzorce Active Record i Rich Domain Model.
+    /// 
+    /// ZASADY ZARZĄDZANIA PREFIKSEM "ARCHIWALNY - ":
+    /// 1. Prefiks jest dodawany/usuwany TYLKO przez metody Archive() i Restore()
+    /// 2. DisplayName i Description w bazie zawsze są w formie kanonicznej dla danego statusu
+    /// 3. Zewnętrzne systemy NIE powinny ręcznie dodawać/usuwać prefiksu
+    /// 4. Metody GetBaseDisplayName/Description zwracają nazwę/opis BEZ prefiksu
+    /// 5. Właściwość DisplayNameWithStatus służy tylko do prezentacji
     /// </summary>
     public class Team : BaseEntity
     {
@@ -346,8 +352,11 @@ namespace TeamsManager.Core.Models
         /// Pobiera bazową nazwę wyświetlaną zespołu, usuwając prefiks archiwizacji, jeśli istnieje.
         /// </summary>
         /// <returns>Nazwa wyświetlana bez prefiksu "ARCHIWALNY - ".</returns>
-        internal string GetBaseDisplayName()
+        public string GetBaseDisplayName()
         {
+            if (string.IsNullOrEmpty(DisplayName))
+                return string.Empty;
+                
             if (DisplayName.StartsWith(ArchivePrefix))
             {
                 return DisplayName.Substring(ArchivePrefix.Length);
@@ -358,10 +367,13 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Pobiera bazowy opis zespołu, usuwając prefiks archiwizacji, jeśli istnieje.
         /// </summary>
-        /// <returns>Opis bez prefiksu "ARCHIWALNY - " lub oryginalny opis, jeśli nie było prefiksu.</returns>
-        internal string GetBaseDescription()
+        /// <returns>Opis bez prefiksu "ARCHIWALNY - " lub pusty string, jeśli opis był null/empty.</returns>
+        public string GetBaseDescription()
         {
-            if (!string.IsNullOrEmpty(Description) && Description.StartsWith(ArchivePrefix))
+            if (string.IsNullOrEmpty(Description))
+                return string.Empty;
+                
+            if (Description.StartsWith(ArchivePrefix))
             {
                 return Description.Substring(ArchivePrefix.Length);
             }
@@ -386,15 +398,11 @@ namespace TeamsManager.Core.Models
             // IsActive zmieni się automatycznie dzięki właściwości obliczeniowej
 
             this.DisplayName = ArchivePrefix + baseName;
-            if (!string.IsNullOrEmpty(baseDescription)) // Dodaj prefiks do opisu tylko, jeśli opis nie jest pusty
+            if (!string.IsNullOrEmpty(baseDescription))
             {
                 this.Description = ArchivePrefix + baseDescription;
             }
-            else if (string.IsNullOrEmpty(this.Description) && string.IsNullOrEmpty(baseDescription))
-            {
-                this.Description = string.Empty; // Jawnie ustaw na pusty, jeśli był pusty
-            }
-
+            // Jeśli opis był pusty, pozostaje pusty - nie ma potrzeby jawnego ustawiania
 
             this.StatusChangeDate = DateTime.UtcNow;
             this.StatusChangedBy = archivedBy;

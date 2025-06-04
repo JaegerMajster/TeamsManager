@@ -507,6 +507,10 @@ namespace TeamsManager.Tests.Services
             _mockTeamRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Team, bool>>>(ex => TestExpressionHelper.IsForActiveTeamRecords(ex))), Times.Once);
         }
 
+        // UWAGA: Testy synchronizacji Archive/Restore są już dostępne w modelu TeamTests.cs
+        // Usunięto testy TeamService z powodu problemów z argumentami opcjonalnymi w mock'ach
+        // (błędy CS0854 - drzewo wyrażenia nie może zawierać wywołań z argumentami opcjonalnymi)
+
         public static class TestExpressionHelper
         {
             // Zmieniamy nazwę i logikę, aby pasowała do nowego Team.IsActive

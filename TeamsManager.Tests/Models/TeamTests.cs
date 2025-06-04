@@ -459,5 +459,206 @@ namespace TeamsManager.Tests.Models
             if (initialDate.HasValue)
                 team.LastActivityDate.Value.Should().BeAfter(initialDate.Value);
         }
+
+        // DODATKOWE TESTY SYNCHRONIZACJI - ETAP 4/4
+
+        [Fact]
+        public void GetBaseDisplayName_WithPrefix_ShouldRemovePrefix()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "ARCHIWALNY - Test Team" 
+            };
+
+            // Act
+            var result = team.GetBaseDisplayName();
+
+            // Assert
+            result.Should().Be("Test Team");
+        }
+
+        [Fact]
+        public void GetBaseDisplayName_WithoutPrefix_ShouldReturnOriginal()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "Test Team" 
+            };
+
+            // Act
+            var result = team.GetBaseDisplayName();
+
+            // Assert
+            result.Should().Be("Test Team");
+        }
+
+        [Fact]
+        public void GetBaseDisplayName_WithEmptyString_ShouldReturnEmpty()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "" 
+            };
+
+            // Act
+            var result = team.GetBaseDisplayName();
+
+            // Assert
+            result.Should().Be("");
+        }
+
+        [Fact]
+        public void GetBaseDisplayName_WithNull_ShouldReturnEmpty()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = null! 
+            };
+
+            // Act
+            var result = team.GetBaseDisplayName();
+
+            // Assert
+            result.Should().Be("");
+        }
+
+        [Fact]
+        public void GetBaseDescription_WithPrefix_ShouldRemovePrefix()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                Description = "ARCHIWALNY - Test Description" 
+            };
+
+            // Act
+            var result = team.GetBaseDescription();
+
+            // Assert
+            result.Should().Be("Test Description");
+        }
+
+        [Fact]
+        public void GetBaseDescription_WithoutPrefix_ShouldReturnOriginal()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                Description = "Test Description" 
+            };
+
+            // Act
+            var result = team.GetBaseDescription();
+
+            // Assert
+            result.Should().Be("Test Description");
+        }
+
+        [Fact]
+        public void Archive_TeamWithPrefix_ShouldNotDuplicatePrefix()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "ARCHIWALNY - Test Team",
+                Description = "ARCHIWALNY - Test Description",
+                Status = TeamStatus.Active
+            };
+
+            // Act
+            team.Archive("reason", "user@test.com");
+
+            // Assert
+            team.DisplayName.Should().Be("ARCHIWALNY - Test Team"); // Bez duplikacji
+            team.Description.Should().Be("ARCHIWALNY - Test Description");
+            team.Status.Should().Be(TeamStatus.Archived);
+            team.IsActive.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Archive_ActiveTeam_ShouldAddPrefixAndChangeStatus()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "Test Team",
+                Description = "Test Description",
+                Status = TeamStatus.Active
+            };
+
+            // Act
+            team.Archive("Test reason", "user@test.com");
+
+            // Assert
+            team.Status.Should().Be(TeamStatus.Archived);
+            team.DisplayName.Should().Be("ARCHIWALNY - Test Team");
+            team.Description.Should().Be("ARCHIWALNY - Test Description");
+            team.StatusChangeReason.Should().Be("Test reason");
+            team.StatusChangedBy.Should().Be("user@test.com");
+            team.IsActive.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Restore_ArchivedTeam_ShouldRemovePrefixAndChangeStatus()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "ARCHIWALNY - Test Team",
+                Description = "ARCHIWALNY - Test Description",
+                Status = TeamStatus.Archived
+            };
+
+            // Act
+            team.Restore("user@test.com");
+
+            // Assert
+            team.Status.Should().Be(TeamStatus.Active);
+            team.DisplayName.Should().Be("Test Team");
+            team.Description.Should().Be("Test Description");
+            team.StatusChangeReason.Should().Be("Przywrócono z archiwum");
+            team.StatusChangedBy.Should().Be("user@test.com");
+            team.IsActive.Should().BeTrue();
+        }
+
+        [Fact]
+        public void DisplayNameWithStatus_ActiveTeam_ShouldNotHavePrefix()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "Test Team",
+                Status = TeamStatus.Active
+            };
+
+            // Act
+            var result = team.DisplayNameWithStatus;
+
+            // Assert
+            result.Should().Be("Test Team");
+        }
+
+        [Fact]
+        public void DisplayNameWithStatus_ArchivedTeam_ShouldHavePrefix()
+        {
+            // Arrange
+            var team = new Team 
+            { 
+                DisplayName = "Test Team", // Bez prefiksu w bazie
+                Status = TeamStatus.Archived
+            };
+
+            // Act
+            var result = team.DisplayNameWithStatus;
+
+            // Assert
+            result.Should().Be("ARCHIWALNY - Test Team");
+        }
+
+        // KONIEC DODATKOWYCH TESTÓW SYNCHRONIZACJI
     }
 }

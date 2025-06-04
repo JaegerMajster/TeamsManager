@@ -187,7 +187,7 @@ namespace TeamsManager.Core.Services
                 // Można dodać logikę synchronizacji wszystkich zespołów z Graph
             }
 
-            var teamsFromDb = await _teamRepository.FindAsync(t => t.IsActive);
+            var teamsFromDb = await _teamRepository.FindAsync(t => t.Status == TeamStatus.Active);
             _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
             _logger.LogDebug("Zespoły z Team.Status = Active dodane do cache.");
             return teamsFromDb;
@@ -542,11 +542,31 @@ namespace TeamsManager.Core.Services
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-                    existingTeam.DisplayName = teamToUpdate.DisplayName;
-                    existingTeam.Description = teamToUpdate.Description;
+                    
+                    // NOWE: Czyszczenie prefiksów z danych wejściowych
+                    string cleanDisplayName = teamToUpdate.DisplayName;
+                    string cleanDescription = teamToUpdate.Description;
+                    
+                    // Usuń prefiks jeśli występuje w danych wejściowych
+                    const string ArchivePrefix = "ARCHIWALNY - ";
+                    if (cleanDisplayName?.StartsWith(ArchivePrefix) == true)
+                    {
+                        cleanDisplayName = cleanDisplayName.Substring(ArchivePrefix.Length);
+                        _logger.LogWarning("Usunięto niepożądany prefiks z nazwy zespołu ID {TeamId}. Oryginalna nazwa: '{Original}', Oczyszczona: '{Clean}'", 
+                            existingTeam.Id, teamToUpdate.DisplayName, cleanDisplayName);
+                    }
+                    
+                    if (cleanDescription?.StartsWith(ArchivePrefix) == true)
+                    {
+                        cleanDescription = cleanDescription.Substring(ArchivePrefix.Length);
+                        _logger.LogWarning("Usunięto niepożądany prefiks z opisu zespołu ID {TeamId}", existingTeam.Id);
+                    }
+                    
+                    // Przypisz oczyszczone wartości
+                    existingTeam.DisplayName = cleanDisplayName;
+                    existingTeam.Description = cleanDescription;
                     existingTeam.Owner = teamToUpdate.Owner;
                     existingTeam.Visibility = teamToUpdate.Visibility;
-                    // ... inne pola ...
                     existingTeam.RequiresApproval = teamToUpdate.RequiresApproval;
                     existingTeam.MaxMembers = teamToUpdate.MaxMembers;
                     existingTeam.SchoolTypeId = teamToUpdate.SchoolTypeId;
