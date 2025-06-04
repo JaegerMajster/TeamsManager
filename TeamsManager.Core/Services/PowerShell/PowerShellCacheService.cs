@@ -48,6 +48,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string AllActiveSubjectsCacheKey = "Subjects_AllActive";
         private const string TeachersForSubjectCacheKeyPrefix = "Subject_Teachers_Id_";
         
+        // Klucze cache dla lat szkolnych
+        private const string SchoolYearByIdCacheKeyPrefix = "SchoolYear_Id_";
+        private const string AllActiveSchoolYearsCacheKey = "SchoolYears_AllActive";
+        private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
+        
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
 
@@ -382,6 +387,31 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             Remove(TeachersForSubjectCacheKeyPrefix + subjectId);
             _logger.LogDebug("Unieważniono cache listy nauczycieli dla przedmiotu: {SubjectId}", subjectId);
+        }
+
+        public void InvalidateSchoolYearById(string schoolYearId)
+        {
+            if (string.IsNullOrWhiteSpace(schoolYearId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego schoolYearId.");
+                return;
+            }
+
+            // Usuń cache roku szkolnego po ID
+            Remove(SchoolYearByIdCacheKeyPrefix + schoolYearId);
+            _logger.LogDebug("Unieważniono cache roku szkolnego po ID: {SchoolYearId}", schoolYearId);
+        }
+
+        public void InvalidateAllActiveSchoolYearsList()
+        {
+            Remove(AllActiveSchoolYearsCacheKey);
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych lat szkolnych.");
+        }
+
+        public void InvalidateCurrentSchoolYear()
+        {
+            Remove(CurrentSchoolYearCacheKey);
+            _logger.LogDebug("Unieważniono cache bieżącego roku szkolnego.");
         }
     }
 }

@@ -168,5 +168,21 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// </summary>
         /// <param name="subjectId">ID przedmiotu</param>
         void InvalidateTeachersForSubject(string subjectId);
+
+        /// <summary>
+        /// Unieważnia cache roku szkolnego według ID.
+        /// </summary>
+        /// <param name="schoolYearId">ID roku szkolnego</param>
+        void InvalidateSchoolYearById(string schoolYearId);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych lat szkolnych.
+        /// </summary>
+        void InvalidateAllActiveSchoolYearsList();
+
+        /// <summary>
+        /// Unieważnia cache bieżącego roku szkolnego.
+        /// </summary>
+        void InvalidateCurrentSchoolYear();
     }
 }

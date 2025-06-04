@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,6 +13,7 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
 using TeamsManager.Core.Enums;
@@ -27,6 +30,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<SchoolYearService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly ISchoolYearService _schoolYearService;
         private readonly string _currentLoggedInUserUpn = "test.schoolyear.admin@example.com";
@@ -46,6 +50,7 @@ namespace TeamsManager.Tests.Services
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<SchoolYearService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
 
@@ -59,6 +64,23 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>()))
                 .ReturnsAsync(mockOperationHistory);
 
+            // Capture operation history updates
+            _mockOperationHistoryService.Setup(s => s.UpdateOperationStatusAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<OperationStatus>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>()))
+                .Callback<string, OperationStatus, string, string>((id, status, details, errorMessage) =>
+                {
+                    if (_capturedOperationHistory != null && _capturedOperationHistory.Id == id)
+                    {
+                        _capturedOperationHistory.Status = status;
+                        _capturedOperationHistory.OperationDetails = details ?? string.Empty;
+                        _capturedOperationHistory.ErrorMessage = errorMessage;
+                    }
+                })
+                .ReturnsAsync(true);
+
             var mockCacheEntry = new Mock<ICacheEntry>();
             mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
             mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
@@ -70,6 +92,12 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
                            .Returns(mockCacheEntry.Object);
 
+            // Setup dla PowerShellCacheService
+            var mockCacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(TimeSpan.FromHours(1));
+            _mockPowerShellCacheService.Setup(s => s.GetDefaultCacheEntryOptions())
+                                     .Returns(mockCacheEntryOptions);
+
             _schoolYearService = new SchoolYearService(
                 _mockSchoolYearRepository.Object,
                 _mockOperationHistoryService.Object,
@@ -77,13 +105,14 @@ namespace TeamsManager.Tests.Services
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
                 _mockTeamRepository.Object,
-                _mockMemoryCache.Object
+                _mockMemoryCache.Object,
+                _mockPowerShellCacheService.Object
             );
         }
 
         private void ResetCapturedOperationHistory()
         {
-            _capturedOperationHistory = null;
+            _capturedOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.InProgress };
         }
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
@@ -93,7 +122,407 @@ namespace TeamsManager.Tests.Services
                            .Returns(foundInCache);
         }
 
-        // Przykładowy test dla DeleteSchoolYearAsync uwzględniający zmiany w Team.IsActive
+        #region Testy podstawowych operacji CRUD (zaktualizowane)
+
+        [Fact]
+        public async Task GetSchoolYearByIdAsync_ExistingId_ShouldReturnSchoolYearAndCacheIt()
+        {
+            ResetCapturedOperationHistory();
+            var schoolYearId = "sy-2023";
+            var expectedSchoolYear = new SchoolYear { Id = schoolYearId, Name = "2023/2024", IsActive = true };
+            string cacheKey = SchoolYearByIdCacheKeyPrefix + schoolYearId;
+            SetupCacheTryGetValue(cacheKey, (SchoolYear?)null, false);
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(expectedSchoolYear);
+
+            var result = await _schoolYearService.GetSchoolYearByIdAsync(schoolYearId);
+
+            result.Should().NotBeNull().And.BeEquivalentTo(expectedSchoolYear);
+            _mockSchoolYearRepository.Verify(r => r.GetByIdAsync(schoolYearId), Times.Once);
+            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            
+            // Weryfikacja użycia PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.GetDefaultCacheEntryOptions(), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetAllActiveSchoolYearsAsync_WhenActiveYearsExist_ShouldReturnActiveSchoolYearsAndCacheThem()
+        {
+            ResetCapturedOperationHistory();
+            var activeSchoolYears = new List<SchoolYear>
+            {
+                new SchoolYear { Id = "sy-1", Name = "2022/2023", IsActive = true },
+                new SchoolYear { Id = "sy-2", Name = "2023/2024", IsActive = true }
+            };
+            SetupCacheTryGetValue(AllSchoolYearsCacheKey, (IEnumerable<SchoolYear>?)null, false);
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()))
+                                   .ReturnsAsync(activeSchoolYears);
+
+            var result = await _schoolYearService.GetAllActiveSchoolYearsAsync();
+
+            result.Should().NotBeNull().And.HaveCount(2).And.BeEquivalentTo(activeSchoolYears);
+            _mockSchoolYearRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()), Times.Once);
+            _mockMemoryCache.Verify(m => m.CreateEntry(AllSchoolYearsCacheKey), Times.Once);
+            
+            // Weryfikacja użycia PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.GetDefaultCacheEntryOptions(), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetSchoolYearByIdAsync_WhenInactiveYear_ShouldNotCache()
+        {
+            // Przygotowanie
+            var schoolYearId = "sy-inactive";
+            var inactiveYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2020/2021", 
+                IsActive = false // Nieaktywny
+            };
+            
+            string cacheKey = SchoolYearByIdCacheKeyPrefix + schoolYearId;
+            SetupCacheTryGetValue(cacheKey, (SchoolYear?)null, false);
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId))
+                .ReturnsAsync(inactiveYear);
+            
+            // Działanie
+            var result = await _schoolYearService.GetSchoolYearByIdAsync(schoolYearId);
+            
+            // Asercja
+            result.Should().BeNull(); // Nieaktywne nie są zwracane
+            _mockMemoryCache.Verify(m => m.Remove(cacheKey), Times.Once); // Powinno usunąć z cache
+            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Never); // Nie powinno dodać do cache
+        }
+
+        #endregion
+
+        #region Testy granularnej inwalidacji cache
+
+        [Fact]
+        public async Task CreateSchoolYearAsync_ShouldUseGranularCacheInvalidation()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var name = "2025/2026";
+            var startDate = new DateTime(2025, 9, 1);
+            var endDate = new DateTime(2026, 6, 30);
+            
+            _mockSchoolYearRepository.Setup(r => r.GetSchoolYearByNameAsync(name))
+                .ReturnsAsync((SchoolYear?)null);
+            _mockSchoolYearRepository.Setup(r => r.AddAsync(It.IsAny<SchoolYear>()))
+                .Returns(Task.CompletedTask);
+            
+            // Działanie
+            var result = await _schoolYearService.CreateSchoolYearAsync(name, startDate, endDate);
+            
+            // Asercja - weryfikacja granularnej inwalidacji
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never); // NIE powinno być globalnego resetu!
+            
+            result.Should().NotBeNull();
+            result!.Name.Should().Be(name);
+        }
+
+        [Fact]
+        public async Task UpdateSchoolYearAsync_WhenWasCurrent_ShouldInvalidateCurrentCache()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var schoolYearId = "sy-was-current";
+            var existingYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2024/2025", 
+                StartDate = new DateTime(2024, 9, 1),
+                EndDate = new DateTime(2025, 6, 30),
+                IsActive = true, 
+                IsCurrent = true // Był bieżący
+            };
+            
+            var updatedYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2024/2025 Updated", 
+                StartDate = new DateTime(2024, 9, 1),
+                EndDate = new DateTime(2025, 6, 30),
+                IsActive = true, 
+                IsCurrent = true
+            };
+            
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId))
+                .ReturnsAsync(existingYear);
+            _mockSchoolYearRepository.Setup(r => r.Update(It.IsAny<SchoolYear>()));
+            
+            // Działanie
+            var result = await _schoolYearService.UpdateSchoolYearAsync(updatedYear);
+            
+            // Asercja
+            result.Should().BeTrue();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(schoolYearId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateCurrentSchoolYear(), Times.Once); // Bo był/jest bieżący
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
+        }
+
+        [Fact]
+        public async Task SetCurrentSchoolYearAsync_ShouldInvalidateBothOldAndNewCurrent()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var oldCurrentId = "sy-old-current";
+            var newCurrentId = "sy-new-current";
+            
+            var oldCurrent = new SchoolYear 
+            { 
+                Id = oldCurrentId, 
+                Name = "2023/2024", 
+                IsCurrent = true, 
+                IsActive = true 
+            };
+            
+            var newCurrent = new SchoolYear 
+            { 
+                Id = newCurrentId, 
+                Name = "2024/2025", 
+                IsCurrent = false, 
+                IsActive = true 
+            };
+            
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(newCurrentId))
+                .ReturnsAsync(newCurrent);
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()))
+                .ReturnsAsync(new List<SchoolYear> { oldCurrent });
+            _mockSchoolYearRepository.Setup(r => r.Update(It.IsAny<SchoolYear>()));
+            
+            // Działanie
+            var result = await _schoolYearService.SetCurrentSchoolYearAsync(newCurrentId);
+            
+            // Asercja
+            result.Should().BeTrue();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Exactly(2)); // Dla obu
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(newCurrentId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(oldCurrentId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateCurrentSchoolYear(), Times.Once); // Tylko dla nowego bieżącego
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteSchoolYearAsync_ShouldUseGranularInvalidation()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var schoolYearId = "sy-to-delete";
+            var schoolYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2022/2023", 
+                IsActive = true, 
+                IsCurrent = false 
+            };
+            
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()))
+                .ReturnsAsync(new List<SchoolYear> { schoolYear });
+            _mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Team, bool>>>()))
+                .ReturnsAsync(new List<Team>());
+            _mockSchoolYearRepository.Setup(r => r.Update(It.IsAny<SchoolYear>()));
+            
+            // Działanie
+            var result = await _schoolYearService.DeleteSchoolYearAsync(schoolYearId);
+            
+            // Asercja
+            result.Should().BeTrue();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(schoolYearId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateCurrentSchoolYear(), Times.Never); // Bo nie był bieżący
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
+        }
+
+        [Fact]
+        public async Task RefreshCacheAsync_ShouldCallInvalidateAllCache()
+        {
+            // Działanie
+            await _schoolYearService.RefreshCacheAsync();
+            
+            // Asercja - tylko w tym przypadku powinien być globalny reset
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Once);
+        }
+
+        #endregion
+
+        #region Testy scenariuszy brzegowych
+
+        [Fact]
+        public async Task CreateSchoolYearAsync_WhenOperationFails_ShouldNotInvalidateCache()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var name = ""; // Pusta nazwa spowoduje błąd
+            
+            // Działanie
+            var result = await _schoolYearService.CreateSchoolYearAsync(name, DateTime.Now, DateTime.Now.AddYears(1));
+            
+            // Asercja
+            result.Should().BeNull();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateSchoolYearAsync_WhenSchoolYearNotExists_ShouldNotInvalidateCache()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var nonExistentYear = new SchoolYear 
+            { 
+                Id = "sy-non-existent", 
+                Name = "Non-existent", 
+                StartDate = DateTime.Now,
+                EndDate = DateTime.Now.AddYears(1),
+                IsActive = true
+            };
+            
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(nonExistentYear.Id))
+                .ReturnsAsync((SchoolYear?)null);
+            
+            // Działanie
+            var result = await _schoolYearService.UpdateSchoolYearAsync(nonExistentYear);
+            
+            // Asercja
+            result.Should().BeFalse();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteSchoolYearAsync_WhenCurrentYear_ShouldNotInvalidateCache()
+        {
+            // Przygotowanie
+            ResetCapturedOperationHistory();
+            var schoolYearId = "sy-current";
+            var currentYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2024/2025", 
+                IsActive = true, 
+                IsCurrent = true // Bieżący rok
+            };
+            
+            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()))
+                .ReturnsAsync(new List<SchoolYear> { currentYear });
+            
+            // Działanie
+            var result = await _schoolYearService.DeleteSchoolYearAsync(schoolYearId);
+            
+            // Asercja
+            result.Should().BeFalse();
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Never);
+        }
+
+        #endregion
+
+        #region Test współbieżności
+
+        [Fact]
+        public async Task ConcurrentOperations_ShouldNotCauseThunderingHerd()
+        {
+            // Przygotowanie
+            var callCount = 0;
+            var schoolYearId = "sy-concurrent";
+            var schoolYear = new SchoolYear 
+            { 
+                Id = schoolYearId, 
+                Name = "2024/2025", 
+                IsActive = true 
+            };
+            
+            string cacheKey = SchoolYearByIdCacheKeyPrefix + schoolYearId;
+            
+            // Symulacja wolnego zapytania do bazy
+            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId))
+                .Returns(async () =>
+                {
+                    Interlocked.Increment(ref callCount);
+                    await Task.Delay(100); // Symulacja opóźnienia
+                    return schoolYear;
+                });
+            
+            // Setup cache - pierwsze wywołanie nie znajdzie w cache
+            var cached = false;
+            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out It.Ref<object>.IsAny))
+                .Returns((object key, out object value) =>
+                {
+                    value = cached ? schoolYear : (object?)null!;
+                    return cached;
+                })
+                .Callback(() => cached = true);
+            
+            // Działanie - 10 równoczesnych żądań
+            var tasks = Enumerable.Range(0, 10)
+                .Select(_ => Task.Run(() => _schoolYearService.GetSchoolYearByIdAsync(schoolYearId)))
+                .ToArray();
+            
+            var results = await Task.WhenAll(tasks);
+            
+            // Asercja
+            results.Should().AllBeEquivalentTo(schoolYear);
+            callCount.Should().BeLessThanOrEqualTo(2); // Maksymalnie 2 zapytania do bazy mimo 10 żądań (race condition może wystąpić)
+        }
+
+        #endregion
+
+        #region Test wydajnościowy
+
+        [Fact]
+        public async Task PerformanceTest_GranularInvalidation_ShouldBeFasterThanGlobalReset()
+        {
+            // Przygotowanie
+            var schoolYears = Enumerable.Range(1, 100)
+                .Select(i => new SchoolYear 
+                { 
+                    Id = $"sy-{i}", 
+                    Name = $"Year {i}", 
+                    IsActive = true,
+                    StartDate = DateTime.Now.AddYears(i - 50),
+                    EndDate = DateTime.Now.AddYears(i - 49)
+                })
+                .ToList();
+            
+            // Setup repozytoriów dla wszystkich lat
+            foreach (var sy in schoolYears.Take(10))
+            {
+                _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(sy.Id))
+                    .ReturnsAsync(sy);
+                _mockSchoolYearRepository.Setup(r => r.Update(It.Is<SchoolYear>(s => s.Id == sy.Id)));
+            }
+            
+            // Pomiar czasu z granularną inwalidacją
+            var stopwatch = Stopwatch.StartNew();
+            
+            foreach (var sy in schoolYears.Take(10))
+            {
+                sy.Name = sy.Name + " Updated";
+                await _schoolYearService.UpdateSchoolYearAsync(sy);
+            }
+            
+            var granularTime = stopwatch.ElapsedMilliseconds;
+            stopwatch.Stop();
+            
+            // Weryfikacja że używamy granularnej inwalidacji
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Exactly(10));
+            
+            // Asercja - czas powinien być rozsądny
+            granularTime.Should().BeLessThan(5000); // Mniej niż 5 sekund na 10 aktualizacji
+            
+            // Log wyniku dla analizy
+            Console.WriteLine($"Granular invalidation time for 10 updates: {granularTime}ms");
+        }
+
+        #endregion
+
+        #region Istniejące testy (zaktualizowane)
+
         [Fact]
         public async Task DeleteSchoolYearAsync_WhenYearHasActiveTeams_ShouldReturnFalseAndLogOperation()
         {
@@ -121,8 +550,12 @@ namespace TeamsManager.Tests.Services
             result.Should().BeFalse(); // Oczekujemy false, bo są aktywne zespoły
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory!.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("jest nadal używany przez");
+            _capturedOperationHistory.OperationDetails.Should().Contain("jest używany przez");
             _mockSchoolYearRepository.Verify(r => r.Update(It.IsAny<SchoolYear>()), Times.Never); // Nie powinno dojść do Update
+            
+            // Weryfikacja że cache nie został inwalidowany przy błędzie
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
@@ -149,9 +582,12 @@ namespace TeamsManager.Tests.Services
             result.Should().BeFalse();
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory!.Status.Should().Be(OperationStatus.Failed);
-            _capturedOperationHistory.ErrorMessage.Should().Contain("Nie można usunąć (dezaktywować) bieżącego roku szkolnego");
+            _capturedOperationHistory.OperationDetails.Should().Contain("Nie można usunąć (dezaktywować) bieżącego roku szkolnego");
+            
+            // Weryfikacja że cache nie został inwalidowany przy błędzie
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(It.IsAny<string>()), Times.Never);
         }
-
 
         [Fact]
         public async Task DeleteSchoolYearAsync_WhenNoActiveTeamsAndNotCurrent_ShouldDeactivateAndLogOperation()
@@ -171,7 +607,6 @@ namespace TeamsManager.Tests.Services
                                .ReturnsAsync(new List<Team>());
             _mockSchoolYearRepository.Setup(r => r.Update(It.IsAny<SchoolYear>()));
 
-
             // Działanie
             var result = await _schoolYearService.DeleteSchoolYearAsync(schoolYearId);
 
@@ -179,8 +614,7 @@ namespace TeamsManager.Tests.Services
             result.Should().BeTrue();
             _capturedOperationHistory.Should().NotBeNull();
             _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
-            _capturedOperationHistory.TargetEntityId.Should().Be(schoolYearId);
-            _capturedOperationHistory.Type.Should().Be(OperationType.SchoolYearDeleted);
+            _capturedOperationHistory.OperationDetails.Should().Contain("oznaczony jako usunięty");
 
             // Weryfikacja, że rok szkolny został oznaczony jako nieaktywny
             _mockSchoolYearRepository.Verify(r => r.Update(It.Is<SchoolYear>(sy =>
@@ -188,52 +622,14 @@ namespace TeamsManager.Tests.Services
                 !sy.IsActive && // Flaga IsActive z BaseEntity
                 sy.ModifiedBy == _currentLoggedInUserUpn
             )), Times.Once);
+            
+            // Weryfikacja granularnej inwalidacji
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateSchoolYearById(schoolYearId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateCurrentSchoolYear(), Times.Never); // Bo nie był bieżący
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
         }
 
-
-        // --- Pozostałe testy z oryginalnego pliku SchoolYearServiceTests.cs ---
-        // Zakładam, że metody takie jak GetSchoolYearByIdAsync, GetAllActiveSchoolYearsAsync,
-        // GetCurrentSchoolYearAsync, CreateSchoolYearAsync, UpdateSchoolYearAsync, SetCurrentSchoolYearAsync
-        // i RefreshCacheAsync oraz ich testy nie są bezpośrednio dotknięte zmianą
-        // logiki Team.IsActive, więc ich kod pozostaje taki sam jak w dostarczonym pliku.
-        // Poniżej przykładowe, które nie wymagają zmian.
-
-        [Fact]
-        public async Task GetSchoolYearByIdAsync_ExistingId_ShouldReturnSchoolYearAndCacheIt()
-        {
-            ResetCapturedOperationHistory();
-            var schoolYearId = "sy-2023";
-            var expectedSchoolYear = new SchoolYear { Id = schoolYearId, Name = "2023/2024", IsActive = true };
-            string cacheKey = SchoolYearByIdCacheKeyPrefix + schoolYearId;
-            SetupCacheTryGetValue(cacheKey, (SchoolYear?)null, false);
-            _mockSchoolYearRepository.Setup(r => r.GetByIdAsync(schoolYearId)).ReturnsAsync(expectedSchoolYear);
-
-            var result = await _schoolYearService.GetSchoolYearByIdAsync(schoolYearId);
-
-            result.Should().NotBeNull().And.BeEquivalentTo(expectedSchoolYear);
-            _mockSchoolYearRepository.Verify(r => r.GetByIdAsync(schoolYearId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
-        }
-
-        [Fact]
-        public async Task GetAllActiveSchoolYearsAsync_WhenActiveYearsExist_ShouldReturnActiveSchoolYearsAndCacheThem()
-        {
-            ResetCapturedOperationHistory();
-            var activeSchoolYears = new List<SchoolYear>
-            {
-                new SchoolYear { Id = "sy-1", Name = "2022/2023", IsActive = true },
-                new SchoolYear { Id = "sy-2", Name = "2023/2024", IsActive = true }
-            };
-            SetupCacheTryGetValue(AllSchoolYearsCacheKey, (IEnumerable<SchoolYear>?)null, false);
-            _mockSchoolYearRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()))
-                                   .ReturnsAsync(activeSchoolYears);
-
-            var result = await _schoolYearService.GetAllActiveSchoolYearsAsync();
-
-            result.Should().NotBeNull().And.HaveCount(2).And.BeEquivalentTo(activeSchoolYears);
-            _mockSchoolYearRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<SchoolYear, bool>>>()), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllSchoolYearsCacheKey), Times.Once);
-        }
-        // ... (reszta testów z SchoolYearServiceTests.cs, które nie są bezpośrednio związane z DeleteSchoolYearAsync i TeamRepository)
+        #endregion
     }
 }

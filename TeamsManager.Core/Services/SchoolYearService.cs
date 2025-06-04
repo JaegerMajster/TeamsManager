@@ -9,6 +9,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -27,15 +28,13 @@ namespace TeamsManager.Core.Services
         private readonly ILogger<SchoolYearService> _logger;
         private readonly ITeamRepository _teamRepository; // Potrzebne do sprawdzania zależności przy usuwaniu
         private readonly IMemoryCache _cache;
+        private readonly IPowerShellCacheService _powerShellCacheService;
 
         // Klucze cache
         private const string AllSchoolYearsCacheKey = "SchoolYears_AllActive";
         private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
         private const string SchoolYearByIdCacheKeyPrefix = "SchoolYear_Id_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromHours(1);
-
-        // Token do unieważniania cache'u dla lat szkolnych
-        private static CancellationTokenSource _schoolYearsCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu lat szkolnych.
@@ -47,7 +46,8 @@ namespace TeamsManager.Core.Services
             ICurrentUserService currentUserService,
             ILogger<SchoolYearService> logger,
             ITeamRepository teamRepository,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IPowerShellCacheService powerShellCacheService)
         {
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
@@ -56,13 +56,13 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_schoolYearsCacheTokenSource.Token));
+            // Delegacja do PowerShellCacheService dla spójnego zarządzania cache
+            return _powerShellCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
@@ -214,7 +214,7 @@ namespace TeamsManager.Core.Services
                 _schoolYearRepository.Update(newCurrentSchoolYear);
                 _logger.LogInformation("Rok szkolny {NewSchoolYearName} (ID: {NewSchoolYearId}) został ustawiony jako bieżący.", newCurrentSchoolYear.Name, newCurrentSchoolYear.Id);
 
-                InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: true, invalidateAll: true);
+                InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: true, invalidateAll: false);
                 if (oldCurrentYearIdToInvalidate != null)
                 {
                     InvalidateCache(schoolYearId: oldCurrentYearIdToInvalidate, wasOrIsCurrent: false, invalidateAll: false);
@@ -354,7 +354,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Rok szkolny '{Name}' pomyślnie przygotowany do zapisu. ID: {SchoolYearId}", name, newSchoolYear.Id);
 
-                InvalidateCache(schoolYearId: newSchoolYear.Id, wasOrIsCurrent: newSchoolYear.IsCurrent, invalidateAll: true);
+                InvalidateCache(schoolYearId: newSchoolYear.Id, wasOrIsCurrent: newSchoolYear.IsCurrent, invalidateAll: false);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -499,7 +499,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Rok szkolny ID: {SchoolYearId} pomyślnie przygotowany do aktualizacji.", existingSchoolYear.Id);
 
-                InvalidateCache(schoolYearId: existingSchoolYear.Id, wasOrIsCurrent: wasCurrentBeforeUpdate || existingSchoolYear.IsCurrent, invalidateAll: true);
+                InvalidateCache(schoolYearId: existingSchoolYear.Id, wasOrIsCurrent: wasCurrentBeforeUpdate || existingSchoolYear.IsCurrent, invalidateAll: false);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -554,6 +554,8 @@ namespace TeamsManager.Core.Services
             SchoolYear? schoolYear = null;
             try
             {
+                // Pobieramy rok szkolny używając FindAsync zamiast GetByIdAsync,
+                // ponieważ GetByIdAsync może nie zwrócić nieaktywnego roku
                 var schoolYears = await _schoolYearRepository.FindAsync(sy => sy.Id == schoolYearId);
                 schoolYear = schoolYears.FirstOrDefault();
 
@@ -577,8 +579,10 @@ namespace TeamsManager.Core.Services
 
                 if (!schoolYear.IsActive)
                 {
+                    // Rok jest już nieaktywny - to nie jest błąd, ale informacja dla użytkownika
+                    // Inwalidujemy cache na wypadek gdyby były niespójności
                     _logger.LogInformation("Rok szkolny ID {SchoolYearId} był już nieaktywny.", schoolYearId);
-                    InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: schoolYear.IsCurrent, invalidateAll: true);
+                    InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: schoolYear.IsCurrent, invalidateAll: false);
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -596,6 +600,8 @@ namespace TeamsManager.Core.Services
 
                 if (schoolYear.IsCurrent)
                 {
+                    // Bieżący rok szkolny nie może być usunięty - to wymaga najpierw
+                    // ustawienia innego roku jako bieżący dla zachowania ciągłości systemu
                     _logger.LogWarning("Nie można usunąć/dezaktywować bieżącego roku szkolnego ID {SchoolYearId}.", schoolYearId);
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -612,6 +618,8 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
+                // Sprawdzamy czy rok szkolny nie jest używany przez aktywne zespoły
+                // To zapobiega usunięciu roku który ma przypisane zespoły
                 var teamsUsingYear = await _teamRepository.FindAsync(t => t.SchoolYearId == schoolYearId && t.IsActive);
                 if (teamsUsingYear.Any())
                 {
@@ -631,12 +639,15 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
+                // Wykonujemy "soft delete" - oznaczamy jako usunięty ale nie usuwamy z bazy
+                // To pozwala na zachowanie historii i ewentualne przywrócenie
                 schoolYear.MarkAsDeleted(currentUserUpn);
                 _schoolYearRepository.Update(schoolYear);
 
                 _logger.LogInformation("Rok szkolny ID {SchoolYearId} pomyślnie oznaczony jako usunięty.", schoolYearId);
 
-                InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: schoolYear.IsCurrent, invalidateAll: true);
+                // Granularna inwalidacja cache - usuwamy tylko dotknięte wpisy
+                InvalidateCache(schoolYearId: schoolYearId, wasOrIsCurrent: schoolYear.IsCurrent, invalidateAll: false);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -686,30 +697,30 @@ namespace TeamsManager.Core.Services
 
         private void InvalidateCache(string? schoolYearId = null, bool wasOrIsCurrent = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u lat szkolnych. schoolYearId: {SchoolYearId}, wasOrIsCurrent: {WasOrIsCurrent}, invalidateAll: {InvalidateAll}",
+            _logger.LogDebug("Granularna inwalidacja cache lat szkolnych. schoolYearId: {SchoolYearId}, wasOrIsCurrent: {WasOrIsCurrent}, invalidateAll: {InvalidateAll}",
                schoolYearId, wasOrIsCurrent, invalidateAll);
 
-            var oldTokenSource = Interlocked.Exchange(ref _schoolYearsCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            if (invalidateAll)
             {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose();
-            }
-            _logger.LogDebug("Token cache'u dla lat szkolnych został zresetowany.");
-
-            _cache.Remove(AllSchoolYearsCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllSchoolYearsCacheKey);
-
-            if (invalidateAll || wasOrIsCurrent) // Jeśli zmieniono bieżący rok lub pełna inwalidacja
-            {
-                _cache.Remove(CurrentSchoolYearCacheKey);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey} (z powodu invalidateAll lub wasOrIsCurrent)", CurrentSchoolYearCacheKey);
+                // Pełny reset cache tylko gdy faktycznie potrzebny (np. RefreshCacheAsync)
+                _powerShellCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano pełny reset cache poprzez InvalidateAllCache()");
+                return;
             }
 
+            // Granularna inwalidacja - zawsze unieważniamy listę wszystkich lat
+            _powerShellCacheService.InvalidateAllActiveSchoolYearsList();
+            
+            // Unieważnij bieżący rok jeśli był lub jest bieżący
+            if (wasOrIsCurrent)
+            {
+                _powerShellCacheService.InvalidateCurrentSchoolYear();
+            }
+            
+            // Unieważnij konkretny rok szkolny jeśli podany
             if (!string.IsNullOrWhiteSpace(schoolYearId))
             {
-                _cache.Remove(SchoolYearByIdCacheKeyPrefix + schoolYearId);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", SchoolYearByIdCacheKeyPrefix, schoolYearId);
+                _powerShellCacheService.InvalidateSchoolYearById(schoolYearId);
             }
         }
     }
