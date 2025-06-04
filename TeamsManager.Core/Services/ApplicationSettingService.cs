@@ -22,7 +22,8 @@ namespace TeamsManager.Core.Services
     public class ApplicationSettingService : IApplicationSettingService
     {
         private readonly IApplicationSettingRepository _settingsRepository;
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ApplicationSettingService> _logger;
         private readonly IMemoryCache _cache;
@@ -41,13 +42,15 @@ namespace TeamsManager.Core.Services
         /// </summary>
         public ApplicationSettingService(
             IApplicationSettingRepository settingsRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ApplicationSettingService> logger,
             IMemoryCache memoryCache)
         {
             _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
@@ -201,98 +204,115 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> SaveSettingAsync(string key, string value, SettingType type, string? description = null, string? category = null)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_save_setting"; //
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(), //
-                TargetEntityType = nameof(ApplicationSetting), //
-                TargetEntityId = key,
-                TargetEntityName = key, //
-                CreatedBy = currentUserUpn, //
-                IsActive = true //
-            };
-
-            _logger.LogInformation("Zapisywanie ustawienia: Klucz={Key}, Wartość='{Value}', Typ={Type} przez {User}", key, value, type, currentUserUpn); //
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Zapisywanie ustawienia: Klucz={Key}, Wartość='{Value}', Typ={Type}", key, value, type);
 
             if (string.IsNullOrWhiteSpace(key))
             {
-                _logger.LogError("Nie można zapisać ustawienia: Klucz nie może być pusty."); //
-                operation.Type = OperationType.ApplicationSettingUpdated;
-                operation.MarkAsFailed("Klucz ustawienia nie może być pusty."); //
-                await SaveOperationHistoryAsync(operation); //
+                _logger.LogError("Nie można zapisać ustawienia: Klucz nie może być pusty.");
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    "Nie można zapisać ustawienia: Klucz nie może być pusty",
+                    "error"
+                );
                 return false;
             }
-            operation.MarkAsStarted(); //
 
-            var existingSetting = await _settingsRepository.GetSettingByKeyAsync(key); //
-            bool success = false;
-            string? oldCategory = existingSetting?.Category; //
-            string? actualSettingId = existingSetting?.Id; //
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingCreated, // Domyślnie na Created, zmieni się w logice
+                nameof(ApplicationSetting),
+                targetEntityId: key,
+                targetEntityName: key
+            );
 
             try
             {
-                if (existingSetting != null)
-                {
-                    operation.Type = OperationType.ApplicationSettingUpdated; //
-                    operation.TargetEntityId = existingSetting.Id;
-                    _logger.LogInformation("Aktualizowanie istniejącego ustawienia: {Key}", key); //
+                var existingSetting = await _settingsRepository.GetSettingByKeyAsync(key);
+                string? oldCategory = existingSetting?.Category;
+                bool isUpdate = existingSetting != null;
 
-                    existingSetting.Value = value; //
-                    existingSetting.Type = type; //
-                    if (description != null) existingSetting.Description = description; //
+                if (isUpdate)
+                {
+                    // Zmiana typu operacji na Update
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.InProgress,
+                        $"Aktualizowanie istniejącego ustawienia: {key}"
+                    );
+
+                    _logger.LogInformation("Aktualizowanie istniejącego ustawienia: {Key}", key);
+
+                    existingSetting.Value = value;
+                    existingSetting.Type = type;
+                    if (description != null) existingSetting.Description = description;
                     if (category != null) existingSetting.Category = category;
-                    existingSetting.MarkAsModified(currentUserUpn); //
-                    _settingsRepository.Update(existingSetting); //
-                    operation.MarkAsCompleted($"Ustawienie '{key}' zaktualizowane."); //
-                    actualSettingId = existingSetting.Id; //
+                    existingSetting.MarkAsModified(currentUserUpn);
+                    _settingsRepository.Update(existingSetting);
                 }
                 else
                 {
-                    operation.Type = OperationType.ApplicationSettingCreated; //
-                    _logger.LogInformation("Tworzenie nowego ustawienia: {Key}", key); //
+                    _logger.LogInformation("Tworzenie nowego ustawienia: {Key}", key);
                     var newSetting = new ApplicationSetting
                     {
-                        Id = Guid.NewGuid().ToString(), //
-                        Key = key, //
-                        Value = value, //
-                        Type = type, //
-                        Description = description ?? string.Empty, //
-                        Category = category ?? "General", //
+                        Id = Guid.NewGuid().ToString(),
+                        Key = key,
+                        Value = value,
+                        Type = type,
+                        Description = description ?? string.Empty,
+                        Category = category ?? "General",
                         IsRequired = false,
                         IsVisible = true,
                         CreatedBy = currentUserUpn,
-                        IsActive = true //
+                        IsActive = true
                     };
-                    await _settingsRepository.AddAsync(newSetting); //
-                    operation.TargetEntityId = newSetting.Id;
-                    operation.MarkAsCompleted($"Ustawienie '{key}' utworzone."); //
-                    actualSettingId = newSetting.Id; //
+                    await _settingsRepository.AddAsync(newSetting);
                     oldCategory = null;
                 }
-                success = true;
-                _logger.LogInformation("Ustawienie '{Key}' pomyślnie przygotowane do zapisu.", key); //
 
-                InvalidateSettingCache(key, category ?? existingSetting?.Category, oldCategory); //
+                _logger.LogInformation("Ustawienie '{Key}' pomyślnie przygotowane do zapisu.", key);
+
+                InvalidateSettingCache(key, category ?? existingSetting?.Category, oldCategory);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                var statusMessage = isUpdate ? $"Ustawienie '{key}' zaktualizowane." : $"Ustawienie '{key}' utworzone.";
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    statusMessage
+                );
+
+                // 3. Powiadomienie o sukcesie
+                var userMessage = isUpdate ? $"Ustawienie '{key}' zostało zaktualizowane" : $"Ustawienie '{key}' zostało utworzone";
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    userMessage,
+                    "success"
+                );
+
+                return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Krytyczny błąd podczas zapisywania ustawienia {Key}. Wiadomość: {ErrorMessage}", key, ex.Message); //
-                if (operation.Type == default(OperationType))
-                {
-                    operation.Type = existingSetting != null ? OperationType.ApplicationSettingUpdated : OperationType.ApplicationSettingCreated; //
-                }
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString()); //
-                success = false;
+                _logger.LogError(ex, "Krytyczny błąd podczas zapisywania ustawienia {Key}. Wiadomość: {ErrorMessage}", key, ex.Message);
+
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas zapisywania ustawienia '{key}': {ex.Message}",
+                    "error"
+                );
+
+                return false;
             }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(actualSettingId) && operation.TargetEntityId != actualSettingId)
-                {
-                    operation.TargetEntityId = actualSettingId;
-                }
-                await SaveOperationHistoryAsync(operation); //
-            }
-            return success;
         }
 
         /// <inheritdoc />
@@ -300,142 +320,222 @@ namespace TeamsManager.Core.Services
         {
             if (settingToUpdate == null || string.IsNullOrEmpty(settingToUpdate.Id) || string.IsNullOrEmpty(settingToUpdate.Key))
             {
-                _logger.LogError("Próba aktualizacji ustawienia aplikacji z nieprawidłowymi danymi (null, brak ID lub Klucza)."); //
+                _logger.LogError("Próba aktualizacji ustawienia aplikacji z nieprawidłowymi danymi (null, brak ID lub Klucza).");
                 throw new ArgumentNullException(nameof(settingToUpdate), "Obiekt ustawienia, jego ID lub Klucz nie może być null/pusty.");
             }
 
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update"; //
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(), //
-                Type = OperationType.ApplicationSettingUpdated, //
-                TargetEntityType = nameof(ApplicationSetting), //
-                TargetEntityId = settingToUpdate.Id, //
-                CreatedBy = currentUserUpn, //
-                IsActive = true //
-            };
-            operation.MarkAsStarted(); //
-            _logger.LogInformation("Aktualizowanie obiektu ApplicationSetting ID: {SettingId}, Klucz: {Key}", settingToUpdate.Id, settingToUpdate.Key); //
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Aktualizowanie obiektu ApplicationSetting ID: {SettingId}, Klucz: {Key}", settingToUpdate.Id, settingToUpdate.Key);
 
-            string? oldKey = null; //
-            string? oldCategory = null; //
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingUpdated,
+                nameof(ApplicationSetting),
+                targetEntityId: settingToUpdate.Id,
+                targetEntityName: settingToUpdate.Key
+            );
 
             try
             {
-                var existingSetting = await _settingsRepository.GetByIdAsync(settingToUpdate.Id); //
+                string? oldKey = null;
+                string? oldCategory = null;
+
+                var existingSetting = await _settingsRepository.GetByIdAsync(settingToUpdate.Id);
                 if (existingSetting == null)
                 {
-                    operation.MarkAsFailed($"Ustawienie o ID '{settingToUpdate.Id}' nie istnieje."); //
-                    _logger.LogWarning("Nie można zaktualizować ustawienia ID {SettingId} - nie istnieje.", settingToUpdate.Id); //
+                    _logger.LogWarning("Nie można zaktualizować ustawienia ID {SettingId} - nie istnieje.", settingToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Ustawienie o ID '{settingToUpdate.Id}' nie istnieje."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można zaktualizować ustawienia: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
-                operation.TargetEntityName = existingSetting.Key;
-                oldKey = existingSetting.Key; //
-                oldCategory = existingSetting.Category; //
+
+                oldKey = existingSetting.Key;
+                oldCategory = existingSetting.Category;
 
                 if (existingSetting.Key != settingToUpdate.Key)
                 {
-                    var conflicting = await _settingsRepository.GetSettingByKeyAsync(settingToUpdate.Key); //
+                    var conflicting = await _settingsRepository.GetSettingByKeyAsync(settingToUpdate.Key);
                     if (conflicting != null && conflicting.Id != existingSetting.Id)
                     {
-                        operation.MarkAsFailed($"Ustawienie o kluczu '{settingToUpdate.Key}' już istnieje."); //
-                        _logger.LogError("Nie można zaktualizować ustawienia: Klucz '{Key}' już istnieje.", settingToUpdate.Key); //
+                        _logger.LogError("Nie można zaktualizować ustawienia: Klucz '{Key}' już istnieje.", settingToUpdate.Key);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Ustawienie o kluczu '{settingToUpdate.Key}' już istnieje."
+                        );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            $"Nie można zaktualizować ustawienia: klucz '{settingToUpdate.Key}' już istnieje",
+                            "error"
+                        );
                         return false;
                     }
                 }
 
-                existingSetting.Key = settingToUpdate.Key; //
-                existingSetting.Value = settingToUpdate.Value; //
-                existingSetting.Description = settingToUpdate.Description; //
-                existingSetting.Type = settingToUpdate.Type; //
-                existingSetting.Category = settingToUpdate.Category; //
-                existingSetting.IsRequired = settingToUpdate.IsRequired; //
-                existingSetting.IsVisible = settingToUpdate.IsVisible; //
-                existingSetting.DefaultValue = settingToUpdate.DefaultValue; //
-                existingSetting.ValidationPattern = settingToUpdate.ValidationPattern; //
-                existingSetting.ValidationMessage = settingToUpdate.ValidationMessage; //
-                existingSetting.DisplayOrder = settingToUpdate.DisplayOrder; //
+                existingSetting.Key = settingToUpdate.Key;
+                existingSetting.Value = settingToUpdate.Value;
+                existingSetting.Description = settingToUpdate.Description;
+                existingSetting.Type = settingToUpdate.Type;
+                existingSetting.Category = settingToUpdate.Category;
+                existingSetting.IsRequired = settingToUpdate.IsRequired;
+                existingSetting.IsVisible = settingToUpdate.IsVisible;
+                existingSetting.DefaultValue = settingToUpdate.DefaultValue;
+                existingSetting.ValidationPattern = settingToUpdate.ValidationPattern;
+                existingSetting.ValidationMessage = settingToUpdate.ValidationMessage;
+                existingSetting.DisplayOrder = settingToUpdate.DisplayOrder;
                 existingSetting.IsActive = settingToUpdate.IsActive;
-                existingSetting.MarkAsModified(currentUserUpn); //
+                existingSetting.MarkAsModified(currentUserUpn);
 
-                _settingsRepository.Update(existingSetting); //
-                operation.TargetEntityName = existingSetting.Key;
-                operation.MarkAsCompleted("Ustawienie aplikacji przygotowane do aktualizacji."); //
+                _settingsRepository.Update(existingSetting);
 
-                InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory); //
+                InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory);
                 if (oldKey != null && oldKey != existingSetting.Key)
                 {
-                    _cache.Remove(SettingByKeyCacheKeyPrefix + oldKey); //
+                    _cache.Remove(SettingByKeyCacheKeyPrefix + oldKey);
                 }
 
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Ustawienie aplikacji przygotowane do aktualizacji."
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Ustawienie '{existingSetting.Key}' zostało zaktualizowane",
+                    "success"
+                );
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas aktualizacji ApplicationSetting ID {SettingId}. Wiadomość: {ErrorMessage}", settingToUpdate.Id, ex.Message); //
-                operation.MarkAsFailed($"Błąd: {ex.Message}", ex.ToString()); //
+                _logger.LogError(ex, "Błąd podczas aktualizacji ApplicationSetting ID {SettingId}. Wiadomość: {ErrorMessage}", settingToUpdate.Id, ex.Message);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji ustawienia: {ex.Message}",
+                    "error"
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation); //
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteSettingAsync(string key)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete_setting"; //
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(), //
-                Type = OperationType.ApplicationSettingDeleted, //
-                TargetEntityType = nameof(ApplicationSetting), //
-                TargetEntityId = key,
-                TargetEntityName = key, //
-                CreatedBy = currentUserUpn, //
-                IsActive = true //
-            };
-            operation.MarkAsStarted(); //
-            _logger.LogInformation("Usuwanie ustawienia o kluczu: {Key}", key); //
-            ApplicationSetting? setting = null; //
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Usuwanie ustawienia o kluczu: {Key}", key);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingDeleted,
+                nameof(ApplicationSetting),
+                targetEntityId: key,
+                targetEntityName: key
+            );
 
             try
             {
-                setting = await _settingsRepository.GetSettingByKeyAsync(key); //
+                var setting = await _settingsRepository.GetSettingByKeyAsync(key);
                 if (setting == null)
                 {
-                    operation.MarkAsFailed($"Ustawienie o kluczu '{key}' nie zostało znalezione."); //
-                    _logger.LogWarning("Nie można usunąć ustawienia: Klucz {Key} nie znaleziony.", key); //
+                    _logger.LogWarning("Nie można usunąć ustawienia: Klucz {Key} nie znaleziony.", key);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Ustawienie o kluczu '{key}' nie zostało znalezione."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można usunąć ustawienia: klucz '{key}' nie został znaleziony",
+                        "error"
+                    );
                     return false;
                 }
 
-                operation.TargetEntityId = setting.Id;
-
                 if (!setting.IsActive)
                 {
-                    operation.MarkAsCompleted($"Ustawienie '{key}' było już nieaktywne. Brak akcji."); //
-                    _logger.LogInformation("Ustawienie o kluczu {Key} było już nieaktywne.", key); //
+                    _logger.LogInformation("Ustawienie o kluczu {Key} było już nieaktywne.", key);
                     InvalidateSettingCache(key, setting.Category);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Ustawienie '{key}' było już nieaktywne. Brak akcji."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Ustawienie '{key}' było już nieaktywne",
+                        "info"
+                    );
                     return true;
                 }
 
                 setting.MarkAsDeleted(currentUserUpn);
-                _settingsRepository.Update(setting); //
-                operation.MarkAsCompleted("Ustawienie aplikacji oznaczone jako usunięte."); //
+                _settingsRepository.Update(setting);
 
-                InvalidateSettingCache(key, setting.Category); //
+                InvalidateSettingCache(key, setting.Category);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Ustawienie aplikacji oznaczone jako usunięte."
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Ustawienie '{key}' zostało usunięte",
+                    "success"
+                );
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Krytyczny błąd podczas usuwania ustawienia aplikacji o kluczu {Key}. Wiadomość: {ErrorMessage}", key, ex.Message); //
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString()); //
+                _logger.LogError(ex, "Krytyczny błąd podczas usuwania ustawienia aplikacji o kluczu {Key}. Wiadomość: {ErrorMessage}", key, ex.Message);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas usuwania ustawienia '{key}': {ex.Message}",
+                    "error"
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation); //
             }
         }
 
@@ -506,31 +606,6 @@ namespace TeamsManager.Core.Services
                     _logger.LogDebug("Usunięto z cache ustawienia dla starej kategorii: {OldCategory}", oldCategory); //
                 }
             }
-        }
-
-        // Metoda pomocnicza do zapisu OperationHistory
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) //
-                operation.Id = Guid.NewGuid().ToString(); //
-            if (string.IsNullOrEmpty(operation.CreatedBy)) //
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save"; //
-
-            // Upewnij się, że StartedAt jest ustawione, jeśli operacja nie jest Pending
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
-            {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow; //
-                // Jeśli operacja jest logowana jako już zakończona, ustaw CompletedAt i Duration
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow; //
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt; //
-                }
-            }
-
-            await _operationHistoryRepository.AddAsync(operation); //
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId}", operation.Id); //
         }
     }
 }

@@ -283,13 +283,10 @@ namespace TeamsManager.Core.Models
             if (Status == ChannelStatus.Archived) return;
 
             Status = ChannelStatus.Archived;
-            // this.IsActive jest teraz false automatycznie.
-            // Nie modyfikujemy DisplayName ani Description dla kanałów, chyba że jest takie wymaganie.
-
             StatusChangeDate = DateTime.UtcNow;
             StatusChangedBy = archivedBy;
             StatusChangeReason = reason;
-            MarkAsModified(archivedBy); // Metoda z BaseEntity
+            MarkAsModified(archivedBy);
         }
 
         /// <summary>
@@ -301,12 +298,10 @@ namespace TeamsManager.Core.Models
             if (Status == ChannelStatus.Active) return;
 
             Status = ChannelStatus.Active;
-            // this.IsActive jest teraz true automatycznie.
-
             StatusChangeDate = DateTime.UtcNow;
             StatusChangedBy = restoredBy;
             StatusChangeReason = "Przywrócono z archiwum";
-            MarkAsModified(restoredBy); // Metoda z BaseEntity
+            MarkAsModified(restoredBy);
         }
 
         /// <summary>

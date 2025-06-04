@@ -82,6 +82,20 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Kolekcja duplikatów lub null</returns>
         Task<Collection<PSObject>?> FindDuplicateUsersAsync();
 
+        /// <summary>
+        /// Pobiera szczegóły użytkownika z Microsoft 365 na podstawie jego unikalnego ID (ObjectId)
+        /// </summary>
+        /// <param name="userId">Unikalny identyfikator użytkownika (ObjectId)</param>
+        /// <returns>Obiekt PSObject z danymi użytkownika lub null</returns>
+        Task<PSObject?> GetM365UserByIdAsync(string userId);
+
+        /// <summary>
+        /// Pobiera wszystkich użytkowników, których konto jest włączone/wyłączone
+        /// </summary>
+        /// <param name="accountEnabled">Czy konto ma być włączone (true) czy wyłączone (false)</param>
+        /// <returns>Kolekcja użytkowników lub null</returns>
+        Task<Collection<PSObject>?> GetM365UsersByAccountEnabledStateAsync(bool accountEnabled);
+
         #endregion
 
         #region Team Membership Operations

@@ -12,20 +12,18 @@ namespace TeamsManager.Core.Abstractions.Services
     public interface IOperationHistoryService
     {
         /// <summary>
-        /// Asynchronicznie loguje nową operację lub aktualizuje istniejącą, jeśli ID operacji jest już znane.
-        /// Tworzy nowy wpis w historii operacji.
+        /// Asynchronicznie tworzy nowy wpis operacji w historii.
+        /// Operacja zawsze rozpoczyna się ze statusem InProgress.
         /// </summary>
         /// <param name="type">Typ operacji.</param>
-        /// <param name="status">Początkowy status operacji.</param>
         /// <param name="targetEntityType">Typ encji, której dotyczy operacja.</param>
         /// <param name="targetEntityId">ID encji, której dotyczy operacja (opcjonalne).</param>
         /// <param name="targetEntityName">Nazwa lub opis encji docelowej (opcjonalne).</param>
         /// <param name="details">Opcjonalne szczegóły operacji (np. w formacie JSON).</param>
         /// <param name="parentOperationId">Opcjonalne ID operacji nadrzędnej.</param>
-        /// <returns>Utworzony lub zaktualizowany obiekt OperationHistory.</returns>
-        Task<OperationHistory> LogOperationAsync(
+        /// <returns>Utworzony obiekt OperationHistory.</returns>
+        Task<OperationHistory> CreateNewOperationEntryAsync(
             OperationType type,
-            OperationStatus status,
             string targetEntityType,
             string? targetEntityId = null,
             string? targetEntityName = null,

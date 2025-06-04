@@ -57,19 +57,18 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task LogOperationAsync_ValidParameters_ShouldCreateAndReturnOperationHistory()
+        public async Task CreateNewOperationEntryAsync_ValidParameters_ShouldCreateAndReturnOperationHistory()
         {
             ResetCapturedOperationHistory();
             var operationType = OperationType.TeamCreated;
-            var operationStatus = OperationStatus.InProgress; // Zmieniono na InProgress dla spójności z MarkAsStarted
             var targetEntityType = nameof(Team);
             var targetEntityId = "team-123";
             var targetEntityName = "Nowy Zespół Testowy";
             var details = "{\"info\":\"Tworzenie zespołu\"}";
             var parentOpId = "parent-op-001";
 
-            var result = await _operationHistoryService.LogOperationAsync(
-                operationType, operationStatus, targetEntityType, targetEntityId, targetEntityName, details, parentOpId
+            var result = await _operationHistoryService.CreateNewOperationEntryAsync(
+                operationType, targetEntityType, targetEntityId, targetEntityName, details, parentOpId
             );
 
             result.Should().NotBeNull();
@@ -82,7 +81,7 @@ namespace TeamsManager.Tests.Services
 
             _capturedOperationHistory!.Id.Should().NotBeNullOrEmpty();
             _capturedOperationHistory.Type.Should().Be(operationType);
-            _capturedOperationHistory.Status.Should().Be(operationStatus); // Powinno być InProgress
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress); // Zawsze InProgress
             _capturedOperationHistory.StartedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(2)); // Używamy większej tolerancji
             _capturedOperationHistory.CompletedAt.Should().BeNull(); // Bo status InProgress
 
@@ -90,28 +89,25 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task LogOperationAsync_StatusCompleted_ShouldSetStartedAtAndCompletedAt()
+        public async Task CreateNewOperationEntryAsync_ShouldAlwaysSetInProgressStatus()
         {
             ResetCapturedOperationHistory();
             var operationType = OperationType.SystemBackup;
-            var operationStatus = OperationStatus.Completed; // Operacja logowana jako już zakończona
             var targetEntityType = "System";
             var targetEntityName = "Pełna kopia zapasowa";
-            var details = "Kopia zakończona pomyślnie.";
+            var details = "Rozpoczynanie kopii zapasowej.";
 
-            await _operationHistoryService.LogOperationAsync(
-                operationType, operationStatus, targetEntityType, targetEntityName: targetEntityName, details: details
+            await _operationHistoryService.CreateNewOperationEntryAsync(
+                operationType, targetEntityType, targetEntityName: targetEntityName, details: details
             );
 
             _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
+            _capturedOperationHistory!.Status.Should().Be(OperationStatus.InProgress); // Zawsze InProgress
             _capturedOperationHistory.StartedAt.Should().NotBe(default(DateTime));
-            _capturedOperationHistory.CompletedAt.Should().HaveValue();
-            _capturedOperationHistory.CompletedAt.Value.Should().BeOnOrAfter(_capturedOperationHistory.StartedAt);
-            _capturedOperationHistory.Duration.Should().HaveValue();
+            _capturedOperationHistory.CompletedAt.Should().BeNull(); // Nie ustawione dla InProgress
+            _capturedOperationHistory.Duration.Should().BeNull(); // Nie ustawione dla InProgress
             _capturedOperationHistory.OperationDetails.Should().Be(details);
         }
-
 
         [Fact]
         public async Task UpdateOperationStatusAsync_ExistingOperation_ShouldUpdateStatusAndFieldsAndReturnTrue()

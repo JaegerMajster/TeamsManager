@@ -49,7 +49,7 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// Archiwizuje zespół i dezaktywuje użytkowników, którzy są tylko w tym zespole
         /// </summary>
         /// <param name="teamId">ID zespołu do archiwizacji</param>
-        /// <returns>True jeśli operacja się powiodła</returns>
-        Task<bool> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId);
+        /// <returns>Słownik z wynikiem operacji dla zespołu</returns>
+        Task<Dictionary<string, bool>> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId);
     }
 }

@@ -6,10 +6,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
-
+using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -21,8 +20,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private readonly IPowerShellConnectionService _connectionService;
         private readonly IPowerShellCacheService _cacheService;
         private readonly IPowerShellUserResolverService _userResolver;
-        private readonly ICurrentUserService _currentUserService;
-        private readonly INotificationService _notificationService;
+        private readonly IOperationHistoryService _operationHistoryService;
         private readonly ILogger<PowerShellBulkOperationsService> _logger;
 
         // Stałe konfiguracyjne
@@ -35,15 +33,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
             IPowerShellConnectionService connectionService,
             IPowerShellCacheService cacheService,
             IPowerShellUserResolverService userResolver,
-            ICurrentUserService currentUserService,
-            INotificationService notificationService,
+            IOperationHistoryService operationHistoryService,
             ILogger<PowerShellBulkOperationsService> logger)
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
             _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
-            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -52,436 +48,464 @@ namespace TeamsManager.Core.Services.PowerShellServices
             List<string> userUpns,
             string role = "Member")
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowego dodawania {userUpns?.Count ?? 0} użytkowników do zespołu...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masowe dodawanie użytkowników do zespołu", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpns?.Any() ?? true)
             {
                 _logger.LogWarning("Lista użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista użytkowników jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Masowe dodawanie {Count} użytkowników do zespołu {TeamId}",
                 userUpns!.Count, teamId);
 
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkUserAddToTeam,
+                "Team", 
+                targetEntityId: teamId,
+                targetEntityName: $"Bulk add {userUpns.Count} users to team"
+            );
+
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            // Podziel na partie
-            var batches = userUpns
-                .Select((upn, index) => new { upn, index })
-                .GroupBy(x => x.index / BatchSize)
-                .Select(g => g.Select(x => x.upn).ToList())
-                .ToList();
-
-            var totalBatches = batches.Count;
-            var processedBatches = 0;
-
-            foreach (var batch in batches)
+            try
             {
-                await _semaphore.WaitAsync(); // Kontrola współbieżności
-                try
-                {
-                    processedBatches++;
-                    var progress = 5 + (int)((processedBatches / (float)totalBatches) * 85);
-                    
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                        $"Przetwarzanie partii {processedBatches}/{totalBatches} ({batch.Count} użytkowników)...");
+                // 2. Przetwarzaj partie
+                var batches = userUpns
+                    .Select((upn, index) => new { upn, index })
+                    .GroupBy(x => x.index / BatchSize)
+                    .Select(g => g.Select(x => x.upn).ToList())
+                    .ToList();
 
-                    var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
-                    foreach (var result in batchResults)
+                foreach (var batch in batches)
+                {
+                    await _semaphore.WaitAsync(); // Kontrola współbieżności
+                    try
                     {
-                        results[result.Key] = result.Value;
+                        var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
+                        
+                        foreach (var result in batchResults)
+                        {
+                            results[result.Key] = result.Value;
+                            if (result.Value) processedCount++;
+                            else failedCount++;
+                        }
+
+                        // 3. Aktualizuj postęp
+                        await _operationHistoryService.UpdateOperationProgressAsync(
+                            operation.Id,
+                            processedItems: processedCount,
+                            failedItems: failedCount,
+                            totalItems: userUpns.Count
+                        );
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+
+                    // Krótka przerwa między partiami
+                    if (batch != batches.Last())
+                    {
+                        await Task.Delay(1000);
                     }
                 }
-                finally
-                {
-                    _semaphore.Release();
-                }
 
-                // Krótka przerwa między partiami
-                if (batch != batches.Last())
-                {
-                    await Task.Delay(1000);
-                }
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == userUpns.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Processed: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono masowe dodawanie. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache dla zespołu
+                _cacheService.InvalidateTeamCache(teamId);
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono masowe dodawanie. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache dla zespołu
-            _cacheService.InvalidateTeamCache(teamId);
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} sukcesów, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowe dodawanie zakończone: {successCount} użytkowników dodanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
-            return results;
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                throw;
+            }
         }
 
         public async Task<Dictionary<string, bool>> BulkRemoveUsersFromTeamAsync(
             string teamId,
             List<string> userUpns)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowego usuwania {userUpns?.Count ?? 0} użytkowników z zespołu...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masowe usuwanie użytkowników z zespołu", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpns?.Any() ?? true)
             {
                 _logger.LogWarning("Lista użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista użytkowników jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Masowe usuwanie {Count} użytkowników z zespołu {TeamId}",
                 userUpns!.Count, teamId);
 
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkUserRemoveFromTeam,
+                "Team", 
+                targetEntityId: teamId,
+                targetEntityName: $"Bulk remove {userUpns.Count} users from team"
+            );
+
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            // Podziel na partie
-            var batches = userUpns
-                .Select((upn, index) => new { upn, index })
-                .GroupBy(x => x.index / BatchSize)
-                .Select(g => g.Select(x => x.upn).ToList())
-                .ToList();
-
-            var totalBatches = batches.Count;
-            var processedBatches = 0;
-
-            foreach (var batch in batches)
+            try
             {
-                await _semaphore.WaitAsync();
-                try
-                {
-                    processedBatches++;
-                    var progress = 5 + (int)((processedBatches / (float)totalBatches) * 85);
-                    
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                        $"Przetwarzanie partii {processedBatches}/{totalBatches} ({batch.Count} użytkowników)...");
+                // 2. Przetwarzaj partie
+                var batches = userUpns
+                    .Select((upn, index) => new { upn, index })
+                    .GroupBy(x => x.index / BatchSize)
+                    .Select(g => g.Select(x => x.upn).ToList())
+                    .ToList();
 
-                    var batchResults = await ProcessUserRemovalBatchAsync(teamId, batch);
-                    foreach (var result in batchResults)
+                foreach (var batch in batches)
+                {
+                    await _semaphore.WaitAsync();
+                    try
                     {
-                        results[result.Key] = result.Value;
+                        var batchResults = await ProcessUserRemovalBatchAsync(teamId, batch);
+                        
+                        foreach (var result in batchResults)
+                        {
+                            results[result.Key] = result.Value;
+                            if (result.Value) processedCount++;
+                            else failedCount++;
+                        }
+
+                        // 3. Aktualizuj postęp
+                        await _operationHistoryService.UpdateOperationProgressAsync(
+                            operation.Id,
+                            processedItems: processedCount,
+                            failedItems: failedCount,
+                            totalItems: userUpns.Count
+                        );
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+
+                    // Krótka przerwa między partiami
+                    if (batch != batches.Last())
+                    {
+                        await Task.Delay(1000);
                     }
                 }
-                finally
-                {
-                    _semaphore.Release();
-                }
 
-                // Krótka przerwa między partiami
-                if (batch != batches.Last())
-                {
-                    await Task.Delay(1000);
-                }
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == userUpns.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Processed: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono masowe usuwanie. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache
+                _cacheService.InvalidateTeamCache(teamId);
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono masowe usuwanie. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache
-            _cacheService.InvalidateTeamCache(teamId);
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} sukcesów, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowe usuwanie zakończone: {successCount} użytkowników usuniętych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
-            return results;
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                throw;
+            }
         }
 
         public async Task<Dictionary<string, bool>> BulkArchiveTeamsAsync(List<string> teamIds)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowej archiwizacji {teamIds?.Count ?? 0} zespołów...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masową archiwizację zespołów", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!teamIds?.Any() ?? true)
             {
                 _logger.LogWarning("Lista zespołów jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista zespołów jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak zespołów do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Masowa archiwizacja {Count} zespołów", teamIds!.Count);
 
-            var script = new StringBuilder();
-            script.AppendLine("$results = @{}");
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkTeamArchive,
+                "Team",
+                targetEntityName: $"Bulk archive {teamIds.Count} teams"
+            );
 
-            var totalTeams = teamIds.Count;
-            var processedTeams = 0;
-
-            foreach (var teamId in teamIds)
-            {
-                processedTeams++;
-                var progress = 30 + (int)((processedTeams / (float)totalTeams) * 50);
-                
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                    $"Archiwizacja zespołu {processedTeams}/{totalTeams}...");
-
-                script.AppendLine($@"
-                    try {{
-                        Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
-                        $results['{teamId}'] = $true
-                    }} catch {{
-                        $results['{teamId}'] = $false
-                        Write-Warning ""Błąd archiwizacji zespołu {teamId}: $_""
-                    }}
-                ");
-            }
-
-            script.AppendLine("$results");
-
-            var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            try
             {
-                foreach (DictionaryEntry entry in hashtable)
+                var script = new StringBuilder();
+                script.AppendLine("$results = @{}");
+
+                foreach (var teamId in teamIds)
                 {
-                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    script.AppendLine($@"
+                        try {{
+                            Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
+                            $results['{teamId}'] = $true
+                        }} catch {{
+                            $results['{teamId}'] = $false
+                            Write-Warning ""Błąd archiwizacji zespołu {teamId}: $_""
+                        }}
+                    ");
+                }
+
+                script.AppendLine("$results");
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
+
+                if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+                {
+                    foreach (DictionaryEntry entry in hashtable)
                     {
-                        results[key] = value;
+                        if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                        {
+                            results[key] = value;
+                            if (value) processedCount++;
+                            else failedCount++;
+                        }
                     }
                 }
+
+                // 3. Aktualizuj postęp (100% po zakończeniu)
+                await _operationHistoryService.UpdateOperationProgressAsync(
+                    operation.Id,
+                    processedItems: processedCount,
+                    failedItems: failedCount,
+                    totalItems: teamIds.Count
+                );
+
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == teamIds.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Archived: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache dla wszystkich zespołów
+                _cacheService.InvalidateAllCache();
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache dla wszystkich zespołów
-            _cacheService.InvalidateAllCache();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} zarchiwizowanych, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowa archiwizacja zakończona: {successCount} zespołów zarchiwizowanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
-            return results;
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
+                _logger.LogError(ex, "Błąd podczas masowej archiwizacji zespołów");
+                throw;
+            }
         }
 
         public async Task<Dictionary<string, bool>> BulkUpdateUserPropertiesAsync(
             Dictionary<string, Dictionary<string, string>> userUpdates)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                $"Rozpoczynanie masowej aktualizacji właściwości {userUpdates?.Count ?? 0} użytkowników...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto masową aktualizację właściwości użytkowników", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
                 return new Dictionary<string, bool>();
             }
 
             if (!userUpdates?.Any() ?? true)
             {
                 _logger.LogWarning("Lista aktualizacji użytkowników jest pusta.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "⚠️ Lista aktualizacji jest pusta", "warning");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona - brak użytkowników do przetworzenia");
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Masowa aktualizacja właściwości dla {Count} użytkowników", userUpdates!.Count);
 
-            var script = new StringBuilder();
-            script.AppendLine("$results = @{}");
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkUserUpdate,
+                "User",
+                targetEntityName: $"Bulk update {userUpdates.Count} users"
+            );
 
-            var totalUsers = userUpdates.Count;
-            var processedUsers = 0;
-
-            foreach (var kvp in userUpdates)
-            {
-                var userUpn = kvp.Key;
-                var properties = kvp.Value;
-
-                processedUsers++;
-                var progress = 20 + (int)((processedUsers / (float)totalUsers) * 60);
-                
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, 
-                    $"Aktualizacja użytkownika {processedUsers}/{totalUsers}: {userUpn}...");
-
-                script.AppendLine($@"
-                    try {{
-                        $params = @{{}}
-                ");
-
-                foreach (var prop in properties)
-                {
-                    switch (prop.Key.ToLower())
-                    {
-                        case "department":
-                            script.AppendLine($"        $params['Department'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "jobtitle":
-                            script.AppendLine($"        $params['JobTitle'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "firstname":
-                        case "givenname":
-                            script.AppendLine($"        $params['GivenName'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "lastname":
-                        case "surname":
-                            script.AppendLine($"        $params['Surname'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                    }
-                }
-
-                script.AppendLine($@"
-                        Update-MgUser -UserId '{userUpn.Replace("'", "''")}' @params -ErrorAction Stop
-                        $results['{userUpn.Replace("'", "''")}'] = $true
-                    }} catch {{
-                        $results['{userUpn.Replace("'", "''")}'] = $false
-                        Write-Warning ""Błąd aktualizacji użytkownika {userUpn}: $_""
-                    }}
-                ");
-            }
-
-            script.AppendLine("$results");
-
-            var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            try
             {
-                foreach (DictionaryEntry entry in hashtable)
+                var script = new StringBuilder();
+                script.AppendLine("$results = @{}");
+
+                foreach (var kvp in userUpdates)
                 {
-                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    var userUpn = kvp.Key;
+                    var properties = kvp.Value;
+
+                    script.AppendLine($@"
+                        try {{
+                            $params = @{{}}
+                    ");
+
+                    foreach (var prop in properties)
                     {
-                        results[key] = value;
+                        switch (prop.Key.ToLower())
+                        {
+                            case "department":
+                                script.AppendLine($"        $params['Department'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "jobtitle":
+                                script.AppendLine($"        $params['JobTitle'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "firstname":
+                            case "givenname":
+                                script.AppendLine($"        $params['GivenName'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "lastname":
+                            case "surname":
+                                script.AppendLine($"        $params['Surname'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                        }
+                    }
+
+                    script.AppendLine($@"
+                            Update-MgUser -UserId '{userUpn.Replace("'", "''")}' @params -ErrorAction Stop
+                            $results['{userUpn.Replace("'", "''")}'] = $true
+                        }} catch {{
+                            $results['{userUpn.Replace("'", "''")}'] = $false
+                            Write-Warning ""Błąd aktualizacji użytkownika {userUpn}: $_""
+                        }}
+                    ");
+                }
+
+                script.AppendLine("$results");
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
+
+                if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+                {
+                    foreach (DictionaryEntry entry in hashtable)
+                    {
+                        if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                        {
+                            results[key] = value;
+                            if (value) processedCount++;
+                            else failedCount++;
+                        }
                     }
                 }
+
+                // 3. Aktualizuj postęp
+                await _operationHistoryService.UpdateOperationProgressAsync(
+                    operation.Id,
+                    processedItems: processedCount,
+                    failedItems: failedCount,
+                    totalItems: userUpdates.Count
+                );
+
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == userUpdates.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Updated: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono masową aktualizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache dla wszystkich zaktualizowanych użytkowników
+                foreach (var userUpn in userUpdates.Keys)
+                {
+                    _cacheService.InvalidateUserCache(userUpn: userUpn);
+                }
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono masową aktualizację. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache dla wszystkich zaktualizowanych użytkowników
-            foreach (var userUpn in userUpdates.Keys)
+            catch (Exception ex)
             {
-                _cacheService.InvalidateUserCache(userUpn: userUpn);
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
+                _logger.LogError(ex, "Błąd podczas masowej aktualizacji użytkowników");
+                throw;
             }
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                $"Operacja zakończona: {successCount} zaktualizowanych, {failedCount} błędów");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"✅ Masowa aktualizacja zakończona: {successCount} użytkowników zaktualizowanych, {failedCount} błędów", 
-                failedCount > 0 ? "warning" : "success");
-
-            return results;
         }
 
-        public async Task<bool> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
+        public async Task<Dictionary<string, bool>> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            var operationId = Guid.NewGuid().ToString();
-
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5, 
-                "Rozpoczynanie archiwizacji zespołu i dezaktywacji ekskluzywnych użytkowników...");
-            await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                $"🚀 Rozpoczęto archiwizację zespołu i dezaktywację ekskluzywnych użytkowników", "info");
-
             if (!_connectionService.ValidateRunspaceState())
             {
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ Środowisko PowerShell nie jest gotowe", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - błąd środowiska");
-                return false;
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return new Dictionary<string, bool>();
             }
 
             if (string.IsNullOrEmpty(teamId))
             {
                 _logger.LogError("TeamID nie może być puste.");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    "❌ ID zespołu nie może być puste", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona niepowodzeniem - brak ID zespołu");
-                return false;
+                return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Archiwizacja zespołu {TeamId} i dezaktywacja ekskluzywnych użytkowników", teamId);
 
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamArchiveWithUserDeactivation,
+                "Team",
+                targetEntityId: teamId,
+                targetEntityName: "Archive team and deactivate exclusive users"
+            );
+
             try
             {
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 20, 
-                    "Pobieranie członków zespołu...");
-
                 var script = $@"
                     $teamId = '{teamId}'
                     $errors = @()
@@ -529,49 +553,50 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     }}
                 ";
 
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 50, 
-                    "Archiwizacja zespołu...");
-
                 var results = await _connectionService.ExecuteScriptAsync(script);
                 var result = results?.FirstOrDefault()?.BaseObject as Hashtable;
 
                 var success = result?["Success"] as bool? ?? false;
                 var deactivatedCount = Convert.ToInt32(result?["DeactivatedCount"] ?? 0);
+                var errors = result?["Errors"] as object[];
                 
-                if (!success)
+                if (!success && errors != null)
                 {
-                    var errors = result?["Errors"] as object[];
-                    foreach (var error in errors ?? Array.Empty<object>())
+                    foreach (var error in errors)
                     {
                         _logger.LogError("Błąd operacji: {Error}", error);
                     }
-                    
-                    await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                        $"⚠️ Operacja zakończona z błędami. Dezaktywowano {deactivatedCount} użytkowników", "warning");
                 }
-                else
-                {
-                    await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                        $"✅ Zespół zarchiwizowany. Dezaktywowano {deactivatedCount} ekskluzywnych użytkowników", "success");
-                }
+
+                // 3. Ustaw końcowy status
+                var status = success ? OperationStatus.Completed : OperationStatus.Failed;
+                var statusMessage = success 
+                    ? $"Team archived. Deactivated {deactivatedCount} exclusive users"
+                    : $"Operation failed. Errors: {errors?.Length ?? 0}";
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status, statusMessage,
+                    success ? null : string.Join("\n", errors ?? Array.Empty<object>())
+                );
+
+                _logger.LogInformation("Zespół zarchiwizowany. Dezaktywowano {Count} użytkowników", deactivatedCount);
 
                 // Invalidate cache
                 _cacheService.InvalidateTeamCache(teamId);
                 _cacheService.InvalidateAllCache();
 
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    $"Operacja zakończona. Dezaktywowano {deactivatedCount} użytkowników");
-
-                return success;
+                // Zamiast zwracać bool, zwróć Dictionary
+                return new Dictionary<string, bool> { { teamId, success } };
             }
             catch (Exception ex)
             {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
                 _logger.LogError(ex, "Błąd podczas archiwizacji zespołu i dezaktywacji użytkowników");
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn, 
-                    $"❌ Błąd krytyczny podczas operacji: {ex.Message}", "error");
-                await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100, 
-                    "Operacja zakończona błędem krytycznym");
-                return false;
+                return new Dictionary<string, bool> { { teamId, false } };
             }
         }
 

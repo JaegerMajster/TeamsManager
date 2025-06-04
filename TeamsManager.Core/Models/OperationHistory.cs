@@ -303,6 +303,8 @@ namespace TeamsManager.Core.Models
             OperationType.MemberAdded => "Dodanie członka",
             OperationType.MemberRemoved => "Usunięcie członka",
             OperationType.MemberRoleChanged => "Zmiana roli członka",
+            OperationType.TeamMembersAdded => "Masowe dodawanie członków",
+            OperationType.TeamMembersRemoved => "Masowe usuwanie członków",
             OperationType.ChannelCreated => "Utworzenie kanału",
             OperationType.ChannelUpdated => "Aktualizacja kanału",
             OperationType.ChannelDeleted => "Usunięcie kanału",

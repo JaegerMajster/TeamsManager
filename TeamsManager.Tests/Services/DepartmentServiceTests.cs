@@ -12,6 +12,7 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -27,6 +28,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<DepartmentService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly DepartmentService _departmentService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -47,6 +49,7 @@ namespace TeamsManager.Tests.Services
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<DepartmentService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
 
@@ -68,13 +71,18 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
                            .Returns(mockCacheEntry.Object);
 
+            // Setup dla GetDefaultCacheEntryOptions w PowerShellCacheService
+            _mockPowerShellCacheService.Setup(p => p.GetDefaultCacheEntryOptions())
+                                       .Returns(new MemoryCacheEntryOptions());
+
             _departmentService = new DepartmentService(
                 _mockDepartmentRepository.Object,
                 _mockUserRepository.Object,
                 _mockOperationHistoryRepository.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object
+                _mockMemoryCache.Object,
+                _mockPowerShellCacheService.Object
             );
         }
 
@@ -280,13 +288,11 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == departmentName && op.Type == OperationType.DepartmentCreated)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-
-            _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + createdDeptId), Times.AtLeastOnce);
+            // Sprawdzenie wywołań nowych metod PowerShellCacheService
+            _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
             if (resultDepartment.ParentDepartmentId != null)
             {
-                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + resultDepartment.ParentDepartmentId), Times.AtLeastOnce);
+                _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(resultDepartment.ParentDepartmentId), Times.Once);
             }
 
             var expectedDeptsAfterCreate = new List<Department> { resultDepartment };
@@ -323,13 +329,13 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == deptId && op.Type == OperationType.DepartmentUpdated)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + oldParentId), Times.AtLeastOnce);
-            if (newParentId != null)
+            // Sprawdzenie wywołań nowych metod PowerShellCacheService
+            _mockPowerShellCacheService.Verify(p => p.InvalidateDepartment(deptId), Times.Once);
+            _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
+            _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(oldParentId), Times.Once);
+            if (!string.IsNullOrEmpty(newParentId))
             {
-                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + newParentId), Times.AtLeastOnce);
+                _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(newParentId), Times.Once);
             }
 
             var expectedDeptAfterUpdate = new Department
@@ -364,7 +370,6 @@ namespace TeamsManager.Tests.Services
                                     .ReturnsAsync(new List<Department>());
             _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, deptId))))
                               .ReturnsAsync(new List<User>());
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var result = await _departmentService.DeleteDepartmentAsync(deptId);
             result.Should().BeTrue();
@@ -372,13 +377,10 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == deptId && op.Type == OperationType.DepartmentDeleted)), Times.Once);
             _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
 
-            _mockMemoryCache.Verify(m => m.Remove(DepartmentByIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UsersInDepartmentCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + deptId), Times.AtLeastOnce);
-            if (parentId != null)
-            {
-                _mockMemoryCache.Verify(m => m.Remove(SubDepartmentsByParentIdCacheKeyPrefix + parentId), Times.AtLeastOnce);
-            }
+            // Sprawdzenie wywołań nowych metod PowerShellCacheService
+            _mockPowerShellCacheService.Verify(p => p.InvalidateDepartment(deptId), Times.Once);
+            _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
+            _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(parentId), Times.Once);
 
             AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), false);
             AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), true);
@@ -393,8 +395,8 @@ namespace TeamsManager.Tests.Services
         {
             await _departmentService.RefreshCacheAsync();
 
-            _mockMemoryCache.Verify(m => m.Remove(AllDepartmentsRootOnlyCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(AllDepartmentsAllCacheKey), Times.AtLeastOnce);
+            // Sprawdzenie wywołania nowej metody PowerShellCacheService
+            _mockPowerShellCacheService.Verify(p => p.InvalidateAllCache(), Times.Once);
 
             SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false);
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
