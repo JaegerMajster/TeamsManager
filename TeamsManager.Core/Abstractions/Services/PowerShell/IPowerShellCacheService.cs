@@ -201,5 +201,69 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// </summary>
         /// <param name="schoolTypeId">ID typu szkoły</param>
         void InvalidateTeamTemplatesBySchoolType(string schoolTypeId);
+
+        // Metody granularnej inwalidacji dla TeamService
+        /// <summary>
+        /// Unieważnia cache zespołu według ID.
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        void InvalidateTeamById(string teamId);
+
+        /// <summary>
+        /// Unieważnia cache zespołów według właściciela.
+        /// </summary>
+        /// <param name="ownerUpn">UPN właściciela zespołu</param>
+        void InvalidateTeamsByOwner(string ownerUpn);
+
+        /// <summary>
+        /// Unieważnia cache zespołów według statusu.
+        /// </summary>
+        /// <param name="status">Status zespołu</param>
+        void InvalidateTeamsByStatus(TeamStatus status);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych zespołów.
+        /// </summary>
+        void InvalidateAllActiveTeamsList();
+
+        /// <summary>
+        /// Unieważnia cache listy zarchiwizowanych zespołów.
+        /// </summary>
+        void InvalidateArchivedTeamsList();
+
+        /// <summary>
+        /// Unieważnia cache listy zespołów o specyficznym statusie Active.
+        /// </summary>
+        void InvalidateTeamSpecificByStatus();
+
+        // Metody granularnej inwalidacji dla SchoolTypeService
+        /// <summary>
+        /// Unieważnia cache typu szkoły według ID.
+        /// </summary>
+        /// <param name="schoolTypeId">ID typu szkoły</param>
+        void InvalidateSchoolTypeById(string schoolTypeId);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych typów szkół.
+        /// </summary>
+        void InvalidateAllActiveSchoolTypesList();
+
+        // Metody granularnej inwalidacji dla ApplicationSettingService
+        /// <summary>
+        /// Unieważnia cache ustawienia według klucza.
+        /// </summary>
+        /// <param name="key">Klucz ustawienia</param>
+        void InvalidateSettingByKey(string key);
+
+        /// <summary>
+        /// Unieważnia cache ustawień według kategorii.
+        /// </summary>
+        /// <param name="category">Kategoria ustawień</param>
+        void InvalidateSettingsByCategory(string category);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych ustawień aplikacji.
+        /// </summary>
+        void InvalidateAllActiveSettingsList();
     }
 }

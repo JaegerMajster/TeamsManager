@@ -54,6 +54,22 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string AllActiveSchoolYearsCacheKey = "SchoolYears_AllActive";
         private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
         
+        // Klucze cache dla zespołów (TeamService)
+        private const string TeamServiceAllActiveTeamsCacheKey = "Teams_AllActive";
+        private const string TeamServiceActiveTeamsSpecificCacheKey = "Teams_Active";
+        private const string TeamServiceArchivedTeamsCacheKey = "Teams_Archived";
+        private const string TeamServiceByOwnerCacheKeyPrefix = "Teams_ByOwner_";
+        private const string TeamServiceByIdCacheKeyPrefix = "Team_Id_";
+        
+        // Klucze cache dla typów szkół (SchoolTypeService)
+        private const string SchoolTypeServiceAllActiveKey = "SchoolTypes_AllActive";
+        private const string SchoolTypeServiceByIdPrefix = "SchoolType_Id_";
+        
+        // Klucze cache dla ustawień aplikacji (ApplicationSettingService)
+        private const string ApplicationSettingServiceAllActiveKey = "ApplicationSettings_AllActive";
+        private const string ApplicationSettingServiceByCategoryPrefix = "ApplicationSettings_Category_";
+        private const string ApplicationSettingServiceByKeyPrefix = "ApplicationSetting_Key_";
+        
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
 
@@ -457,6 +473,118 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Remove(defaultKey);
             
             _logger.LogDebug("Unieważniono cache szablonów zespołów dla typu szkoły: {SchoolTypeId}", schoolTypeId);
+        }
+
+        // Metody granularnej inwalidacji dla TeamService
+        public void InvalidateTeamById(string teamId)
+        {
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego teamId.");
+                return;
+            }
+
+            Remove(TeamServiceByIdCacheKeyPrefix + teamId);
+            _logger.LogDebug("Unieważniono cache zespołu po ID: {TeamId}", teamId);
+        }
+
+        public void InvalidateTeamsByOwner(string ownerUpn)
+        {
+            if (string.IsNullOrWhiteSpace(ownerUpn))
+            {
+                _logger.LogWarning("Próba unieważnienia cache zespołów dla pustego ownerUpn.");
+                return;
+            }
+
+            Remove(TeamServiceByOwnerCacheKeyPrefix + ownerUpn);
+            _logger.LogDebug("Unieważniono cache zespołów dla właściciela: {OwnerUpn}", ownerUpn);
+        }
+
+        public void InvalidateTeamsByStatus(TeamStatus status)
+        {
+            // Unieważnij listy zespołów według statusu
+            switch (status)
+            {
+                case TeamStatus.Active:
+                    Remove(TeamServiceActiveTeamsSpecificCacheKey);
+                    _logger.LogDebug("Unieważniono cache zespołów o statusie Active.");
+                    break;
+                case TeamStatus.Archived:
+                    Remove(TeamServiceArchivedTeamsCacheKey);
+                    _logger.LogDebug("Unieważniono cache zespołów o statusie Archived.");
+                    break;
+                default:
+                    _logger.LogDebug("Unieważniono cache dla statusu zespołu: {Status}", status);
+                    break;
+            }
+        }
+
+        public void InvalidateAllActiveTeamsList()
+        {
+            Remove(TeamServiceAllActiveTeamsCacheKey);
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych zespołów.");
+        }
+
+        public void InvalidateArchivedTeamsList()
+        {
+            Remove(TeamServiceArchivedTeamsCacheKey);
+            _logger.LogDebug("Unieważniono cache listy zarchiwizowanych zespołów.");
+        }
+
+        public void InvalidateTeamSpecificByStatus()
+        {
+            Remove(TeamServiceActiveTeamsSpecificCacheKey);
+            _logger.LogDebug("Unieważniono cache listy zespołów o specyficznym statusie Active.");
+        }
+
+        // Metody granularnej inwalidacji dla SchoolTypeService
+        public void InvalidateSchoolTypeById(string schoolTypeId)
+        {
+            if (string.IsNullOrWhiteSpace(schoolTypeId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego schoolTypeId.");
+                return;
+            }
+
+            Remove(SchoolTypeServiceByIdPrefix + schoolTypeId);
+            _logger.LogDebug("Unieważniono cache typu szkoły po ID: {SchoolTypeId}", schoolTypeId);
+        }
+
+        public void InvalidateAllActiveSchoolTypesList()
+        {
+            Remove(SchoolTypeServiceAllActiveKey);
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych typów szkół.");
+        }
+
+        // Metody granularnej inwalidacji dla ApplicationSettingService
+        public void InvalidateSettingByKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego klucza ustawienia.");
+                return;
+            }
+
+            Remove(ApplicationSettingServiceByKeyPrefix + key);
+            _logger.LogDebug("Unieważniono cache ustawienia po kluczu: {Key}", key);
+        }
+
+        public void InvalidateSettingsByCategory(string category)
+        {
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                _logger.LogWarning("Próba unieważnienia cache ustawień dla pustej kategorii.");
+                return;
+            }
+
+            Remove(ApplicationSettingServiceByCategoryPrefix + category);
+            _logger.LogDebug("Unieważniono cache ustawień dla kategorii: {Category}", category);
+        }
+
+        public void InvalidateAllActiveSettingsList()
+        {
+            Remove(ApplicationSettingServiceAllActiveKey);
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych ustawień aplikacji.");
         }
     }
 }
