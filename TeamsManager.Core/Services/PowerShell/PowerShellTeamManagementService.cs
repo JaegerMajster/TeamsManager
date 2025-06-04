@@ -567,7 +567,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("New-MgTeamChannel", parameters);
 
                 // Invalidate channels cache for this team
-                _cacheService.InvalidateTeamCache(teamId);
+                _cacheService.InvalidateChannelsForTeam(teamId);
 
                 return results?.FirstOrDefault();
             }
@@ -625,7 +625,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                 if (results != null)
                 {
-                    _cacheService.InvalidateTeamCache(teamId);
+                    _cacheService.InvalidateChannelAndTeam(teamId, channelId);
                     _logger.LogInformation("Pomyślnie zaktualizowano kanał ID '{ChannelId}' w zespole {TeamId}.", 
                         channelId, teamId);
                     return true;
@@ -665,7 +665,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                 if (results != null)
                 {
-                    _cacheService.InvalidateTeamCache(teamId);
+                    _cacheService.InvalidateChannelAndTeam(teamId, channelId);
                     _logger.LogInformation("Pomyślnie usunięto kanał ID '{ChannelId}' z zespołu {TeamId}.", 
                         channelId, teamId);
                     return true;

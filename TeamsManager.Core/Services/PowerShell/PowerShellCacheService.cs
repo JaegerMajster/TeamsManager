@@ -26,6 +26,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string TeamChannelsCacheKeyPrefix = "PowerShell_TeamChannels_";
         private const string M365UserDetailsCacheKeyPrefix = "PowerShell_M365User_Id_";
         private const string M365UsersAccountEnabledCacheKeyPrefix = "PowerShell_M365Users_AccountEnabled_";
+        private const string ChannelByGraphIdCacheKeyPrefix = "PowerShell_Channel_GraphId_";
         
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
