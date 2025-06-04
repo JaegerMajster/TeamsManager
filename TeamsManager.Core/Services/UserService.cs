@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
@@ -29,19 +28,17 @@ namespace TeamsManager.Core.Services
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<UserService> _logger;
-        private readonly IMemoryCache _cache;
         private readonly ISubjectService _subjectService;
         private readonly IPowerShellService _powerShellService;
-        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
+        private readonly IOperationHistoryService _operationHistoryService;
         private readonly IPowerShellCacheService _powerShellCacheService;
-        private readonly INotificationService _notificationService; // NOWE: Dodane pole
+        private readonly INotificationService _notificationService;
 
         // Definicje kluczy cache
         private const string AllActiveUsersCacheKey = "Users_AllActive";
         private const string UserByIdCacheKeyPrefix = "User_Id_";
         private const string UserByUpnCacheKeyPrefix = "User_Upn_";
         private const string UsersByRoleCacheKeyPrefix = "Users_Role_";
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
         /// <summary>
         /// Konstruktor serwisu użytkowników.
@@ -56,12 +53,11 @@ namespace TeamsManager.Core.Services
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
             ILogger<UserService> logger,
-            IMemoryCache memoryCache,
             ISubjectService subjectService,
             IPowerShellService powerShellService,
-            IOperationHistoryService operationHistoryService, // Dodaj to do konstruktora
+            IOperationHistoryService operationHistoryService,
             IPowerShellCacheService powerShellCacheService,
-            INotificationService notificationService) // NOWE: Dodane pole
+            INotificationService notificationService)
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -69,22 +65,17 @@ namespace TeamsManager.Core.Services
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userSubjectRepository = userSubjectRepository ?? throw new ArgumentNullException(nameof(userSubjectRepository));
             _subjectRepository = subjectRepository ?? throw new ArgumentNullException(nameof(subjectRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository)); // Zachowaj to dla specjalnych operacji
+            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
-            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
-            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService)); // NOWE: Dodane pole
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         }
 
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            // Delegacja do PowerShellCacheService dla spójnego zarządzania cache
-            return _powerShellCacheService.GetDefaultCacheEntryOptions();
-        }
+
 
         /// <inheritdoc />
         public async Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false, string? apiAccessToken = null) // ZMIANA: accessToken -> apiAccessToken
@@ -97,7 +88,7 @@ namespace TeamsManager.Core.Services
             }
             string cacheKey = UserByIdCacheKeyPrefix + userId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out User? cachedUser))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik ID: {UserId} znaleziony w cache.", userId);
                 return cachedUser;
@@ -107,19 +98,18 @@ namespace TeamsManager.Core.Services
             var userFromDb = await _userRepository.GetByIdAsync(userId);
             if (userFromDb != null && userFromDb.IsActive)
             {
-                var cacheEntryOptions = GetDefaultCacheEntryOptions();
-                _cache.Set(cacheKey, userFromDb, cacheEntryOptions);
+                _powerShellCacheService.Set(cacheKey, userFromDb);
                 _logger.LogDebug("Użytkownik ID: {UserId} dodany/zaktualizowany w cache po ID.", userId);
                 if (!string.IsNullOrWhiteSpace(userFromDb.UPN))
                 {
                     string upnCacheKey = UserByUpnCacheKeyPrefix + userFromDb.UPN;
-                    _cache.Set(upnCacheKey, userFromDb, cacheEntryOptions);
+                    _powerShellCacheService.Set(upnCacheKey, userFromDb);
                     _logger.LogDebug("Użytkownik (ID: {UserId}, UPN: {UPN}) zaktualizowany/dodany w cache po UPN.", userId, userFromDb.UPN);
                 }
             }
             else
             {
-                _cache.Remove(cacheKey);
+                _powerShellCacheService.Remove(cacheKey);
                 if (userFromDb != null && !userFromDb.IsActive)
                 {
                     _logger.LogDebug("Użytkownik ID: {UserId} jest nieaktywny, nie zostanie zcache'owany po ID.", userId);
@@ -140,7 +130,7 @@ namespace TeamsManager.Core.Services
             }
             string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
 
-            if (!forceRefresh && _cache.TryGetValue(upnCacheKey, out User? cachedUser))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(upnCacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik UPN: {UPN} znaleziony w cache.", upn);
                 return cachedUser;
@@ -151,7 +141,7 @@ namespace TeamsManager.Core.Services
             if (userFromDbBase == null)
             {
                 _logger.LogInformation("Nie znaleziono użytkownika o UPN: {UPN} w repozytorium.", upn);
-                _cache.Set(upnCacheKey, (User?)null, TimeSpan.FromMinutes(1));
+                _powerShellCacheService.Set(upnCacheKey, (User?)null);
                 return null;
             }
             var userFromDbFull = await GetUserByIdAsync(userFromDbBase.Id, forceRefresh: true, apiAccessToken: apiAccessToken); // ZMIANA: przekazanie apiAccessToken
@@ -162,7 +152,7 @@ namespace TeamsManager.Core.Services
         public async Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false, string? apiAccessToken = null) // ZMIANA: accessToken -> apiAccessToken
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych użytkowników. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
-            if (!forceRefresh && _cache.TryGetValue(AllActiveUsersCacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllActiveUsersCacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Wszyscy aktywni użytkownicy znalezieni w cache.");
                 return cachedUsers;
@@ -170,7 +160,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszyscy aktywni użytkownicy nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
 
             var usersFromDb = await _userRepository.FindAsync(u => u.IsActive);
-            _cache.Set(AllActiveUsersCacheKey, usersFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(AllActiveUsersCacheKey, usersFromDb);
             _logger.LogDebug("Wszyscy aktywni użytkownicy dodani do cache.");
             return usersFromDb;
         }
@@ -181,7 +171,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie użytkowników o roli: {Role}. Wymuszenie odświeżenia: {ForceRefresh}", role, forceRefresh);
             string cacheKey = UsersByRoleCacheKeyPrefix + role.ToString();
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Użytkownicy o roli {Role} znalezieni w cache.", role);
                 return cachedUsers;
@@ -189,7 +179,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Użytkownicy o roli {Role} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", role);
 
             var usersFromDb = await _userRepository.GetUsersByRoleAsync(role);
-            _cache.Set(cacheKey, usersFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, usersFromDb);
             _logger.LogDebug("Użytkownicy o roli {Role} dodani do cache.", role);
             return usersFromDb;
         }
