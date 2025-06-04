@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -34,6 +35,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string DepartmentByIdCacheKeyPrefix = "Department_Id_";
         private const string SubDepartmentsByParentIdCacheKeyPrefix = "Department_Sub_ParentId_";
         private const string UsersInDepartmentCacheKeyPrefix = "Department_UsersIn_Id_";
+        
+        // Klucze cache używane przez UserService
+        private const string UserServiceAllActiveKey = "Users_AllActive";
+        private const string UserServiceByIdPrefix = "User_Id_";
+        private const string UserServiceByUpnPrefix = "User_Upn_";
+        private const string UserServiceByRolePrefix = "Users_Role_";
         
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
@@ -270,6 +277,67 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Remove(AllDepartmentsAllCacheKey);
             Remove(AllDepartmentsRootOnlyCacheKey);
             _logger.LogDebug("Unieważniono globalne listy działów (wszystkie i root-only).");
+        }
+
+        public void InvalidateUsersByRole(UserRole role)
+        {
+            // Usuń cache listy użytkowników według roli (klucz UserService)
+            Remove(UserServiceByRolePrefix + role.ToString());
+            
+            _logger.LogDebug("Unieważniono cache użytkowników z rolą: {Role}", role);
+        }
+
+        public void InvalidateAllActiveUsersList()
+        {
+            // Usuń cache listy wszystkich aktywnych użytkowników (klucz UserService)
+            Remove(UserServiceAllActiveKey);
+            
+            _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych użytkowników.");
+        }
+
+        public void InvalidateUserAndRelatedData(string? userId, string? userUpn, string? oldUpn, UserRole? role, UserRole? oldRole)
+        {
+            // Unieważnij podstawowe dane użytkownika (istniejąca metoda)
+            InvalidateUserCache(userId, userUpn);
+            
+            // Unieważnij klucze UserService dla userId
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                Remove(UserServiceByIdPrefix + userId);
+                _logger.LogDebug("Unieważniono cache UserService dla userId: {UserId}", userId);
+            }
+            
+            // Unieważnij klucze UserService dla userUpn
+            if (!string.IsNullOrWhiteSpace(userUpn))
+            {
+                Remove(UserServiceByUpnPrefix + userUpn);
+                _logger.LogDebug("Unieważniono cache UserService dla userUpn: {UserUpn}", userUpn);
+            }
+            
+            // Unieważnij stary UPN jeśli został zmieniony
+            if (!string.IsNullOrWhiteSpace(oldUpn) && oldUpn != userUpn)
+            {
+                Remove(UserIdCacheKeyPrefix + oldUpn);
+                Remove(UserUpnCacheKeyPrefix + oldUpn);
+                Remove(UserServiceByUpnPrefix + oldUpn);
+                _logger.LogDebug("Unieważniono cache dla starego UPN: {OldUpn}", oldUpn);
+            }
+            
+            // Unieważnij cache według roli
+            if (role.HasValue)
+            {
+                InvalidateUsersByRole(role.Value);
+            }
+            
+            // Unieważnij cache według starej roli jeśli została zmieniona
+            if (oldRole.HasValue && oldRole != role)
+            {
+                InvalidateUsersByRole(oldRole.Value);
+            }
+            
+            _logger.LogDebug("Wykonano kompleksową inwalidację cache użytkownika. " +
+                "UserId: {UserId}, UserUpn: {UserUpn}, OldUpn: {OldUpn}, Role: {Role}, OldRole: {OldRole}", 
+                userId, userUpn, oldUpn, role, oldRole);
         }
     }
 }

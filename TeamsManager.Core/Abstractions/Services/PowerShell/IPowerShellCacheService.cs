@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
+using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Core.Abstractions.Services.PowerShell
 {
@@ -124,5 +125,29 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// Unieważnia cache listy użytkowników.
         /// </summary>
         void InvalidateUserListCache();
+
+        /// <summary>
+        /// Unieważnia cache użytkowników według roli.
+        /// Usuwa listy użytkowników przechowywane według roli.
+        /// </summary>
+        /// <param name="role">Rola użytkowników do unieważnienia</param>
+        void InvalidateUsersByRole(UserRole role);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych użytkowników.
+        /// Usuwa klucz "Users_AllActive" używany przez UserService.
+        /// </summary>
+        void InvalidateAllActiveUsersList();
+
+        /// <summary>
+        /// Unieważnia cache użytkownika w sposób kompleksowy, obsługując również klucze używane przez UserService.
+        /// Obsługuje scenariusze zmiany UPN i roli użytkownika.
+        /// </summary>
+        /// <param name="userId">ID użytkownika</param>
+        /// <param name="userUpn">Aktualny UPN użytkownika</param>
+        /// <param name="oldUpn">Poprzedni UPN (jeśli został zmieniony)</param>
+        /// <param name="role">Aktualna rola użytkownika</param>
+        /// <param name="oldRole">Poprzednia rola (jeśli została zmieniona)</param>
+        void InvalidateUserAndRelatedData(string? userId, string? userUpn, string? oldUpn, UserRole? role, UserRole? oldRole);
     }
 }
