@@ -22,11 +22,11 @@ namespace TeamsManager.Core.Services
     public class ApplicationSettingService : IApplicationSettingService
     {
         private readonly IApplicationSettingRepository _settingsRepository;
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ApplicationSettingService> _logger;
         private readonly IMemoryCache _cache;
-        private readonly IOperationHistoryService _operationHistoryService;
 
         // Definicje kluczy cache
         private const string AllSettingsCacheKey = "ApplicationSettings_AllActive";
@@ -42,18 +42,18 @@ namespace TeamsManager.Core.Services
         /// </summary>
         public ApplicationSettingService(
             IApplicationSettingRepository settingsRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ApplicationSettingService> logger,
-            IMemoryCache memoryCache,
-            IOperationHistoryService operationHistoryService)
+            IMemoryCache memoryCache)
         {
             _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         // Generuje domyślne opcje dla wpisu w pamięci podręcznej.
@@ -204,11 +204,17 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> SaveSettingAsync(string key, string value, SettingType type, string? description = null, string? category = null)
         {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Zapisywanie ustawienia: Klucz={Key}, Wartość='{Value}', Typ={Type}", key, value, type);
 
             if (string.IsNullOrWhiteSpace(key))
             {
                 _logger.LogError("Nie można zapisać ustawienia: Klucz nie może być pusty.");
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    "Nie można zapisać ustawienia: Klucz nie może być pusty",
+                    "error"
+                );
                 return false;
             }
 
@@ -224,8 +230,9 @@ namespace TeamsManager.Core.Services
             {
                 var existingSetting = await _settingsRepository.GetSettingByKeyAsync(key);
                 string? oldCategory = existingSetting?.Category;
+                bool isUpdate = existingSetting != null;
 
-                if (existingSetting != null)
+                if (isUpdate)
                 {
                     // Zmiana typu operacji na Update
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -240,7 +247,7 @@ namespace TeamsManager.Core.Services
                     existingSetting.Type = type;
                     if (description != null) existingSetting.Description = description;
                     if (category != null) existingSetting.Category = category;
-                    existingSetting.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
+                    existingSetting.MarkAsModified(currentUserUpn);
                     _settingsRepository.Update(existingSetting);
                 }
                 else
@@ -256,7 +263,7 @@ namespace TeamsManager.Core.Services
                         Category = category ?? "General",
                         IsRequired = false,
                         IsVisible = true,
-                        CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system",
+                        CreatedBy = currentUserUpn,
                         IsActive = true
                     };
                     await _settingsRepository.AddAsync(newSetting);
@@ -268,11 +275,21 @@ namespace TeamsManager.Core.Services
                 InvalidateSettingCache(key, category ?? existingSetting?.Category, oldCategory);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                var statusMessage = isUpdate ? $"Ustawienie '{key}' zaktualizowane." : $"Ustawienie '{key}' utworzone.";
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    existingSetting != null ? $"Ustawienie '{key}' zaktualizowane." : $"Ustawienie '{key}' utworzone."
+                    statusMessage
                 );
+
+                // 3. Powiadomienie o sukcesie
+                var userMessage = isUpdate ? $"Ustawienie '{key}' zostało zaktualizowane" : $"Ustawienie '{key}' zostało utworzone";
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    userMessage,
+                    "success"
+                );
+
                 return true;
             }
             catch (Exception ex)
@@ -286,6 +303,14 @@ namespace TeamsManager.Core.Services
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
                 );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas zapisywania ustawienia '{key}': {ex.Message}",
+                    "error"
+                );
+
                 return false;
             }
         }
@@ -299,6 +324,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(settingToUpdate), "Obiekt ustawienia, jego ID lub Klucz nie może być null/pusty.");
             }
 
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Aktualizowanie obiektu ApplicationSetting ID: {SettingId}, Klucz: {Key}", settingToUpdate.Id, settingToUpdate.Key);
 
             // 1. Inicjalizacja operacji historii na początku
@@ -324,6 +350,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         $"Ustawienie o ID '{settingToUpdate.Id}' nie istnieje."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można zaktualizować ustawienia: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -342,6 +374,12 @@ namespace TeamsManager.Core.Services
                             OperationStatus.Failed,
                             $"Ustawienie o kluczu '{settingToUpdate.Key}' już istnieje."
                         );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            $"Nie można zaktualizować ustawienia: klucz '{settingToUpdate.Key}' już istnieje",
+                            "error"
+                        );
                         return false;
                     }
                 }
@@ -358,7 +396,7 @@ namespace TeamsManager.Core.Services
                 existingSetting.ValidationMessage = settingToUpdate.ValidationMessage;
                 existingSetting.DisplayOrder = settingToUpdate.DisplayOrder;
                 existingSetting.IsActive = settingToUpdate.IsActive;
-                existingSetting.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
+                existingSetting.MarkAsModified(currentUserUpn);
 
                 _settingsRepository.Update(existingSetting);
 
@@ -374,6 +412,13 @@ namespace TeamsManager.Core.Services
                     OperationStatus.Completed,
                     "Ustawienie aplikacji przygotowane do aktualizacji."
                 );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Ustawienie '{existingSetting.Key}' zostało zaktualizowane",
+                    "success"
+                );
                 return true;
             }
             catch (Exception ex)
@@ -387,6 +432,13 @@ namespace TeamsManager.Core.Services
                     $"Błąd: {ex.Message}",
                     ex.StackTrace
                 );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji ustawienia: {ex.Message}",
+                    "error"
+                );
                 return false;
             }
         }
@@ -394,6 +446,7 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> DeleteSettingAsync(string key)
         {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Usuwanie ustawienia o kluczu: {Key}", key);
 
             // 1. Inicjalizacja operacji historii na początku
@@ -416,6 +469,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         $"Ustawienie o kluczu '{key}' nie zostało znalezione."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można usunąć ustawienia: klucz '{key}' nie został znaleziony",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -429,10 +488,16 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Completed,
                         $"Ustawienie '{key}' było już nieaktywne. Brak akcji."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Ustawienie '{key}' było już nieaktywne",
+                        "info"
+                    );
                     return true;
                 }
 
-                setting.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system");
+                setting.MarkAsDeleted(currentUserUpn);
                 _settingsRepository.Update(setting);
 
                 InvalidateSettingCache(key, setting.Category);
@@ -442,6 +507,13 @@ namespace TeamsManager.Core.Services
                     operation.Id,
                     OperationStatus.Completed,
                     "Ustawienie aplikacji oznaczone jako usunięte."
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Ustawienie '{key}' zostało usunięte",
+                    "success"
                 );
                 return true;
             }
@@ -455,6 +527,13 @@ namespace TeamsManager.Core.Services
                     OperationStatus.Failed,
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas usuwania ustawienia '{key}': {ex.Message}",
+                    "error"
                 );
                 return false;
             }

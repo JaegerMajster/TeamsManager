@@ -24,7 +24,8 @@ namespace TeamsManager.Core.Services
         private readonly IConfidentialClientApplication _confidentialClientApplication;
         private readonly IGenericRepository<Channel> _channelRepository;
         private readonly ITeamRepository _teamRepository;
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ChannelService> _logger;
         private readonly IMemoryCache _cache;
@@ -42,7 +43,8 @@ namespace TeamsManager.Core.Services
             IConfidentialClientApplication confidentialClientApplication,
             IGenericRepository<Channel> channelRepository,
             ITeamRepository teamRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ChannelService> logger,
             IMemoryCache memoryCache,
@@ -52,7 +54,8 @@ namespace TeamsManager.Core.Services
             _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication));
             _channelRepository = channelRepository ?? throw new ArgumentNullException(nameof(channelRepository));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
@@ -354,34 +357,70 @@ namespace TeamsManager.Core.Services
 
         public async Task<Channel?> CreateTeamChannelAsync(string teamId, string displayName, string apiAccessToken, string? description = null, bool isPrivate = false)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_create_channel";
-            var operation = new OperationHistory { Id = Guid.NewGuid().ToString(), Type = OperationType.ChannelCreated, TargetEntityType = nameof(Channel), CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Tworzenie kanału '{DisplayName}' w lokalnym zespole ID: {TeamId} przez {User}", displayName, teamId, currentUserUpn);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ChannelCreated,
+                nameof(Channel),
+                targetEntityName: displayName
+            );
 
             try
             {
-                _logger.LogInformation("Tworzenie kanału '{DisplayName}' w lokalnym zespole ID: {TeamId} przez {User}", displayName, teamId, currentUserUpn);
                 var team = await _teamRepository.GetByIdAsync(teamId);
                 if (team == null || !team.IsActive || string.IsNullOrEmpty(team.ExternalId))
                 {
-                    operation.MarkAsFailed($"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId (GraphID).");
-                    await SaveOperationHistoryAsync(operation);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId (GraphID)."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można utworzyć kanału: zespół nie istnieje lub jest nieaktywny",
+                        "error"
+                    );
+
                     _logger.LogWarning("Nie można utworzyć kanału: Zespół o lokalnym ID '{TeamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId.", teamId);
                     return null;
                 }
                 string teamGraphId = team.ExternalId;
-                operation.TargetEntityName = $"{displayName} (w zespole GraphID: {teamGraphId})";
 
                 if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
                 {
-                    operation.MarkAsFailed("Nie udało się połączyć z Graph w CreateTeamChannelAsync."); await SaveOperationHistoryAsync(operation); return null;
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się połączyć z Microsoft Graph"
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się połączyć z Microsoft Graph",
+                        "error"
+                    );
+
+                    return null;
                 }
 
                 var psChannel = await _powerShellService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description);
                 if (psChannel == null)
                 {
-                    operation.MarkAsFailed("Nie udało się utworzyć kanału w Microsoft Teams.");
-                    await SaveOperationHistoryAsync(operation);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się utworzyć kanału w Microsoft Teams"
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się utworzyć kanału w Microsoft Teams",
+                        "error"
+                    );
+
                     _logger.LogError("Nie udało się utworzyć kanału '{DisplayName}' w zespole '{TeamGraphId}' poprzez PowerShell.", displayName, teamGraphId);
                     return null;
                 }
@@ -389,14 +428,25 @@ namespace TeamsManager.Core.Services
                 var newChannel = MapPsObjectToLocalChannel(psChannel, teamId);
                 newChannel.CreatedBy = currentUserUpn;
                 newChannel.CreatedDate = DateTime.UtcNow;
-                newChannel.Status = ChannelStatus.Active; // Nowy kanał jest aktywny
-                // BaseEntity.IsActive domyślnie true, Channel.IsActive (obliczeniowe) będzie true
+                newChannel.Status = ChannelStatus.Active;
 
+                // 2. Synchronizacja lokalnej bazy danych
                 await _channelRepository.AddAsync(newChannel);
-                // SaveChangesAsync() na wyższym poziomie
 
-                operation.TargetEntityId = newChannel.Id; // Graph ID kanału
-                operation.MarkAsCompleted($"Kanał '{newChannel.DisplayName}' utworzony. GraphID: {newChannel.Id}");
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Kanał '{newChannel.DisplayName}' został utworzony pomyślnie",
+                    "success"
+                );
+
+                // 4. Finalizacja audytu
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Kanał '{newChannel.DisplayName}' utworzony pomyślnie. GraphID: {newChannel.Id}"
+                );
+
                 _logger.LogInformation("Kanał '{DisplayName}' (GraphID: {ChannelGraphId}) utworzony pomyślnie w zespole {TeamGraphId} i dodany do lokalnej bazy dla TeamId {LocalTeamId}.", newChannel.DisplayName, newChannel.Id, teamGraphId, teamId);
 
                 _powerShellCacheService.InvalidateChannelsForTeam(teamId);
@@ -405,57 +455,124 @@ namespace TeamsManager.Core.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas tworzenia kanału '{DisplayName}' w zespole {TeamId}.", displayName, teamId);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return null;
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas tworzenia kanału: {ex.Message}",
+                    "error"
+                );
+
+                return null;
             }
-            finally { await SaveOperationHistoryAsync(operation); }
         }
 
         public async Task<Channel?> UpdateTeamChannelAsync(string teamId, string channelId, string apiAccessToken, string? newDisplayName = null, string? newDescription = null)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update_channel";
-            var operation = new OperationHistory { Id = Guid.NewGuid().ToString(), Type = OperationType.ChannelUpdated, TargetEntityType = nameof(Channel), TargetEntityId = channelId, CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Aktualizowanie kanału GraphID: {ChannelId} w lokalnym zespole ID: {TeamId} przez {User}", channelId, teamId, currentUserUpn);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ChannelUpdated,
+                nameof(Channel),
+                targetEntityId: channelId
+            );
 
             try
             {
-                _logger.LogInformation("Aktualizowanie kanału GraphID: {ChannelId} w lokalnym zespole ID: {TeamId} przez {User}", channelId, teamId, currentUserUpn);
                 var team = await _teamRepository.GetByIdAsync(teamId);
                 if (team == null || !team.IsActive || string.IsNullOrEmpty(team.ExternalId))
                 {
-                    operation.MarkAsFailed($"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId.");
-                    await SaveOperationHistoryAsync(operation); return null;
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować kanału: zespół nie istnieje lub jest nieaktywny",
+                        "error"
+                    );
+                    return null;
                 }
                 string teamGraphId = team.ExternalId;
 
                 var localChannel = (await _channelRepository.FindAsync(c => c.Id == channelId && c.TeamId == teamId)).FirstOrDefault();
                 if (localChannel == null)
                 {
-                    operation.MarkAsFailed($"Lokalny rekord kanału o GraphID '{channelId}' w zespole '{teamId}' nie został znaleziony.");
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Lokalny rekord kanału o GraphID '{channelId}' w zespole '{teamId}' nie został znaleziony."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować kanału: kanał nie został znaleziony",
+                        "error"
+                    );
                     _logger.LogWarning("Nie znaleziono lokalnego rekordu dla kanału GraphID {ChannelId} w zespole {TeamId} do aktualizacji.", channelId, teamId);
-                    await SaveOperationHistoryAsync(operation); return null;
+                    return null;
                 }
-                operation.TargetEntityName = $"Kanał '{localChannel.DisplayName}' (ID: {channelId}) w zespole {teamGraphId}";
 
                 if (string.IsNullOrWhiteSpace(newDisplayName) && newDescription == null)
                 {
                     _logger.LogInformation("Brak zmian do zastosowania dla kanału {ChannelId}.", channelId);
-                    operation.MarkAsCompleted("Brak zmian do zastosowania.");
-                    await SaveOperationHistoryAsync(operation);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        "Brak zmian do zastosowania."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Kanał został sprawdzony - brak zmian do zastosowania",
+                        "info"
+                    );
                     return localChannel;
                 }
 
                 if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
                 {
-                    operation.MarkAsFailed("Nie udało się połączyć z Graph w UpdateTeamChannelAsync."); await SaveOperationHistoryAsync(operation); return null;
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się połączyć z Graph w UpdateTeamChannelAsync."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się połączyć z Microsoft Graph",
+                        "error"
+                    );
+                    return null;
                 }
 
-                // Używamy channelId, zgodnie ze zmodyfikowanym IPowerShellService
                 bool psSuccess = await _powerShellService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription);
 
                 if (!psSuccess)
                 {
-                    operation.MarkAsFailed("Nie udało się zaktualizować kanału w Microsoft Teams.");
-                    await SaveOperationHistoryAsync(operation);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się zaktualizować kanału w Microsoft Teams."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się zaktualizować kanału w Microsoft Teams",
+                        "error"
+                    );
+
                     _logger.LogError("Nie udało się zaktualizować kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez PowerShell.", channelId, teamGraphId);
                     return null;
                 }
@@ -464,9 +581,21 @@ namespace TeamsManager.Core.Services
                 if (newDescription != null) localChannel.Description = newDescription;
                 localChannel.MarkAsModified(currentUserUpn);
                 _channelRepository.Update(localChannel);
-                // SaveChangesAsync() na wyższym poziomie
 
-                operation.MarkAsCompleted($"Kanał ID '{channelId}' zaktualizowany.");
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Kanał '{localChannel.DisplayName}' został zaktualizowany",
+                    "success"
+                );
+
+                // 4. Finalizacja audytu
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Kanał ID '{channelId}' zaktualizowany."
+                );
+
                 _logger.LogInformation("Kanał GraphID {ChannelId} zaktualizowany pomyślnie w Graph i lokalnie.", channelId);
                 _powerShellCacheService.InvalidateChannelAndTeam(teamId, channelId);
                 return localChannel;
@@ -474,25 +603,52 @@ namespace TeamsManager.Core.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas aktualizacji kanału GraphID {ChannelId} w zespole {TeamId}.", channelId, teamId);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return null;
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji kanału: {ex.Message}",
+                    "error"
+                );
+                return null;
             }
-            finally { await SaveOperationHistoryAsync(operation); }
         }
 
         public async Task<bool> RemoveTeamChannelAsync(string teamId, string channelId, string apiAccessToken)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_channel";
-            var operation = new OperationHistory { Id = Guid.NewGuid().ToString(), Type = OperationType.ChannelDeleted, TargetEntityType = nameof(Channel), TargetEntityId = channelId, CreatedBy = currentUserUpn, IsActive = true };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Usuwanie kanału GraphID: {ChannelId} z lokalnego zespołu ID: {TeamId} przez {User}", channelId, teamId, currentUserUpn);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ChannelDeleted,
+                nameof(Channel),
+                targetEntityId: channelId
+            );
 
             try
             {
-                _logger.LogInformation("Usuwanie kanału GraphID: {ChannelId} z lokalnego zespołu ID: {TeamId} przez {User}", channelId, teamId, currentUserUpn);
                 var team = await _teamRepository.GetByIdAsync(teamId);
                 if (team == null || !team.IsActive || string.IsNullOrEmpty(team.ExternalId))
                 {
-                    operation.MarkAsFailed($"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId.");
-                    await SaveOperationHistoryAsync(operation); return false;
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Zespół o lokalnym ID '{teamId}' nie istnieje, jest nieaktywny lub nie ma ExternalId."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można usunąć kanału: zespół nie istnieje lub jest nieaktywny",
+                        "error"
+                    );
+                    return false;
                 }
                 string teamGraphId = team.ExternalId;
 
@@ -500,49 +656,84 @@ namespace TeamsManager.Core.Services
                 if (localChannel == null)
                 {
                     _logger.LogWarning("Nie znaleziono lokalnego rekordu dla kanału GraphID {ChannelId} w zespole {TeamId}. Usunięcie z Graph może się nie powieść bez sprawdzenia 'IsGeneral'.", channelId, teamId);
-                    operation.TargetEntityName = $"Kanał ID: {channelId} (lokalnie nieznaleziony) w zespole {teamGraphId}";
-                    // Jeśli nie ma lokalnie, a mimo to próbujemy usunąć z Graph, nie możemy sprawdzić IsGeneral
-                    // Rozważ zwrócenie błędu lub logowanie wysokiego ryzyka.
-                    // Na razie, dla uproszczenia, pozwalamy na próbę, ale PowerShellService powinien obsłużyć błąd Graph.
                 }
                 else
                 {
-                    operation.TargetEntityName = $"Kanał '{localChannel.DisplayName}' (ID: {channelId}) w zespole {teamGraphId}";
-                    if (localChannel.IsGeneral) // Sprawdzenie na podstawie lokalnego rekordu
+                    if (localChannel.IsGeneral)
                     {
-                        operation.MarkAsFailed("Nie można usunąć kanału General/Ogólny.");
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            "Nie można usunąć kanału General/Ogólny."
+                        );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Nie można usunąć kanału General/Ogólny",
+                            "error"
+                        );
+
                         _logger.LogWarning("Próba usunięcia kanału General/Ogólny (GraphID: {ChannelId}) dla zespołu {TeamGraphId}.", channelId, teamGraphId);
-                        await SaveOperationHistoryAsync(operation);
                         return false;
                     }
                 }
 
                 if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, _graphChannelWriteScopes))
                 {
-                    operation.MarkAsFailed("Nie udało się połączyć z Graph w RemoveTeamChannelAsync."); await SaveOperationHistoryAsync(operation); return false;
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się połączyć z Graph w RemoveTeamChannelAsync."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się połączyć z Microsoft Graph",
+                        "error"
+                    );
+                    return false;
                 }
 
-                // Używamy channelId, zgodnie ze zmodyfikowanym IPowerShellService
                 bool psSuccess = await _powerShellService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId);
 
                 if (!psSuccess)
                 {
-                    operation.MarkAsFailed("Nie udało się usunąć kanału w Microsoft Teams.");
-                    await SaveOperationHistoryAsync(operation);
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się usunąć kanału w Microsoft Teams."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się usunąć kanału w Microsoft Teams",
+                        "error"
+                    );
+
                     _logger.LogError("Nie udało się usunąć kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez PowerShell.", channelId, teamGraphId);
                     return false;
                 }
 
                 if (localChannel != null)
                 {
-                    localChannel.Archive($"Usunięty z Microsoft Teams przez {currentUserUpn}", currentUserUpn); // Używa metody z modelu Channel
-                    // localChannel.Status = ChannelStatus.Archived; // Metoda Archive już to robi
-                    // localChannel.MarkAsDeleted(currentUserUpn); // Metoda Archive już wywołuje MarkAsModified
+                    localChannel.Archive($"Usunięty z Microsoft Teams przez {currentUserUpn}", currentUserUpn);
                     _channelRepository.Update(localChannel);
-                    // SaveChangesAsync() na wyższym poziomie
                 }
 
-                operation.MarkAsCompleted($"Kanał ID '{channelId}' usunięty z Microsoft Teams i oznaczony jako nieaktywny/zarchiwizowany lokalnie.");
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Kanał '{localChannel?.DisplayName ?? "N/A"}' został usunięty",
+                    "success"
+                );
+
+                // 4. Finalizacja audytu
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Kanał ID '{channelId}' usunięty z Microsoft Teams i oznaczony jako nieaktywny/zarchiwizowany lokalnie."
+                );
+
                 _logger.LogInformation("Kanał GraphID {ChannelId} ('{ChannelDisplayName}') pomyślnie usunięty z zespołu {TeamGraphId}.", channelId, localChannel?.DisplayName ?? "N/A", teamGraphId);
                 _powerShellCacheService.InvalidateChannelAndTeam(teamId, channelId);
                 return true;
@@ -550,9 +741,21 @@ namespace TeamsManager.Core.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas usuwania kanału GraphID {ChannelId} z zespołu {TeamId}.", channelId, teamId);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.StackTrace); return false;
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas usuwania kanału: {ex.Message}",
+                    "error"
+                );
+                return false;
             }
-            finally { await SaveOperationHistoryAsync(operation); }
         }
 
         public Task RefreshChannelCacheAsync(string teamId)
@@ -569,28 +772,6 @@ namespace TeamsManager.Core.Services
             _cache.Remove(TeamChannelsCacheKeyPrefix + teamId);
             
             return Task.CompletedTask;
-        }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_channel_op";
-
-            if (operation.StartedAt == default && (operation.Status != OperationStatus.Pending))
-            {
-                operation.StartedAt = DateTime.UtcNow;
-            }
-            if (operation.IsCompleted && !operation.CompletedAt.HasValue)
-            {
-                operation.CompletedAt = DateTime.UtcNow;
-            }
-            if (operation.CompletedAt.HasValue && operation.StartedAt != default && !operation.Duration.HasValue)
-            {
-                operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-            }
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano wpis historii operacji ID: {OperationId} dla operacji na kanale.", operation.Id);
         }
     }
 }

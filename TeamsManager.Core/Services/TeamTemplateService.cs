@@ -22,7 +22,8 @@ namespace TeamsManager.Core.Services
     {
         private readonly ITeamTemplateRepository _teamTemplateRepository;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository; // Potrzebne do walidacji i dociągania SchoolType
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamTemplateService> _logger;
         private readonly IMemoryCache _cache;
@@ -44,14 +45,16 @@ namespace TeamsManager.Core.Services
         public TeamTemplateService(
             ITeamTemplateRepository teamTemplateRepository,
             IGenericRepository<SchoolType> schoolTypeRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<TeamTemplateService> logger,
             IMemoryCache memoryCache)
         {
             _teamTemplateRepository = teamTemplateRepository ?? throw new ArgumentNullException(nameof(teamTemplateRepository));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
@@ -221,33 +224,51 @@ namespace TeamsManager.Core.Services
             string? schoolTypeId = null,
             string category = "Ogólne")
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.TeamTemplateCreated,
-                TargetEntityType = nameof(TeamTemplate),
-                TargetEntityName = name,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            _logger.LogInformation("Rozpoczynanie tworzenia szablonu zespołu: '{TemplateName}' przez {User}", name, currentUserUpn);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamTemplateCreated,
+                nameof(TeamTemplate),
+                targetEntityName: name
+            );
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie tworzenia szablonu zespołu: '{TemplateName}' przez {User}", name, currentUserUpn);
-
                 if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(templateContent))
                 {
-                    operation.MarkAsFailed("Nazwa szablonu i jego zawartość (wzorzec) są wymagane.");
                     _logger.LogError("Nie można utworzyć szablonu: Nazwa lub zawartość są puste.");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nazwa szablonu i jego zawartość (wzorzec) są wymagane."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można utworzyć szablonu: nazwa i zawartość są wymagane",
+                        "error"
+                    );
                     return null;
                 }
 
                 if (!isUniversal && string.IsNullOrWhiteSpace(schoolTypeId))
                 {
-                    operation.MarkAsFailed("Dla szablonu nieuniwersalnego wymagany jest typ szkoły (SchoolTypeId).");
                     _logger.LogError("Nie można utworzyć szablonu: Dla szablonu nieuniwersalnego SchoolTypeId jest wymagany.");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Dla szablonu nieuniwersalnego wymagany jest typ szkoły (SchoolTypeId)."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można utworzyć szablonu: dla szablonu nieuniwersalnego wymagany jest typ szkoły",
+                        "error"
+                    );
                     return null;
                 }
 
@@ -257,8 +278,19 @@ namespace TeamsManager.Core.Services
                     schoolType = await _schoolTypeRepository.GetByIdAsync(schoolTypeId);
                     if (schoolType == null || !schoolType.IsActive)
                     {
-                        operation.MarkAsFailed($"Typ szkoły o ID '{schoolTypeId}' podany dla szablonu nie istnieje lub jest nieaktywny.");
                         _logger.LogWarning("Nie można utworzyć szablonu: Typ szkoły ID {SchoolTypeId} nie istnieje lub jest nieaktywny.", schoolTypeId);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Typ szkoły o ID '{schoolTypeId}' podany dla szablonu nie istnieje lub jest nieaktywny."
+                        );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Nie można utworzyć szablonu: wybrany typ szkoły nie istnieje lub jest nieaktywny",
+                            "error"
+                        );
                         return null;
                     }
                 }
@@ -272,8 +304,19 @@ namespace TeamsManager.Core.Services
                 if (validationErrors.Any())
                 {
                     string errorsString = string.Join("; ", validationErrors);
-                    operation.MarkAsFailed($"Błędy walidacji szablonu: {errorsString}");
                     _logger.LogError("Nie można utworzyć szablonu '{TemplateName}': Błędy walidacji wzorca: {ValidationErrors}", name, errorsString);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Błędy walidacji szablonu: {errorsString}"
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można utworzyć szablonu: błędy walidacji wzorca - {errorsString}",
+                        "error"
+                    );
                     return null;
                 }
 
@@ -283,36 +326,57 @@ namespace TeamsManager.Core.Services
                     Name = name,
                     Template = templateContent,
                     Description = description,
-                    IsDefault = false, // Nowo tworzone szablony nie są domyślne
+                    IsDefault = false,
                     IsUniversal = isUniversal,
                     SchoolTypeId = schoolTypeId,
                     SchoolType = schoolType,
                     Category = category,
-                    Language = "Polski", // Można by to uczynić konfigurowalnym
-                    Separator = " - ",   // Domyślny separator
+                    Language = "Polski",
+                    Separator = " - ",
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
                 await _teamTemplateRepository.AddAsync(newTemplate);
-                // SaveChangesAsync() na wyższym poziomie
 
-                operation.TargetEntityId = newTemplate.Id;
-                operation.MarkAsCompleted($"Szablon zespołu ID: {newTemplate.Id} ('{newTemplate.Name}') przygotowany do utworzenia.");
                 _logger.LogInformation("Szablon zespołu '{TemplateName}' pomyślnie przygotowany do zapisu. ID: {TemplateId}", name, newTemplate.Id);
 
                 InvalidateCache(templateId: newTemplate.Id, schoolTypeId: newTemplate.SchoolTypeId, isUniversal: newTemplate.IsUniversal, isDefault: newTemplate.IsDefault, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Szablon zespołu '{newTemplate.Name}' utworzony pomyślnie"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Szablon zespołu '{newTemplate.Name}' został utworzony",
+                    "success"
+                );
                 return newTemplate;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia szablonu zespołu {TemplateName}. Wiadomość: {ErrorMessage}", name, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Nie udało się utworzyć szablonu zespołu: {ex.Message}",
+                    "error"
+                );
                 return null;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -325,18 +389,16 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(templateToUpdate), "Obiekt szablonu lub jego ID nie może być null/pusty.");
             }
 
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.TeamTemplateUpdated,
-                TargetEntityType = nameof(TeamTemplate),
-                TargetEntityId = templateToUpdate.Id,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Aktualizowanie szablonu ID: {TemplateId}", templateToUpdate.Id);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamTemplateUpdated,
+                nameof(TeamTemplate),
+                targetEntityId: templateToUpdate.Id,
+                targetEntityName: templateToUpdate.Name
+            );
 
             string? oldSchoolTypeId = null;
             bool oldIsDefault = false;
@@ -344,35 +406,82 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                var existingTemplate = await _teamTemplateRepository.GetByIdAsync(templateToUpdate.Id); // GetByIdAsync powinien załadować SchoolType, jeśli jest
+                var existingTemplate = await _teamTemplateRepository.GetByIdAsync(templateToUpdate.Id);
                 if (existingTemplate == null)
                 {
-                    operation.MarkAsFailed("Szablon nie istnieje.");
                     _logger.LogWarning("Nie można zaktualizować szablonu ID {TemplateId} - nie istnieje.", templateToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Szablon nie istnieje."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować szablonu: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
-                operation.TargetEntityName = existingTemplate.Name; // Nazwa przed modyfikacją
+                
                 oldSchoolTypeId = existingTemplate.SchoolTypeId;
                 oldIsDefault = existingTemplate.IsDefault;
                 oldIsUniversal = existingTemplate.IsUniversal;
 
                 if (string.IsNullOrWhiteSpace(templateToUpdate.Name) || string.IsNullOrWhiteSpace(templateToUpdate.Template))
                 {
-                    operation.MarkAsFailed("Nazwa i wzorzec szablonu są wymagane.");
                     _logger.LogError("Błąd aktualizacji szablonu {TemplateId}: Nazwa lub wzorzec puste.", templateToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nazwa i wzorzec szablonu są wymagane."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować szablonu: nazwa i wzorzec są wymagane",
+                        "error"
+                    );
                     return false;
                 }
+                
                 if (!templateToUpdate.IsUniversal && string.IsNullOrWhiteSpace(templateToUpdate.SchoolTypeId))
                 {
-                    operation.MarkAsFailed("Dla szablonu nieuniwersalnego wymagany jest typ szkoły (SchoolTypeId).");
                     _logger.LogError("Błąd aktualizacji szablonu {TemplateId}: Brak SchoolTypeId dla szablonu nieuniwersalnego.", templateToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Dla szablonu nieuniwersalnego wymagany jest typ szkoły (SchoolTypeId)."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować szablonu: dla szablonu nieuniwersalnego wymagany jest typ szkoły",
+                        "error"
+                    );
                     return false;
                 }
-                var validationErrors = templateToUpdate.ValidateTemplate(); // Używamy obiektu templateToUpdate do walidacji
+                
+                var validationErrors = templateToUpdate.ValidateTemplate();
                 if (validationErrors.Any())
                 {
-                    operation.MarkAsFailed($"Błędy walidacji szablonu: {string.Join("; ", validationErrors)}");
+                    string errorsString = string.Join("; ", validationErrors);
                     _logger.LogError("Błąd aktualizacji szablonu {TemplateId}: Błędy walidacji wzorca.", templateToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Błędy walidacji szablonu: {errorsString}"
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można zaktualizować szablonu: błędy walidacji wzorca - {errorsString}",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -382,26 +491,37 @@ namespace TeamsManager.Core.Services
                     schoolType = await _schoolTypeRepository.GetByIdAsync(templateToUpdate.SchoolTypeId);
                     if (schoolType == null || !schoolType.IsActive)
                     {
-                        operation.MarkAsFailed($"Typ szkoły o ID '{templateToUpdate.SchoolTypeId}' nie istnieje lub jest nieaktywny.");
                         _logger.LogWarning("Błąd aktualizacji szablonu {TemplateId}: Podany typ szkoły ID {SchoolTypeId} nieprawidłowy.", templateToUpdate.Id, templateToUpdate.SchoolTypeId);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Typ szkoły o ID '{templateToUpdate.SchoolTypeId}' nie istnieje lub jest nieaktywny."
+                        );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Nie można zaktualizować szablonu: wybrany typ szkoły nie istnieje lub jest nieaktywny",
+                            "error"
+                        );
                         return false;
                     }
                 }
                 else if (templateToUpdate.IsUniversal)
                 {
-                    templateToUpdate.SchoolTypeId = null; // Upewnijmy się, że jest null dla uniwersalnego
+                    templateToUpdate.SchoolTypeId = null;
                     schoolType = null;
                 }
 
                 // Logika obsługi zmiany flagi IsDefault
-                if (templateToUpdate.IsDefault && !existingTemplate.IsDefault) // Jeśli ustawiamy ten szablon jako domyślny
+                if (templateToUpdate.IsDefault && !existingTemplate.IsDefault)
                 {
                     if (!templateToUpdate.IsUniversal && !string.IsNullOrEmpty(templateToUpdate.SchoolTypeId))
                     {
                         var otherDefaultTemplates = await _teamTemplateRepository.FindAsync(t =>
                             t.SchoolTypeId == templateToUpdate.SchoolTypeId &&
                             t.IsDefault &&
-                            t.Id != templateToUpdate.Id && // Nie odznaczaj samego siebie
+                            t.Id != templateToUpdate.Id &&
                             t.IsActive);
 
                         foreach (var oldDefault in otherDefaultTemplates)
@@ -413,8 +533,6 @@ namespace TeamsManager.Core.Services
                             InvalidateCache(templateId: oldDefault.Id, schoolTypeId: oldDefault.SchoolTypeId, isDefault: false, invalidateAll: false);
                         }
                     }
-                    // Jeśli szablon uniwersalny jest ustawiany jako domyślny - to nie ma sensu, IsDefault powinno być powiązane z SchoolTypeId.
-                    // Można by dodać walidację: if (templateToUpdate.IsUniversal && templateToUpdate.IsDefault) { throw new InvalidOperationException("Uniwersalny szablon nie może być domyślny dla typu szkoły."); }
                 }
 
                 existingTemplate.Name = templateToUpdate.Name;
@@ -437,8 +555,6 @@ namespace TeamsManager.Core.Services
                 existingTemplate.MarkAsModified(currentUserUpn);
 
                 _teamTemplateRepository.Update(existingTemplate);
-                operation.TargetEntityName = existingTemplate.Name; // Nazwa po modyfikacji
-                operation.MarkAsCompleted("Szablon przygotowany do aktualizacji.");
 
                 InvalidateCache(templateId: existingTemplate.Id,
                                 schoolTypeId: existingTemplate.SchoolTypeId,
@@ -447,72 +563,138 @@ namespace TeamsManager.Core.Services
                                 oldSchoolTypeId: oldSchoolTypeId,
                                 oldIsUniversal: oldIsUniversal,
                                 oldIsDefault: oldIsDefault,
-                                invalidateAll: true); // Zawsze odświeżaj listy globalne przy update
+                                invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Szablon '{existingTemplate.Name}' zaktualizowany pomyślnie"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Szablon '{existingTemplate.Name}' został zaktualizowany",
+                    "success"
+                );
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas aktualizacji szablonu ID {TemplateId}. Wiadomość: {ErrorMessage}", templateToUpdate.Id, ex.Message);
-                operation.MarkAsFailed($"Błąd: {ex.Message}", ex.ToString());
+                _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji szablonu ID {TemplateId}. Wiadomość: {ErrorMessage}", templateToUpdate.Id, ex.Message);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji szablonu: {ex.Message}",
+                    "error"
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteTemplateAsync(string templateId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.TeamTemplateDeleted,
-                TargetEntityType = nameof(TeamTemplate),
-                TargetEntityId = templateId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Usuwanie (dezaktywacja) szablonu ID: {TemplateId}", templateId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamTemplateDeleted,
+                nameof(TeamTemplate),
+                targetEntityId: templateId
+            );
+
             TeamTemplate? template = null;
             try
             {
-                template = await _teamTemplateRepository.GetByIdAsync(templateId); // Pobierz z dołączonym SchoolType jeśli repo to robi
+                template = await _teamTemplateRepository.GetByIdAsync(templateId);
                 if (template == null)
                 {
-                    operation.MarkAsFailed($"Szablon o ID '{templateId}' nie istnieje.");
                     _logger.LogWarning("Nie można usunąć szablonu ID {TemplateId} - nie istnieje.", templateId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Szablon o ID '{templateId}' nie istnieje."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można usunąć szablonu: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
-                operation.TargetEntityName = template.Name;
 
                 if (!template.IsActive)
                 {
-                    operation.MarkAsCompleted($"Szablon '{template.Name}' był już nieaktywny. Brak akcji.");
                     _logger.LogInformation("Szablon ID {TemplateId} był już nieaktywny. Nie wykonano żadnej akcji.", templateId);
                     InvalidateCache(templateId: templateId, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: true);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Szablon '{template.Name}' był już nieaktywny."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Szablon '{template.Name}' był już nieaktywny",
+                        "info"
+                    );
                     return true;
                 }
 
                 template.MarkAsDeleted(currentUserUpn);
                 _teamTemplateRepository.Update(template);
-                operation.MarkAsCompleted("Szablon oznaczony jako usunięty.");
 
                 InvalidateCache(templateId: templateId, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Szablon '{template.Name}' oznaczony jako usunięty."
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Szablon '{template.Name}' został usunięty",
+                    "success"
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania szablonu zespołu ID {TemplateId}. Wiadomość: {ErrorMessage}", templateId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas usuwania szablonu: {ex.Message}",
+                    "error"
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -520,20 +702,17 @@ namespace TeamsManager.Core.Services
         public async Task<string?> GenerateTeamNameFromTemplateAsync(string templateId, Dictionary<string, string> values)
         {
             _logger.LogInformation("Generowanie nazwy zespołu z szablonu ID: {TemplateId}", templateId);
-            var template = await GetTemplateByIdAsync(templateId); // Używa cache
+            var template = await GetTemplateByIdAsync(templateId);
             if (template == null || !template.IsActive)
             {
                 _logger.LogWarning("Nie można wygenerować nazwy: Szablon o ID {TemplateId} nie istnieje lub jest nieaktywny.", templateId);
                 return null;
             }
 
-            var generatedName = template.GenerateTeamName(values); // To inkrementuje UsageCount i LastUsedDate
+            var generatedName = template.GenerateTeamName(values);
 
-            // Zapisz zmiany w szablonie (UsageCount, LastUsedDate)
             _teamTemplateRepository.Update(template);
-            // SaveChangesAsync na wyższym poziomie
 
-            // Unieważnij cache dla tego szablonu, aby odzwierciedlić zmiany w UsageCount/LastUsedDate
             InvalidateCache(templateId: template.Id, schoolTypeId: template.SchoolTypeId, isUniversal: template.IsUniversal, isDefault: template.IsDefault, invalidateAll: false);
 
             return generatedName;
@@ -542,68 +721,119 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<TeamTemplate?> CloneTemplateAsync(string originalTemplateId, string newTemplateName)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_clone";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.TeamTemplateCloned,
-                TargetEntityType = nameof(TeamTemplate),
-                TargetEntityId = originalTemplateId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Klonowanie szablonu ID: {OriginalTemplateId} do nowego szablonu o nazwie: {NewTemplateName}", originalTemplateId, newTemplateName);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamTemplateCloned,
+                nameof(TeamTemplate),
+                targetEntityId: originalTemplateId,
+                targetEntityName: $"Klonowanie -> {newTemplateName}"
+            );
 
             try
             {
-                var originalTemplate = await GetTemplateByIdAsync(originalTemplateId); // Używa cache
+                var originalTemplate = await GetTemplateByIdAsync(originalTemplateId);
                 if (originalTemplate == null)
                 {
-                    operation.MarkAsFailed("Oryginalny szablon nie istnieje.");
                     _logger.LogWarning("Nie można sklonować szablonu: Oryginalny szablon ID {OriginalTemplateId} nie istnieje.", originalTemplateId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Oryginalny szablon nie istnieje."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można sklonować szablonu: oryginalny szablon nie istnieje",
+                        "error"
+                    );
                     return null;
                 }
-                operation.TargetEntityName = $"Klonowanie: {originalTemplate.Name} -> {newTemplateName}";
 
                 if (string.IsNullOrWhiteSpace(newTemplateName))
                 {
-                    operation.MarkAsFailed("Nowa nazwa szablonu nie może być pusta.");
                     _logger.LogError("Nie można sklonować szablonu: Nowa nazwa jest pusta.");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nowa nazwa szablonu nie może być pusta."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można sklonować szablonu: nowa nazwa nie może być pusta",
+                        "error"
+                    );
                     return null;
                 }
 
                 var existingWithName = (await _teamTemplateRepository.FindAsync(t => t.Name == newTemplateName && t.IsActive)).FirstOrDefault();
                 if (existingWithName != null)
                 {
-                    operation.MarkAsFailed($"Szablon o nazwie '{newTemplateName}' już istnieje i jest aktywny. Klonowanie przerwane.");
                     _logger.LogWarning("Nie można sklonować szablonu: Szablon o nazwie '{NewTemplateName}' już istnieje i jest aktywny.", newTemplateName);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Szablon o nazwie '{newTemplateName}' już istnieje i jest aktywny."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można sklonować szablonu: nazwa '{newTemplateName}' już istnieje",
+                        "error"
+                    );
                     return null;
                 }
 
                 var clonedTemplate = originalTemplate.Clone(newTemplateName);
-                clonedTemplate.CreatedBy = currentUserUpn; // Ustaw CreatedBy dla nowego obiektu
-                clonedTemplate.Id = Guid.NewGuid().ToString(); // Nadaj nowe ID
+                clonedTemplate.CreatedBy = currentUserUpn;
+                clonedTemplate.Id = Guid.NewGuid().ToString();
 
                 await _teamTemplateRepository.AddAsync(clonedTemplate);
-                // SaveChangesAsync na wyższym poziomie
 
-                operation.OperationDetails = $"Szablon ID: {originalTemplate.Id} ('{originalTemplate.Name}') sklonowany do nowego szablonu ID: {clonedTemplate.Id} ('{clonedTemplate.Name}').";
-                operation.MarkAsCompleted(operation.OperationDetails);
-                _logger.LogInformation("Szablon '{OriginalName}' pomyślnie sklonowany do '{NewName}'. Nowe ID: {NewId}", originalTemplate.Name, newTemplateName, clonedTemplate.Id);
+                _logger.LogInformation("Szablon '{OriginalTemplateName}' pomyślnie sklonowany jako '{NewTemplateName}'. Nowy ID: {ClonedTemplateId}", originalTemplate.Name, newTemplateName, clonedTemplate.Id);
 
                 InvalidateCache(templateId: clonedTemplate.Id, schoolTypeId: clonedTemplate.SchoolTypeId, isUniversal: clonedTemplate.IsUniversal, isDefault: clonedTemplate.IsDefault, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Szablon '{originalTemplate.Name}' sklonowany jako '{clonedTemplate.Name}'"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Szablon '{originalTemplate.Name}' został sklonowany jako '{clonedTemplate.Name}'",
+                    "success"
+                );
                 return clonedTemplate;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas klonowania szablonu ID {OriginalTemplateId}. Wiadomość: {ErrorMessage}", originalTemplateId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Nie udało się sklonować szablonu: {ex.Message}",
+                    "error"
+                );
                 return null;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -700,27 +930,6 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogDebug("Flaga IsDefault zmieniła się z {Old} na {New} dla szablonu (ID: {TemplateId}) dla typu szkoły (ID: {SchoolTypeId}). Odpowiednie klucze domyślne zostały usunięte.", oldIsDefault, isDefault, templateId ?? "nieznane", schoolTypeId ?? "nieznany");
             }
-        }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
-
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
-            {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-                }
-            }
-
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla szablonu zespołu.", operation.Id);
         }
     }
 }

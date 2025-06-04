@@ -23,12 +23,12 @@ namespace TeamsManager.Core.Services
     {
         private readonly IGenericRepository<Department> _departmentRepository;
         private readonly IUserRepository _userRepository;
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<DepartmentService> _logger;
         private readonly IMemoryCache _cache;
         private readonly IPowerShellCacheService _powerShellCacheService;
-        private readonly IOperationHistoryService _operationHistoryService;
 
         // Klucze cache
         private const string AllDepartmentsRootOnlyCacheKey = "Departments_AllActive_RootOnly";
@@ -44,21 +44,21 @@ namespace TeamsManager.Core.Services
         public DepartmentService(
             IGenericRepository<Department> departmentRepository,
             IUserRepository userRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<DepartmentService> logger,
             IMemoryCache memoryCache,
-            IPowerShellCacheService powerShellCacheService,
-            IOperationHistoryService operationHistoryService)
+            IPowerShellCacheService powerShellCacheService)
         {
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
-            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
@@ -207,12 +207,19 @@ namespace TeamsManager.Core.Services
             string? parentDepartmentId = null,
             string? departmentCode = null)
         {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Rozpoczynanie tworzenia działu: '{DepartmentName}'", name);
 
             if (string.IsNullOrWhiteSpace(name))
             {
                 var message = "Nazwa działu nie może być pusta.";
                 _logger.LogError("Nie można utworzyć działu: {ErrorReason}", message);
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    message,
+                    "error"
+                );
                 throw new ArgumentException(message, nameof(name));
             }
 
@@ -238,6 +245,12 @@ namespace TeamsManager.Core.Services
                             OperationStatus.Failed,
                             $"Dział nadrzędny o ID '{parentDepartmentId}' nie istnieje lub jest nieaktywny."
                         );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Nie można utworzyć działu: dział nadrzędny nie istnieje lub jest nieaktywny",
+                            "error"
+                        );
                         return null;
                     }
                 }
@@ -250,7 +263,7 @@ namespace TeamsManager.Core.Services
                     ParentDepartmentId = parentDepartmentId,
                     ParentDepartment = parentDepartment,
                     DepartmentCode = departmentCode,
-                    CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system",
+                    CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
@@ -268,8 +281,16 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    $"Dział ID: {newDepartment.Id} przygotowany do utworzenia."
+                    $"Dział '{name}' utworzony pomyślnie"
                 );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Dział '{name}' został utworzony",
+                    "success"
+                );
+
                 return newDepartment;
             }
             catch (Exception ex)
@@ -283,6 +304,14 @@ namespace TeamsManager.Core.Services
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
                 );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Nie udało się utworzyć działu: {ex.Message}",
+                    "error"
+                );
+
                 throw;
             }
         }
@@ -296,6 +325,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(departmentToUpdate), "Obiekt działu lub jego ID nie może być null/pusty.");
             }
 
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Aktualizowanie działu ID: {DepartmentId}", departmentToUpdate.Id);
 
             // 1. Inicjalizacja operacji historii na początku
@@ -320,6 +350,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         "Dział nie istnieje."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować działu: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -333,6 +369,12 @@ namespace TeamsManager.Core.Services
                         operation.Id,
                         OperationStatus.Failed,
                         "Nazwa działu nie może być pusta."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować działu: nazwa nie może być pusta",
+                        "error"
                     );
                     return false;
                 }
@@ -348,6 +390,12 @@ namespace TeamsManager.Core.Services
                             OperationStatus.Failed,
                             "Dział nie może być swoim własnym rodzicem."
                         );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Dział nie może być swoim własnym rodzicem",
+                            "error"
+                        );
                         return false;
                     }
 
@@ -361,6 +409,12 @@ namespace TeamsManager.Core.Services
                             OperationStatus.Failed,
                             $"Dział nadrzędny o ID '{departmentToUpdate.ParentDepartmentId}' nie istnieje lub jest nieaktywny."
                         );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Dział nadrzędny nie istnieje lub jest nieaktywny",
+                            "error"
+                        );
                         return false;
                     }
 
@@ -373,6 +427,12 @@ namespace TeamsManager.Core.Services
                             operation.Id,
                             OperationStatus.Failed,
                             "Nie można ustawić działu jako rodzica, ponieważ spowodowałoby to cykliczną zależność."
+                        );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            "Nie można ustawić tego działu jako rodzica - spowodowałoby to cykliczną zależność",
+                            "error"
                         );
                         return false;
                     }
@@ -392,7 +452,7 @@ namespace TeamsManager.Core.Services
                 existingDepartment.Location = departmentToUpdate.Location;
                 existingDepartment.SortOrder = departmentToUpdate.SortOrder;
                 existingDepartment.IsActive = departmentToUpdate.IsActive;
-                existingDepartment.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
+                existingDepartment.MarkAsModified(currentUserUpn);
 
                 _departmentRepository.Update(existingDepartment);
 
@@ -414,7 +474,14 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    "Dział przygotowany do aktualizacji."
+                    $"Dział '{existingDepartment.Name}' zaktualizowany pomyślnie"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Dział '{existingDepartment.Name}' został zaktualizowany",
+                    "success"
                 );
                 return true;
             }
@@ -428,6 +495,13 @@ namespace TeamsManager.Core.Services
                     OperationStatus.Failed,
                     $"Błąd: {ex.Message}",
                     ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji działu: {ex.Message}",
+                    "error"
                 );
                 return false;
             }

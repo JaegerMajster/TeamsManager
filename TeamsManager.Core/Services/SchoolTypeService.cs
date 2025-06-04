@@ -22,11 +22,11 @@ namespace TeamsManager.Core.Services
     {
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly IUserRepository _userRepository; // Potrzebne do przypisywania wicedyrektorów
-        private readonly IOperationHistoryRepository _operationHistoryRepository;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolTypeService> _logger;
         private readonly IMemoryCache _cache;
-        private readonly IOperationHistoryService _operationHistoryService;
 
         // Definicje kluczy cache
         private const string AllSchoolTypesCacheKey = "SchoolTypes_AllActive";
@@ -43,19 +43,19 @@ namespace TeamsManager.Core.Services
         public SchoolTypeService(
             IGenericRepository<SchoolType> schoolTypeRepository,
             IUserRepository userRepository,
-            IOperationHistoryRepository operationHistoryRepository,
+            IOperationHistoryService operationHistoryService,
+            INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<SchoolTypeService> logger,
-            IMemoryCache memoryCache,
-            IOperationHistoryService operationHistoryService)
+            IMemoryCache memoryCache)
         {
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
@@ -138,11 +138,18 @@ namespace TeamsManager.Core.Services
             string? colorCode = null,
             int sortOrder = 0)
         {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Rozpoczynanie tworzenia typu szkoły: {ShortName} - {FullName}", shortName, fullName);
 
             if (string.IsNullOrWhiteSpace(shortName) || string.IsNullOrWhiteSpace(fullName))
             {
                 _logger.LogError("Nie można utworzyć typu szkoły: Skrócona nazwa lub pełna nazwa są puste.");
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    "Nie można utworzyć typu szkoły: skrócona nazwa i pełna nazwa są wymagane",
+                    "error"
+                );
                 return null;
             }
 
@@ -165,6 +172,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         $"Typ szkoły o skróconej nazwie '{shortName}' już istnieje i jest aktywny."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można utworzyć typu szkoły: nazwa '{shortName}' już istnieje",
+                        "error"
+                    );
                     return null;
                 }
 
@@ -176,7 +189,7 @@ namespace TeamsManager.Core.Services
                     Description = description,
                     ColorCode = colorCode,
                     SortOrder = sortOrder,
-                    CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system",
+                    CreatedBy = currentUserUpn,
                     IsActive = true
                 };
 
@@ -191,7 +204,14 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    $"Typ szkoły ID: {newSchoolType.Id} ('{newSchoolType.ShortName}') przygotowany do utworzenia."
+                    $"Typ szkoły '{newSchoolType.FullName}' utworzony pomyślnie"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Typ szkoły '{newSchoolType.FullName}' został utworzony",
+                    "success"
                 );
                 return newSchoolType;
             }
@@ -206,7 +226,14 @@ namespace TeamsManager.Core.Services
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
                 );
-                return null; // Lub rzuć wyjątek, jeśli preferowane jest, aby kontroler to obsłużył
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Nie udało się utworzyć typu szkoły: {ex.Message}",
+                    "error"
+                );
+                return null;
             }
         }
 
@@ -219,13 +246,15 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(schoolTypeToUpdate), "Obiekt typu szkoły lub jego ID nie może być null/pusty.");
             }
 
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Rozpoczynanie aktualizacji typu szkoły ID: {SchoolTypeId}", schoolTypeToUpdate.Id);
 
             // 1. Inicjalizacja operacji historii na początku
             var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
                 OperationType.SchoolTypeUpdated,
                 nameof(SchoolType),
-                targetEntityId: schoolTypeToUpdate.Id
+                targetEntityId: schoolTypeToUpdate.Id,
+                targetEntityName: schoolTypeToUpdate.FullName
             );
 
             try
@@ -242,6 +271,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         $"Typ szkoły o ID '{schoolTypeToUpdate.Id}' nie istnieje."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować typu szkoły: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -255,6 +290,12 @@ namespace TeamsManager.Core.Services
                         operation.Id,
                         OperationStatus.Failed,
                         "Skrócona nazwa i pełna nazwa są wymagane."
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można zaktualizować typu szkoły: skrócona nazwa i pełna nazwa są wymagane",
+                        "error"
                     );
                     return false;
                 }
@@ -272,6 +313,12 @@ namespace TeamsManager.Core.Services
                             OperationStatus.Failed,
                             $"Typ szkoły o skróconej nazwie '{schoolTypeToUpdate.ShortName}' już istnieje i jest aktywny."
                         );
+
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            $"Nie można zaktualizować typu szkoły: nazwa '{schoolTypeToUpdate.ShortName}' już istnieje",
+                            "error"
+                        );
                         return false;
                     }
                 }
@@ -281,8 +328,8 @@ namespace TeamsManager.Core.Services
                 existingSchoolType.Description = schoolTypeToUpdate.Description;
                 existingSchoolType.ColorCode = schoolTypeToUpdate.ColorCode;
                 existingSchoolType.SortOrder = schoolTypeToUpdate.SortOrder;
-                existingSchoolType.IsActive = schoolTypeToUpdate.IsActive; // Pozwalamy na zmianę IsActive
-                existingSchoolType.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
+                existingSchoolType.IsActive = schoolTypeToUpdate.IsActive;
+                existingSchoolType.MarkAsModified(currentUserUpn);
 
                 _schoolTypeRepository.Update(existingSchoolType);
                 _logger.LogInformation("Typ szkoły ID: {SchoolTypeId} pomyślnie przygotowany do aktualizacji.", existingSchoolType.Id);
@@ -293,7 +340,14 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    $"Typ szkoły ID: {existingSchoolType.Id} przygotowany do aktualizacji."
+                    $"Typ szkoły '{existingSchoolType.FullName}' zaktualizowany pomyślnie"
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Typ szkoły '{existingSchoolType.FullName}' został zaktualizowany",
+                    "success"
                 );
                 return true;
             }
@@ -308,6 +362,13 @@ namespace TeamsManager.Core.Services
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
                 );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas aktualizacji typu szkoły: {ex.Message}",
+                    "error"
+                );
                 return false;
             }
         }
@@ -315,6 +376,7 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public async Task<bool> DeleteSchoolTypeAsync(string schoolTypeId)
         {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Rozpoczynanie usuwania (dezaktywacji) typu szkoły ID: {SchoolTypeId}", schoolTypeId);
 
             // 1. Inicjalizacja operacji historii na początku
@@ -336,6 +398,12 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Failed,
                         $"Typ szkoły o ID '{schoolTypeId}' nie istnieje."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie można usunąć typu szkoły: nie istnieje w systemie",
+                        "error"
+                    );
                     return false;
                 }
 
@@ -349,14 +417,16 @@ namespace TeamsManager.Core.Services
                         OperationStatus.Completed,
                         $"Typ szkoły '{schoolType.FullName}' był już nieaktywny."
                     );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Typ szkoły '{schoolType.FullName}' był już nieaktywny",
+                        "info"
+                    );
                     return true;
                 }
 
-                // TODO: Dodać sprawdzenie, czy typ szkoły nie jest używany przez aktywne zespoły, szablony, przypisania nauczycieli itp.
-                // Jeśli jest używany, operacja powinna być zablokowana lub wymagać potwierdzenia.
-                // if (await _teamRepository.ExistsAsync(t => t.SchoolTypeId == schoolTypeId && t.IsActive)) { /* log/fail */ }
-
-                schoolType.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system");
+                schoolType.MarkAsDeleted(currentUserUpn);
                 _schoolTypeRepository.Update(schoolType);
 
                 _logger.LogInformation("Typ szkoły ID {SchoolTypeId} pomyślnie oznaczony jako usunięty.", schoolTypeId);
@@ -367,7 +437,14 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Completed,
-                    $"Typ szkoły '{schoolType.FullName}' (ID: {schoolTypeId}) oznaczony jako usunięty."
+                    $"Typ szkoły '{schoolType.FullName}' oznaczony jako usunięty."
+                );
+
+                // 3. Powiadomienie o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Typ szkoły '{schoolType.FullName}' został usunięty",
+                    "success"
                 );
                 return true;
             }
@@ -381,6 +458,13 @@ namespace TeamsManager.Core.Services
                     OperationStatus.Failed,
                     $"Krytyczny błąd: {ex.Message}",
                     ex.StackTrace
+                );
+
+                // 4. Powiadomienie o błędzie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Błąd podczas usuwania typu szkoły: {ex.Message}",
+                    "error"
                 );
                 return false;
             }
