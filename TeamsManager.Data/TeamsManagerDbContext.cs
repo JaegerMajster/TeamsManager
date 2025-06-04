@@ -479,6 +479,11 @@ namespace TeamsManager.Data
                 entity.Ignore(oh => oh.DurationInSeconds);
                 entity.Ignore(oh => oh.StatusDescription);
                 entity.Ignore(oh => oh.ShortDescription);
+                
+                // Dodaj ignorowanie pól zarządzanych przez serwis
+                entity.Ignore(oh => oh.StartedAt);
+                entity.Ignore(oh => oh.CompletedAt);
+                entity.Ignore(oh => oh.Duration);
             });
 
             // ===== KONFIGURACJA USTAWIEŃ APLIKACJI =====
