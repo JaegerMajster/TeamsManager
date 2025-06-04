@@ -138,6 +138,14 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Obiekt PSObject z danymi kanału lub null</returns>
         Task<PSObject?> GetTeamChannelAsync(string teamId, string channelDisplayName);
 
+        /// <summary>
+        /// Pobiera kanał zespołu po jego ID
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        /// <param name="channelId">ID kanału</param>
+        /// <returns>Obiekt kanału lub null</returns>
+        Task<PSObject?> GetTeamChannelByIdAsync(string teamId, string channelId);
+
         #endregion
     }
 }

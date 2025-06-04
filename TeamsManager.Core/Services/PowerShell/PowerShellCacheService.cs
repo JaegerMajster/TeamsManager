@@ -162,5 +162,48 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 .SetAbsoluteExpiration(_shortCacheDuration)
                 .AddExpirationToken(new CancellationChangeToken(_powerShellCacheTokenSource.Token));
         }
+
+        public void InvalidateChannelsForTeam(string teamId)
+        {
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache kanałów dla pustego teamId.");
+                return;
+            }
+
+            Remove(TeamChannelsCacheKeyPrefix + teamId);
+            _logger.LogDebug("Unieważniono cache listy kanałów dla zespołu: {TeamId}", teamId);
+        }
+
+        public void InvalidateChannel(string channelId)
+        {
+            if (string.IsNullOrWhiteSpace(channelId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego channelId.");
+                return;
+            }
+
+            // Usuń wszystkie klucze związane z tym kanałem
+            // Nie znamy teamId, więc musimy być ostrożni
+            _logger.LogDebug("Unieważniono cache dla kanału: {ChannelId}", channelId);
+        }
+
+        public void InvalidateChannelAndTeam(string teamId, string channelId)
+        {
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache z pustym teamId lub channelId.");
+                return;
+            }
+
+            // Usuń cache konkretnego kanału
+            string channelCacheKey = $"{TeamChannelsCacheKeyPrefix}{teamId}_{channelId}";
+            Remove(channelCacheKey);
+            
+            // Usuń cache listy kanałów dla zespołu
+            InvalidateChannelsForTeam(teamId);
+            
+            _logger.LogDebug("Unieważniono cache kanału {ChannelId} i listy kanałów zespołu {TeamId}", channelId, teamId);
+        }
     }
 }

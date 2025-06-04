@@ -75,5 +75,24 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// Zwraca krótkie opcje cache z tokenem unieważniania
         /// </summary>
         MemoryCacheEntryOptions GetShortCacheEntryOptions();
+
+        /// <summary>
+        /// Unieważnia cache kanałów dla zespołu
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        void InvalidateChannelsForTeam(string teamId);
+
+        /// <summary>
+        /// Unieważnia cache konkretnego kanału
+        /// </summary>
+        /// <param name="channelId">ID kanału</param>
+        void InvalidateChannel(string channelId);
+
+        /// <summary>
+        /// Unieważnia cache kanału i jego zespołu
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        /// <param name="channelId">ID kanału</param>
+        void InvalidateChannelAndTeam(string teamId, string channelId);
     }
 }

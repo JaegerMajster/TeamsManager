@@ -764,6 +764,56 @@ namespace TeamsManager.Core.Services.PowerShellServices
             }
         }
 
+        public async Task<PSObject?> GetTeamChannelByIdAsync(string teamId, string channelId)
+        {
+            if (!_connectionService.ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(channelId))
+            {
+                _logger.LogError("TeamID i ChannelID są wymagane do pobrania kanału.");
+                return null;
+            }
+
+            string cacheKey = $"{TeamChannelsCacheKeyPrefix}{teamId}_{channelId}";
+
+            if (_cacheService.TryGetValue(cacheKey, out PSObject? cachedChannel))
+            {
+                _logger.LogDebug("Kanał ID: {ChannelId} dla zespołu ID: {TeamId} znaleziony w cache.", channelId, teamId);
+                return cachedChannel;
+            }
+
+            _logger.LogInformation("Pobieranie kanału ID '{ChannelId}' dla zespołu '{TeamId}' z Microsoft Graph.", channelId, teamId);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "TeamId", teamId },
+                    { "ChannelId", channelId }
+                };
+
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeamChannel", parameters);
+                var channel = results?.FirstOrDefault();
+
+                if (channel != null)
+                {
+                    _cacheService.Set(cacheKey, channel, _cacheService.GetShortCacheEntryOptions().AbsoluteExpirationRelativeToNow);
+                    _logger.LogDebug("Kanał ID: {ChannelId} dla zespołu ID: {TeamId} dodany do cache.", channelId, teamId);
+                }
+                else
+                {
+                    _logger.LogInformation("Kanał ID: {ChannelId} dla zespołu ID: {TeamId} nie został znaleziony w Microsoft Graph.", channelId, teamId);
+                }
+
+                return channel;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania kanału ID '{ChannelId}' dla zespołu '{TeamId}'.", channelId, teamId);
+                return null;
+            }
+        }
+
         #endregion
 
         #region Private Methods
