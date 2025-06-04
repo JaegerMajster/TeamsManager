@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Threading;
+
 using System.Threading.Tasks;
 using FluentAssertions;
-using Microsoft.Extensions.Caching.Memory;
+
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
+
 using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
@@ -38,8 +38,9 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ILogger<TeamService>> _mockLogger;
         private readonly Mock<IGenericRepository<SchoolType>> _mockSchoolTypeRepository;
         private readonly Mock<ISchoolYearRepository> _mockSchoolYearRepository;
-        private readonly Mock<IMemoryCache> _mockMemoryCache;
+
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly TeamService _teamService;
         private readonly User _testOwnerUser;
@@ -70,8 +71,9 @@ namespace TeamsManager.Tests.Services
             _mockLogger = new Mock<ILogger<TeamService>>();
             _mockSchoolTypeRepository = new Mock<IGenericRepository<SchoolType>>();
             _mockSchoolYearRepository = new Mock<ISchoolYearRepository>();
-            _mockMemoryCache = new Mock<IMemoryCache>();
+
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _testOwnerUser = new User { Id = "owner-guid-123", UPN = "owner@example.com", FirstName = "Test", LastName = "Owner", Role = UserRole.Nauczyciel, IsActive = true };
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
@@ -89,16 +91,7 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>()))
                 .ReturnsAsync(mockOperationHistory);
 
-            var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
-            mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
-            mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
 
-            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
-                           .Returns(mockCacheEntry.Object);
 
 
             _teamService = new TeamService(
@@ -116,15 +109,14 @@ namespace TeamsManager.Tests.Services
                 _mockLogger.Object,
                 _mockSchoolTypeRepository.Object,
                 _mockSchoolYearRepository.Object,
-                _mockMemoryCache.Object,
-                _mockOperationHistoryService.Object
+                _mockOperationHistoryService.Object,
+                _mockPowerShellCacheService.Object
             );
         }
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            object? outItem = item;
-            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
+            _mockPowerShellCacheService.Setup(m => m.TryGetValue(cacheKey, out item))
                            .Returns(foundInCache);
         }
 
@@ -147,7 +139,7 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Team, bool>>>(ex => TestExpressionHelper.IsForActiveTeamRecords(ex))), Times.Once, "GetAllTeamsAsync powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllActiveTeamsCacheKey), Times.AtLeastOnce, "Dane GetAllTeamsAsync powinny zostać ponownie zcache'owane.");
+            _mockPowerShellCacheService.Verify(m => m.Set(AllActiveTeamsCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce, "Dane GetAllTeamsAsync powinny zostać ponownie zcache'owane.");
         }
 
         private void AssertCacheInvalidationByReFetchingActiveSpecific(List<Team> expectedDbItemsAfterOperation)
@@ -161,7 +153,7 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamRepository.Verify(r => r.GetActiveTeamsAsync(), Times.Once, "GetActiveTeamsAsync powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(ActiveTeamsSpecificCacheKey), Times.AtLeastOnce, "Dane GetActiveTeamsAsync powinny zostać ponownie zcache'owane.");
+            _mockPowerShellCacheService.Verify(m => m.Set(ActiveTeamsSpecificCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce, "Dane GetActiveTeamsAsync powinny zostać ponownie zcache'owane.");
         }
 
         private void AssertCacheInvalidationByReFetchingArchived(List<Team> expectedDbItemsAfterOperation)
@@ -175,7 +167,7 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamRepository.Verify(r => r.GetArchivedTeamsAsync(), Times.Once, "GetArchivedTeamsAsync powinno odpytać repozytorium po unieważnieniu cache.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(ArchivedTeamsCacheKey), Times.AtLeastOnce, "Dane GetArchivedTeamsAsync powinny zostać ponownie zcache'owane.");
+            _mockPowerShellCacheService.Verify(m => m.Set(ArchivedTeamsCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce, "Dane GetArchivedTeamsAsync powinny zostać ponownie zcache'owane.");
         }
 
         private void AssertCacheInvalidationByReFetchingByOwner(string ownerUpn, List<Team> expectedDbItemsAfterOperation)
@@ -193,7 +185,7 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamRepository.Verify(r => r.GetTeamsByOwnerAsync(ownerUpn), Times.Once, $"GetTeamsByOwnerAsync({ownerUpn}) powinno odpytać repozytorium.");
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbItemsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(TeamsByOwnerCacheKeyPrefix + ownerUpn), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(m => m.Set(TeamsByOwnerCacheKeyPrefix + ownerUpn, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce);
         }
 
 
@@ -214,7 +206,7 @@ namespace TeamsManager.Tests.Services
             result!.IsActive.Should().BeTrue(); // Sprawdzenie obliczeniowego IsActive
             result.Should().BeEquivalentTo(expectedTeam, options => options.ExcludingMissingMembers());
             _mockTeamRepository.Verify(r => r.GetByIdAsync(teamId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<Team>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -247,7 +239,7 @@ namespace TeamsManager.Tests.Services
             result.Should().BeEquivalentTo(dbTeam);
             result!.IsActive.Should().BeTrue();
             _mockTeamRepository.Verify(r => r.GetByIdAsync(teamId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<Team>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetAllTeamsAsync (zwraca rekordy z BaseEntity.IsActive = true) ---
@@ -266,7 +258,7 @@ namespace TeamsManager.Tests.Services
             var result = await _teamService.GetAllTeamsAsync();
 
             result.Should().BeEquivalentTo(activeStatusTeams);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllActiveTeamsCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllActiveTeamsCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetActiveTeamsAsync ---
@@ -281,7 +273,7 @@ namespace TeamsManager.Tests.Services
             var result = await _teamService.GetActiveTeamsAsync();
 
             result.Should().BeEquivalentTo(activeStatusTeams);
-            _mockMemoryCache.Verify(m => m.CreateEntry(ActiveTeamsSpecificCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(ActiveTeamsSpecificCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetArchivedTeamsAsync ---
@@ -304,7 +296,7 @@ namespace TeamsManager.Tests.Services
 
             result.Should().BeEquivalentTo(archivedTeams);
             result.First().IsActive.Should().BeFalse(); // Sprawdzenie obliczeniowego IsActive
-            _mockMemoryCache.Verify(m => m.CreateEntry(ArchivedTeamsCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(ArchivedTeamsCacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy GetTeamsByOwnerAsync ---
@@ -345,7 +337,7 @@ namespace TeamsManager.Tests.Services
 
             result.Should().BeEquivalentTo(teamsByOwnerFromRepo);
             result.Should().OnlyContain(t => t.IsActive); // Sprawdzenie, czy są tylko te z obliczeniowym IsActive = true
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.IsAny<IEnumerable<Team>>(), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
 
@@ -492,11 +484,10 @@ namespace TeamsManager.Tests.Services
         {
             await _teamService.RefreshCacheAsync();
 
-            _mockMemoryCache.Verify(m => m.Remove(AllActiveTeamsCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(ActiveTeamsSpecificCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(ArchivedTeamsCacheKey), Times.Once);
-            // Token unieważni klucze specyficzne (ID, Owner)
+            // Sprawdzamy, czy PowerShellCacheService otrzymał globalną inwalidację
+            _mockPowerShellCacheService.Verify(m => m.InvalidateAllCache(), Times.Once);
 
+            // Po globalnej inwalidacji, cache powinien być pusty
             SetupCacheTryGetValue(AllActiveTeamsCacheKey, (IEnumerable<Team>?)null, false);
             _mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Team, bool>>>()))
                                .ReturnsAsync(new List<Team>())

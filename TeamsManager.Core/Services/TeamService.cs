@@ -2,11 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
+
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
+
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
+
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
@@ -36,18 +36,16 @@ namespace TeamsManager.Core.Services
         private readonly ILogger<TeamService> _logger;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly ISchoolYearRepository _schoolYearRepository;
-        private readonly IMemoryCache _cache;
-        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
 
-        // Definicje kluczy cache
+        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
+        private readonly IPowerShellCacheService _powerShellCacheService;
+
+        // Klucze cache (delegowane do PowerShellCacheService)
         private const string AllActiveTeamsCacheKey = "Teams_AllActive";
         private const string ActiveTeamsSpecificCacheKey = "Teams_Active";
         private const string ArchivedTeamsCacheKey = "Teams_Archived";
         private const string TeamsByOwnerCacheKeyPrefix = "Teams_ByOwner_";
         private const string TeamByIdCacheKeyPrefix = "Team_Id_";
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
-
-        private static CancellationTokenSource _teamsCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu zespołów.
@@ -67,8 +65,9 @@ namespace TeamsManager.Core.Services
             ILogger<TeamService> logger,
             IGenericRepository<SchoolType> schoolTypeRepository,
             ISchoolYearRepository schoolYearRepository,
-            IMemoryCache memoryCache,
-            IOperationHistoryService operationHistoryService) // Dodaj to do konstruktora
+
+            IOperationHistoryService operationHistoryService, // Dodaj to do konstruktora
+            IPowerShellCacheService powerShellCacheService)
         {
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -84,16 +83,12 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
         }
 
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_teamsCacheTokenSource.Token));
-        }
+
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache. Zwraca zespół tylko jeśli jego Status to Active.</remarks>
@@ -110,7 +105,7 @@ namespace TeamsManager.Core.Services
             string cacheKey = TeamByIdCacheKeyPrefix + teamId;
             Team? team;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out team) && team != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out team) && team != null)
             {
                 _logger.LogDebug("Zespół ID: {TeamId} znaleziony w cache.", teamId);
                 if (team.Status != TeamStatus.Active)
@@ -149,12 +144,12 @@ namespace TeamsManager.Core.Services
 
                 if (team != null && team.IsActive)
                 {
-                    _cache.Set(cacheKey, team, GetDefaultCacheEntryOptions());
+                    _powerShellCacheService.Set(cacheKey, team);
                     _logger.LogDebug("Zespół ID: {TeamId} dodany do cache.", teamId);
                 }
                 else
                 {
-                    _cache.Remove(cacheKey);
+                    _powerShellCacheService.Remove(cacheKey);
                     if (team != null && !team.IsActive)
                     {
                         _logger.LogDebug("Zespół ID: {TeamId} jest nieaktywny (Status != Active), nie zostanie zcache'owany po ID i nie zostanie zwrócony przez tę metodę.", teamId);
@@ -171,7 +166,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie wszystkich zespołów z Team.Status = Active. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = AllActiveTeamsCacheKey;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły z Team.Status = Active znalezione w cache.");
                 return cachedTeams;
@@ -188,7 +183,7 @@ namespace TeamsManager.Core.Services
             }
 
             var teamsFromDb = await _teamRepository.FindAsync(t => t.Status == TeamStatus.Active);
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły z Team.Status = Active dodane do cache.");
             return teamsFromDb;
         }
@@ -199,7 +194,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie zespołów o statusie 'Active'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = ActiveTeamsSpecificCacheKey;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
@@ -215,7 +210,7 @@ namespace TeamsManager.Core.Services
             }
 
             var teamsFromDb = await _teamRepository.GetActiveTeamsAsync();
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
@@ -226,7 +221,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie zespołów o statusie 'Archived'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = ArchivedTeamsCacheKey;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
@@ -241,7 +236,7 @@ namespace TeamsManager.Core.Services
                 }
             }
             var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync();
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
@@ -257,7 +252,7 @@ namespace TeamsManager.Core.Services
             }
             string cacheKey = TeamsByOwnerCacheKeyPrefix + ownerUpn;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły (status Active) dla właściciela {OwnerUpn} znalezione w cache.", ownerUpn);
                 return cachedTeams;
@@ -272,7 +267,7 @@ namespace TeamsManager.Core.Services
                 }
             }
             var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn);
-            _cache.Set(cacheKey, teamsFromDb, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły (status Active) dla właściciela {OwnerUpn} dodane do cache.", ownerUpn);
             return teamsFromDb;
         }
@@ -1184,43 +1179,46 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Inwalidacja cache'u zespołów. teamId: {TeamId}, ownerUpn: {OwnerUpn}, oldStatus: {OldStatus}, newStatus: {NewStatus}, oldOwnerUpnIfChanged: {OldOwner}, invalidateAll: {InvalidateAll}",
                 teamId, ownerUpn, oldStatus, newStatus, oldOwnerUpnIfChanged, invalidateAll);
 
-            var oldTokenSource = Interlocked.Exchange(ref _teamsCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
-            {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose();
-            }
-            _logger.LogDebug("Token cache'u dla zespołów został zresetowany.");
-
-            _cache.Remove(AllActiveTeamsCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllActiveTeamsCacheKey);
-            _cache.Remove(ActiveTeamsSpecificCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", ActiveTeamsSpecificCacheKey);
-            _cache.Remove(ArchivedTeamsCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", ArchivedTeamsCacheKey);
-
             if (invalidateAll)
             {
-                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u zespołów.");
+                // TYLKO dla RefreshCacheAsync() - globalne resetowanie
+                _powerShellCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
+                return;
             }
+
+            // GRANULARNA inwalidacja przez PowerShellCacheService
+            _powerShellCacheService.InvalidateAllActiveTeamsList();
+            _powerShellCacheService.InvalidateArchivedTeamsList();
+            _powerShellCacheService.InvalidateTeamSpecificByStatus();
 
             if (!string.IsNullOrWhiteSpace(teamId))
             {
-                _cache.Remove(TeamByIdCacheKeyPrefix + teamId);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", TeamByIdCacheKeyPrefix, teamId);
+                _powerShellCacheService.InvalidateTeamById(teamId);
             }
 
             if (!string.IsNullOrWhiteSpace(ownerUpn))
             {
-                _cache.Remove(TeamsByOwnerCacheKeyPrefix + ownerUpn);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, ownerUpn);
+                _powerShellCacheService.InvalidateTeamsByOwner(ownerUpn);
             }
 
             if (!string.IsNullOrWhiteSpace(oldOwnerUpnIfChanged) && oldOwnerUpnIfChanged != ownerUpn)
             {
-                _cache.Remove(TeamsByOwnerCacheKeyPrefix + oldOwnerUpnIfChanged);
-                _logger.LogDebug("Usunięto z cache klucz dla starego właściciela: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, oldOwnerUpnIfChanged);
+                _powerShellCacheService.InvalidateTeamsByOwner(oldOwnerUpnIfChanged);
             }
+
+            // Inwalidacja według statusu zespołu
+            if (oldStatus.HasValue)
+            {
+                _powerShellCacheService.InvalidateTeamsByStatus(oldStatus.Value);
+            }
+
+            if (newStatus.HasValue && newStatus != oldStatus)
+            {
+                _powerShellCacheService.InvalidateTeamsByStatus(newStatus.Value);
+            }
+
+            _logger.LogDebug("Wykonano granularną inwalidację cache zespołów przez PowerShellCacheService.");
         }
 
         /// <summary>
