@@ -52,5 +52,15 @@ namespace TeamsManager.Data.Repositories
                               (tt.Category != null && tt.Category.ToLower().Contains(lowerSearchTerm))))
                 .ToListAsync();
         }
+
+        /// <summary>
+        /// Zapisuje wszystkie zmiany w kontekście do bazy danych.
+        /// Automatycznie ustawia pola audytu dzięki TeamsManagerDbContext.SaveChangesAsync().
+        /// </summary>
+        /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
+        public async Task<int> SaveChangesAsync()
+        {
+            return await _context.SaveChangesAsync();
+        }
     }
 }

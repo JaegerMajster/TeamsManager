@@ -11,6 +11,7 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using Xunit;
@@ -27,6 +28,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<TeamTemplateService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockMemoryCache;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly ITeamTemplateService _teamTemplateService;
         private readonly string _currentLoggedInUserUpn = "test.admin@example.com";
@@ -48,29 +50,62 @@ namespace TeamsManager.Tests.Services
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<TeamTemplateService>>();
             _mockMemoryCache = new Mock<IMemoryCache>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
 
-            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
+            // Setup dla SaveChangesAsync
+            _mockTeamTemplateRepository.Setup(r => r.SaveChangesAsync()).ReturnsAsync(1);
+
+            // Setup dla OperationHistoryService
             _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
                     It.IsAny<OperationType>(),
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()))
+                .Callback<OperationType, string, string?, string?, string?, string?>(
+                    (type, entityType, entityId, entityName, details, parentId) =>
+                    {
+                        _capturedOperationHistory = new OperationHistory 
+                        { 
+                            Id = "test-operation-id", 
+                            Type = type, 
+                            Status = OperationStatus.Completed,
+                            TargetEntityType = entityType,
+                            TargetEntityId = entityId,
+                            TargetEntityName = entityName,
+                            OperationDetails = details ?? string.Empty,
+                            ParentOperationId = parentId
+                        };
+                    })
+                .ReturnsAsync(new OperationHistory { Id = "test-operation-id" });
+
+            _mockOperationHistoryService.Setup(s => s.UpdateOperationStatusAsync(
                     It.IsAny<string>(),
+                    It.IsAny<OperationStatus>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()))
+                .ReturnsAsync(true);
+
+            // Setup dla NotificationService
+            _mockNotificationService.Setup(s => s.SendNotificationToUserAsync(
                     It.IsAny<string>(),
                     It.IsAny<string>(),
                     It.IsAny<string>()))
-                .ReturnsAsync(mockOperationHistory);
+                .Returns(Task.CompletedTask);
 
-            var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
-            mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
-            mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
+            // Setup dla PowerShellCacheService
+            _mockPowerShellCacheService.Setup(s => s.GetDefaultCacheEntryOptions())
+                .Returns(new MemoryCacheEntryOptions());
+            _mockPowerShellCacheService.Setup(s => s.InvalidateAllActiveTeamTemplatesList());
+            _mockPowerShellCacheService.Setup(s => s.InvalidateTeamTemplateById(It.IsAny<string>()));
+            _mockPowerShellCacheService.Setup(s => s.InvalidateTeamTemplatesBySchoolType(It.IsAny<string>()));
+            _mockPowerShellCacheService.Setup(s => s.InvalidateAllCache());
 
-            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
-                           .Returns(mockCacheEntry.Object);
+            var mockObject = new object();
+            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>())).Returns(Mock.Of<ICacheEntry>());
 
             _teamTemplateService = new TeamTemplateService(
                 _mockTeamTemplateRepository.Object,
@@ -79,7 +114,8 @@ namespace TeamsManager.Tests.Services
                 _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object
+                _mockMemoryCache.Object,
+                _mockPowerShellCacheService.Object
             );
         }
 
@@ -283,7 +319,6 @@ namespace TeamsManager.Tests.Services
             _mockTeamTemplateRepository.Setup(r => r.AddAsync(It.IsAny<TeamTemplate>()))
                 .Callback<TeamTemplate>(t => t.Id = createdTemplate.Id)
                 .Returns(Task.CompletedTask);
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var result = await _teamTemplateService.CreateTemplateAsync(
                 templateName, templateContent, templateDescription, isUniversal, schoolType.Id);
@@ -298,16 +333,14 @@ namespace TeamsManager.Tests.Services
                     It.Is<string>(targetEntityName => targetEntityName == templateName),
                     It.IsAny<string>(), // details
                     It.IsAny<string>()), Times.Once);
-            // INotificationService nie ma metody SendNotification
 
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + newTemplateId), Times.AtLeastOnce);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(newTemplateId), Times.AtLeastOnce);
 
             if (!isUniversal && !string.IsNullOrWhiteSpace(schoolType.Id))
             {
-                _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolType.Id), Times.AtLeastOnce);
-                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolType.Id), Times.AtLeastOnce);
+                _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(schoolType.Id), Times.AtLeastOnce);
             }
 
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate> { result });
@@ -332,7 +365,6 @@ namespace TeamsManager.Tests.Services
             _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(templateId)).ReturnsAsync(existingTemplate);
             _mockSchoolTypeRepository.Setup(r => r.GetByIdAsync(schoolTypeId)).ReturnsAsync(schoolType);
             _mockTeamTemplateRepository.Setup(r => r.Update(It.IsAny<TeamTemplate>()));
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var updateResult = await _teamTemplateService.UpdateTemplateAsync(updatedTemplateData);
             updateResult.Should().BeTrue();
@@ -344,13 +376,11 @@ namespace TeamsManager.Tests.Services
                     It.Is<string>(targetEntityName => targetEntityName == updatedTemplateData.Name),
                     It.IsAny<string>(), // details
                     It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
 
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(schoolTypeId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.AtLeastOnce);
 
             var expectedAfterUpdate = new TeamTemplate { Id = templateId, Name = "Nowy Prosty", SchoolTypeId = schoolTypeId, IsDefault = false, IsUniversal = false, IsActive = true, Template = "new", SchoolType = schoolType, CreatedBy = existingTemplate.CreatedBy, CreatedDate = existingTemplate.CreatedDate };
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate> { expectedAfterUpdate });
@@ -375,7 +405,6 @@ namespace TeamsManager.Tests.Services
             _mockTeamTemplateRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()))
                                    .ReturnsAsync(new List<TeamTemplate>());
             _mockTeamTemplateRepository.Setup(r => r.Update(It.IsAny<TeamTemplate>()));
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var updateResult = await _teamTemplateService.UpdateTemplateAsync(updatedTemplateData);
             updateResult.Should().BeTrue();
@@ -387,13 +416,11 @@ namespace TeamsManager.Tests.Services
                     It.Is<string>(targetEntityName => targetEntityName == updatedTemplateData.Name),
                     It.IsAny<string>(), // details
                     It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
 
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(schoolTypeId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.AtLeastOnce);
 
             var expectedAfterUpdate = new TeamTemplate { Id = templateId, Name = "Nowy Domyślny", SchoolTypeId = schoolTypeId, IsDefault = true, IsUniversal = false, IsActive = true, Template = "content", SchoolType = schoolType, CreatedBy = existingTemplate.CreatedBy, CreatedDate = existingTemplate.CreatedDate };
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate> { expectedAfterUpdate });
@@ -415,8 +442,6 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(templateId)).ReturnsAsync(existingTemplate);
             _mockTeamTemplateRepository.Setup(r => r.Update(It.IsAny<TeamTemplate>()));
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
-
 
             var updateResult = await _teamTemplateService.UpdateTemplateAsync(updatedTemplateData);
             updateResult.Should().BeTrue();
@@ -428,13 +453,11 @@ namespace TeamsManager.Tests.Services
                     It.Is<string>(targetEntityName => targetEntityName == updatedTemplateData.Name),
                     It.IsAny<string>(), // details
                     It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
 
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + oldSchoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + It.IsAny<string>()), Times.Never);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.AtLeastOnce);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(oldSchoolTypeId), Times.Once);
 
             var expectedAfterUpdate = new TeamTemplate { Id = templateId, Name = "Nowy Uniwersalny", SchoolTypeId = null, IsDefault = false, IsUniversal = true, IsActive = true, Template = "content", CreatedBy = existingTemplate.CreatedBy, CreatedDate = existingTemplate.CreatedDate };
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate> { expectedAfterUpdate });
@@ -456,26 +479,22 @@ namespace TeamsManager.Tests.Services
             var templateToDelete = new TeamTemplate { Id = templateId, Name = "Do Usunięcia Specyficzny", SchoolTypeId = schoolTypeId, IsDefault = false, IsUniversal = false, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(templateId)).ReturnsAsync(templateToDelete);
             _mockTeamTemplateRepository.Setup(r => r.Update(It.IsAny<TeamTemplate>()));
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
-
 
             var deleteResult = await _teamTemplateService.DeleteTemplateAsync(templateId);
             deleteResult.Should().BeTrue();
 
             _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
                     It.Is<OperationType>(op => op == OperationType.TeamTemplateDeleted),
-                    It.IsAny<string>(), // targetEntityType
+                    It.Is<string>(entityType => entityType == "TeamTemplate"),
                     It.Is<string>(targetEntityId => targetEntityId == templateId),
-                    It.Is<string>(targetEntityName => targetEntityName == templateToDelete.Name),
-                    It.IsAny<string>(), // details
-                    It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
+                    It.Is<string?>(targetEntityName => targetEntityName == null),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + schoolTypeId), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.AtLeastOnce);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.AtLeastOnce);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(schoolTypeId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.AtLeastOnce);
 
             AssertCacheInvalidationByReFetchingForSchoolType(schoolTypeId, new List<TeamTemplate>());
 
@@ -492,25 +511,23 @@ namespace TeamsManager.Tests.Services
             var templateToDelete = new TeamTemplate { Id = templateId, Name = "Do Usunięcia Uniwersalny", SchoolTypeId = null, IsDefault = false, IsUniversal = true, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(templateId)).ReturnsAsync(templateToDelete);
             _mockTeamTemplateRepository.Setup(r => r.Update(It.IsAny<TeamTemplate>()));
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var deleteResult = await _teamTemplateService.DeleteTemplateAsync(templateId);
             deleteResult.Should().BeTrue();
 
             _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
                     It.Is<OperationType>(op => op == OperationType.TeamTemplateDeleted),
-                    It.IsAny<string>(), // targetEntityType
+                    It.Is<string>(entityType => entityType == "TeamTemplate"),
                     It.Is<string>(targetEntityId => targetEntityId == templateId),
-                    It.Is<string>(targetEntityName => targetEntityName == templateToDelete.Name),
-                    It.IsAny<string>(), // details
-                    It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
+                    It.Is<string?>(targetEntityName => targetEntityName == null),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(It.Is<string>(s => s.StartsWith(TeamTemplatesBySchoolTypeIdCacheKeyPrefix))), Times.Never);
-            _mockMemoryCache.Verify(m => m.Remove(It.Is<string>(s => s.StartsWith(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix))), Times.Never);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            // Dla uniwersalnego szablonu nie inwalidujemy cache typu szkoły
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(It.IsAny<string>()), Times.Never);
 
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate>());
             AssertCacheInvalidationByReFetchingUniversal(new List<TeamTemplate>());
@@ -546,8 +563,6 @@ namespace TeamsManager.Tests.Services
                 .Returns(Task.CompletedTask);
             _mockTeamTemplateRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<TeamTemplate, bool>>>()))
                                        .ReturnsAsync(new List<TeamTemplate>());
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
-
 
             var cloned = await _teamTemplateService.CloneTemplateAsync(originalId, "Nowy Sklonowany");
 
@@ -556,22 +571,20 @@ namespace TeamsManager.Tests.Services
             var clonedSchoolTypeId = cloned.SchoolTypeId;
 
             _mockOperationHistoryService.Verify(r => r.CreateNewOperationEntryAsync(
-                    It.Is<OperationType>(op => op == OperationType.TeamTemplateCreated),
-                    It.IsAny<string>(), // targetEntityType
-                    It.IsAny<string>(), // targetEntityId
-                    It.Is<string>(targetEntityName => targetEntityName == cloned.Name),
-                    It.IsAny<string>(), // details
-                    It.IsAny<string>()), Times.Once); // parentOperationId
-            // INotificationService nie ma metody SendNotification
+                    It.Is<OperationType>(op => op == OperationType.TeamTemplateCloned),
+                    It.Is<string>(entityType => entityType == "TeamTemplate"),
+                    It.Is<string>(targetEntityId => targetEntityId == originalId),
+                    It.Is<string?>(targetEntityName => targetEntityName == "Klonowanie -> Nowy Sklonowany"),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(TeamTemplateByIdCacheKeyPrefix + clonedId), Times.Once);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(clonedId), Times.Once);
 
             if (!string.IsNullOrWhiteSpace(clonedSchoolTypeId))
             {
-                _mockMemoryCache.Verify(m => m.Remove(TeamTemplatesBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.AtLeastOnce);
-                _mockMemoryCache.Verify(m => m.Remove(DefaultTeamTemplateBySchoolTypeIdCacheKeyPrefix + clonedSchoolTypeId), Times.AtLeastOnce);
+                _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(clonedSchoolTypeId), Times.AtLeastOnce);
             }
 
             AssertCacheInvalidationByReFetchingAll(new List<TeamTemplate> { cloned });
@@ -588,8 +601,8 @@ namespace TeamsManager.Tests.Services
         {
             await _teamTemplateService.RefreshCacheAsync();
 
-            _mockMemoryCache.Verify(m => m.Remove(AllTeamTemplatesCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.Remove(UniversalTeamTemplatesCacheKey), Times.Once);
+            // Weryfikacja granularnej inwalidacji PowerShellCacheService
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Once);
 
             SetupCacheTryGetValue(AllTeamTemplatesCacheKey, (IEnumerable<TeamTemplate>?)null, false);
             var dbTemplates = new List<TeamTemplate> { new TeamTemplate { Id = "refreshed", Name = "Refreshed", IsActive = true } };
@@ -615,6 +628,175 @@ namespace TeamsManager.Tests.Services
 
             result.Should().NotBeNull().And.BeEquivalentTo(expectedTemplate);
             _mockMemoryCache.Verify(m => m.CreateEntry(TeamTemplateByIdCacheKeyPrefix + templateId), Times.Once);
+        }
+
+        [Fact]
+        public async Task GenerateTeamNameFromTemplateAsync_Should_Save_Usage_Statistics()
+        {
+            // Arrange
+            var templateId = "test-template-id";
+            var values = new Dictionary<string, string> { { "Name", "Test" }, { "Subject", "Math" } };
+            var template = new TeamTemplate 
+            { 
+                Id = templateId, 
+                Template = "{Name} - {Subject}",
+                IsActive = true,
+                UsageCount = 5,
+                LastUsedDate = DateTime.UtcNow.AddDays(-1)
+            };
+            
+            _mockTeamTemplateRepository
+                .Setup(x => x.GetByIdAsync(templateId))
+                .ReturnsAsync(template);
+
+            // Act
+            var result = await _teamTemplateService.GenerateTeamNameFromTemplateAsync(templateId, values);
+
+            // Assert
+            result.Should().Be("Test - Math");
+            _mockTeamTemplateRepository.Verify(x => x.Update(It.IsAny<TeamTemplate>()), Times.Once);
+            _mockTeamTemplateRepository.Verify(x => x.SaveChangesAsync(), Times.Once);
+            template.UsageCount.Should().Be(6);
+            template.LastUsedDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public async Task CreateTemplateAsync_Should_Save_To_Database()
+        {
+            // Arrange
+            var name = "New Template";
+            var templateContent = "{Name} - {Subject}";
+            var description = "Test description";
+            var isUniversal = true;
+
+            // Act
+            var result = await _teamTemplateService.CreateTemplateAsync(name, templateContent, description, isUniversal);
+
+            // Assert
+            result.Should().NotBeNull();
+            _mockTeamTemplateRepository.Verify(x => x.AddAsync(It.IsAny<TeamTemplate>()), Times.Once);
+            _mockTeamTemplateRepository.Verify(x => x.SaveChangesAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateTemplateAsync_Should_Save_To_Database()
+        {
+            // Arrange
+            var templateToUpdate = new TeamTemplate
+            {
+                Id = "template-1",
+                Name = "Updated Template",
+                Template = "{Name} - {Subject}",
+                Description = "Updated description",
+                IsUniversal = true,
+                IsActive = true
+            };
+
+            var existingTemplate = new TeamTemplate
+            {
+                Id = "template-1",
+                Name = "Original Template",
+                Template = "{Name}",
+                Description = "Original description",
+                IsUniversal = false,
+                IsActive = true
+            };
+
+            _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync("template-1"))
+                                     .ReturnsAsync(existingTemplate);
+
+            // Act
+            var result = await _teamTemplateService.UpdateTemplateAsync(templateToUpdate);
+
+            // Assert
+            result.Should().BeTrue();
+            _mockTeamTemplateRepository.Verify(x => x.Update(It.IsAny<TeamTemplate>()), Times.Once);
+            _mockTeamTemplateRepository.Verify(x => x.SaveChangesAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteTemplateAsync_Should_Save_To_Database()
+        {
+            // Arrange
+            var templateId = "template-to-delete";
+            var template = new TeamTemplate
+            {
+                Id = templateId,
+                Name = "Template to Delete",
+                IsActive = true
+            };
+
+            _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(templateId))
+                                     .ReturnsAsync(template);
+
+            // Act
+            var result = await _teamTemplateService.DeleteTemplateAsync(templateId);
+
+            // Assert
+            result.Should().BeTrue();
+            _mockTeamTemplateRepository.Verify(x => x.Update(It.IsAny<TeamTemplate>()), Times.Once);
+            _mockTeamTemplateRepository.Verify(x => x.SaveChangesAsync(), Times.Once);
+            template.IsActive.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task CloneTemplateAsync_Should_Save_To_Database()
+        {
+            // Arrange
+            var originalTemplateId = "original-template";
+            var newTemplateName = "Cloned Template";
+            var originalTemplate = new TeamTemplate
+            {
+                Id = originalTemplateId,
+                Name = "Original Template",
+                Template = "{Name} - {Subject}",
+                Description = "Original description",
+                IsUniversal = true,
+                IsActive = true
+            };
+
+            _mockTeamTemplateRepository.Setup(r => r.GetByIdAsync(originalTemplateId))
+                                     .ReturnsAsync(originalTemplate);
+            _mockTeamTemplateRepository.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<TeamTemplate, bool>>>()))
+                                     .ReturnsAsync(new List<TeamTemplate>());
+
+            // Act
+            var result = await _teamTemplateService.CloneTemplateAsync(originalTemplateId, newTemplateName);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Name.Should().Be(newTemplateName);
+            _mockTeamTemplateRepository.Verify(x => x.AddAsync(It.IsAny<TeamTemplate>()), Times.Once);
+            _mockTeamTemplateRepository.Verify(x => x.SaveChangesAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task GenerateTeamNameFromTemplateAsync_Should_InvalidateOnlySpecificTemplate()
+        {
+            // Arrange
+            var templateId = "test-template-granular";
+            var template = new TeamTemplate 
+            { 
+                Id = templateId, 
+                Template = "{Name}",
+                IsActive = true,
+                UsageCount = 0,
+                LastUsedDate = null
+            };
+            
+            _mockTeamTemplateRepository
+                .Setup(x => x.GetByIdAsync(templateId))
+                .ReturnsAsync(template);
+
+            // Act
+            var result = await _teamTemplateService.GenerateTeamNameFromTemplateAsync(templateId, new Dictionary<string, string> { { "Name", "Test" } });
+
+            // Assert - tylko konkretny szablon, nie listy
+            result.Should().Be("Test");
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplateById(templateId), Times.Once);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveTeamTemplatesList(), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateTeamTemplatesBySchoolType(It.IsAny<string>()), Times.Never);
+            _mockPowerShellCacheService.Verify(s => s.InvalidateAllCache(), Times.Never);
         }
     }
 }

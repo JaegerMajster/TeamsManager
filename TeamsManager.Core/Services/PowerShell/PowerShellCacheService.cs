@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Services.Cache;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -412,6 +413,50 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             Remove(CurrentSchoolYearCacheKey);
             _logger.LogDebug("Unieważniono cache bieżącego roku szkolnego.");
+        }
+
+        public void InvalidateTeamTemplateById(string templateId)
+        {
+            if (string.IsNullOrWhiteSpace(templateId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache dla pustego templateId.");
+                return;
+            }
+            
+            var key = TeamTemplateCacheKeys.TeamTemplateById(templateId);
+            Remove(key);
+            
+            _logger.LogDebug("Unieważniono cache szablonu zespołu po ID: {TemplateId}", templateId);
+        }
+
+        public void InvalidateAllActiveTeamTemplatesList()
+        {
+            // Usuń listę wszystkich aktywnych szablonów
+            Remove(TeamTemplateCacheKeys.AllActiveTeamTemplates);
+            
+            // Usuń też listę szablonów uniwersalnych (są powiązane)
+            Remove(TeamTemplateCacheKeys.UniversalTeamTemplates);
+            
+            _logger.LogDebug("Unieważniono cache list szablonów zespołów (wszystkie aktywne i uniwersalne).");
+        }
+
+        public void InvalidateTeamTemplatesBySchoolType(string schoolTypeId)
+        {
+            if (string.IsNullOrWhiteSpace(schoolTypeId))
+            {
+                _logger.LogWarning("Próba unieważnienia cache szablonów dla pustego schoolTypeId.");
+                return;
+            }
+            
+            // Usuń listę szablonów dla typu szkoły
+            var listKey = TeamTemplateCacheKeys.TeamTemplatesBySchoolType(schoolTypeId);
+            Remove(listKey);
+            
+            // Usuń też domyślny szablon dla typu szkoły
+            var defaultKey = TeamTemplateCacheKeys.DefaultTeamTemplateBySchoolType(schoolTypeId);
+            Remove(defaultKey);
+            
+            _logger.LogDebug("Unieważniono cache szablonów zespołów dla typu szkoły: {SchoolTypeId}", schoolTypeId);
         }
     }
 }

@@ -36,6 +36,12 @@ namespace TeamsManager.Core.Abstractions.Data
         /// <returns>Kolekcja pasujących szablonów TeamTemplate.</returns>
         Task<IEnumerable<TeamTemplate>> SearchTemplatesAsync(string searchTerm);
 
+        /// <summary>
+        /// Asynchronicznie zapisuje wszystkie zmiany do bazy danych.
+        /// </summary>
+        /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
+        Task<int> SaveChangesAsync();
+
         // Metoda do "budowania" nowego szablonu (czyli jego tworzenia z walidacją)
         // mogłaby być częścią serwisu TeamTemplateService, który używałby tego repozytorium do zapisu.
         // Repozytorium jest odpowiedzialne za utrwalanie i pobieranie danych.

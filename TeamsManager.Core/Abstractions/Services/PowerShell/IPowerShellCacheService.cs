@@ -184,5 +184,22 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// Unieważnia cache bieżącego roku szkolnego.
         /// </summary>
         void InvalidateCurrentSchoolYear();
+
+        /// <summary>
+        /// Unieważnia cache szablonu zespołu według ID.
+        /// </summary>
+        /// <param name="templateId">ID szablonu zespołu</param>
+        void InvalidateTeamTemplateById(string templateId);
+
+        /// <summary>
+        /// Unieważnia cache listy wszystkich aktywnych szablonów zespołów.
+        /// </summary>
+        void InvalidateAllActiveTeamTemplatesList();
+
+        /// <summary>
+        /// Unieważnia cache szablonów zespołów dla danego typu szkoły.
+        /// </summary>
+        /// <param name="schoolTypeId">ID typu szkoły</param>
+        void InvalidateTeamTemplatesBySchoolType(string schoolTypeId);
     }
 }
