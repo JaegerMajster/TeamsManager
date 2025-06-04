@@ -7,6 +7,7 @@ using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using System.IO;        // Dla Path i File
 using System.Text.Json; // Dla JsonSerializer
@@ -53,7 +54,10 @@ builder.Services.AddControllers();
 
 // ========== DODANIE HEALTH CHECKS ==========
 builder.Services.AddHealthChecks()
-    .AddCheck<DependencyInjectionHealthCheck>("di_check");
+    .AddCheck<DependencyInjectionHealthCheck>("di_check")
+    .AddCheck<PowerShellConnectionHealthCheck>("powershell_connection", 
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "powershell", "graph", "external" });
 // ==========================================
 
 // ========== NOWA LINIA - Dodanie usług SignalR ==========
@@ -407,6 +411,37 @@ app.MapControllers();
 
 // ========== MAPOWANIE HEALTH CHECKS ==========
 app.MapHealthChecks("/health");
+
+// Dodatkowy endpoint ze szczegółowymi informacjami
+app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        
+        var response = new
+        {
+            status = report.Status.ToString(),
+            totalDuration = report.TotalDuration.TotalMilliseconds,
+            entries = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                duration = e.Value.Duration.TotalMilliseconds,
+                description = e.Value.Description,
+                data = e.Value.Data,
+                exception = e.Value.Exception?.Message
+            })
+        };
+        
+        await context.Response.WriteAsync(
+            System.Text.Json.JsonSerializer.Serialize(response, 
+                new System.Text.Json.JsonSerializerOptions 
+                { 
+                    WriteIndented = true 
+                }));
+    }
+});
 // =============================================
 
 // ========== NOWA LINIA - Mapowanie Huba SignalR ==========
