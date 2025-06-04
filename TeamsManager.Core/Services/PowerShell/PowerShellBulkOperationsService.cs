@@ -6,8 +6,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using TeamsManager.Core.Abstractions;
-using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
 
@@ -21,8 +19,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private readonly IPowerShellConnectionService _connectionService;
         private readonly IPowerShellCacheService _cacheService;
         private readonly IPowerShellUserResolverService _userResolver;
-        private readonly ICurrentUserService _currentUserService;
-        private readonly INotificationService _notificationService;
         private readonly ILogger<PowerShellBulkOperationsService> _logger;
 
         // Stałe konfiguracyjne
@@ -35,15 +31,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
             IPowerShellConnectionService connectionService,
             IPowerShellCacheService cacheService,
             IPowerShellUserResolverService userResolver,
-            ICurrentUserService currentUserService,
-            INotificationService notificationService,
             ILogger<PowerShellBulkOperationsService> logger)
         {
             _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
             _userResolver = userResolver ?? throw new ArgumentNullException(nameof(userResolver));
-            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
