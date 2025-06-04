@@ -264,48 +264,88 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             _logger.LogInformation("Masowa archiwizacja {Count} zespołów", teamIds!.Count);
 
-            var script = new StringBuilder();
-            script.AppendLine("$results = @{}");
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkTeamArchive,
+                "Team",
+                targetEntityName: $"Bulk archive {teamIds.Count} teams"
+            );
 
-            foreach (var teamId in teamIds)
-            {
-                script.AppendLine($@"
-                    try {{
-                        Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
-                        $results['{teamId}'] = $true
-                    }} catch {{
-                        $results['{teamId}'] = $false
-                        Write-Warning ""Błąd archiwizacji zespołu {teamId}: $_""
-                    }}
-                ");
-            }
-
-            script.AppendLine("$results");
-
-            var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            try
             {
-                foreach (DictionaryEntry entry in hashtable)
+                var script = new StringBuilder();
+                script.AppendLine("$results = @{}");
+
+                foreach (var teamId in teamIds)
                 {
-                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    script.AppendLine($@"
+                        try {{
+                            Update-MgTeam -GroupId '{teamId}' -IsArchived $true -ErrorAction Stop
+                            $results['{teamId}'] = $true
+                        }} catch {{
+                            $results['{teamId}'] = $false
+                            Write-Warning ""Błąd archiwizacji zespołu {teamId}: $_""
+                        }}
+                    ");
+                }
+
+                script.AppendLine("$results");
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
+
+                if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+                {
+                    foreach (DictionaryEntry entry in hashtable)
                     {
-                        results[key] = value;
+                        if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                        {
+                            results[key] = value;
+                            if (value) processedCount++;
+                            else failedCount++;
+                        }
                     }
                 }
+
+                // 3. Aktualizuj postęp (100% po zakończeniu)
+                await _operationHistoryService.UpdateOperationProgressAsync(
+                    operation.Id,
+                    processedItems: processedCount,
+                    failedItems: failedCount,
+                    totalItems: teamIds.Count
+                );
+
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == teamIds.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Archived: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache dla wszystkich zespołów
+                _cacheService.InvalidateAllCache();
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache dla wszystkich zespołów
-            _cacheService.InvalidateAllCache();
-
-            return results;
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
+                _logger.LogError(ex, "Błąd podczas masowej archiwizacji zespołów");
+                throw;
+            }
         }
 
         public async Task<Dictionary<string, bool>> BulkUpdateUserPropertiesAsync(
@@ -325,96 +365,144 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             _logger.LogInformation("Masowa aktualizacja właściwości dla {Count} użytkowników", userUpdates!.Count);
 
-            var script = new StringBuilder();
-            script.AppendLine("$results = @{}");
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkUserUpdate,
+                "User",
+                targetEntityName: $"Bulk update {userUpdates.Count} users"
+            );
 
-            foreach (var kvp in userUpdates)
-            {
-                var userUpn = kvp.Key;
-                var properties = kvp.Value;
-
-                script.AppendLine($@"
-                    try {{
-                        $params = @{{}}
-                ");
-
-                foreach (var prop in properties)
-                {
-                    switch (prop.Key.ToLower())
-                    {
-                        case "department":
-                            script.AppendLine($"        $params['Department'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "jobtitle":
-                            script.AppendLine($"        $params['JobTitle'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "firstname":
-                        case "givenname":
-                            script.AppendLine($"        $params['GivenName'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                        case "lastname":
-                        case "surname":
-                            script.AppendLine($"        $params['Surname'] = '{prop.Value.Replace("'", "''")}'");
-                            break;
-                    }
-                }
-
-                script.AppendLine($@"
-                        Update-MgUser -UserId '{userUpn.Replace("'", "''")}' @params -ErrorAction Stop
-                        $results['{userUpn.Replace("'", "''")}'] = $true
-                    }} catch {{
-                        $results['{userUpn.Replace("'", "''")}'] = $false
-                        Write-Warning ""Błąd aktualizacji użytkownika {userUpn}: $_""
-                    }}
-                ");
-            }
-
-            script.AppendLine("$results");
-
-            var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
             var results = new Dictionary<string, bool>();
+            var processedCount = 0;
+            var failedCount = 0;
 
-            if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+            try
             {
-                foreach (DictionaryEntry entry in hashtable)
+                var script = new StringBuilder();
+                script.AppendLine("$results = @{}");
+
+                foreach (var kvp in userUpdates)
                 {
-                    if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                    var userUpn = kvp.Key;
+                    var properties = kvp.Value;
+
+                    script.AppendLine($@"
+                        try {{
+                            $params = @{{}}
+                    ");
+
+                    foreach (var prop in properties)
                     {
-                        results[key] = value;
+                        switch (prop.Key.ToLower())
+                        {
+                            case "department":
+                                script.AppendLine($"        $params['Department'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "jobtitle":
+                                script.AppendLine($"        $params['JobTitle'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "firstname":
+                            case "givenname":
+                                script.AppendLine($"        $params['GivenName'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                            case "lastname":
+                            case "surname":
+                                script.AppendLine($"        $params['Surname'] = '{prop.Value.Replace("'", "''")}'");
+                                break;
+                        }
+                    }
+
+                    script.AppendLine($@"
+                            Update-MgUser -UserId '{userUpn.Replace("'", "''")}' @params -ErrorAction Stop
+                            $results['{userUpn.Replace("'", "''")}'] = $true
+                        }} catch {{
+                            $results['{userUpn.Replace("'", "''")}'] = $false
+                            Write-Warning ""Błąd aktualizacji użytkownika {userUpn}: $_""
+                        }}
+                    ");
+                }
+
+                script.AppendLine("$results");
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script.ToString());
+
+                if (scriptResults?.FirstOrDefault()?.BaseObject is Hashtable hashtable)
+                {
+                    foreach (DictionaryEntry entry in hashtable)
+                    {
+                        if (entry.Key?.ToString() is string key && entry.Value is bool value)
+                        {
+                            results[key] = value;
+                            if (value) processedCount++;
+                            else failedCount++;
+                        }
                     }
                 }
+
+                // 3. Aktualizuj postęp
+                await _operationHistoryService.UpdateOperationProgressAsync(
+                    operation.Id,
+                    processedItems: processedCount,
+                    failedItems: failedCount,
+                    totalItems: userUpdates.Count
+                );
+
+                // 4. Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == userUpdates.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Updated: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Zakończono masową aktualizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Invalidate cache dla wszystkich zaktualizowanych użytkowników
+                foreach (var userUpn in userUpdates.Keys)
+                {
+                    _cacheService.InvalidateUserCache(userUpn: userUpn);
+                }
+
+                return results;
             }
-
-            var successCount = results.Count(r => r.Value);
-            var failedCount = results.Count(r => !r.Value);
-
-            _logger.LogInformation("Zakończono masową aktualizację. Sukcesy: {Success}, Błędy: {Failed}",
-                successCount, failedCount);
-
-            // Invalidate cache dla wszystkich zaktualizowanych użytkowników
-            foreach (var userUpn in userUpdates.Keys)
+            catch (Exception ex)
             {
-                _cacheService.InvalidateUserCache(userUpn: userUpn);
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
+                _logger.LogError(ex, "Błąd podczas masowej aktualizacji użytkowników");
+                throw;
             }
-
-            return results;
         }
 
-        public async Task<bool> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
+        public async Task<Dictionary<string, bool>> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId)
         {
             if (!_connectionService.ValidateRunspaceState())
             {
                 _logger.LogError("Środowisko PowerShell nie jest gotowe.");
-                return false;
+                return new Dictionary<string, bool>();
             }
 
             if (string.IsNullOrEmpty(teamId))
             {
                 _logger.LogError("TeamID nie może być puste.");
-                return false;
+                return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation("Archiwizacja zespołu {TeamId} i dezaktywacja ekskluzywnych użytkowników", teamId);
+
+            // 1. Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamArchiveWithUserDeactivation,
+                "Team",
+                targetEntityId: teamId,
+                targetEntityName: "Archive team and deactivate exclusive users"
+            );
 
             try
             {
@@ -470,15 +558,26 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                 var success = result?["Success"] as bool? ?? false;
                 var deactivatedCount = Convert.ToInt32(result?["DeactivatedCount"] ?? 0);
+                var errors = result?["Errors"] as object[];
                 
-                if (!success)
+                if (!success && errors != null)
                 {
-                    var errors = result?["Errors"] as object[];
-                    foreach (var error in errors ?? Array.Empty<object>())
+                    foreach (var error in errors)
                     {
                         _logger.LogError("Błąd operacji: {Error}", error);
                     }
                 }
+
+                // 3. Ustaw końcowy status
+                var status = success ? OperationStatus.Completed : OperationStatus.Failed;
+                var statusMessage = success 
+                    ? $"Team archived. Deactivated {deactivatedCount} exclusive users"
+                    : $"Operation failed. Errors: {errors?.Length ?? 0}";
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status, statusMessage,
+                    success ? null : string.Join("\n", errors ?? Array.Empty<object>())
+                );
 
                 _logger.LogInformation("Zespół zarchiwizowany. Dezaktywowano {Count} użytkowników", deactivatedCount);
 
@@ -486,12 +585,18 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 _cacheService.InvalidateTeamCache(teamId);
                 _cacheService.InvalidateAllCache();
 
-                return success;
+                // Zamiast zwracać bool, zwróć Dictionary
+                return new Dictionary<string, bool> { { teamId, success } };
             }
             catch (Exception ex)
             {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
                 _logger.LogError(ex, "Błąd podczas archiwizacji zespołu i dezaktywacji użytkowników");
-                return false;
+                return new Dictionary<string, bool> { { teamId, false } };
             }
         }
 

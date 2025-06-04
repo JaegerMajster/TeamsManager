@@ -36,6 +36,9 @@
         BulkArchiving = 42,     // Masowa archiwizacja
         BulkUserAddToTeam = 43, // Masowe dodawanie użytkowników do zespołu
         BulkUserRemoveFromTeam = 44, // Masowe usuwanie użytkowników z zespołu
+        BulkTeamArchive = 45,   // Masowa archiwizacja zespołów
+        BulkUserUpdate = 46,    // Masowa aktualizacja właściwości użytkowników
+        TeamArchiveWithUserDeactivation = 47, // Archiwizacja zespołu z dezaktywacją ekskluzywnych użytkowników
 
         // Operacje systemowe
         SystemBackup = 50,      // Kopia zapasowa systemu
