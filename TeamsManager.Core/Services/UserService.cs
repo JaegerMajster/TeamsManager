@@ -2,14 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -34,6 +33,7 @@ namespace TeamsManager.Core.Services
         private readonly ISubjectService _subjectService;
         private readonly IPowerShellService _powerShellService;
         private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
+        private readonly IPowerShellCacheService _powerShellCacheService;
         private readonly INotificationService _notificationService; // NOWE: Dodane pole
 
         // Definicje kluczy cache
@@ -42,8 +42,6 @@ namespace TeamsManager.Core.Services
         private const string UserByUpnCacheKeyPrefix = "User_Upn_";
         private const string UsersByRoleCacheKeyPrefix = "Users_Role_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
-
-        private static CancellationTokenSource _usersCacheTokenSource = new CancellationTokenSource();
 
         /// <summary>
         /// Konstruktor serwisu użytkowników.
@@ -62,6 +60,7 @@ namespace TeamsManager.Core.Services
             ISubjectService subjectService,
             IPowerShellService powerShellService,
             IOperationHistoryService operationHistoryService, // Dodaj to do konstruktora
+            IPowerShellCacheService powerShellCacheService,
             INotificationService notificationService) // NOWE: Dodane pole
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -77,14 +76,14 @@ namespace TeamsManager.Core.Services
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
+            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService)); // NOWE: Dodane pole
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(_defaultCacheDuration)
-                .AddExpirationToken(new CancellationChangeToken(_usersCacheTokenSource.Token));
+            // Delegacja do PowerShellCacheService dla spójnego zarządzania cache
+            return _powerShellCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
@@ -510,7 +509,7 @@ namespace TeamsManager.Core.Services
                 existingUser.MarkAsModified(currentUserUpn);
                 _userRepository.Update(existingUser);
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zaktualizowany.", userToUpdate.Id);
-                InvalidateUserCache(userId: existingUser.Id, upn: existingUser.UPN, role: existingUser.Role, oldUpnIfChanged: oldUpn, oldRoleIfChanged: oldRole, isActiveChanged: oldIsActive != existingUser.IsActive, invalidateAllGlobalLists: true);
+                InvalidateUserCache(userId: existingUser.Id, upn: existingUser.UPN, role: existingUser.Role, oldUpnIfChanged: oldUpn, oldRoleIfChanged: oldRole, isActiveChanged: oldIsActive != existingUser.IsActive, invalidateAllGlobalLists: oldIsActive != existingUser.IsActive);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -1069,83 +1068,85 @@ namespace TeamsManager.Core.Services
 
         public Task RefreshCacheAsync()
         {
-            _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a użytkowników.");
+            _logger.LogInformation("Wymuszenie odświeżenia cache użytkowników.");
             InvalidateUserCache(invalidateAll: true);
-            _logger.LogInformation("Cache użytkowników został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;
         }
 
-        private void InvalidateUserCache(string? userId = null, string? upn = null, UserRole? role = null, string? oldUpnIfChanged = null, UserRole? oldRoleIfChanged = null, bool isActiveChanged = false, bool invalidateAllGlobalLists = false, bool invalidateAll = false)
+        private void InvalidateUserCache(string? userId = null, string? upn = null, 
+            UserRole? role = null, string? oldUpnIfChanged = null, 
+            UserRole? oldRoleIfChanged = null, bool isActiveChanged = false, 
+            bool invalidateAllGlobalLists = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u użytkowników. UserId: {UserId}, UPN: {UPN}, Role: {Role}, oldUpnIfChanged: {OldUpnIfChanged}, oldRoleIfChanged: {OldRoleIfChanged}, isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists}, invalidateAll: {InvalidateAll}",
-                userId, upn, role, oldUpnIfChanged, oldRoleIfChanged, isActiveChanged, invalidateAllGlobalLists, invalidateAll);
+            _logger.LogDebug("Delegowanie inwalidacji cache do PowerShellCacheService. " +
+                "UserId: {UserId}, UPN: {UPN}, Role: {Role}, OldUpn: {OldUpn}, " +
+                "OldRole: {OldRole}, IsActiveChanged: {IsActiveChanged}, " +
+                "InvalidateAllGlobalLists: {InvalidateAllGlobalLists}, InvalidateAll: {InvalidateAll}",
+                userId, upn, role, oldUpnIfChanged, oldRoleIfChanged, 
+                isActiveChanged, invalidateAllGlobalLists, invalidateAll);
 
-            var oldTokenSource = Interlocked.Exchange(ref _usersCacheTokenSource, new CancellationTokenSource());
-            if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
+            if (invalidateAll)
             {
-                oldTokenSource.Cancel();
-                oldTokenSource.Dispose();
+                // Pełne resetowanie cache tylko w skrajnych przypadkach
+                _powerShellCacheService.InvalidateAllCache();
+                _powerShellCacheService.InvalidateAllActiveUsersList();
+                _powerShellCacheService.InvalidateUserListCache();
+                
+                // Usuń wszystkie klucze UserService
+                foreach (UserRole roleToInvalidate in Enum.GetValues(typeof(UserRole)))
+                {
+                    _powerShellCacheService.InvalidateUsersByRole(roleToInvalidate);
+                }
+                
+                _logger.LogInformation("Wykonano pełne resetowanie cache użytkowników.");
+                return;
             }
 
-            if (invalidateAll || invalidateAllGlobalLists)
+            // Granularna inwalidacja - używamy kompleksowej metody
+            _powerShellCacheService.InvalidateUserAndRelatedData(
+                userId, 
+                upn, 
+                oldUpnIfChanged, 
+                role, 
+                oldRoleIfChanged
+            );
+
+            // Obsługa list globalnych
+            if (invalidateAllGlobalLists || isActiveChanged)
             {
-                _cache.Remove(AllActiveUsersCacheKey);
-                if (invalidateAll)
-                {
-                    // Inwaliduj wszystkie wpisy cache
-                    var fieldsToRemove = new[]
-                    {
-                        UserByIdCacheKeyPrefix,
-                        UserByUpnCacheKeyPrefix,
-                        UsersByRoleCacheKeyPrefix
-                    };
-                    foreach (var prefix in fieldsToRemove)
-                    {
-                        // Uwaga: W rzeczywistości, MemoryCache nie posiada metody GetAllKeys(), więc nie można bezpośrednio usunąć wszystkich kluczy zaczynających się od prefiksu
-                        // Jest to uproszczenie - w praktyce używamy CancellationToken do inwalidacji grupowej
-                        _logger.LogDebug("Inwalidacja wszystkich wpisów cache dla prefiksu: {Prefix}", prefix);
-                    }
-                }
+                _powerShellCacheService.InvalidateAllActiveUsersList();
+                _powerShellCacheService.InvalidateUserListCache();
+                
+                _logger.LogDebug("Unieważniono globalne listy użytkowników " +
+                    "(isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists})",
+                    isActiveChanged, invalidateAllGlobalLists);
             }
-            else
+
+            // Specjalna obsługa dla ról nauczycielskich
+            if (role.HasValue && IsTeachingRole(role.Value))
             {
-                // Granularna inwalidacja specyficznych wpisów
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    string userIdCacheKey = UserByIdCacheKeyPrefix + userId;
-                    _cache.Remove(userIdCacheKey);
-                }
-                if (!string.IsNullOrEmpty(upn))
-                {
-                    string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
-                    _cache.Remove(upnCacheKey);
-                }
-                if (!string.IsNullOrEmpty(oldUpnIfChanged) && oldUpnIfChanged != upn)
-                {
-                    string oldUpnCacheKey = UserByUpnCacheKeyPrefix + oldUpnIfChanged;
-                    _cache.Remove(oldUpnCacheKey);
-                }
-                if (role.HasValue)
-                {
-                    string roleCacheKey = UsersByRoleCacheKeyPrefix + role.Value.ToString();
-                    _cache.Remove(roleCacheKey);
-                }
-                if (oldRoleIfChanged.HasValue && oldRoleIfChanged != role)
-                {
-                    string oldRoleCacheKey = UsersByRoleCacheKeyPrefix + oldRoleIfChanged.Value.ToString();
-                    _cache.Remove(oldRoleCacheKey);
-                }
-                if (isActiveChanged || invalidateAllGlobalLists)
-                {
-                    _cache.Remove(AllActiveUsersCacheKey);
-                }
-                if (role.HasValue && (role.Value == UserRole.Nauczyciel || role.Value == UserRole.Wicedyrektor || role.Value == UserRole.Dyrektor))
-                {
-                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Nauczyciel.ToString());
-                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Wicedyrektor.ToString());
-                    _cache.Remove(UsersByRoleCacheKeyPrefix + UserRole.Dyrektor.ToString());
-                }
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Nauczyciel);
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor);
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Dyrektor);
+                
+                _logger.LogDebug("Unieważniono cache dla wszystkich ról nauczycielskich.");
             }
+            
+            // Jeśli stara rola też była nauczycielska
+            if (oldRoleIfChanged.HasValue && IsTeachingRole(oldRoleIfChanged.Value))
+            {
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Nauczyciel);
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor);
+                _powerShellCacheService.InvalidateUsersByRole(UserRole.Dyrektor);
+            }
+        }
+
+        // Metoda pomocnicza
+        private bool IsTeachingRole(UserRole role)
+        {
+            return role == UserRole.Nauczyciel || 
+                   role == UserRole.Wicedyrektor || 
+                   role == UserRole.Dyrektor;
         }
 
         public async Task<bool> DeactivateUserAsync(string userId, string apiAccessToken, bool deactivateM365Account = true)
@@ -1187,7 +1188,8 @@ namespace TeamsManager.Core.Services
                 if (!user.IsActive) 
                 { 
                     _logger.LogWarning("Użytkownik o ID {UserId} jest już nieaktywny.", userId); 
-                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); 
+                    // Używamy precyzyjnej inwalidacji - nie potrzebujemy invalidateAllGlobalLists gdy status się nie zmienił
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: false); 
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -1249,7 +1251,8 @@ namespace TeamsManager.Core.Services
                 user.MarkAsDeleted(currentUserUpn);
                 _userRepository.Update(user);
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie zdezaktywowany.", userId);
-                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
+                // Używamy precyzyjnej inwalidacji - isActiveChanged automatycznie obsłuży listy globalne
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: false);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -1338,7 +1341,8 @@ namespace TeamsManager.Core.Services
                 if (user.IsActive) 
                 { 
                     _logger.LogInformation("Użytkownik o ID {UserId} był już aktywny.", userId); 
-                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: true); 
+                    // Używamy precyzyjnej inwalidacji - nie potrzebujemy invalidateAllGlobalLists gdy status się nie zmienił
+                    InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: false, invalidateAllGlobalLists: false); 
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -1401,7 +1405,8 @@ namespace TeamsManager.Core.Services
                 user.MarkAsModified(currentUserUpn);
                 _userRepository.Update(user);
                 _logger.LogInformation("Użytkownik ID: {UserId} pomyślnie aktywowany.", userId);
-                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: true);
+                // Używamy precyzyjnej inwalidacji - isActiveChanged automatycznie obsłuży listy globalne
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, isActiveChanged: true, invalidateAllGlobalLists: false);
                 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(

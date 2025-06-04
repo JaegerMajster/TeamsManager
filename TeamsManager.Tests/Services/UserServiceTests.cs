@@ -12,6 +12,7 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -37,6 +38,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IConfidentialClientApplication> _mockConfidentialClientApplication;
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<INotificationService> _mockNotificationService;
+        private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly UserService _userService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -65,18 +67,44 @@ namespace TeamsManager.Tests.Services
             _mockConfidentialClientApplication = new Mock<IConfidentialClientApplication>();
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockNotificationService = new Mock<INotificationService>();
+            _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
-                                         .Returns(Task.CompletedTask);
-            // Usunięto Setup dla Update, jeśli SaveOperationHistoryAsync zawsze robi AddAsync
+            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+                                           It.IsAny<OperationType>(), 
+                                           It.IsAny<string>(), 
+                                           It.IsAny<string>(), 
+                                           It.IsAny<string>(), 
+                                           It.IsAny<string>(), 
+                                           It.IsAny<string>()))
+                                       .ReturnsAsync(new OperationHistory { Id = "mock-operation-id", Status = OperationStatus.InProgress })
+                                       .Callback<OperationType, string, string, string, string, string>((type, entityType, entityId, entityName, details, parentId) =>
+                                       {
+                                           _capturedOperationHistory = new OperationHistory { Id = "mock-operation-id", Type = type, TargetEntityType = entityType, TargetEntityId = entityId ?? string.Empty, TargetEntityName = entityName ?? string.Empty, Status = OperationStatus.InProgress };
+                                       });
+
+            _mockOperationHistoryService.Setup(s => s.UpdateOperationStatusAsync(It.IsAny<string>(), It.IsAny<OperationStatus>(), It.IsAny<string>(), It.IsAny<string>()))
+                                       .ReturnsAsync(true)
+                                       .Callback<string, OperationStatus, string, string>((id, status, details, errorMessage) =>
+                                       {
+                                           if (_capturedOperationHistory != null && _capturedOperationHistory.Id == id)
+                                           {
+                                               _capturedOperationHistory.Status = status;
+                                               _capturedOperationHistory.OperationDetails = details ?? string.Empty;
+                                               _capturedOperationHistory.ErrorMessage = errorMessage;
+                                           }
+                                       });
+
+            _mockNotificationService.Setup(n => n.SendNotificationToUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                                  .Returns(Task.CompletedTask);
+
+            var mockCacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(TimeSpan.FromMinutes(15));
+            _mockPowerShellCacheService.Setup(c => c.GetDefaultCacheEntryOptions())
+                                      .Returns(mockCacheEntryOptions);
 
             var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
             mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
             mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
             mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
 
@@ -97,6 +125,7 @@ namespace TeamsManager.Tests.Services
                 _mockSubjectService.Object,
                 _mockPowerShellService.Object,
                 _mockOperationHistoryService.Object,
+                _mockPowerShellCacheService.Object,
                 _mockNotificationService.Object
             );
         }
