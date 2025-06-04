@@ -790,28 +790,5 @@ namespace TeamsManager.Core.Services
                 _logger.LogDebug("Usunięto z cache klucz dla starego właściciela: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, oldOwnerUpnIfChanged);
             }
         }
-
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
-
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess))
-            {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue && operation.StartedAt != default(DateTime))
-                    {
-                        operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-                    }
-                }
-            }
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla zespołu.", operation.Id);
-        }
     }
 }
