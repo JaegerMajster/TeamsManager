@@ -28,6 +28,7 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SubjectService> _logger;
         private readonly IMemoryCache _cache;
+        private readonly IOperationHistoryService _operationHistoryService;
 
         // Definicje kluczy cache
         private const string AllSubjectsCacheKey = "Subjects_AllActive";
@@ -50,7 +51,8 @@ namespace TeamsManager.Core.Services
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
             ILogger<SubjectService> logger,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            IOperationHistoryService operationHistoryService)
         {
             _subjectRepository = subjectRepository ?? throw new ArgumentNullException(nameof(subjectRepository));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
@@ -60,6 +62,7 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions(TimeSpan? duration = null)
@@ -134,36 +137,35 @@ namespace TeamsManager.Core.Services
             string? defaultSchoolTypeId = null,
             string? category = null)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-            var operation = new OperationHistory
+            _logger.LogInformation("Rozpoczynanie tworzenia przedmiotu: '{SubjectName}'", name);
+
+            if (string.IsNullOrWhiteSpace(name))
             {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SubjectCreated,
-                TargetEntityType = nameof(Subject),
-                TargetEntityName = name,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
+                _logger.LogError("Nie można utworzyć przedmiotu: Nazwa jest pusta.");
+                return null;
+            }
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SubjectCreated,
+                nameof(Subject),
+                targetEntityName: name
+            );
 
             try
             {
-                _logger.LogInformation("Rozpoczynanie tworzenia przedmiotu: '{SubjectName}' przez {User}", name, currentUserUpn);
-
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    operation.MarkAsFailed("Nazwa przedmiotu nie może być pusta.");
-                    _logger.LogError("Nie można utworzyć przedmiotu: Nazwa jest pusta.");
-                    return null;
-                }
-
                 if (!string.IsNullOrWhiteSpace(code))
                 {
                     var existingByCode = await _subjectRepository.GetByCodeAsync(code); // GetByCodeAsync zwraca tylko aktywne
                     if (existingByCode != null)
                     {
-                        operation.MarkAsFailed($"Aktywny przedmiot o kodzie '{code}' już istnieje.");
                         _logger.LogError("Nie można utworzyć przedmiotu: Aktywny przedmiot o kodzie {SubjectCode} już istnieje.", code);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Aktywny przedmiot o kodzie '{code}' już istnieje."
+                        );
                         return null;
                     }
                 }
@@ -190,29 +192,37 @@ namespace TeamsManager.Core.Services
                     DefaultSchoolTypeId = defaultSchoolTypeId,
                     DefaultSchoolType = defaultSchoolType,
                     Category = category,
-                    CreatedBy = currentUserUpn, // Ustawiane również przez DbContext
+                    CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system", // Ustawiane również przez DbContext
                     IsActive = true
                 };
 
                 await _subjectRepository.AddAsync(newSubject);
                 // SaveChangesAsync() na wyższym poziomie
 
-                operation.TargetEntityId = newSubject.Id;
-                operation.MarkAsCompleted($"Przedmiot ID: {newSubject.Id} ('{newSubject.Name}') przygotowany do utworzenia.");
                 _logger.LogInformation("Przedmiot '{SubjectName}' pomyślnie przygotowany do zapisu. ID: {SubjectId}", name, newSubject.Id);
 
                 InvalidateCache(subjectId: newSubject.Id, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Przedmiot ID: {newSubject.Id} ('{newSubject.Name}') przygotowany do utworzenia."
+                );
                 return newSubject;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Krytyczny błąd podczas tworzenia przedmiotu {SubjectName}. Wiadomość: {ErrorMessage}", name, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                _logger.LogError(ex, "Krytyczny błąd podczas tworzenia przedmiotu '{SubjectName}'. Wiadomość: {ErrorMessage}", name, ex.Message);
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return null;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -225,18 +235,14 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(subjectToUpdate), "Obiekt przedmiotu lub jego ID nie może być null/pusty.");
             }
 
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SubjectUpdated,
-                TargetEntityType = nameof(Subject),
-                TargetEntityId = subjectToUpdate.Id,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
-            _logger.LogInformation("Rozpoczynanie aktualizacji przedmiotu ID: {SubjectId} przez {User}", subjectToUpdate.Id, currentUserUpn);
+            _logger.LogInformation("Rozpoczynanie aktualizacji przedmiotu ID: {SubjectId}", subjectToUpdate.Id);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SubjectUpdated,
+                nameof(Subject),
+                targetEntityId: subjectToUpdate.Id
+            );
 
             try
             {
@@ -245,16 +251,25 @@ namespace TeamsManager.Core.Services
                 {
                     // Jeśli chcemy zezwolić na aktualizację także nieaktywnych, musielibyśmy użyć GetByIdAsync
                     // i potem sprawdzić existingSubject.IsActive
-                    operation.MarkAsFailed($"Przedmiot o ID '{subjectToUpdate.Id}' nie istnieje lub jest nieaktywny.");
                     _logger.LogWarning("Nie można zaktualizować przedmiotu ID {SubjectId} - nie istnieje lub jest nieaktywny.", subjectToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Przedmiot o ID '{subjectToUpdate.Id}' nie istnieje lub jest nieaktywny."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = existingSubject.Name; // Nazwa przed modyfikacją
 
                 if (string.IsNullOrWhiteSpace(subjectToUpdate.Name))
                 {
-                    operation.MarkAsFailed("Nazwa przedmiotu nie może być pusta.");
                     _logger.LogError("Błąd walidacji przy aktualizacji przedmiotu {SubjectId}: Nazwa pusta.", subjectToUpdate.Id);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nazwa przedmiotu nie może być pusta."
+                    );
                     return false;
                 }
 
@@ -264,8 +279,13 @@ namespace TeamsManager.Core.Services
                     var conflicting = await _subjectRepository.GetByCodeAsync(subjectToUpdate.Code);
                     if (conflicting != null && conflicting.Id != existingSubject.Id)
                     {
-                        operation.MarkAsFailed($"Aktywny przedmiot o kodzie '{subjectToUpdate.Code}' już istnieje.");
                         _logger.LogError("Nie można zaktualizować przedmiotu: Aktywny przedmiot o kodzie '{SubjectCode}' już istnieje.", subjectToUpdate.Code);
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Aktywny przedmiot o kodzie '{subjectToUpdate.Code}' już istnieje."
+                        );
                         return false;
                     }
                 }
@@ -298,65 +318,78 @@ namespace TeamsManager.Core.Services
                 existingSubject.Hours = subjectToUpdate.Hours;
                 existingSubject.Category = subjectToUpdate.Category;
                 existingSubject.IsActive = subjectToUpdate.IsActive; // Pozwalamy na zmianę IsActive
-                existingSubject.MarkAsModified(currentUserUpn);
+                existingSubject.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system");
 
                 _subjectRepository.Update(existingSubject);
-                operation.TargetEntityName = existingSubject.Name; // Nazwa po modyfikacji
-                operation.MarkAsCompleted($"Przedmiot ID: {existingSubject.Id} przygotowany do aktualizacji.");
                 _logger.LogInformation("Przedmiot ID: {SubjectId} pomyślnie przygotowany do aktualizacji.", existingSubject.Id);
 
                 // Zmiana przedmiotu (np. jego status IsActive) może wpłynąć na listy nauczycieli i wszystkie listy przedmiotów.
                 InvalidateCache(subjectId: existingSubject.Id, invalidateTeachersList: true, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Przedmiot ID: {existingSubject.Id} przygotowany do aktualizacji."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas aktualizacji przedmiotu ID {SubjectId}. Wiadomość: {ErrorMessage}", subjectToUpdate.Id, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> DeleteSubjectAsync(string subjectId)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
-            var operation = new OperationHistory
-            {
-                Id = Guid.NewGuid().ToString(),
-                Type = OperationType.SubjectDeleted,
-                TargetEntityType = nameof(Subject),
-                TargetEntityId = subjectId,
-                CreatedBy = currentUserUpn,
-                IsActive = true
-            };
-            operation.MarkAsStarted();
             _logger.LogInformation("Usuwanie (dezaktywacja) przedmiotu ID: {SubjectId}", subjectId);
-            Subject? subject = null;
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.SubjectDeleted,
+                nameof(Subject),
+                targetEntityId: subjectId
+            );
+
             try
             {
                 // Używamy GetByIdAsync, aby móc zdezaktywować nawet już nieaktywny rekord (jeśli logika na to pozwala,
                 // ale standardowo MarkAsDeleted zadziała idempotetnie na IsActive).
                 // Jednakże GetByIdWithDetailsAsync zwraca null dla nieaktywnych, więc użyjemy GetByIdAsync z repozytorium.
-                subject = await _subjectRepository.GetByIdAsync(subjectId);
+                var subject = await _subjectRepository.GetByIdAsync(subjectId);
                 if (subject == null)
                 {
-                    operation.MarkAsFailed($"Przedmiot o ID '{subjectId}' nie istnieje.");
                     _logger.LogWarning("Nie można usunąć przedmiotu ID {SubjectId} - nie istnieje.", subjectId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Przedmiot o ID '{subjectId}' nie istnieje."
+                    );
                     return false;
                 }
-                operation.TargetEntityName = subject.Name;
 
                 if (!subject.IsActive)
                 {
-                    operation.MarkAsCompleted($"Przedmiot '{subject.Name}' był już nieaktywny.");
                     _logger.LogInformation("Przedmiot ID {SubjectId} był już nieaktywny.", subjectId);
                     // Mimo wszystko unieważnij cache, bo mogło dojść do zmiany np. przypisań nauczycieli w międzyczasie
                     InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: true);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        $"Przedmiot '{subject.Name}' był już nieaktywny."
+                    );
                     return true;
                 }
 
@@ -366,28 +399,37 @@ namespace TeamsManager.Core.Services
                 {
                     foreach (var assignment in assignments)
                     {
-                        assignment.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
+                        assignment.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system"); // Ustawia IsActive = false
                         _userSubjectRepository.Update(assignment);
                     }
                     _logger.LogInformation("Zdezaktywowano {Count} przypisań nauczycieli do przedmiotu {SubjectId} przed usunięciem przedmiotu.", assignments.Count(), subjectId);
                 }
 
-                subject.MarkAsDeleted(currentUserUpn); // Ustawia IsActive = false
+                subject.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system"); // Ustawia IsActive = false
                 _subjectRepository.Update(subject);
-                operation.MarkAsCompleted("Przedmiot oznaczony jako usunięty wraz z przypisaniami.");
 
                 InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: true);
+
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Przedmiot oznaczony jako usunięty wraz z przypisaniami."
+                );
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas usuwania przedmiotu ID {SubjectId}. Wiadomość: {ErrorMessage}", subjectId, ex.Message);
-                operation.MarkAsFailed($"Krytyczny błąd: {ex.Message}", ex.ToString());
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
                 return false;
-            }
-            finally
-            {
-                await SaveOperationHistoryAsync(operation);
             }
         }
 
@@ -411,37 +453,25 @@ namespace TeamsManager.Core.Services
             }
 
             _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", subjectId);
+            var teachersFromDb = await _subjectRepository.GetTeachersAsync(subjectId);
 
-            // Najpierw sprawdź, czy sam przedmiot istnieje i jest aktywny
-            var subjectExistsAndActive = await _subjectRepository.GetByIdAsync(subjectId); // Użyj GetByIdAsync, które nie filtruje po IsActive
-            if (subjectExistsAndActive == null || !subjectExistsAndActive.IsActive)
-            {
-                _logger.LogWarning("Przedmiot o ID {SubjectId} nie istnieje lub jest nieaktywny podczas pobierania nauczycieli.", subjectId);
-                _cache.Set(cacheKey, Enumerable.Empty<User>(), GetDefaultCacheEntryOptions(_shortCacheDuration)); // Cache'uj pustą listę
-                return Enumerable.Empty<User>();
-            }
-
-            var teachersFromDb = await _subjectRepository.GetTeachersAsync(subjectId); // Ta metoda w repozytorium powinna zwracać tylko aktywnych nauczycieli z aktywnych przypisań
-
-            _cache.Set(cacheKey, teachersFromDb, GetDefaultCacheEntryOptions(_shortCacheDuration)); // Krótszy czas dla dynamicznych list
+            _cache.Set(cacheKey, teachersFromDb, GetDefaultCacheEntryOptions(_shortCacheDuration));
             _logger.LogDebug("Nauczyciele dla przedmiotu ID: {SubjectId} dodani do cache.", subjectId);
+
             return teachersFromDb;
         }
 
         /// <inheritdoc />
-        /// <remarks>Ta metoda unieważnia cache dla listy nauczycieli danego przedmiotu oraz globalny cache przedmiotów.</remarks>
         public Task InvalidateTeachersCacheForSubjectAsync(string subjectId)
         {
-            _logger.LogInformation("Unieważnianie cache listy nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
             if (string.IsNullOrWhiteSpace(subjectId))
             {
-                _logger.LogWarning("Próba unieważnienia cache listy nauczycieli dla pustego ID przedmiotu.");
+                _logger.LogWarning("Próba unieważnienia cache nauczycieli dla pustego ID przedmiotu.");
                 return Task.CompletedTask;
             }
-            // Ustawienie invalidateTeachersList na true, a invalidateAll na false, ponieważ
-            // reset tokenu i tak unieważni AllSubjectsCacheKey.
-            // Jawne usunięcie AllSubjectsCacheKey jest też w samej metodzie InvalidateCache.
-            InvalidateCache(subjectId: subjectId, invalidateTeachersList: true, invalidateAll: false);
+
+            _logger.LogInformation("Unieważnianie cache nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
+            InvalidateCache(subjectId: subjectId, invalidateTeachersList: true);
             return Task.CompletedTask;
         }
 
@@ -458,18 +488,18 @@ namespace TeamsManager.Core.Services
         /// <summary>
         /// Unieważnia cache dla przedmiotów.
         /// Resetuje globalny token dla przedmiotów, co unieważnia wszystkie zależne wpisy.
-        /// Jawnie usuwa klucz dla listy wszystkich aktywnych przedmiotów.
-        /// Opcjonalnie usuwa klucze dla konkretnego przedmiotu i jego listy nauczycieli.
+        /// Dodatkowo, jawnie usuwa klucze cache'a na podstawie podanych parametrów
+        /// dla natychmiastowego efektu.
         /// </summary>
-        /// <param name="subjectId">ID przedmiotu, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
-        /// <param name="invalidateTeachersList">Czy unieważnić cache listy nauczycieli dla danego przedmiotu (opcjonalnie).</param>
+        /// <param name="subjectId">ID konkretnego przedmiotu do usunięcia z cache (opcjonalnie).</param>
+        /// <param name="invalidateTeachersList">Czy unieważnić cache listy nauczycieli dla konkretnego przedmiotu (opcjonalnie).</param>
         /// <param name="invalidateAll">Czy unieważnić wszystkie klucze związane z przedmiotami (opcjonalnie, domyślnie false).</param>
         private void InvalidateCache(string? subjectId = null, bool invalidateTeachersList = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Inwalidacja cache'u przedmiotów. subjectId: {SubjectId}, invalidateTeachersList: {InvalidateTeachersList}, invalidateAll: {InvalidateAll}",
-                subjectId, invalidateTeachersList, invalidateAll);
+            _logger.LogDebug("Inwalidacja cache'u przedmiotów. subjectId: {SubjectId}, invalidateTeachersList: {InvalidateTeachers}, invalidateAll: {InvalidateAll}",
+                             subjectId, invalidateTeachersList, invalidateAll);
 
-            // 1. Zresetuj CancellationTokenSource
+            // 1. Zresetuj CancellationTokenSource - to unieważni wszystkie wpisy używające tego tokenu.
             var oldTokenSource = Interlocked.Exchange(ref _subjectsCacheTokenSource, new CancellationTokenSource());
             if (oldTokenSource != null && !oldTokenSource.IsCancellationRequested)
             {
@@ -478,51 +508,28 @@ namespace TeamsManager.Core.Services
             }
             _logger.LogDebug("Token cache'u dla przedmiotów został zresetowany.");
 
-            // 2. Zawsze usuń klucz dla listy wszystkich aktywnych przedmiotów
+            // 2. Jawnie usuń kluczowe listy
             _cache.Remove(AllSubjectsCacheKey);
-            _logger.LogDebug("Usunięto z cache klucz: {CacheKey}", AllSubjectsCacheKey);
+            _logger.LogDebug("Usunięto z cache klucz dla wszystkich aktywnych przedmiotów.");
 
-            // 3. Jeśli invalidateAll jest true, to wystarczy, bo token załatwi resztę
-            if (invalidateAll)
-            {
-                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u przedmiotów.");
-                // Można by dodać usuwanie WSZYSTKICH kluczy z prefiksami, ale token jest bardziej efektywny.
-                return;
-            }
-
-            // 4. Jawnie usuń klucze dla specyficznych elementów, jeśli dotyczy
+            // 3. Jeśli podano subjectId, usuń specyficzne klucze dla tego przedmiotu
             if (!string.IsNullOrWhiteSpace(subjectId))
             {
                 _cache.Remove(SubjectByIdCacheKeyPrefix + subjectId);
-                _logger.LogDebug("Usunięto z cache klucz: {CacheKey}{Id}", SubjectByIdCacheKeyPrefix, subjectId);
+                _logger.LogDebug("Usunięto z cache przedmiot o ID: {SubjectId}", subjectId);
 
                 if (invalidateTeachersList)
                 {
                     _cache.Remove(TeachersForSubjectCacheKeyPrefix + subjectId);
-                    _logger.LogDebug("Usunięto z cache klucz listy nauczycieli: {CacheKey}{Id}", TeachersForSubjectCacheKeyPrefix, subjectId);
+                    _logger.LogDebug("Usunięto z cache listę nauczycieli dla przedmiotu o ID: {SubjectId}", subjectId);
                 }
             }
-        }
 
-        private async Task SaveOperationHistoryAsync(OperationHistory operation)
-        {
-            if (string.IsNullOrEmpty(operation.Id)) operation.Id = Guid.NewGuid().ToString();
-            if (string.IsNullOrEmpty(operation.CreatedBy))
-                operation.CreatedBy = _currentUserService.GetCurrentUserUpn() ?? "system_log_save";
-
-            if (operation.StartedAt == default(DateTime) &&
-                (operation.Status == OperationStatus.InProgress || operation.Status == OperationStatus.Pending || operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed))
+            if (invalidateAll)
             {
-                if (operation.StartedAt == default(DateTime)) operation.StartedAt = DateTime.UtcNow;
-                if (operation.Status == OperationStatus.Completed || operation.Status == OperationStatus.Failed || operation.Status == OperationStatus.Cancelled || operation.Status == OperationStatus.PartialSuccess)
-                {
-                    if (!operation.CompletedAt.HasValue) operation.CompletedAt = DateTime.UtcNow;
-                    if (!operation.Duration.HasValue && operation.CompletedAt.HasValue) operation.Duration = operation.CompletedAt.Value - operation.StartedAt;
-                }
+                _logger.LogDebug("Globalna inwalidacja (invalidateAll=true) dla cache'u przedmiotów.");
+                // Reset tokenu już załatwia globalną inwalidację, ale można tu dodać dodatkowe operacje, jeśli potrzebne
             }
-
-            await _operationHistoryRepository.AddAsync(operation);
-            _logger.LogDebug("Zapisano nowy wpis historii operacji ID: {OperationId} dla przedmiotu.", operation.Id);
         }
     }
 }

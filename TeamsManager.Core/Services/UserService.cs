@@ -35,6 +35,7 @@ namespace TeamsManager.Core.Services
         private readonly ISubjectService _subjectService;
         private readonly IPowerShellService _powerShellService;
         private readonly IConfidentialClientApplication _confidentialClientApplication; // NOWE
+        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to pole
 
         // Definicje kluczy cache
         private const string AllActiveUsersCacheKey = "Users_AllActive";
@@ -66,7 +67,8 @@ namespace TeamsManager.Core.Services
             IMemoryCache memoryCache,
             ISubjectService subjectService,
             IPowerShellService powerShellService,
-            IConfidentialClientApplication confidentialClientApplication) // NOWE
+            IConfidentialClientApplication confidentialClientApplication, // NOWE
+            IOperationHistoryService operationHistoryService) // Dodaj to do konstruktora
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -74,13 +76,14 @@ namespace TeamsManager.Core.Services
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userSubjectRepository = userSubjectRepository ?? throw new ArgumentNullException(nameof(userSubjectRepository));
             _subjectRepository = subjectRepository ?? throw new ArgumentNullException(nameof(subjectRepository));
-            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository));
+            _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository)); // Zachowaj to dla specjalnych operacji
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _confidentialClientApplication = confidentialClientApplication ?? throw new ArgumentNullException(nameof(confidentialClientApplication)); // NOWE
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
