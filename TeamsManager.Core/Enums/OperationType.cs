@@ -34,6 +34,8 @@
         BulkTeamCreation = 40,  // Masowe tworzenie zespołów
         BulkUserImport = 41,    // Masowy import użytkowników
         BulkArchiving = 42,     // Masowa archiwizacja
+        BulkUserAddToTeam = 43, // Masowe dodawanie użytkowników do zespołu
+        BulkUserRemoveFromTeam = 44, // Masowe usuwanie użytkowników z zespołu
 
         // Operacje systemowe
         SystemBackup = 50,      // Kopia zapasowa systemu
