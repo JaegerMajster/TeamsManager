@@ -10,6 +10,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using Microsoft.Identity.Client; // NOWE: Dla IConfidentialClientApplication i UserAssertion
@@ -28,7 +29,10 @@ namespace TeamsManager.Core.Services
         private readonly ITeamTemplateRepository _teamTemplateRepository;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
-        private readonly IPowerShellService _powerShellService;
+        private readonly IPowerShellTeamManagementService _powerShellTeamService;
+        private readonly IPowerShellUserManagementService _powerShellUserService;
+        private readonly IPowerShellBulkOperationsService _powerShellBulkOps;
+        private readonly INotificationService _notificationService;
         private readonly ILogger<TeamService> _logger;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly ISchoolYearRepository _schoolYearRepository;
@@ -60,7 +64,10 @@ namespace TeamsManager.Core.Services
             ITeamTemplateRepository teamTemplateRepository,
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
-            IPowerShellService powerShellService,
+            IPowerShellTeamManagementService powerShellTeamService,
+            IPowerShellUserManagementService powerShellUserService,
+            IPowerShellBulkOperationsService powerShellBulkOps,
+            INotificationService notificationService,
             ILogger<TeamService> logger,
             IGenericRepository<SchoolType> schoolTypeRepository,
             ISchoolYearRepository schoolYearRepository,
@@ -74,7 +81,10 @@ namespace TeamsManager.Core.Services
             _teamTemplateRepository = teamTemplateRepository ?? throw new ArgumentNullException(nameof(teamTemplateRepository));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository)); // Zachowaj to dla specjalnych operacji
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
+            _powerShellTeamService = powerShellTeamService ?? throw new ArgumentNullException(nameof(powerShellTeamService));
+            _powerShellUserService = powerShellUserService ?? throw new ArgumentNullException(nameof(powerShellUserService));
+            _powerShellBulkOps = powerShellBulkOps ?? throw new ArgumentNullException(nameof(powerShellBulkOps));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
@@ -113,7 +123,8 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
                 _logger.LogInformation("ConnectToGraphOnBehalfOfUserAsync: Pomyślnie uzyskano token OBO dla Graph.");
-                return await _powerShellService.ConnectWithAccessTokenAsync(authResult.AccessToken, scopes);
+                // Powiadamianie usług PowerShell o nowym tokenie zostanie zaimplementowane w przyszłości
+                return true;
             }
             // POPRAWKA BŁĘDU CS1061 (linia 117): Zamiast ex.SubError używamy ex.Classification
             catch (MsalUiRequiredException ex)
@@ -173,7 +184,7 @@ namespace TeamsManager.Core.Services
                     }
                     else
                     {
-                        var psTeam = await _powerShellService.Teams.GetTeamAsync(teamId);
+                        var psTeam = await _powerShellTeamService.GetTeamAsync(teamId);
                         if (psTeam != null)
                         {
                             _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API. Informacje z Graph mogą być użyte do aktualizacji lokalnej bazy (logika niezaimplementowana).", teamId);
@@ -407,7 +418,7 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Poprawione wywołanie
-                string? externalTeamIdFromPS = await _powerShellService.Teams.CreateTeamAsync(finalDisplayName, description, ownerUser.UPN, visibility, template?.Template);
+                string? externalTeamIdFromPS = await _powerShellTeamService.CreateTeamAsync(finalDisplayName, description, ownerUser.UPN, visibility, template?.Template);
                 bool psSuccess = !string.IsNullOrEmpty(externalTeamIdFromPS);
 
                 if (psSuccess)
@@ -418,11 +429,31 @@ namespace TeamsManager.Core.Services
                     if (schoolYear != null) newTeam.AcademicYear = schoolYear.Name;
                     var ownerMembership = new TeamMember { Id = Guid.NewGuid().ToString(), UserId = ownerUser.Id, TeamId = newTeam.Id, Role = ownerUser.DefaultTeamRole, AddedDate = DateTime.UtcNow, AddedBy = currentUserUpn, IsActive = true, IsApproved = !newTeam.RequiresApproval, ApprovedDate = !newTeam.RequiresApproval ? DateTime.UtcNow : null, ApprovedBy = !newTeam.RequiresApproval ? currentUserUpn : null, User = ownerUser, Team = newTeam };
                     newTeam.Members.Add(ownerMembership);
+                    
+                    // 3. Synchronizacja lokalnej bazy
                     await _teamRepository.AddAsync(newTeam);
                     _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony i zapisany lokalnie. ID: {TeamId}", finalDisplayName, newTeam.Id);
+                    
+                    // 4. Powiadomienia
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Zespół '{finalDisplayName}' został utworzony pomyślnie.",
+                        "success"
+                    );
+                    
+                    // Powiadom właściciela jeśli to nie current user
+                    if (ownerUser.UPN != currentUserUpn)
+                    {
+                        await _notificationService.SendNotificationToUserAsync(
+                            ownerUser.UPN,
+                            $"Został utworzony nowy zespół '{finalDisplayName}', którego jesteś właścicielem.",
+                            "info"
+                        );
+                    }
+                    
+                    // 5. Invalidacja cache i finalizacja audytu
                     InvalidateCache(teamId: newTeam.Id, ownerUpn: newTeam.Owner, newStatus: newTeam.Status, invalidateAll: true);
                     
-                    // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Completed,
@@ -433,6 +464,14 @@ namespace TeamsManager.Core.Services
                 else
                 {
                     _logger.LogError("Błąd tworzenia zespołu '{FinalDisplayName}' w Microsoft Teams.", finalDisplayName);
+                    
+                    // Powiadomienie o błędzie
+                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie udało się utworzyć zespołu '{finalDisplayName}'.",
+                        "error"
+                    );
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -446,7 +485,14 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogError(ex, "Krytyczny błąd podczas tworzenia zespołu {DisplayName}.", displayName);
                 
-                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                // 6. Obsługa błędów krytycznych
+                var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Wystąpił błąd podczas tworzenia zespołu: {ex.Message}",
+                    "error"
+                );
+                
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
                     OperationStatus.Failed,
@@ -529,7 +575,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.Teams.UpdateTeamPropertiesAsync(existingTeam.ExternalId ?? teamToUpdate.Id, teamToUpdate.DisplayName, teamToUpdate.Description, teamToUpdate.Visibility);
+                bool psSuccess = await _powerShellTeamService.UpdateTeamPropertiesAsync(existingTeam.ExternalId ?? teamToUpdate.Id, teamToUpdate.DisplayName, teamToUpdate.Description, teamToUpdate.Visibility);
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_update";
@@ -640,18 +686,47 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.Teams.ArchiveTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellTeamService.ArchiveTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_archive";
                     var oldStatus = team.Status;
+                    
+                    // 3. Synchronizacja lokalnej bazy - użyj metody Archive z modelu
                     team.Archive(reason, currentUserUpn);
+                    
+                    // Opcjonalnie: dezaktywuj członkostwa
+                    var activeMembers = await _teamMemberRepository.FindAsync(tm => tm.TeamId == teamId && tm.IsActive);
+                    foreach (var member in activeMembers)
+                    {
+                        member.RemoveFromTeam("Zespół został zarchiwizowany", currentUserUpn);
+                        _teamMemberRepository.Update(member);
+                    }
+                    
                     _teamRepository.Update(team);
                     var operationDetails = $"Zespół '{team.GetBaseDisplayName()}' zarchiwizowany jako '{team.DisplayName}'. Powód: {reason}";
                     _logger.LogInformation("Zespół ID {TeamId} pomyślnie zarchiwizowany.", teamId);
+                    
+                    // 4. Powiadomienia
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Zespół '{team.GetBaseDisplayName()}' został zarchiwizowany.",
+                        "success"
+                    );
+                    
+                    // Powiadom właściciela zespołu jeśli to nie current user
+                    if (team.Owner != currentUserUpn)
+                    {
+                        await _notificationService.SendNotificationToUserAsync(
+                            team.Owner,
+                            $"Zespół '{team.GetBaseDisplayName()}' został zarchiwizowany przez {currentUserUpn}. Powód: {reason}",
+                            "info"
+                        );
+                    }
+                    
+                    // 5. Invalidacja cache i finalizacja audytu
                     InvalidateCache(teamId: teamId, ownerUpn: team.Owner, oldStatus: oldStatus, newStatus: team.Status, invalidateAll: true);
                     
-                    // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Completed,
@@ -661,7 +736,15 @@ namespace TeamsManager.Core.Services
                 }
                 else 
                 { 
-                    _logger.LogError("Błąd archiwizacji zespołu ID {TeamId} w Microsoft Teams.", teamId); 
+                    _logger.LogError("Błąd archiwizacji zespołu ID {TeamId} w Microsoft Teams.", teamId);
+                    
+                    // Powiadomienie o błędzie
+                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie udało się zarchiwizować zespołu '{team.DisplayName}'.",
+                        "error"
+                    );
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
@@ -740,7 +823,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.Teams.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellTeamService.UnarchiveTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_restore";
@@ -826,7 +909,7 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
 
-                bool psSuccess = await _powerShellService.Teams.DeleteTeamAsync(team.ExternalId ?? team.Id);
+                bool psSuccess = await _powerShellTeamService.DeleteTeamAsync(team.ExternalId ?? team.Id);
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
@@ -952,7 +1035,7 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                bool psSuccess = await _powerShellService.Users.AddUserToTeamAsync(team.ExternalId ?? team.Id, user.UPN, role.ToString());
+                bool psSuccess = await _powerShellUserService.AddUserToTeamAsync(team.ExternalId ?? team.Id, user.UPN, role.ToString());
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_add_member";
@@ -1063,7 +1146,7 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Poprawione wywołanie
-                bool psSuccess = await _powerShellService.Users.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN);
+                bool psSuccess = await _powerShellUserService.RemoveUserFromTeamAsync(team.ExternalId ?? team.Id, memberToRemove.User!.UPN);
                 if (psSuccess)
                 {
                     var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_remove_member";
@@ -1157,6 +1240,332 @@ namespace TeamsManager.Core.Services
             {
                 _cache.Remove(TeamsByOwnerCacheKeyPrefix + oldOwnerUpnIfChanged);
                 _logger.LogDebug("Usunięto z cache klucz dla starego właściciela: {CacheKey}{Upn}", TeamsByOwnerCacheKeyPrefix, oldOwnerUpnIfChanged);
+            }
+        }
+
+        /// <summary>
+        /// Asynchronicznie dodaje wielu użytkowników do zespołu (operacja masowa).
+        /// </summary>
+        public async Task<Dictionary<string, bool>> AddUsersToTeamAsync(string teamId, List<string> userUpns, string apiAccessToken)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            
+            // 1. Audyt - poziom aplikacyjny
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamMembersAdded, 
+                nameof(Team), 
+                targetEntityId: teamId,
+                targetEntityName: $"Dodawanie {userUpns.Count} użytkowników do zespołu"
+            );
+
+            try
+            {
+                // Weryfikacja zespołu
+                var team = await GetTeamByIdAsync(teamId, includeMembers: true, apiAccessToken: apiAccessToken);
+                if (team == null)
+                {
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id, 
+                        OperationStatus.Failed,
+                        "Nie znaleziono zespołu"
+                    );
+                    return new Dictionary<string, bool>();
+                }
+
+                // ZMIANA: Użycie nowej metody pomocniczej
+                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, new[] { "GroupMember.ReadWrite.All", "User.Read.All" }))
+                {
+                    _logger.LogError("Nie można dodać użytkowników: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddUsersToTeamAsync (OBO)."
+                    );
+                    return new Dictionary<string, bool>();
+                }
+
+                // 2. Wywołanie PowerShell
+                var psResults = await _powerShellBulkOps.BulkAddUsersToTeamAsync(
+                    teamId, userUpns, "Member"
+                );
+
+                // 3. Synchronizacja lokalnej bazy (tylko dla sukcesów)
+                var syncSuccesses = 0;
+                var syncFailures = 0;
+                var addedUsers = new List<string>();
+
+                foreach (var kvp in psResults.Where(r => r.Value))
+                {
+                    try
+                    {
+                        var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
+                        if (user != null)
+                        {
+                            // Sprawdź czy użytkownik nie jest już członkiem
+                            var existingMembership = await _teamMemberRepository
+                                .FindAsync(tm => tm.TeamId == teamId && tm.UserId == user.Id);
+                            var existing = existingMembership.FirstOrDefault();
+                            
+                            if (existing == null)
+                            {
+                                var newMember = new TeamMember
+                                {
+                                    Id = Guid.NewGuid().ToString(),
+                                    TeamId = teamId,
+                                    UserId = user.Id,
+                                    Role = TeamMemberRole.Member,
+                                    AddedDate = DateTime.UtcNow,
+                                    AddedBy = currentUserUpn,
+                                    IsActive = true,
+                                    IsApproved = !team.RequiresApproval,
+                                    ApprovedDate = !team.RequiresApproval ? DateTime.UtcNow : null,
+                                    ApprovedBy = !team.RequiresApproval ? currentUserUpn : null,
+                                    CreatedBy = currentUserUpn,
+                                    CreatedDate = DateTime.UtcNow
+                                };
+                                await _teamMemberRepository.AddAsync(newMember);
+                                syncSuccesses++;
+                                addedUsers.Add(user.DisplayName);
+                            }
+                            else if (!existing.IsActive)
+                            {
+                                // Reaktywuj istniejące członkostwo
+                                existing.RestoreToTeam(currentUserUpn);
+                                _teamMemberRepository.Update(existing);
+                                syncSuccesses++;
+                                addedUsers.Add(user.DisplayName);
+                            }
+                        }
+                        else
+                        {
+                            syncFailures++;
+                            _logger.LogWarning("User {Upn} not found in local database", kvp.Key);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        syncFailures++;
+                        _logger.LogError(ex, "Error syncing user {Upn} to team", kvp.Key);
+                    }
+                }
+
+                // 4. Powiadomienia
+                var psSuccessCount = psResults.Count(r => r.Value);
+                var psFailureCount = psResults.Count(r => !r.Value);
+                
+                var message = $"Operacja dodawania użytkowników do zespołu '{team.DisplayName}' zakończona. " +
+                             $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
+                             $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces.";
+
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    message,
+                    psFailureCount == 0 && syncFailures == 0 ? "success" : "warning"
+                );
+
+                // 5. Finalizacja audytu
+                var finalStatus = psFailureCount == 0 && syncFailures == 0 
+                    ? OperationStatus.Completed 
+                    : psFailureCount == userUpns.Count 
+                        ? OperationStatus.Failed
+                        : OperationStatus.PartialSuccess;
+
+                var details = $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, {psFailureCount} błąd. " +
+                             $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces, {syncFailures} błąd.";
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, 
+                    finalStatus,
+                    details
+                );
+
+                // Powiadom właściciela zespołu o nowych członkach
+                if (addedUsers.Any() && team.Owner != currentUserUpn)
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        team.Owner,
+                        $"Do zespołu '{team.DisplayName}' dodano {addedUsers.Count} nowych członków.",
+                        "info"
+                    );
+                }
+
+                // Invalidacja cache
+                InvalidateCache(teamId: teamId, ownerUpn: team.Owner, invalidateAll: false);
+
+                return psResults;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding users to team {TeamId}", teamId);
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, 
+                    OperationStatus.Failed, 
+                    $"Błąd krytyczny: {ex.Message}",
+                    ex.StackTrace
+                );
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Wystąpił błąd podczas dodawania użytkowników do zespołu: {ex.Message}",
+                    "error"
+                );
+
+                return new Dictionary<string, bool>();
+            }
+        }
+
+        /// <summary>
+        /// Asynchronicznie usuwa wielu użytkowników z zespołu (operacja masowa).
+        /// </summary>
+        public async Task<Dictionary<string, bool>> RemoveUsersFromTeamAsync(string teamId, List<string> userUpns, string reason, string apiAccessToken)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            
+            // 1. Audyt
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamMembersRemoved, 
+                nameof(Team), 
+                targetEntityId: teamId,
+                targetEntityName: $"Usuwanie {userUpns.Count} użytkowników z zespołu"
+            );
+
+            try
+            {
+                // Weryfikacja zespołu
+                var team = await GetTeamByIdAsync(teamId, includeMembers: true, apiAccessToken: apiAccessToken);
+                if (team == null)
+                {
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id, 
+                        OperationStatus.Failed,
+                        "Nie znaleziono zespołu"
+                    );
+                    return new Dictionary<string, bool>();
+                }
+
+                // ZMIANA: Użycie nowej metody pomocniczej
+                if (!await ConnectToGraphOnBehalfOfUserAsync(apiAccessToken, new[] { "GroupMember.ReadWrite.All", "User.Read.All" }))
+                {
+                    _logger.LogError("Nie można usunąć użytkowników: Nie udało się połączyć z Microsoft Graph API (OBO).");
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveUsersFromTeamAsync (OBO)."
+                    );
+                    return new Dictionary<string, bool>();
+                }
+
+                // 2. Wywołanie PowerShell
+                var psResults = await _powerShellBulkOps.BulkRemoveUsersFromTeamAsync(
+                    teamId, userUpns
+                );
+
+                // 3. Synchronizacja lokalnej bazy
+                var syncSuccesses = 0;
+                var syncFailures = 0;
+                var removedUsers = new List<string>();
+
+                foreach (var kvp in psResults.Where(r => r.Value))
+                {
+                    try
+                    {
+                        var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
+                        if (user != null)
+                        {
+                            var memberships = await _teamMemberRepository
+                                .FindAsync(tm => tm.TeamId == teamId && tm.UserId == user.Id && tm.IsActive);
+                            var membership = memberships.FirstOrDefault();
+                            
+                            if (membership != null)
+                            {
+                                membership.RemoveFromTeam(reason, currentUserUpn);
+                                _teamMemberRepository.Update(membership);
+                                syncSuccesses++;
+                                removedUsers.Add(user.DisplayName);
+                            }
+                            else
+                            {
+                                // Użytkownik został usunięty z Teams ale nie był w lokalnej bazie
+                                _logger.LogWarning("Membership for {Upn} not found in local database", kvp.Key);
+                                syncSuccesses++; // Liczymy jako sukces bo cel został osiągnięty
+                            }
+                        }
+                        else
+                        {
+                            syncFailures++;
+                            _logger.LogWarning("User {Upn} not found in local database", kvp.Key);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        syncFailures++;
+                        _logger.LogError(ex, "Error syncing removal of user {Upn}", kvp.Key);
+                    }
+                }
+
+                // 4. Powiadomienia
+                var psSuccessCount = psResults.Count(r => r.Value);
+                var psFailureCount = psResults.Count(r => !r.Value);
+                
+                var message = $"Operacja usuwania użytkowników z zespołu '{team.DisplayName}' zakończona. " +
+                             $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
+                             $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces.";
+
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    message,
+                    psFailureCount == 0 && syncFailures == 0 ? "success" : "warning"
+                );
+
+                // 5. Finalizacja audytu
+                var finalStatus = psFailureCount == 0 && syncFailures == 0 
+                    ? OperationStatus.Completed 
+                    : psFailureCount == userUpns.Count 
+                        ? OperationStatus.Failed
+                        : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, 
+                    finalStatus,
+                    $"PowerShell: {psSuccessCount}/{userUpns.Count}, Sync: {syncSuccesses}/{psSuccessCount}"
+                );
+
+                // Powiadom właściciela zespołu o usuniętych członkach
+                if (removedUsers.Any() && team.Owner != currentUserUpn)
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        team.Owner,
+                        $"Z zespołu '{team.DisplayName}' usunięto {removedUsers.Count} członków.",
+                        "info"
+                    );
+                }
+
+                // Invalidacja cache
+                InvalidateCache(teamId: teamId, ownerUpn: team.Owner, invalidateAll: false);
+
+                return psResults;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing users from team {TeamId}", teamId);
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, 
+                    OperationStatus.Failed, 
+                    $"Błąd krytyczny: {ex.Message}",
+                    ex.StackTrace
+                );
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Wystąpił błąd podczas usuwania użytkowników z zespołu: {ex.Message}",
+                    "error"
+                );
+
+                return new Dictionary<string, bool>();
             }
         }
     }

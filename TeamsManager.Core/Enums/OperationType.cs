@@ -14,14 +14,16 @@
         TeamDeleted = 5,        // Usunięcie zespołu
 
         // Operacje na członkach zespołów
-        MemberAdded = 10,       // Dodanie członka do zespołu
-        MemberRemoved = 11,     // Usunięcie członka z zespołu
-        MemberRoleChanged = 12, // Zmiana roli członka w zespole
+        MemberAdded = 20,       // Dodanie członka do zespołu
+        MemberRemoved = 21,     // Usunięcie członka z zespołu
+        MemberRoleChanged = 22, // Zmiana roli członka
+        TeamMembersAdded = 23,  // Masowe dodawanie członków do zespołu
+        TeamMembersRemoved = 24, // Masowe usuwanie członków z zespołu
 
         // Operacje na kanałach
-        ChannelCreated = 20,    // Utworzenie kanału
-        ChannelUpdated = 21,    // Aktualizacja kanału
-        ChannelDeleted = 22,    // Usunięcie kanału
+        ChannelCreated = 25,    // Utworzenie kanału
+        ChannelUpdated = 26,    // Aktualizacja kanału
+        ChannelDeleted = 27,    // Usunięcie kanału
 
         // Operacje na użytkownikach
         UserCreated = 30,       // Utworzenie użytkownika

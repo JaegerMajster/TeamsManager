@@ -132,6 +132,25 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> RemoveMemberAsync(string teamId, string userId, string accessToken);
 
         /// <summary>
+        /// Asynchronicznie dodaje wielu użytkowników do zespołu (operacja masowa).
+        /// </summary>
+        /// <param name="teamId">Identyfikator zespołu.</param>
+        /// <param name="userUpns">Lista UPN użytkowników do dodania.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <returns>Słownik z wynikami operacji dla każdego użytkownika.</returns>
+        Task<Dictionary<string, bool>> AddUsersToTeamAsync(string teamId, List<string> userUpns, string accessToken);
+
+        /// <summary>
+        /// Asynchronicznie usuwa wielu użytkowników z zespołu (operacja masowa).
+        /// </summary>
+        /// <param name="teamId">Identyfikator zespołu.</param>
+        /// <param name="userUpns">Lista UPN użytkowników do usunięcia.</param>
+        /// <param name="reason">Powód usunięcia.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <returns>Słownik z wynikami operacji dla każdego użytkownika.</returns>
+        Task<Dictionary<string, bool>> RemoveUsersFromTeamAsync(string teamId, List<string> userUpns, string reason, string accessToken);
+
+        /// <summary>
         /// Odświeża cache zespołów (jeśli jest używany).
         /// </summary>
         Task RefreshCacheAsync();
