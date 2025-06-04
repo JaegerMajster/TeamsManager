@@ -14,7 +14,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
     /// </summary>
     public class PowerShellCacheService : IPowerShellCacheService
     {
-        private readonly IMemoryCache _cache;
+        private readonly MemoryCache _cache;
         private readonly ILogger<PowerShellCacheService> _logger;
 
         // Definicje kluczy cache
@@ -30,12 +30,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         // Token do zarządzania unieważnianiem wpisów cache
         private static CancellationTokenSource _powerShellCacheTokenSource = new CancellationTokenSource();
+        
+        // Współdzielony cache między instancjami Scoped
+        private static readonly MemoryCache _sharedCache = new MemoryCache(new MemoryCacheOptions());
 
         public PowerShellCacheService(
-            IMemoryCache cache,
             ILogger<PowerShellCacheService> logger)
         {
-            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            // Używamy współdzielonego cache zamiast wstrzykniętego
+            _cache = _sharedCache;
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 

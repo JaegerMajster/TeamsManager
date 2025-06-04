@@ -21,8 +21,10 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private readonly INotificationService _notificationService;
         private readonly IPowerShellCacheService _cacheService;
 
-        private Runspace? _runspace;
-        private bool _isConnected = false;
+        // Współdzielony stan między instancjami Scoped
+        private static Runspace? _sharedRunspace;
+        private static bool _sharedIsConnected = false;
+        private static readonly object _runspaceLock = new object();
         private bool _disposed = false;
 
         private const int MaxRetryAttempts = 3;
@@ -41,31 +43,40 @@ namespace TeamsManager.Core.Services.PowerShellServices
             InitializeRunspace();
         }
 
-        public bool IsConnected => _isConnected;
+        public bool IsConnected => _sharedIsConnected;
 
         private void InitializeRunspace()
         {
-            try
+            lock (_runspaceLock)
             {
-                var initialSessionState = InitialSessionState.CreateDefault2();
-                _runspace = RunspaceFactory.CreateRunspace(initialSessionState);
-                _runspace.Open();
-                _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane poprawnie.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Nie udało się zainicjalizować środowiska PowerShell. Próba inicjalizacji w trybie podstawowym.");
-                _runspace = null;
+                if (_sharedRunspace != null && _sharedRunspace.RunspaceStateInfo.State == RunspaceState.Opened)
+                {
+                    _logger.LogDebug("Używanie istniejącego środowiska PowerShell.");
+                    return;
+                }
+
                 try
                 {
-                    _runspace = RunspaceFactory.CreateRunspace();
-                    _runspace.Open();
-                    _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane w trybie podstawowym.");
+                    var initialSessionState = InitialSessionState.CreateDefault2();
+                    _sharedRunspace = RunspaceFactory.CreateRunspace(initialSessionState);
+                    _sharedRunspace.Open();
+                    _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane poprawnie.");
                 }
-                catch (Exception basicEx)
+                catch (Exception ex)
                 {
-                    _logger.LogError(basicEx, "Nie udało się zainicjalizować środowiska PowerShell nawet w trybie podstawowym.");
-                    _runspace = null;
+                    _logger.LogError(ex, "Nie udało się zainicjalizować środowiska PowerShell. Próba inicjalizacji w trybie podstawowym.");
+                    _sharedRunspace = null;
+                    try
+                    {
+                        _sharedRunspace = RunspaceFactory.CreateRunspace();
+                        _sharedRunspace.Open();
+                        _logger.LogInformation("Środowisko PowerShell zostało zainicjalizowane w trybie podstawowym.");
+                    }
+                    catch (Exception basicEx)
+                    {
+                        _logger.LogError(basicEx, "Nie udało się zainicjalizować środowiska PowerShell nawet w trybie podstawowym.");
+                        _sharedRunspace = null;
+                    }
                 }
             }
         }
@@ -75,7 +86,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             var operationId = Guid.NewGuid().ToString();
 
-            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            if (_sharedRunspace == null || _sharedRunspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
                 _logger.LogError("Nie można połączyć z Microsoft Graph: środowisko PowerShell nie jest poprawnie zainicjalizowane.");
                 await _notificationService.SendNotificationToUserAsync(currentUserUpn,
@@ -107,7 +118,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                     using (var ps = PowerShell.Create())
                     {
-                        ps.Runspace = _runspace;
+                        ps.Runspace = _sharedRunspace;
 
                         // Import modułów
                         ps.AddScript(@"
@@ -165,7 +176,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                             return false;
                         }
 
-                        _isConnected = true;
+                        _sharedIsConnected = true;
 
                         // Cache kontekstu
                         var context = contextCheckResult.First();
@@ -194,12 +205,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public void DisconnectFromGraph()
         {
-            if (!_isConnected || _runspace == null) return;
+            if (!_sharedIsConnected || _sharedRunspace == null) return;
 
             try
             {
                 using var ps = PowerShell.Create();
-                ps.Runspace = _runspace;
+                ps.Runspace = _sharedRunspace;
                 ps.AddScript("Disconnect-MgGraph -ErrorAction SilentlyContinue");
                 ps.Invoke();
                 _logger.LogInformation("Rozłączono z Microsoft Graph.");
@@ -210,33 +221,36 @@ namespace TeamsManager.Core.Services.PowerShellServices
             }
             finally
             {
-                _isConnected = false;
+                _sharedIsConnected = false;
                 _cacheService.InvalidateAllCache();
             }
         }
 
         public bool ValidateRunspaceState()
         {
-            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            lock (_runspaceLock)
             {
-                _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
-                return false;
-            }
+                if (_sharedRunspace == null || _sharedRunspace.RunspaceStateInfo.State != RunspaceState.Opened)
+                {
+                    _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
+                    return false;
+                }
 
-            if (!_isConnected)
-            {
-                _logger.LogWarning("Brak aktywnego połączenia z Microsoft Graph.");
-                return false;
-            }
+                if (!_sharedIsConnected)
+                {
+                    _logger.LogWarning("Brak aktywnego połączenia z Microsoft Graph.");
+                    return false;
+                }
 
-            return true;
+                return true;
+            }
         }
 
         public async Task<Collection<PSObject>?> ExecuteScriptAsync(
             string script,
             Dictionary<string, object>? parameters = null)
         {
-            if (_runspace == null || _runspace.RunspaceStateInfo.State != RunspaceState.Opened)
+            if (_sharedRunspace == null || _sharedRunspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
                 _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
                 return null;
@@ -258,37 +272,40 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             return await Task.Run(() =>
             {
-                try
+                lock (_runspaceLock)
                 {
-                    using (var ps = PowerShell.Create())
+                    try
                     {
-                        ps.Runspace = _runspace;
-                        ps.AddScript(script);
-
-                        if (parameters != null)
+                        using (var ps = PowerShell.Create())
                         {
-                            ps.AddParameters(parameters);
+                            ps.Runspace = _sharedRunspace;
+                            ps.AddScript(script);
+
+                            if (parameters != null)
+                            {
+                                ps.AddParameters(parameters);
+                            }
+
+                            var results = ps.Invoke();
+
+                            // Logowanie strumieni
+                            LogPowerShellStreams(ps);
+
+                            if (ps.HadErrors && results.Count == 0)
+                            {
+                                _logger.LogError("Skrypt zakończył się błędami.");
+                                return null;
+                            }
+
+                            _logger.LogDebug("Skrypt wykonany. Wyniki: {Count}", results.Count);
+                            return results;
                         }
-
-                        var results = ps.Invoke();
-
-                        // Logowanie strumieni
-                        LogPowerShellStreams(ps);
-
-                        if (ps.HadErrors && results.Count == 0)
-                        {
-                            _logger.LogError("Skrypt zakończył się błędami.");
-                            return null;
-                        }
-
-                        _logger.LogDebug("Skrypt wykonany. Wyniki: {Count}", results.Count);
-                        return results;
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Błąd wykonywania skryptu PowerShell");
-                    return null;
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd wykonywania skryptu PowerShell");
+                        return null;
+                    }
                 }
             });
         }
@@ -313,7 +330,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                     using (var ps = PowerShell.Create())
                     {
-                        ps.Runspace = _runspace;
+                        ps.Runspace = _sharedRunspace;
                         var command = ps.AddCommand(commandName)
                                        .AddParameter("ErrorAction", "Stop");
 
@@ -403,8 +420,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             if (disposing)
             {
-                DisconnectFromGraph();
-                _runspace?.Dispose();
+                // Nie dispose'ujemy współdzielonego runspace
+                _logger.LogDebug("PowerShellConnectionService disposed (Scoped)");
             }
 
             _disposed = true;

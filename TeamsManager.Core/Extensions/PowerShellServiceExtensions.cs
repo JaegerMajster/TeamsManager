@@ -17,17 +17,17 @@ namespace TeamsManager.Core.Extensions
         /// <returns>Kolekcja serwisów dla łańcuchowania</returns>
         public static IServiceCollection AddPowerShellServices(this IServiceCollection services)
         {
-            // Core services - Singleton bo zarządzają stanem (runspace, cache)
-            services.AddSingleton<IPowerShellConnectionService, PowerShellConnectionService>();
-            services.AddSingleton<IPowerShellCacheService, PowerShellCacheService>();
-            services.AddSingleton<IPowerShellUserResolverService, PowerShellUserResolverService>();
+            // Core services - Scoped zamiast Singleton
+            services.AddScoped<IPowerShellConnectionService, PowerShellConnectionService>();
+            services.AddScoped<IPowerShellCacheService, PowerShellCacheService>();
+            services.AddScoped<IPowerShellUserResolverService, PowerShellUserResolverService>();
 
-            // Domain services - Scoped dla izolacji między żądaniami
+            // Domain services - pozostają Scoped
             services.AddScoped<IPowerShellTeamManagementService, PowerShellTeamManagementService>();
             services.AddScoped<IPowerShellUserManagementService, PowerShellUserManagementService>();
             services.AddScoped<IPowerShellBulkOperationsService, PowerShellBulkOperationsService>();
 
-            // Facade - Scoped aby korzystać z scoped services
+            // Facade - pozostaje Scoped
             services.AddScoped<IPowerShellService, PowerShellService>();
 
             return services;
