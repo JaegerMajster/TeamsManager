@@ -24,6 +24,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
         private const string TeamDetailsCacheKeyPrefix = "PowerShell_Team_";
         private const string AllTeamsCacheKey = "PowerShell_Teams_All";
         private const string TeamChannelsCacheKeyPrefix = "PowerShell_TeamChannels_";
+        private const string M365UserDetailsCacheKeyPrefix = "PowerShell_M365User_Id_";
+        private const string M365UsersAccountEnabledCacheKeyPrefix = "PowerShell_M365Users_AccountEnabled_";
         
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
         private readonly TimeSpan _shortCacheDuration = TimeSpan.FromMinutes(5);
@@ -109,6 +111,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             if (!string.IsNullOrWhiteSpace(userId))
             {
                 Remove(UserIdCacheKeyPrefix + userId);
+                Remove(M365UserDetailsCacheKeyPrefix + userId);
             }
 
             if (!string.IsNullOrWhiteSpace(userUpn))
@@ -117,8 +120,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 Remove(UserUpnCacheKeyPrefix + userUpn);
             }
 
+            Remove(M365UsersAccountEnabledCacheKeyPrefix + "True");
+            Remove(M365UsersAccountEnabledCacheKeyPrefix + "False");
+
             _logger.LogDebug("Unieważniono cache użytkownika. userId: {UserId}, userUpn: {UserUpn}", 
                 userId, userUpn);
+        }
+
+        public void InvalidateUserListCache()
+        {
+            Remove(M365UsersAccountEnabledCacheKeyPrefix + "True");
+            Remove(M365UsersAccountEnabledCacheKeyPrefix + "False");
+            Remove(AllTeamsCacheKey);
+            
+            _logger.LogDebug("Unieważniono cache list użytkowników.");
         }
 
         public void InvalidateTeamCache(string teamId)

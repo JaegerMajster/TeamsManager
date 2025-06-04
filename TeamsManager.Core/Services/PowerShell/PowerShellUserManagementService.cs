@@ -425,6 +425,93 @@ namespace TeamsManager.Core.Services.PowerShellServices
             }
         }
 
+        public async Task<PSObject?> GetM365UserByIdAsync(string userId)
+        {
+            if (!_connectionService.ValidateRunspaceState()) return null;
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                _logger.LogError("ID użytkownika nie może być puste.");
+                return null;
+            }
+
+            // Tworzenie klucza cache dla użytkownika po ID
+            string cacheKey = $"PowerShell_M365User_Id_{userId}";
+
+            // Próba pobrania z cache
+            if (_cacheService.TryGetValue(cacheKey, out PSObject? cachedUser))
+            {
+                _logger.LogDebug("Użytkownik ID: {UserId} znaleziony w cache PowerShell.", userId);
+                return cachedUser;
+            }
+
+            _logger.LogInformation("Pobieranie użytkownika ID '{UserId}' z Microsoft 365.", userId);
+
+            try
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "UserId", userId }
+                };
+
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgUser", parameters);
+                var user = results?.FirstOrDefault();
+
+                if (user != null)
+                {
+                    _cacheService.Set<PSObject>(cacheKey, user);
+                    _logger.LogDebug("Użytkownik ID: {UserId} dodany do cache PowerShell.", userId);
+                }
+                else
+                {
+                    _cacheService.Set<PSObject?>(cacheKey, null, TimeSpan.FromMinutes(1));
+                }
+                return user;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania użytkownika ID '{UserId}'.", userId);
+                _cacheService.Set<PSObject?>(cacheKey, null, TimeSpan.FromMinutes(1));
+                return null;
+            }
+        }
+
+        public async Task<Collection<PSObject>?> GetM365UsersByAccountEnabledStateAsync(bool accountEnabled)
+        {
+            if (!_connectionService.ValidateRunspaceState()) return null;
+
+            string cacheKey = $"PowerShell_M365Users_AccountEnabled_{accountEnabled}";
+
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedUsers))
+            {
+                _logger.LogDebug("Lista użytkowników z accountEnabled='{AccountEnabled}' znaleziona w cache PowerShell.", accountEnabled);
+                return cachedUsers;
+            }
+
+            _logger.LogInformation("Pobieranie użytkowników z accountEnabled='{AccountEnabled}' z Microsoft 365.", accountEnabled);
+
+            try
+            {
+                var script = $@"
+            Get-MgUser -All -Property Id,DisplayName,UserPrincipalName,AccountEnabled,Mail,Department,JobTitle -Filter ""accountEnabled eq {accountEnabled.ToString().ToLower()}"" -PageSize 999
+        ";
+                
+                var results = await _connectionService.ExecuteScriptAsync(script);
+
+                if (results != null)
+                {
+                    _cacheService.Set<Collection<PSObject>>(cacheKey, results);
+                    _logger.LogDebug("Lista użytkowników z accountEnabled='{AccountEnabled}' dodana do cache PowerShell.", accountEnabled);
+                }
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania użytkowników z accountEnabled='{AccountEnabled}'.", accountEnabled);
+                return null;
+            }
+        }
+
         #endregion
 
         #region Team Membership Operations
