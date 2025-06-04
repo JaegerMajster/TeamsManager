@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace TeamsManager.Core.Utilities
+namespace TeamsManager.Core.Common
 {
     public class CircuitBreaker
     {

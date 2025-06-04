@@ -11,7 +11,7 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
-using TeamsManager.Core.Utilities;
+using TeamsManager.Core.Common;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
