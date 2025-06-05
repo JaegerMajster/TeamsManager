@@ -275,6 +275,10 @@ namespace TeamsManager.Core.Models
             if (string.IsNullOrEmpty(departmentId))
                 return false;
                 
+            // Element nie może być dzieckiem samego siebie
+            if (Id == departmentId)
+                return false;
+                
             var visited = new HashSet<string>();
             var parent = ParentDepartment;
             const int maxDepth = 100;

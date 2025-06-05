@@ -118,7 +118,7 @@ namespace TeamsManager.Core.Services.Synchronization
 
             if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException($"Nie można pobrać ID z obiektu Graph typu {graphObject.BaseObject?.GetType().Name}");
+                throw new ArgumentException($"Nie można pobrać ID z obiektu Graph typu {graphObject.BaseObject?.GetType().Name}", nameof(graphObject));
             }
 
             return id;

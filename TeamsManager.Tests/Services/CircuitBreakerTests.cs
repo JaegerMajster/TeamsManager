@@ -231,9 +231,10 @@ namespace TeamsManager.Tests.Services
             await _circuitBreaker.ExecuteAsync(() => Task.FromResult("success"));
 
             // Assert
-            stateChanges.Should().HaveCount(2);
+            stateChanges.Should().HaveCount(3);
             stateChanges[0].Should().Be((CircuitState.Closed, CircuitState.Open));
-            stateChanges[1].Should().Be((CircuitState.HalfOpen, CircuitState.Closed));
+            stateChanges[1].Should().Be((CircuitState.Open, CircuitState.HalfOpen));
+            stateChanges[2].Should().Be((CircuitState.HalfOpen, CircuitState.Closed));
         }
 
         [Fact]

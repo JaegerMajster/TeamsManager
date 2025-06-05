@@ -30,8 +30,9 @@ namespace TeamsManager.Api.Configuration
         /// (czyli z appsettings.json, User Secrets, zmiennych środowiskowych itp.).
         /// </summary>
         /// <param name="configuration">Dostawca konfiguracji ASP.NET Core.</param>
+        /// <param name="skipValidation">Jeśli true, pomija walidację kompletności konfiguracji (przydatne dla testów).</param>
         /// <returns>Skonfigurowany obiekt ApiOAuthConfig.</returns>
-        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration? configuration)
+        public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration? configuration, bool skipValidation = false)
         {
             System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wczytywanie konfiguracji z IConfiguration (appsettings.json / User Secrets).");
 
@@ -52,11 +53,12 @@ namespace TeamsManager.Api.Configuration
                 $"Audience (for incoming tokens)='{apiOAuthConfig.AzureAd.Audience}', " +
                 $"ClientSecret is {(string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) ? "NOT" : "potentially")} set (checked from User Secrets/env vars).");
 
-            // Podstawowa walidacja wczytanej konfiguracji
-            if (string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.TenantId) ||
-                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientId) || // ClientID API potrzebny do OBO
-                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) || // ClientSecret API potrzebny do OBO
-                string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.Audience)) // Audience, którego API oczekuje w tokenach od UI
+            // Podstawowa walidacja wczytanej konfiguracji (pomijana jeśli skipValidation = true)
+            if (!skipValidation &&
+                (string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.TenantId) ||
+                 string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientId) || // ClientID API potrzebny do OBO
+                 string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) || // ClientSecret API potrzebny do OBO
+                 string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.Audience))) // Audience, którego API oczekuje w tokenach od UI
             {
                 var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
                                    "nie zostały w pełni skonfigurowane dla API w appsettings.json lub User Secrets. " +

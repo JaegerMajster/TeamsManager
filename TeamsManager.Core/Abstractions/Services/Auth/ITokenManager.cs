@@ -14,8 +14,8 @@ namespace TeamsManager.Core.Abstractions.Services.Auth
         /// </summary>
         /// <param name="userUpn">UPN użytkownika dla kontekstu</param>
         /// <param name="apiAccessToken">Token API do przepływu OBO</param>
-        /// <returns>Ważny token dostępu do Graph</returns>
-        Task<string> GetValidAccessTokenAsync(string userUpn, string apiAccessToken);
+        /// <returns>Ważny token dostępu do Graph lub null jeśli nie można uzyskać</returns>
+        Task<string?> GetValidAccessTokenAsync(string userUpn, string apiAccessToken);
 
         /// <summary>
         /// Odświeża token używając refresh token

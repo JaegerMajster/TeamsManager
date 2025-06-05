@@ -258,13 +258,13 @@ namespace TeamsManager.Tests.Services.Synchronization
         }
 
         [Fact]
-        public void GetGraphId_MissingId_ShouldThrowInvalidOperationException()
+        public void GetGraphId_MissingId_ShouldThrowArgumentException()
         {
             // Arrange
             var psChannel = CreateMockChannelPSObject(id: "");
 
             // Act & Assert
-            var exception = Assert.Throws<InvalidOperationException>(() => _synchronizer.GetGraphId(psChannel));
+            var exception = Assert.Throws<ArgumentException>(() => _synchronizer.GetGraphId(psChannel));
             Assert.Contains("ID", exception.Message);
         }
 

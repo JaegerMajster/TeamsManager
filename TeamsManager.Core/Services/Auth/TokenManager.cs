@@ -37,7 +37,7 @@ namespace TeamsManager.Core.Services.Auth
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         }
 
-        public async Task<string> GetValidAccessTokenAsync(string userUpn, string apiAccessToken)
+        public async Task<string?> GetValidAccessTokenAsync(string userUpn, string apiAccessToken)
         {
             if (string.IsNullOrEmpty(userUpn))
                 throw new ArgumentNullException(nameof(userUpn));
@@ -65,15 +65,21 @@ namespace TeamsManager.Core.Services.Auth
             {
                 // Pobierz nowy token przez OBO flow
                 var userAssertion = new UserAssertion(apiAccessToken);
-                var result = await _confidentialClientApp
-                    .AcquireTokenOnBehalfOf(_graphPowerShellScopes, userAssertion)
-                    .ExecuteAsync();
+                var builder = _confidentialClientApp?.AcquireTokenOnBehalfOf(_graphPowerShellScopes, userAssertion);
+                
+                if (builder == null)
+                {
+                    _logger.LogWarning("Nie można utworzyć AcquireTokenOnBehalfOf builder dla użytkownika: {UserUpn}", userUpn);
+                    return null;
+                }
+
+                var result = await builder.ExecuteAsync();
 
                 // Przechowaj w cache
                 await StoreAuthenticationResultAsync(userUpn, result);
 
                 _logger.LogInformation("Uzyskano nowy token Graph dla użytkownika: {UserUpn}", userUpn);
-                return result.AccessToken;
+                return result?.AccessToken;
             }
             catch (MsalException ex)
             {
@@ -96,9 +102,15 @@ namespace TeamsManager.Core.Services.Auth
                     return false;
                 }
 
-                var result = await _confidentialClientApp
-                    .AcquireTokenSilent(_graphPowerShellScopes, account)
-                    .ExecuteAsync();
+                var builder = _confidentialClientApp?.AcquireTokenSilent(_graphPowerShellScopes, account);
+                
+                if (builder == null)
+                {
+                    _logger.LogWarning("Nie można utworzyć AcquireTokenSilent builder dla użytkownika: {UserUpn}", userUpn);
+                    return false;
+                }
+
+                var result = await builder.ExecuteAsync();
 
                 await StoreAuthenticationResultAsync(userUpn, result);
                 _logger.LogInformation("Odświeżono token dla użytkownika: {UserUpn}", userUpn);

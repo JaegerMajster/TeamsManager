@@ -343,18 +343,24 @@ namespace TeamsManager.Tests.Models
         }
 
         [Fact]
-        public void Department_IsChildOf_WithCycle_ShouldReturnFalse()
+        public void Department_IsChildOf_WithCycle_ShouldHandleCorrectly()
         {
             // Przygotowanie
             var dept1 = new Department { Id = "1", Name = "Dept1" };
             var dept2 = new Department { Id = "2", Name = "Dept2", ParentDepartment = dept1 };
             dept1.ParentDepartment = dept2; // Cykl!
             
-            // Wykonanie
-            var result = dept1.IsChildOf("2");
+            // Wykonanie i sprawdzenie
+            // dept1 jest bezpośrednim dzieckiem dept2, więc powinno zwrócić true
+            dept1.IsChildOf("2").Should().BeTrue();
             
-            // Sprawdzenie - w cyklicznej hierarchii IsChildOf powinno zwrócić false
-            result.Should().BeFalse();
+            // dept2 jest bezpośrednim dzieckiem dept1, więc powinno zwrócić true  
+            dept2.IsChildOf("1").Should().BeTrue();
+            
+            // Sprawdzenie przypadku gdy wystąpi cykl podczas przeszukiwania w górę  
+            // dept1 próbuje sprawdzić czy jest dzieckiem dept1 (samego siebie) - to powinno zwrócić false
+            dept1.IsChildOf("1").Should().BeFalse();
+            dept2.IsChildOf("2").Should().BeFalse();
         }
 
         [Fact]

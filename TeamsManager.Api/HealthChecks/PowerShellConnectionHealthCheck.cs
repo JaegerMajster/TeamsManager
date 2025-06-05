@@ -15,8 +15,8 @@ namespace TeamsManager.Api.HealthChecks
             IPowerShellConnectionService connectionService,
             ILogger<PowerShellConnectionHealthCheck> logger)
         {
-            _connectionService = connectionService;
-            _logger = logger;
+            _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<HealthCheckResult> CheckHealthAsync(
@@ -25,25 +25,24 @@ namespace TeamsManager.Api.HealthChecks
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                
                 _logger.LogInformation("Rozpoczęto sprawdzanie stanu połączenia PowerShell");
-
-                // Sprawdź czy połączenie jest aktywne
-                var isConnected = _connectionService.IsConnected;
-
-                if (!isConnected)
-                {
-                    _logger.LogWarning("PowerShell nie jest połączony z Microsoft Graph");
-                    return HealthCheckResult.Unhealthy(
-                        "PowerShell connection is not active",
-                        data: new Dictionary<string, object>
-                        {
-                            ["connected"] = false,
-                            ["timestamp"] = DateTime.UtcNow
-                        });
-                }
 
                 // Wykonaj test połączenia używając GetConnectionHealthAsync
                 var healthInfo = await _connectionService.GetConnectionHealthAsync();
+                
+                if (healthInfo == null)
+                {
+                    _logger.LogError("GetConnectionHealthAsync zwróciło null");
+                    return HealthCheckResult.Unhealthy(
+                        "Unable to retrieve connection health information",
+                        data: new Dictionary<string, object>
+                        {
+                            ["error"] = "Health info is null",
+                            ["timestamp"] = DateTime.UtcNow
+                        });
+                }
 
                 if (healthInfo.IsConnected && healthInfo.TokenValid)
                 {
@@ -76,6 +75,11 @@ namespace TeamsManager.Api.HealthChecks
                             ["timestamp"] = DateTime.UtcNow
                         });
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Re-throw cancellation exceptions
+                throw;
             }
             catch (Exception ex)
             {

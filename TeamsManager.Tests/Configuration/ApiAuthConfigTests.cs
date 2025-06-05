@@ -18,7 +18,7 @@ namespace TeamsManager.Tests.Configuration
         public void LoadApiOAuthConfig_WithNullConfiguration_ShouldReturnDefaultValues()
         {
             // Arrange & Act
-            var result = ApiAuthConfig.LoadApiOAuthConfig(null);
+            var result = ApiAuthConfig.LoadApiOAuthConfig(null, skipValidation: true);
 
             // Assert
             result.Should().NotBeNull();
@@ -36,7 +36,7 @@ namespace TeamsManager.Tests.Configuration
             mockConfig.Setup(x => x.GetSection("AzureAd")).Returns(mockSection.Object);
 
             // Act
-            var result = ApiAuthConfig.LoadApiOAuthConfig(mockConfig.Object);
+            var result = ApiAuthConfig.LoadApiOAuthConfig(mockConfig.Object, skipValidation: true);
 
             // Assert
             result.Should().NotBeNull();

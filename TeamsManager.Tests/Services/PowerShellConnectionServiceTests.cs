@@ -125,12 +125,12 @@ namespace TeamsManager.Tests.Services
             var mockScope = new Mock<IServiceScope>();
             var mockServiceProvider = new Mock<IServiceProvider>();
 
-            // Setup CurrentUserService in scope
-            mockServiceProvider.Setup(p => p.GetRequiredService<ICurrentUserService>())
+            // Setup CurrentUserService in scope - używamy GetService zamiast GetRequiredService
+            mockServiceProvider.Setup(p => p.GetService(typeof(ICurrentUserService)))
                               .Returns(_mockCurrentUserService.Object);
 
-            // Setup NotificationService in scope
-            mockServiceProvider.Setup(p => p.GetRequiredService<INotificationService>())
+            // Setup NotificationService in scope - używamy GetService zamiast GetRequiredService
+            mockServiceProvider.Setup(p => p.GetService(typeof(INotificationService)))
                               .Returns(_mockNotificationService.Object);
 
             mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);

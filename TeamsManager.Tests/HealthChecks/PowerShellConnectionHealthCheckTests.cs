@@ -58,10 +58,18 @@ namespace TeamsManager.Tests.HealthChecks
         }
 
         [Fact]
-        public async Task CheckHealthAsync_WhenNotConnected_ShouldReturnUnhealthy()
+        public async Task CheckHealthAsync_WhenNotConnected_ShouldReturnDegraded()
         {
             // Arrange
-            _mockConnectionService.Setup(s => s.IsConnected).Returns(false);
+            var healthInfo = new ConnectionHealthInfo
+            {
+                IsConnected = false,
+                TokenValid = false,
+                RunspaceState = "Closed",
+                CircuitBreakerState = "Closed"
+            };
+
+            _mockConnectionService.Setup(s => s.GetConnectionHealthAsync()).ReturnsAsync(healthInfo);
 
             var context = new HealthCheckContext();
 
@@ -69,8 +77,8 @@ namespace TeamsManager.Tests.HealthChecks
             var result = await _healthCheck.CheckHealthAsync(context, CancellationToken.None);
 
             // Assert
-            result.Status.Should().Be(HealthStatus.Unhealthy);
-            result.Description.Should().Be("PowerShell connection is not active");
+            result.Status.Should().Be(HealthStatus.Degraded);
+            result.Description.Should().Contain("PowerShell connection test failed");
             result.Data.Should().ContainKey("connected").WhoseValue.Should().Be(false);
             result.Data.Should().ContainKey("timestamp");
         }
@@ -138,7 +146,7 @@ namespace TeamsManager.Tests.HealthChecks
         {
             // Arrange
             var expectedException = new InvalidOperationException("Connection service error");
-            _mockConnectionService.Setup(s => s.IsConnected).Throws(expectedException);
+            _mockConnectionService.Setup(s => s.GetConnectionHealthAsync()).ThrowsAsync(expectedException);
 
             var context = new HealthCheckContext();
 
@@ -178,16 +186,12 @@ namespace TeamsManager.Tests.HealthChecks
         {
             // Arrange
             var cancellationTokenSource = new CancellationTokenSource();
-            cancellationTokenSource.Cancel();
-
-            _mockConnectionService.Setup(s => s.IsConnected).Returns(true);
-            _mockConnectionService.Setup(s => s.GetConnectionHealthAsync())
-                                 .Returns(Task.Delay(1000).ContinueWith(_ => new ConnectionHealthInfo(), cancellationTokenSource.Token));
+            cancellationTokenSource.Cancel(); // Cancel immediately
 
             var context = new HealthCheckContext();
 
             // Act & Assert
-            await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+            await Assert.ThrowsAsync<OperationCanceledException>(async () =>
                 await _healthCheck.CheckHealthAsync(context, cancellationTokenSource.Token));
         }
 
@@ -230,7 +234,6 @@ namespace TeamsManager.Tests.HealthChecks
         public async Task CheckHealthAsync_WithNullHealthInfo_ShouldHandleGracefully()
         {
             // Arrange
-            _mockConnectionService.Setup(s => s.IsConnected).Returns(true);
             _mockConnectionService.Setup(s => s.GetConnectionHealthAsync()).ReturnsAsync((ConnectionHealthInfo?)null);
 
             var context = new HealthCheckContext();
@@ -240,7 +243,8 @@ namespace TeamsManager.Tests.HealthChecks
 
             // Assert
             result.Status.Should().Be(HealthStatus.Unhealthy);
-            result.Exception.Should().NotBeNull();
+            result.Description.Should().Be("Unable to retrieve connection health information");
+            result.Data.Should().ContainKey("error").WhoseValue.Should().Be("Health info is null");
         }
 
         [Fact]

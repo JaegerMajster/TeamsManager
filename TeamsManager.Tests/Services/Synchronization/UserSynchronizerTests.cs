@@ -226,7 +226,7 @@ namespace TeamsManager.Tests.Services.Synchronization
             var psUser = CreateMockUserPSObject(id: "");
 
             // Act & Assert
-            var exception = Assert.Throws<InvalidOperationException>(() => _synchronizer.GetGraphId(psUser));
+            var exception = Assert.Throws<ArgumentException>(() => _synchronizer.GetGraphId(psUser));
             Assert.Contains("ID", exception.Message);
         }
     }

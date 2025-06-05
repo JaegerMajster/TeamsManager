@@ -69,7 +69,8 @@ namespace TeamsManager.Tests.Services
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            _mockPowerShellCacheService.Setup(m => m.TryGetValue(cacheKey, out item))
+            var outputValue = item;
+            _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out outputValue))
                                       .Returns(foundInCache);
         }
 

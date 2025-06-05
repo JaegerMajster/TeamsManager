@@ -17,14 +17,14 @@ namespace TeamsManager.Tests.Models // lub TeamsManager.Tests.Core.Enums
             ((int)OperationType.TeamDeleted).Should().Be(5);
 
             // Operacje na członkach zespołów
-            ((int)OperationType.MemberAdded).Should().Be(10);
-            ((int)OperationType.MemberRemoved).Should().Be(11);
-            ((int)OperationType.MemberRoleChanged).Should().Be(12);
+            ((int)OperationType.MemberAdded).Should().Be(20);
+            ((int)OperationType.MemberRemoved).Should().Be(21);
+            ((int)OperationType.MemberRoleChanged).Should().Be(22);
 
             // Operacje na kanałach
-            ((int)OperationType.ChannelCreated).Should().Be(20);
-            ((int)OperationType.ChannelUpdated).Should().Be(21);
-            ((int)OperationType.ChannelDeleted).Should().Be(22);
+            ((int)OperationType.ChannelCreated).Should().Be(25);
+            ((int)OperationType.ChannelUpdated).Should().Be(26);
+            ((int)OperationType.ChannelDeleted).Should().Be(27);
 
             // Operacje na użytkownikach
             ((int)OperationType.UserCreated).Should().Be(30);
@@ -87,8 +87,8 @@ namespace TeamsManager.Tests.Models // lub TeamsManager.Tests.Core.Enums
         public void OperationType_WhenConvertingFromInt_ShouldReturnCorrectEnum()
         {
             ((OperationType)1).Should().Be(OperationType.TeamCreated);
-            ((OperationType)10).Should().Be(OperationType.MemberAdded);
-            ((OperationType)20).Should().Be(OperationType.ChannelCreated);
+            ((OperationType)20).Should().Be(OperationType.MemberAdded);
+            ((OperationType)25).Should().Be(OperationType.ChannelCreated);
             ((OperationType)30).Should().Be(OperationType.UserCreated);
             ((OperationType)40).Should().Be(OperationType.BulkTeamCreation);
             ((OperationType)50).Should().Be(OperationType.SystemBackup);
