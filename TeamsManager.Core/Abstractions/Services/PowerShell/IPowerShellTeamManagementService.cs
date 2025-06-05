@@ -135,6 +135,18 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Słownik uprawnień i ich statusu</returns>
         Task<Dictionary<string, bool>> ValidatePermissionsAsync();
 
+        /// <summary>
+        /// [ETAP4] Pobiera informacje o systemie PowerShell i środowisku
+        /// </summary>
+        /// <returns>Obiekt PSObject z informacjami systemowymi lub null</returns>
+        Task<PSObject?> GetSystemInfoAsync();
+
+        /// <summary>
+        /// [ETAP4] Pobiera wersję PowerShell i zainstalowanych modułów
+        /// </summary>
+        /// <returns>Obiekt PSObject z informacjami o wersji lub null</returns>
+        Task<PSObject?> GetPowerShellVersionAsync();
+
         #endregion
 
         #region Channel Operations

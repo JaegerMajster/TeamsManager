@@ -359,38 +359,29 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<PSObject?> GetTeamAsync(string teamId)
         {
-            // TODO [ETAP4-AUDIT]: Zgodność z PowerShellServices.md sekcja 1.1
-            // ✅ CMDLET: Get-MgTeam vs specyfikacja Get-Team -GroupId $teamId
-            // UWAGI: Używamy Microsoft.Graph cmdletów zamiast Teams module
-            // PRIORYTET: LOW - funkcjonalnie równoważne
+            // [ETAP4] Walidacja parametrów z PSParameterValidator
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
             
-            // TODO [ETAP4-VALIDATION]: Brak walidacji parametrów
-            // PROPONOWANY: PSParameterValidator.ValidateGuid(teamId, nameof(teamId))
-            // PRIORYTET: MEDIUM
-            if (!_connectionService.ValidateRunspaceState()) return null;
-
-            if (string.IsNullOrWhiteSpace(teamId))
+            if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("TeamID nie może być puste.");
-                return null;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            string cacheKey = TeamDetailsCacheKeyPrefix + teamId;
+            string cacheKey = TeamDetailsCacheKeyPrefix + validatedTeamId;
 
             if (_cacheService.TryGetValue(cacheKey, out PSObject? cachedTeam))
             {
-                _logger.LogDebug("Zespół {TeamId} znaleziony w cache.", teamId);
+                _logger.LogDebug("Zespół {TeamId} znaleziony w cache.", validatedTeamId);
                 return cachedTeam;
             }
 
-            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}", teamId);
+            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}", validatedTeamId);
 
             try
             {
-                var parameters = new Dictionary<string, object>
-                {
-                    { "TeamId", teamId }
-                };
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamId", validatedTeamId)
+                );
 
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeam", parameters);
                 var team = results?.FirstOrDefault();
@@ -398,14 +389,22 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 if (team != null)
                 {
                     _cacheService.Set(cacheKey, team);
+                    _logger.LogInformation("Zespół {TeamId} znaleziony i dodany do cache.", validatedTeamId);
                 }
 
                 return team;
             }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas pobierania zespołu {TeamId}", teamId);
-                return null;
+                _logger.LogError(ex, "Błąd podczas pobierania zespołu {TeamId}", validatedTeamId);
+                throw new PowerShellCommandExecutionException(
+                    $"Failed to retrieve team {validatedTeamId}",
+                    command: "Get-MgTeam",
+                    innerException: ex);
             }
         }
 
@@ -449,41 +448,49 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<Collection<PSObject>?> GetTeamsByOwnerAsync(string ownerUpn)
         {
-            // TODO [ETAP4-AUDIT]: Różnica w implementacji vs specyfikacja sekcja 1.3
-            // OBECNY: Get-MgUserOwnedTeam -UserId $userId
-            // SPECYFIKACJA: Get-Team | Where-Object { $_.Owner -eq $ownerUpn }
-            // PRIORYTET: LOW - obecna implementacja lepsza (mniej danych)
-            // UWAGI: Obecna używa Graph API bezpośrednio, bardziej efektywna
+            // [ETAP4] Walidacja parametrów z PSParameterValidator
+            var validatedOwnerUpn = PSParameterValidator.ValidateEmail(ownerUpn, nameof(ownerUpn));
             
-            // TODO [ETAP4-VALIDATION]: Brak walidacji email
-            // PROPONOWANY: PSParameterValidator.ValidateEmail(ownerUpn)
-            // PRIORYTET: MEDIUM
-            if (!_connectionService.ValidateRunspaceState()) return null;
-
-            if (string.IsNullOrWhiteSpace(ownerUpn))
+            if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("OwnerUpn nie może być puste.");
-                return null;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}", ownerUpn);
+            _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}", validatedOwnerUpn);
 
             try
             {
-                var userId = await _userResolver.GetUserIdAsync(ownerUpn);
+                var userId = await _userResolver.GetUserIdAsync(validatedOwnerUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {OwnerUpn}", ownerUpn);
-                    return null;
+                    throw new PowerShellCommandExecutionException(
+                        $"Owner user not found: {validatedOwnerUpn}",
+                        command: "UserResolver.GetUserIdAsync",
+                        innerException: null);
                 }
 
                 var script = $"Get-MgUserOwnedTeam -UserId '{userId}' -ErrorAction Stop";
-                return await _connectionService.ExecuteScriptAsync(script);
+                var results = await _connectionService.ExecuteScriptAsync(script);
+                
+                if (results != null)
+                {
+                    _logger.LogInformation("Znaleziono {Count} zespołów dla właściciela {OwnerUpn}", 
+                        results.Count, validatedOwnerUpn);
+                }
+                
+                return results;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas pobierania zespołów dla właściciela {OwnerUpn}", ownerUpn);
-                return null;
+                _logger.LogError(ex, "Błąd podczas pobierania zespołów dla właściciela {OwnerUpn}", validatedOwnerUpn);
+                throw new PowerShellCommandExecutionException(
+                    $"Failed to retrieve teams for owner {validatedOwnerUpn}",
+                    command: "Get-MgUserOwnedTeam",
+                    innerException: ex);
             }
         }
 
@@ -827,6 +834,160 @@ if ($context -eq $null) {
 
         #endregion
 
+        #region Diagnostic Operations - Phase 2 (ETAP4)
+
+        /// <summary>
+        /// [ETAP4] Pobiera informacje o systemie PowerShell i środowisku
+        /// </summary>
+        /// <returns>Obiekt PSObject z informacjami systemowymi lub null</returns>
+        public async Task<PSObject?> GetSystemInfoAsync()
+        {
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
+            }
+
+            _logger.LogInformation("Pobieranie informacji o systemie PowerShell");
+
+            try
+            {
+                var script = @"
+$systemInfo = @{
+    PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+    PowerShellEdition = $PSVersionTable.PSEdition
+    HostName = $Host.Name
+    HostVersion = $Host.Version.ToString()
+    OSVersion = [System.Environment]::OSVersion.ToString()
+    MachineName = [System.Environment]::MachineName
+    UserName = [System.Environment]::UserName
+    WorkingSet = [System.GC]::GetTotalMemory($false)
+    ProcessorCount = [System.Environment]::ProcessorCount
+    ExecutionPolicy = Get-ExecutionPolicy
+    CurrentCulture = (Get-Culture).Name
+    TimeZone = (Get-TimeZone).Id
+    DotNetVersion = [System.Runtime.InteropServices.RuntimeInformation]::FrameworkDescription
+}
+$systemInfo
+";
+
+                var results = await _connectionService.ExecuteScriptAsync(script);
+                var systemInfo = results?.FirstOrDefault();
+
+                if (systemInfo != null)
+                {
+                    _logger.LogInformation("Informacje o systemie PowerShell zostały pobrane pomyślnie");
+                    
+                    // Log some key system info for debugging
+                    try
+                    {
+                        var psVersion = PSObjectMapper.GetString(systemInfo, "PowerShellVersion") ?? "Unknown";
+                        var osVersion = PSObjectMapper.GetString(systemInfo, "OSVersion") ?? "Unknown";
+                        _logger.LogDebug("System: PowerShell {PowerShellVersion}, OS {OSVersion}", psVersion, osVersion);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to extract system info details for logging");
+                    }
+                }
+
+                return systemInfo;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get system information");
+                throw new PowerShellCommandExecutionException(
+                    "Failed to retrieve system information",
+                    command: "Get-SystemInfo",
+                    innerException: ex);
+            }
+        }
+
+        /// <summary>
+        /// [ETAP4] Pobiera wersję PowerShell i zainstalowanych modułów
+        /// </summary>
+        /// <returns>Obiekt PSObject z informacjami o wersji lub null</returns>
+        public async Task<PSObject?> GetPowerShellVersionAsync()
+        {
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
+            }
+
+            _logger.LogInformation("Pobieranie wersji PowerShell i modułów");
+
+            try
+            {
+                var script = @"
+$versionInfo = @{
+    PSVersionTable = $PSVersionTable
+    ImportantModules = @()
+}
+
+# Sprawdź kluczowe moduły
+$importantModuleNames = @('Microsoft.Graph', 'Microsoft.Graph.Teams', 'Microsoft.Graph.Users', 'Microsoft.Graph.Groups')
+foreach ($moduleName in $importantModuleNames) {
+    $module = Get-Module -Name $moduleName -ListAvailable | Select-Object -First 1
+    if ($module) {
+        $versionInfo.ImportantModules += @{
+            Name = $module.Name
+            Version = $module.Version.ToString()
+            Path = $module.ModuleBase
+            Author = $module.Author
+        }
+    } else {
+        $versionInfo.ImportantModules += @{
+            Name = $moduleName
+            Version = 'Not Installed'
+            Path = $null
+            Author = $null
+        }
+    }
+}
+
+$versionInfo
+";
+
+                var results = await _connectionService.ExecuteScriptAsync(script);
+                var versionInfo = results?.FirstOrDefault();
+
+                if (versionInfo != null)
+                {
+                    _logger.LogInformation("Informacje o wersji PowerShell zostały pobrane pomyślnie");
+                    
+                    // Log key module versions for debugging
+                    try
+                    {
+                        var psVersion = PSObjectMapper.GetString(versionInfo, "PSVersionTable.PSVersion") ?? "Unknown";
+                        _logger.LogDebug("PowerShell version: {PowerShellVersion}", psVersion);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to extract version info details for logging");
+                    }
+                }
+
+                return versionInfo;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get PowerShell version information");
+                throw new PowerShellCommandExecutionException(
+                    "Failed to retrieve PowerShell version information",
+                    command: "Get-PowerShellVersion",
+                    innerException: ex);
+            }
+        }
+
+        #endregion
+
         #region Channel Operations
 
         public async Task<PSObject?> CreateTeamChannelAsync(
@@ -1158,7 +1319,7 @@ if ($context -eq $null) {
         // SEKCJA 7. NARZĘDZIA DIAGNOSTYCZNE - PRIORYTET MEDIUM:
         // - TestConnectionAsync() - Get-CsTenant
         // - ValidatePermissionsAsync() - Dictionary<string, bool>
-        // - SyncTeamDataAsync(string teamId) - bool
+        // - SyncTeamDataAsync() - bool
         //
         // SEKCJA 8. ZAAWANSOWANE OPERACJE - PRIORYTET LOW:
         // - CloneTeamAsync() - Klonowanie zespołu
