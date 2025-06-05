@@ -124,71 +124,40 @@ namespace TeamsManager.Core.Services.PowerShellServices
             List<string>? licenseSkuIds = null,
             bool accountEnabled = true)
         {
-            // TODO [ETAP5-VALIDATION]: Brak walidacji parametrów - sync z TeamManagementService
-            // OBECNY: Tylko string.IsNullOrWhiteSpace
-            // PROPONOWANY:
-            // - PSParameterValidator.ValidateAndSanitizeString(displayName, maxLength: 256)
-            // - PSParameterValidator.ValidateEmail(userPrincipalName)
-            // - PSParameterValidator.ValidateAndSanitizeString(password, allowEmpty: false)
-            // PRIORYTET: HIGH
+            // [ETAP6] Walidacja parametrów z PSParameterValidator
+            var validatedDisplayName = PSParameterValidator.ValidateAndSanitizeString(displayName, nameof(displayName), maxLength: 256);
+            var validatedUserPrincipalName = PSParameterValidator.ValidateEmail(userPrincipalName, nameof(userPrincipalName));
+            var validatedPassword = PSParameterValidator.ValidateAndSanitizeString(password, nameof(password), allowEmpty: false);
+            var validatedUsageLocation = PSParameterValidator.ValidateAndSanitizeString(usageLocation ?? DefaultUsageLocation, "usageLocation", maxLength: 2);
             
-            // TODO [ETAP5-ERROR]: Return null zamiast wyjątków - sync z TeamManagementService
-            // OBECNY: return null w przypadku błędów
-            // PROPONOWANY: PowerShellCommandExecutionException, ArgumentException
-            // PRIORYTET: HIGH
-            
-            // TODO [ETAP5-INJECTION]: Tylko podstawowe escape - sync z TeamManagementService
-            // OBECNY: Replace("'", "''") - niepełne
-            // PROPONOWANY: PSParameterValidator.ValidateAndSanitizeString()
-            // PRIORYTET: HIGH
-            // UWAGI: Brak ochrony przed backtick i dollar
             if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
-                return null;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            if (string.IsNullOrWhiteSpace(displayName) ||
-                string.IsNullOrWhiteSpace(userPrincipalName) ||
-                string.IsNullOrWhiteSpace(password))
-            {
-                _logger.LogError("DisplayName, UserPrincipalName i Password są wymagane.");
-                return null;
-            }
-
-            // Użyj domyślnej lokalizacji jeśli nie podano
-            usageLocation ??= DefaultUsageLocation;
-
-            _logger.LogInformation("Tworzenie użytkownika M365: {UserPrincipalName}", userPrincipalName);
+            _logger.LogInformation("Tworzenie użytkownika M365: {UserPrincipalName}", validatedUserPrincipalName);
 
             try
             {
-                var script = $@"
-                    $passwordProfile = @{{
-                        password = '{password.Replace("'", "''")}'
-                        forceChangePasswordNextSignIn = $false
-                    }}
-                    
-                    $user = New-MgUser `
-                        -DisplayName '{displayName.Replace("'", "''")}' `
-                        -UserPrincipalName '{userPrincipalName.Replace("'", "''")}' `
-                        -MailNickname '{userPrincipalName.Split('@')[0].Replace("'", "''")}' `
-                        -PasswordProfile $passwordProfile `
-                        -AccountEnabled ${accountEnabled} `
-                        -UsageLocation '{usageLocation.Replace("'", "''")}' `
-                        -ErrorAction Stop
-                    
-                    $user.Id
-                ";
+                var mailNickname = validatedUserPrincipalName.Split('@')[0];
+                
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("DisplayName", validatedDisplayName),
+                    ("UserPrincipalName", validatedUserPrincipalName),
+                    ("MailNickname", mailNickname),
+                    ("PasswordProfile", new { password = validatedPassword, forceChangePasswordNextSignIn = false }),
+                    ("AccountEnabled", accountEnabled),
+                    ("UsageLocation", validatedUsageLocation)
+                );
 
-                var results = await _connectionService.ExecuteScriptAsync(script);
-                var userId = results?.FirstOrDefault()?.BaseObject?.ToString();
-
-                if (string.IsNullOrEmpty(userId))
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("New-MgUser", parameters);
+                var userIdObject = results?.FirstOrDefault();
+                
+                if (userIdObject?.Properties["Id"]?.Value?.ToString() is not string userId || string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie udało się utworzyć użytkownika {UserPrincipalName}",
-                        userPrincipalName);
-                    return null;
+                    throw new UserOperationException(
+                        $"Failed to create user {validatedUserPrincipalName} - no user ID returned",
+                        new PowerShellCommandExecutionException("New-MgUser returned null or empty user ID", "New-MgUser", null));
                 }
 
                 // Przypisz licencje jeśli podano
@@ -197,24 +166,30 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     await AssignLicensesToUserAsync(userId, licenseSkuIds);
                 }
 
-                _logger.LogInformation("Utworzono użytkownika {UserPrincipalName} o ID: {UserId}",
-                    userPrincipalName, userId);
-
-                // [ETAP7-CACHE] Unieważnij cache użytkowników
+                // Cache invalidation for user creation
                 _cacheService.InvalidateUserListCache();
                 _cacheService.InvalidateAllActiveUsersList();
+                _cacheService.InvalidateUserCache(userId: userId, userUpn: validatedUserPrincipalName);
                 
-                // Unieważnij cache szczegółów użytkownika
-                _cacheService.InvalidateUserCache(userId: userId, userUpn: userPrincipalName);
-                
-                _logger.LogInformation("Cache użytkowników unieważniony po utworzeniu {UserPrincipalName}", userPrincipalName);
+                _logger.LogInformation("Utworzono użytkownika {UserPrincipalName} o ID: {UserId}",
+                    validatedUserPrincipalName, userId);
 
                 return userId;
             }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd tworzenia użytkownika {UserPrincipalName}", userPrincipalName);
-                return null;
+                _logger.LogError(ex, "Błąd tworzenia użytkownika {UserPrincipalName}", validatedUserPrincipalName);
+                throw new UserOperationException(
+                    $"Failed to create user {validatedUserPrincipalName}",
+                    ex);
             }
         }
 
@@ -938,87 +913,98 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<Collection<PSObject>?> GetTeamMembersAsync(string teamId)
         {
-            // TODO [ETAP5-AUDIT]: Zgodność z PowerShellServices.md sekcja 2.1
-            // ✅ CMDLET: Get-MgTeamMember vs specyfikacja Get-TeamUser -GroupId $teamId
-            // PRIORYTET: LOW - funkcjonalnie równoważne, Graph API lepsze
-            // UWAGI: Używamy Microsoft.Graph zamiast Teams module
+            // [ETAP6] Walidacja parametrów z PSParameterValidator
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
             
-            // TODO [ETAP5-VALIDATION]: Brak walidacji GUID
-            // PROPONOWANY: PSParameterValidator.ValidateGuid(teamId, nameof(teamId))
-            // PRIORYTET: MEDIUM
-            
-            // [ETAP7-CACHE] Implementacja cache dla członków zespołu
-            if (!_connectionService.ValidateRunspaceState()) return null;
-
-            if (string.IsNullOrWhiteSpace(teamId))
-            {
-                _logger.LogError("TeamID nie może być puste.");
-                return null;
-            }
-
-            string cacheKey = $"PowerShell_TeamMembers_{teamId}";
+            string cacheKey = $"PowerShell_TeamMembers_{validatedTeamId}";
 
             if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedMembers))
             {
-                _logger.LogDebug("Członkowie zespołu {TeamId} znalezieni w cache.", teamId);
+                _logger.LogDebug("Członkowie zespołu {TeamId} znalezieni w cache.", validatedTeamId);
                 return cachedMembers;
             }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
+            }
 
-            _logger.LogInformation("Pobieranie wszystkich członków zespołu {TeamId}", teamId);
+            _logger.LogInformation("Pobieranie wszystkich członków zespołu {TeamId}", validatedTeamId);
 
             try
             {
-                var parameters = new Dictionary<string, object>
-                {
-                    { "TeamId", teamId }
-                };
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamId", validatedTeamId)
+                );
 
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeamMember", parameters);
                 
-                if (results != null)
+                if (results != null && results.Any())
                 {
-                    _cacheService.Set(cacheKey, results);
-                    _logger.LogDebug("Członkowie zespołu {TeamId} dodani do cache.", teamId);
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(10));
+                    _logger.LogInformation("Pobrano {Count} członków zespołu {TeamId} i dodano do cache", results.Count, validatedTeamId);
                 }
 
                 return results;
             }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas pobierania członków zespołu {TeamId}", teamId);
-                return null;
+                _logger.LogError(ex, "Błąd podczas pobierania członków zespołu {TeamId}", validatedTeamId);
+                throw new TeamOperationException(
+                    $"Failed to get members for team {validatedTeamId}",
+                    ex);
             }
         }
 
         public async Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn)
         {
-            if (!_connectionService.ValidateRunspaceState()) return null;
-
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(userUpn))
+            // [ETAP6] Walidacja parametrów z PSParameterValidator
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            var validatedUserUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            
+            if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("TeamID i UserUpn są wymagane.");
-                return null;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            _logger.LogInformation("Pobieranie członka {UserUpn} z zespołu {TeamId}", userUpn, teamId);
+            _logger.LogInformation("Pobieranie członka {UserUpn} z zespołu {TeamId}", validatedUserUpn, validatedTeamId);
 
             try
             {
-                var userId = await _userResolver.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(validatedUserUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
-                    return null;
+                    throw new UserOperationException(
+                        $"User not found: {validatedUserUpn}",
+                        new PowerShellCommandExecutionException($"User {validatedUserUpn} not found", "UserResolver.GetUserIdAsync", null));
                 }
 
-                var script = $"Get-MgTeamMember -TeamId '{teamId}' -UserId '{userId}' -ErrorAction Stop";
-                var results = await _connectionService.ExecuteScriptAsync(script);
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamId", validatedTeamId),
+                    ("UserId", userId)
+                );
+
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeamMember", parameters);
                 return results?.FirstOrDefault();
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas pobierania członka {UserUpn} z zespołu {TeamId}", userUpn, teamId);
-                return null;
+                _logger.LogError(ex, "Błąd podczas pobierania członka {UserUpn} z zespołu {TeamId}", validatedUserUpn, validatedTeamId);
+                throw new TeamOperationException(
+                    $"Failed to get team member {validatedUserUpn} from team {validatedTeamId}",
+                    ex);
             }
         }
 
