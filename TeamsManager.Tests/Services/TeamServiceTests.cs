@@ -12,7 +12,9 @@ using Moq;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -41,6 +43,8 @@ namespace TeamsManager.Tests.Services
 
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
+        private readonly Mock<ICacheInvalidationService> _mockCacheInvalidationService;
+        private readonly Mock<IGraphSynchronizer<Team>> _mockTeamSynchronizer;
 
         private readonly TeamService _teamService;
         private readonly User _testOwnerUser;
@@ -74,6 +78,8 @@ namespace TeamsManager.Tests.Services
 
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
+            _mockCacheInvalidationService = new Mock<ICacheInvalidationService>();
+            _mockTeamSynchronizer = new Mock<IGraphSynchronizer<Team>>();
 
             _testOwnerUser = new User { Id = "owner-guid-123", UPN = "owner@example.com", FirstName = "Test", LastName = "Owner", Role = UserRole.Nauczyciel, IsActive = true };
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
@@ -110,7 +116,10 @@ namespace TeamsManager.Tests.Services
                 _mockSchoolTypeRepository.Object,
                 _mockSchoolYearRepository.Object,
                 _mockOperationHistoryService.Object,
-                _mockPowerShellCacheService.Object
+                _mockPowerShellCacheService.Object,
+                _mockCacheInvalidationService.Object,
+                null, // unitOfWork
+                _mockTeamSynchronizer.Object
             );
         }
 
@@ -484,8 +493,12 @@ namespace TeamsManager.Tests.Services
         {
             await _teamService.RefreshCacheAsync();
 
-            // Sprawdzamy, czy PowerShellCacheService otrzymał globalną inwalidację
-            _mockPowerShellCacheService.Verify(m => m.InvalidateAllCache(), Times.Once);
+            // Sprawdzamy, czy CacheInvalidationService otrzymał batch inwalidację z kluczem "*"
+            _mockCacheInvalidationService.Verify(m => m.InvalidateBatchAsync(
+                It.Is<Dictionary<string, List<string>>>(dict => 
+                    dict.ContainsKey("RefreshAllCache") && 
+                    dict["RefreshAllCache"].Contains("*"))), 
+                Times.Once);
 
             // Po globalnej inwalidacji, cache powinien być pusty
             SetupCacheTryGetValue(AllActiveTeamsCacheKey, (IEnumerable<Team>?)null, false);

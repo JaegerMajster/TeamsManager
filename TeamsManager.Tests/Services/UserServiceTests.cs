@@ -13,6 +13,7 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Services;
@@ -38,6 +39,8 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
+        private readonly Mock<IGraphSynchronizer<User>> _mockUserSynchronizer;
+        private readonly Mock<IUnitOfWork> _mockUnitOfWork;
 
         private readonly UserService _userService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
@@ -66,6 +69,8 @@ namespace TeamsManager.Tests.Services
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockNotificationService = new Mock<INotificationService>();
             _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
+            _mockUserSynchronizer = new Mock<IGraphSynchronizer<User>>();
+            _mockUnitOfWork = new Mock<IUnitOfWork>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
             _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
@@ -112,7 +117,9 @@ namespace TeamsManager.Tests.Services
                 _mockPowerShellService.Object,
                 _mockOperationHistoryService.Object,
                 _mockPowerShellCacheService.Object,
-                _mockNotificationService.Object
+                _mockNotificationService.Object,
+                _mockUserSynchronizer.Object,
+                _mockUnitOfWork.Object
             );
         }
 
@@ -1081,7 +1088,9 @@ namespace TeamsManager.Tests.Services
                 _mockPowerShellService.Object,
                 _mockOperationHistoryService.Object,
                 _mockPowerShellCacheService.Object,
-                _mockNotificationService.Object
+                _mockNotificationService.Object,
+                _mockUserSynchronizer.Object,
+                _mockUnitOfWork.Object
             );
 
             // Act - różne operacje które powinny używać granularnej inwalidacji

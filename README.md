@@ -11,8 +11,9 @@
 7. [Instrukcje Uruchomienia](#instrukcje-uruchomienia)
 8. [Funkcjonalności dla Środowiska Edukacyjnego](#funkcjonalności-dla-środowiska-edukacyjnego)
 9. [Korzyści Rozwiązania](#korzyści-rozwiązania)
-10. [Dokumentacja Techniczna](#dokumentacja-techniczna)
-11. [Licencja i Autorzy](#licencja-i-autorzy)
+10. [System Synchronizacji Graph-DB](#system-synchronizacji-graph-db)
+11. [Dokumentacja Techniczna](#dokumentacja-techniczna)
+12. [Licencja i Autorzy](#licencja-i-autorzy)
 
 ## 1. Informacje Ogólne
 
@@ -1075,7 +1076,120 @@ Aplikacja wymaga rejestracji dwóch aplikacji w Azure AD:
 - ✅ Dziennik audytu kompletny
 - ✅ Synchronizacja pracy (planowana)
 
-## 10. Dokumentacja Techniczna
+## 10. System Synchronizacji Graph-DB
+
+### 🔄 Architektura Synchronizacji
+
+TeamsManager implementuje zaawansowany system dwukierunkowej synchronizacji między Microsoft Graph a lokalną bazą danych, zapewniając spójność danych oraz wysoką wydajność dzięki inteligentnej strategii cache.
+
+#### Kluczowe Komponenty
+
+**IGraphSynchronizer<T>** - Interfejs synchronizacji dla różnych typów encji:
+- `TeamSynchronizer` - synchronizacja zespołów Graph→DB
+- `UserSynchronizer` - synchronizacja użytkowników z ochroną soft-deleted
+- `ChannelSynchronizer` - synchronizacja kanałów z automatyczną klasyfikacją
+
+**IUnitOfWork** - Wzorzec transakcyjności zapewniający spójność operacji Graph+DB
+
+**CacheInvalidationService** - Centralne zarządzanie cache z granularną inwalidacją
+
+#### Przepływ Synchronizacji
+
+```
+API Request → Cache Check → DB Query → Graph Sync (jeśli potrzebne) → Cache Update → Response
+```
+
+1. **Cache Check**: Sprawdzenie czy dane są w cache
+2. **DB Query**: Pobranie z bazy danych jeśli brak w cache  
+3. **Graph Sync**: Automatyczna synchronizacja z Graph jeśli dane nieaktualne
+4. **Cache Update**: Inteligentna inwalidacja powiązanych kluczy cache
+5. **Response**: Zwrócenie aktualnych danych
+
+#### Wzorzec ExecuteWithAutoConnectAsync
+
+Wszystkie operacje PowerShell używają ujednoliconego wzorca:
+
+```csharp
+// Nowy wzorzec (Etap 3/8+)
+var result = await _powerShellService.ExecuteWithAutoConnectAsync(
+    apiAccessToken,
+    async () => await _powerShellService.Teams.GetTeamAsync(teamId),
+    "Pobieranie zespołu z Graph"
+);
+```
+
+**Korzyści**:
+- Automatyczne zarządzanie połączeniem
+- Centralne error handling  
+- Spójne logowanie operacji
+- Retry mechanism
+
+#### Strategia Cache
+
+**Granularna Inwalidacja** - zamiast czyścić cały cache, system inwaliduje tylko powiązane klucze:
+
+```csharp
+// Aktualizacja zespołu inwaliduje:
+await _cacheInvalidationService.InvalidateForTeamUpdatedAsync(team);
+
+// Wewnętrznie inwaliduje klucze:
+// - "Team_Id_{teamId}"
+// - "Teams_AllActive" 
+// - "Teams_ByOwner_{ownerUpn}"
+// - "Teams_Active" (jeśli status = Active)
+```
+
+**Operacje Masowe** - batch invalidation dla wydajności:
+
+```csharp
+await _cacheInvalidationService.InvalidateForTeamMembersBulkOperationAsync(teamId, userIds);
+```
+
+#### Ochrona Soft-Deleted Users
+
+UserSynchronizer chroni użytkowników oznaczonych jako nieaktywni:
+
+```csharp
+public async Task<bool> RequiresSynchronizationAsync(PSObject graphObject, User? existingEntity)
+{
+    if (existingEntity?.IsActive == false)
+        return false; // Nie sync soft-deleted users
+        
+    // Pozostała logika wykrywania zmian...
+}
+```
+
+#### Historia Operacji
+
+Każda krytyczna operacja jest logowana w `OperationHistoryService`:
+
+```csharp
+// 1. Inicjalizacja operacji
+var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+    OperationType.TeamCreated, nameof(Team), targetEntityId: team.Id
+);
+
+// 2. Aktualizacja statusu przy sukcesie/błędzie
+await _operationHistoryService.UpdateOperationStatusAsync(
+    operation.Id, OperationStatus.Completed, "Zespół pomyślnie utworzony"
+);
+```
+
+#### Metryki Wydajności
+
+Oczekiwane wartości produkcyjne:
+- **Cache Hit Rate**: > 80%
+- **Sync Duration**: < 500ms per entity
+- **API Response Time**: < 100ms (z cache), < 1000ms (z sync)
+- **Memory Usage**: < 50MB cache per 1000 entities
+
+### 📚 Dokumentacja Szczegółowa
+
+Kompletna dokumentacja architektury synchronizacji dostępna w:
+- [`docs/Architecture-Synchronization.md`](docs/Architecture-Synchronization.md) - Szczegółowa architektura
+- [`docs/Cache-Strategy.md`](docs/Cache-Strategy.md) - Strategia cache i inwalidacji
+
+## 11. Dokumentacja Techniczna
 
 ### 🏗️ Wzorce Projektowe
 

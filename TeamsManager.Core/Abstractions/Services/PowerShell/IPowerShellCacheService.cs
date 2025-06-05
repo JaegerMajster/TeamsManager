@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Abstractions.Services.PowerShell
 {
@@ -265,5 +266,43 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// Unieważnia cache listy wszystkich aktywnych ustawień aplikacji.
         /// </summary>
         void InvalidateAllActiveSettingsList();
+
+        // ETAP 6/8: Zaawansowane funkcje cache P2
+        /// <summary>
+        /// Pobiera obiekt z cache z automatycznym zbieraniem metryk wydajności
+        /// </summary>
+        /// <typeparam name="T">Typ obiektu</typeparam>
+        /// <param name="key">Klucz cache</param>
+        /// <param name="value">Wartość z cache</param>
+        /// <returns>True jeśli znaleziono w cache</returns>
+        bool TryGetValueWithMetrics<T>(string key, out T? value);
+
+        /// <summary>
+        /// Unieważnia wiele kluczy cache w jednej operacji batch
+        /// </summary>
+        /// <param name="cacheKeys">Lista kluczy do unieważnienia</param>
+        /// <param name="operationName">Nazwa operacji dla logowania</param>
+        void BatchInvalidateKeys(IEnumerable<string> cacheKeys, string operationName = "BatchInvalidation");
+
+        /// <summary>
+        /// Wstępnie ładuje dane do cache (cache warming)
+        /// </summary>
+        /// <param name="cacheKey">Klucz cache</param>
+        /// <param name="dataLoader">Funkcja ładująca dane</param>
+        /// <param name="duration">Czas przechowywania</param>
+        Task WarmCacheAsync(string cacheKey, Func<Task<object>> dataLoader, TimeSpan? duration = null);
+
+        /// <summary>
+        /// Unieważnia cache na podstawie wzorca klucza
+        /// </summary>
+        /// <param name="pattern">Wzorzec do wyszukania</param>
+        /// <param name="operationName">Nazwa operacji dla logowania</param>
+        void InvalidateByPattern(string pattern, string operationName = "PatternInvalidation");
+
+        /// <summary>
+        /// Pobiera metryki wydajności cache
+        /// </summary>
+        /// <returns>Obiekt z metrykami cache</returns>
+        CacheMetrics GetCacheMetrics();
     }
 }

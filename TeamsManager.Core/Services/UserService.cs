@@ -8,6 +8,7 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -33,6 +34,8 @@ namespace TeamsManager.Core.Services
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly IPowerShellCacheService _powerShellCacheService;
         private readonly INotificationService _notificationService;
+        private readonly IGraphSynchronizer<User> _userSynchronizer;
+        private readonly IUnitOfWork _unitOfWork;
 
         // Definicje kluczy cache
         private const string AllActiveUsersCacheKey = "Users_AllActive";
@@ -57,7 +60,9 @@ namespace TeamsManager.Core.Services
             IPowerShellService powerShellService,
             IOperationHistoryService operationHistoryService,
             IPowerShellCacheService powerShellCacheService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IGraphSynchronizer<User> userSynchronizer,
+            IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -73,6 +78,8 @@ namespace TeamsManager.Core.Services
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _userSynchronizer = userSynchronizer ?? throw new ArgumentNullException(nameof(userSynchronizer));
+            _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
 
 
@@ -93,9 +100,74 @@ namespace TeamsManager.Core.Services
                 _logger.LogDebug("Użytkownik ID: {UserId} znaleziony w cache.", userId);
                 return cachedUser;
             }
-            _logger.LogDebug("Użytkownik ID: {UserId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", userId);
+            _logger.LogDebug("Użytkownik ID: {UserId} nie znaleziony w cache lub wymuszono odświeżenie.", userId);
 
             var userFromDb = await _userRepository.GetByIdAsync(userId);
+            
+            // NOWA LOGIKA: Synchronizacja z Graph jeśli mamy token
+            if (!string.IsNullOrEmpty(apiAccessToken) && (forceRefresh || userFromDb == null))
+            {
+                try
+                {
+                    _logger.LogInformation("Próba pobrania użytkownika {UserId} z Microsoft Graph", userId);
+                    
+                    // Pobierz dane z Graph
+                    var psUser = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _powerShellService.Users.GetM365UserByIdAsync(userId),
+                        $"GetM365UserByIdAsync dla ID: {userId}"
+                    );
+
+                    if (psUser != null)
+                    {
+                        // Synchronizuj z lokalną bazą
+                        if (await _userSynchronizer.RequiresSynchronizationAsync(psUser, userFromDb))
+                        {
+                            _logger.LogInformation("Synchronizacja użytkownika {UserId} z Microsoft Graph", userId);
+                            
+                            await _unitOfWork.BeginTransactionAsync();
+                            try
+                            {
+                                userFromDb = await _userSynchronizer.SynchronizeAsync(psUser, userFromDb);
+                                
+                                if (userFromDb.Id != userId && string.IsNullOrEmpty(userFromDb.Id))
+                                {
+                                    userFromDb.Id = userId; // Zachowaj lokalne ID
+                                }
+                                
+                                if (string.IsNullOrEmpty(userFromDb.Id))
+                                {
+                                    await _unitOfWork.Users.AddAsync(userFromDb);
+                                }
+                                else
+                                {
+                                    _unitOfWork.Users.Update(userFromDb);
+                                }
+                                
+                                await _unitOfWork.CommitAsync();
+                                await _unitOfWork.CommitTransactionAsync();
+                                
+                                // Inwaliduj cache po synchronizacji
+                                InvalidateUserCache(userId, userFromDb.UPN, invalidateAll: true);
+                                
+                                _logger.LogInformation("Synchronizacja użytkownika {UserId} zakończona pomyślnie", userId);
+                            }
+                            catch (Exception ex)
+                            {
+                                await _unitOfWork.RollbackAsync();
+                                _logger.LogError(ex, "Błąd podczas synchronizacji użytkownika {UserId}", userId);
+                                throw;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Błąd podczas pobierania użytkownika {UserId} z Graph", userId);
+                    // Kontynuuj z danymi lokalnymi jeśli są
+                }
+            }
+
             if (userFromDb != null && userFromDb.IsActive)
             {
                 _powerShellCacheService.Set(cacheKey, userFromDb);
@@ -107,14 +179,10 @@ namespace TeamsManager.Core.Services
                     _logger.LogDebug("Użytkownik (ID: {UserId}, UPN: {UPN}) zaktualizowany/dodany w cache po UPN.", userId, userFromDb.UPN);
                 }
             }
-            else
+            else if (userFromDb != null && !userFromDb.IsActive)
             {
-                _powerShellCacheService.Remove(cacheKey);
-                if (userFromDb != null && !userFromDb.IsActive)
-                {
-                    _logger.LogDebug("Użytkownik ID: {UserId} jest nieaktywny, nie zostanie zcache'owany po ID.", userId);
-                    return null;
-                }
+                _logger.LogDebug("Użytkownik ID: {UserId} jest nieaktywny, nie zostanie zcache'owany.", userId);
+                return null;
             }
             return userFromDb;
         }
@@ -265,28 +333,13 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // Najpierw połącz się z Graph używając przekazanego tokenu
-                if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
-                {
-                    _logger.LogError("Nie można utworzyć użytkownika: Nie udało się połączyć z Microsoft Graph API.");
-                    
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Failed,
-                        "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateUserAsync."
-                    );
-                    
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        "Nie udało się utworzyć użytkownika: Błąd połączenia z Microsoft Graph API.",
-                        "error"
-                    );
-                    
-                    return null;
-                }
-
-                // Używamy bezpośrednio metod PowerShell po zapewnieniu połączenia
-                string? externalUserId = await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true);
+                // Używamy ExecuteWithAutoConnectAsync dla utworzenia użytkownika w M365
+                string? externalUserId = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true),
+                    $"Tworzenie użytkownika M365: {firstName} {lastName} ({upn})"
+                );
+                
                 if (string.IsNullOrEmpty(externalUserId))
                 {
                     _logger.LogError("Nie udało się utworzyć użytkownika {UPN} w Microsoft 365.", upn);
@@ -1198,27 +1251,14 @@ namespace TeamsManager.Core.Services
 
                 if (deactivateM365Account)
                 {
-                    // Najpierw połącz się z Graph używając przekazanego tokenu
-                    if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
-                    {
-                        _logger.LogError("Nie można zdezaktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
-                        
-                        await _operationHistoryService.UpdateOperationStatusAsync(
-                            operation.Id,
-                            OperationStatus.Failed,
-                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie DeactivateUserAsync."
-                        );
-                        
-                        await _notificationService.SendNotificationToUserAsync(
-                            currentUserUpn,
-                            "Nie udało się zdezaktywować użytkownika: Błąd połączenia z Microsoft Graph API.",
-                            "error"
-                        );
-                        
-                        return false;
-                    }
-                    bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, false);
-                    if (!psSuccess) 
+                    // Używamy ExecuteWithAutoConnectAsync dla dezaktywacji konta M365
+                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, false),
+                        $"Dezaktywacja konta M365 użytkownika: {user.UPN}"
+                    );
+                    
+                    if (psSuccess != true) 
                     { 
                         _logger.LogError("Nie udało się zdezaktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); 
                         
@@ -1351,27 +1391,14 @@ namespace TeamsManager.Core.Services
 
                 if (activateM365Account)
                 {
-                    // Najpierw połącz się z Graph używając przekazanego tokenu
-                    if (!await _powerShellService.ConnectWithAccessTokenAsync(apiAccessToken))
-                    {
-                        _logger.LogError("Nie można aktywować konta M365: Nie udało się połączyć z Microsoft Graph API.");
-                        
-                        await _operationHistoryService.UpdateOperationStatusAsync(
-                            operation.Id,
-                            OperationStatus.Failed,
-                            "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie ActivateUserAsync."
-                        );
-                        
-                        await _notificationService.SendNotificationToUserAsync(
-                            currentUserUpn,
-                            "Nie udało się aktywować użytkownika: Błąd połączenia z Microsoft Graph API.",
-                            "error"
-                        );
-                        
-                        return false;
-                    }
-                    bool psSuccess = await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, true);
-                    if (!psSuccess) 
+                    // Używamy ExecuteWithAutoConnectAsync dla aktywacji konta M365
+                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, true),
+                        $"Aktywacja konta M365 użytkownika: {user.UPN}"
+                    );
+                    
+                    if (psSuccess != true) 
                     { 
                         _logger.LogError("Nie udało się aktywować konta użytkownika {UPN} w Microsoft 365.", user.UPN); 
                         

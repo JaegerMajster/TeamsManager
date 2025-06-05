@@ -5,13 +5,14 @@ using System.Linq;
 using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Helpers.PowerShell;
@@ -27,12 +28,12 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ChannelService> _logger;
-        private readonly IMemoryCache _cache;
         private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphSynchronizer<Channel> _channelSynchronizer;
+        private readonly IUnitOfWork _unitOfWork;
 
         private const string TeamChannelsCacheKeyPrefix = "Channels_TeamId_";
         private const string ChannelByGraphIdCacheKeyPrefix = "Channel_GraphId_";
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(15);
 
         public ChannelService(
             IPowerShellService powerShellService,
@@ -42,8 +43,9 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ChannelService> logger,
-            IMemoryCache memoryCache,
-            IPowerShellCacheService powerShellCacheService)
+            IPowerShellCacheService powerShellCacheService,
+            IGraphSynchronizer<Channel> channelSynchronizer,
+            IUnitOfWork unitOfWork)
         {
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _channelRepository = channelRepository ?? throw new ArgumentNullException(nameof(channelRepository));
@@ -52,14 +54,12 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _channelSynchronizer = channelSynchronizer ?? throw new ArgumentNullException(nameof(channelSynchronizer));
+            _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
 
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            return _powerShellCacheService.GetDefaultCacheEntryOptions();
-        }
+
 
         private Channel MapPsObjectToLocalChannel(PSObject psChannel, string localTeamId)
         {
@@ -141,7 +141,7 @@ namespace TeamsManager.Core.Services
             string teamGraphId = team.ExternalId;
             string cacheKey = TeamChannelsCacheKeyPrefix + teamId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Channel>? cachedChannels) && cachedChannels != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValueWithMetrics(cacheKey, out IEnumerable<Channel>? cachedChannels) && cachedChannels != null)
             {
                 _logger.LogDebug("Kanały dla lokalnego zespołu ID {TeamId} (GraphID: {TeamGraphId}) znalezione w cache (serwis).", teamId, teamGraphId);
                 return cachedChannels;
@@ -159,83 +159,71 @@ namespace TeamsManager.Core.Services
                 return Enumerable.Empty<Channel>();
             }
 
-            var channelsFromGraph = new List<Channel>();
-            foreach (var pso in psObjects)
-            {
-                channelsFromGraph.Add(MapPsObjectToLocalChannel(pso, teamId));
-            }
-
+            // NOWA LOGIKA: Użyj ChannelSynchronizer zamiast MapPsObjectToLocalChannel
             var localChannels = (await _channelRepository.FindAsync(c => c.TeamId == teamId)).ToList();
             var currentUser = _currentUserService.GetCurrentUserUpn() ?? "system_sync_channels";
+            var graphChannelIds = new HashSet<string>();
 
-            // Synchronizacja kanałów z Graph do lokalnej bazy
-            var graphChannelIds = new HashSet<string>(channelsFromGraph.Select(c => c.Id));
-
-            foreach (var graphChannel in channelsFromGraph)
+                         // Synchronizacja kanałów z Graph w transakcji
+             await _unitOfWork.BeginTransactionAsync();
+            try
             {
-                var localChannel = localChannels.FirstOrDefault(lc => lc.Id == graphChannel.Id);
-                if (localChannel == null)
+                foreach (var pso in psObjects)
                 {
-                    graphChannel.CreatedBy = currentUser;
-                    graphChannel.CreatedDate = DateTime.UtcNow;
-                    await _channelRepository.AddAsync(graphChannel);
-                    _logger.LogInformation("Dodano nowy kanał lokalnie: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
-                        graphChannel.DisplayName, graphChannel.Id, teamId);
-                }
-                else
-                {
-                    bool updated = false;
-                    if (localChannel.DisplayName != graphChannel.DisplayName) { localChannel.DisplayName = graphChannel.DisplayName; updated = true; }
-                    if (localChannel.Description != graphChannel.Description) { localChannel.Description = graphChannel.Description; updated = true; }
-                    if (localChannel.ChannelType != graphChannel.ChannelType) { localChannel.ChannelType = graphChannel.ChannelType; updated = true; }
-                    if (localChannel.IsPrivate != graphChannel.IsPrivate) { localChannel.IsPrivate = graphChannel.IsPrivate; updated = true; }
-                    if (localChannel.IsGeneral != graphChannel.IsGeneral) { localChannel.IsGeneral = graphChannel.IsGeneral; updated = true; }
-                    if (localChannel.ExternalUrl != graphChannel.ExternalUrl) { localChannel.ExternalUrl = graphChannel.ExternalUrl; updated = true; }
+                    // Utwórz tymczasowy kanał z TeamId
+                    var tempChannel = new Channel { TeamId = teamId };
                     
-                    // Aktualizacja nowych pól
-                    if (localChannel.FilesCount != graphChannel.FilesCount) { localChannel.FilesCount = graphChannel.FilesCount; updated = true; }
-                    if (localChannel.FilesSize != graphChannel.FilesSize) { localChannel.FilesSize = graphChannel.FilesSize; updated = true; }
-                    if (localChannel.LastActivityDate != graphChannel.LastActivityDate) { localChannel.LastActivityDate = graphChannel.LastActivityDate; updated = true; }
-                    if (localChannel.LastMessageDate != graphChannel.LastMessageDate) { localChannel.LastMessageDate = graphChannel.LastMessageDate; updated = true; }
-                    if (localChannel.MessageCount != graphChannel.MessageCount) { localChannel.MessageCount = graphChannel.MessageCount; updated = true; }
-                    if (localChannel.NotificationSettings != graphChannel.NotificationSettings) { localChannel.NotificationSettings = graphChannel.NotificationSettings; updated = true; }
-                    if (localChannel.IsModerationEnabled != graphChannel.IsModerationEnabled) { localChannel.IsModerationEnabled = graphChannel.IsModerationEnabled; updated = true; }
-                    if (localChannel.Category != graphChannel.Category) { localChannel.Category = graphChannel.Category; updated = true; }
-                    if (localChannel.Tags != graphChannel.Tags) { localChannel.Tags = graphChannel.Tags; updated = true; }
-                    if (localChannel.SortOrder != graphChannel.SortOrder) { localChannel.SortOrder = graphChannel.SortOrder; updated = true; }
+                    // Użyj synchronizatora do mapowania właściwości
+                    await _channelSynchronizer.SynchronizeAsync(pso, tempChannel);
+                    graphChannelIds.Add(tempChannel.Id);
                     
-                    // Przywróć kanał jeśli był zarchiwizowany
-                    if (localChannel.Status != ChannelStatus.Active) 
-                    { 
-                        localChannel.Restore(currentUser); 
-                        updated = true; 
-                    }
-
-                    if (updated)
+                    var localChannel = localChannels.FirstOrDefault(lc => lc.Id == tempChannel.Id);
+                    
+                    if (localChannel == null)
                     {
+                        // Nowy kanał
+                        tempChannel.CreatedBy = currentUser;
+                        tempChannel.CreatedDate = DateTime.UtcNow;
+                        await _unitOfWork.Repository<Channel>().AddAsync(tempChannel);
+                        _logger.LogInformation("Dodano nowy kanał: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
+                            tempChannel.DisplayName, tempChannel.Id, teamId);
+                    }
+                    else if (await _channelSynchronizer.RequiresSynchronizationAsync(pso, localChannel))
+                    {
+                        // Aktualizacja istniejącego
+                        await _channelSynchronizer.SynchronizeAsync(pso, localChannel);
                         localChannel.MarkAsModified(currentUser);
-                        _channelRepository.Update(localChannel);
-                        _logger.LogInformation("Zaktualizowano lokalny kanał: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
+                        _unitOfWork.Repository<Channel>().Update(localChannel);
+                        _logger.LogInformation("Zaktualizowano kanał: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
                             localChannel.DisplayName, localChannel.Id, teamId);
                     }
                 }
-            }
 
-            // Oznacz kanały usunięte z Graph jako nieaktywne lokalnie
-            foreach (var localChannel in localChannels.Where(lc => lc.Status == ChannelStatus.Active))
-            {
-                if (!graphChannelIds.Contains(localChannel.Id))
+                // Oznacz kanały usunięte z Graph jako zarchiwizowane
+                foreach (var localChannel in localChannels.Where(lc => lc.Status == ChannelStatus.Active))
                 {
-                    localChannel.Archive($"Kanał usunięty z Microsoft Teams", currentUser);
-                    _channelRepository.Update(localChannel);
-                    _logger.LogWarning("Kanał {ChannelDisplayName} (GraphID: {ChannelGraphId}) został usunięty z Microsoft Teams. Oznaczono jako zarchiwizowany.", 
-                        localChannel.DisplayName, localChannel.Id);
+                    if (!graphChannelIds.Contains(localChannel.Id))
+                    {
+                        localChannel.Archive($"Kanał usunięty z Microsoft Teams", currentUser);
+                        _unitOfWork.Repository<Channel>().Update(localChannel);
+                        _logger.LogWarning("Kanał {ChannelDisplayName} (GraphID: {ChannelGraphId}) został usunięty z Teams", 
+                            localChannel.DisplayName, localChannel.Id);
+                    }
                 }
+
+                await _unitOfWork.CommitAsync();
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch (Exception ex)
+            {
+                await _unitOfWork.RollbackAsync();
+                _logger.LogError(ex, "Błąd podczas synchronizacji kanałów dla zespołu {TeamId}", teamId);
+                throw;
             }
 
             var finalChannelList = (await _channelRepository.FindAsync(c => c.TeamId == teamId && c.IsActive)).ToList();
 
-            _cache.Set(cacheKey, finalChannelList, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, finalChannelList);
             _logger.LogInformation("Pobrano i zsynchronizowano {Count} kanałów dla zespołu ID {TeamId}. Zcache'owano.", finalChannelList.Count, teamId);
             return finalChannelList;
         }
@@ -252,7 +240,7 @@ namespace TeamsManager.Core.Services
             string teamGraphId = team.ExternalId;
             string cacheKey = ChannelByGraphIdCacheKeyPrefix + channelGraphId;
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out Channel? cachedChannel) && cachedChannel != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValueWithMetrics(cacheKey, out Channel? cachedChannel) && cachedChannel != null)
             {
                 _logger.LogDebug("Kanał GraphID: {ChannelGraphId} (zespół {TeamGraphId}) znaleziony w cache.", channelGraphId, teamGraphId);
                 return cachedChannel;
@@ -264,7 +252,7 @@ namespace TeamsManager.Core.Services
                 if (localChannel != null && localChannel.IsActive)
                 {
                     _logger.LogDebug("Kanał GraphID: {ChannelGraphId} (zespół {TeamGraphId}) znaleziony w lokalnej bazie (bez forceRefresh).", channelGraphId, teamGraphId);
-                    _cache.Set(cacheKey, localChannel, GetDefaultCacheEntryOptions());
+                    _powerShellCacheService.Set(cacheKey, localChannel);
                     return localChannel;
                 }
             }
@@ -278,7 +266,7 @@ namespace TeamsManager.Core.Services
             if (psChannel == null)
             {
                 _logger.LogInformation("Kanał GraphID: {ChannelGraphId} w zespole GraphID: {TeamGraphId} nie znaleziony przez PowerShell.", channelGraphId, teamGraphId);
-                _cache.Remove(cacheKey);
+                _powerShellCacheService.Remove(cacheKey);
                 return null;
             }
 
@@ -308,7 +296,7 @@ namespace TeamsManager.Core.Services
             }
             // SaveChangesAsync na wyższym poziomie
 
-            _cache.Set(cacheKey, channelFromGraph, GetDefaultCacheEntryOptions());
+            _powerShellCacheService.Set(cacheKey, channelFromGraph);
             return channelFromGraph;
         }
 
@@ -703,20 +691,116 @@ namespace TeamsManager.Core.Services
             }
         }
 
-        public Task RefreshChannelCacheAsync(string teamId)
+                public Task RefreshChannelCacheAsync(string teamId)
         {
             if (string.IsNullOrWhiteSpace(teamId))
             {
                 _logger.LogWarning("Próba odświeżenia cache kanałów dla pustego teamId (lokalnego).");
                 return Task.CompletedTask;
             }
-            
+
             _logger.LogInformation("Odświeżanie cache dla kanałów lokalnego zespołu ID: {TeamId}", teamId);
-            
+
             // Usunięcie cache dla zespołu
-            _cache.Remove(TeamChannelsCacheKeyPrefix + teamId);
-            
+            _powerShellCacheService.Remove(TeamChannelsCacheKeyPrefix + teamId);
+
             return Task.CompletedTask;
+        }
+
+        // ETAP 6/8: Zaawansowane funkcje cache P2
+
+        /// <summary>
+        /// Unieważnia wszystkie cache kanałów dla zespołu w jednej operacji batch
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        public async Task InvalidateAllChannelsForTeamAsync(string teamId)
+        {
+            if (string.IsNullOrWhiteSpace(teamId))
+            {
+                _logger.LogWarning("Próba batch invalidation cache kanałów dla pustego teamId.");
+                return;
+            }
+
+            // Pobierz wszystkie kanały zespołu z bazy, aby znać ich GraphId
+            var channels = await _channelRepository.FindAsync(c => c.TeamId == teamId);
+            
+            var keysToInvalidate = new List<string>
+            {
+                $"{TeamChannelsCacheKeyPrefix}{teamId}"
+            };
+
+            // Dodaj klucze dla poszczególnych kanałów
+            foreach (var channel in channels)
+            {
+                if (!string.IsNullOrWhiteSpace(channel.Id))
+                {
+                    keysToInvalidate.Add($"{ChannelByGraphIdCacheKeyPrefix}{channel.Id}");
+                }
+            }
+
+            _powerShellCacheService.BatchInvalidateKeys(
+                keysToInvalidate, 
+                $"InvalidateAllChannelsForTeam_{teamId}"
+            );
+
+            _logger.LogInformation("Batch invalidation wykonana dla {Count} kluczy cache zespołu {TeamId}", 
+                keysToInvalidate.Count, teamId);
+        }
+
+        /// <summary>
+        /// Wstępnie ładuje cache kanałów dla zespołu (cache warming)
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        /// <param name="apiAccessToken">Token dostępu do API</param>
+        public async Task WarmChannelsCacheAsync(string teamId, string apiAccessToken)
+        {
+            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(apiAccessToken))
+            {
+                _logger.LogWarning("Próba cache warming z pustym teamId lub tokenem.");
+                return;
+            }
+
+            var cacheKey = TeamChannelsCacheKeyPrefix + teamId;
+            
+            await _powerShellCacheService.WarmCacheAsync(
+                cacheKey,
+                async () => {
+                    _logger.LogInformation("Cache warming: ładowanie kanałów dla zespołu {TeamId}", teamId);
+                    var channels = await GetTeamChannelsAsync(teamId, apiAccessToken, forceRefresh: true);
+                    return channels ?? Enumerable.Empty<Channel>();
+                },
+                TimeSpan.FromMinutes(30) // Dłuższy TTL dla warm cache
+            );
+
+            _logger.LogInformation("Cache warming wykonane dla kanałów zespołu {TeamId}", teamId);
+        }
+
+        /// <summary>
+        /// Unieważnia wszystkie cache kanałów na podstawie wzorca
+        /// </summary>
+        public void InvalidateAllChannelCaches()
+        {
+            // Usuń wszystkie cache kanałów
+            _powerShellCacheService.InvalidateByPattern(
+                "Channel", 
+                "InvalidateAllChannels"
+            );
+
+            _logger.LogInformation("Pattern-based invalidation wykonana dla wszystkich cache kanałów");
+        }
+
+        /// <summary>
+        /// Pobiera metryki wydajności cache dla kanałów
+        /// </summary>
+        /// <returns>Informacje o wydajności cache</returns>
+        public string GetChannelCacheMetrics()
+        {
+            var metrics = _powerShellCacheService.GetCacheMetrics();
+            return $"Cache Hit Rate: {metrics.HitRate:F1}%, " +
+                   $"Total Operations: {metrics.TotalOperations}, " +
+                   $"Cache Hits: {metrics.CacheHits}, " +
+                   $"Cache Misses: {metrics.CacheMisses}, " +
+                   $"Invalidations: {metrics.CacheInvalidations}";
         }
     }
 }
