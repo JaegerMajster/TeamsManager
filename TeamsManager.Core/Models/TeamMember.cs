@@ -1,5 +1,6 @@
 ﻿using System;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Helpers;
 
 namespace TeamsManager.Core.Models
 {
@@ -291,18 +292,21 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Aktualizuje datę ostatniej aktywności
         /// </summary>
-        public void UpdateLastActivity()
+        /// <param name="modifiedBy">Osoba wykonująca aktualizację (UPN).</param>
+        public void UpdateLastActivity(string? modifiedBy = null)
         {
             LastActivityDate = DateTime.UtcNow;
+            MarkAsModified(modifiedBy ?? AuditHelper.SystemActivityUpdate);
         }
 
         /// <summary>
         /// Zwiększa licznik wysłanych wiadomości
         /// </summary>
-        public void IncrementMessageCount()
+        /// <param name="modifiedBy">Osoba wykonująca aktualizację (UPN).</param>
+        public void IncrementMessageCount(string? modifiedBy = null)
         {
             MessagesCount++;
-            UpdateLastActivity();
+            UpdateLastActivity(modifiedBy);
         }
 
         /// <summary>

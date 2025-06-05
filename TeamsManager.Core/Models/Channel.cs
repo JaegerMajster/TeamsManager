@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Helpers;
 
 namespace TeamsManager.Core.Models
 {
@@ -330,7 +331,8 @@ namespace TeamsManager.Core.Models
         /// <param name="messageCount">Nowa liczba wiadomości.</param>
         /// <param name="filesCount">Nowa liczba plików.</param>
         /// <param name="filesSize">Nowy rozmiar plików.</param>
-        public void UpdateActivityStats(int? messageCount = null, int? filesCount = null, long? filesSize = null)
+        /// <param name="modifiedBy">Osoba wykonująca aktualizację (UPN).</param>
+        public void UpdateActivityStats(int? messageCount = null, int? filesCount = null, long? filesSize = null, string? modifiedBy = null)
         {
             if (messageCount.HasValue)
             {
@@ -345,8 +347,9 @@ namespace TeamsManager.Core.Models
                 FilesSize = filesSize.Value;
 
             LastActivityDate = DateTime.UtcNow;
-            // Rozważenie wywołania MarkAsModified, jeśli te statystyki są częścią stanu encji, który powinien być audytowany.
-            // MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_activity_update"); // Jeśli jest dostępne ICurrentUserService
+            
+            // Audyt z fallback na wartość systemową
+            MarkAsModified(modifiedBy ?? AuditHelper.SystemActivityUpdate);
         }
 
         /// <summary>

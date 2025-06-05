@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Helpers;
 
 namespace TeamsManager.Core.Models
 {
@@ -307,9 +308,11 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Oznacza ostatnie logowanie użytkownika
         /// </summary>
-        public void UpdateLastLogin()
+        /// <param name="modifiedBy">Osoba wykonująca aktualizację (UPN).</param>
+        public void UpdateLastLogin(string? modifiedBy = null)
         {
             LastLoginDate = DateTime.UtcNow;
+            MarkAsModified(modifiedBy ?? AuditHelper.SystemLoginUpdate);
         }
     }
 }

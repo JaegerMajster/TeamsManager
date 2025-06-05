@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using TeamsManager.Core.Helpers;
 
 namespace TeamsManager.Core.Models
 {
@@ -186,8 +187,9 @@ namespace TeamsManager.Core.Models
         /// Generuje nazwę zespołu na podstawie szablonu i podanych wartości
         /// </summary>
         /// <param name="values">Słownik wartości dla placeholderów</param>
+        /// <param name="modifiedBy">Osoba wykonująca generowanie (UPN).</param>
         /// <returns>Wygenerowana nazwa zespołu</returns>
-        public string GenerateTeamName(Dictionary<string, string> values)
+        public string GenerateTeamName(Dictionary<string, string> values, string? modifiedBy = null)
         {
             if (string.IsNullOrWhiteSpace(Template))
                 return string.Empty;
@@ -218,7 +220,7 @@ namespace TeamsManager.Core.Models
                 result = result.Substring(0, MaxLength.Value).TrimEnd();
 
             // Zapisz statystyki użycia
-            IncrementUsage();
+            IncrementUsage(modifiedBy);
 
             return result.Trim();
         }
@@ -282,10 +284,12 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Zwiększa licznik użyć szablonu
         /// </summary>
-        public void IncrementUsage()
+        /// <param name="modifiedBy">Osoba wykonująca aktualizację (UPN).</param>
+        public void IncrementUsage(string? modifiedBy = null)
         {
             UsageCount++;
             LastUsedDate = DateTime.UtcNow;
+            MarkAsModified(modifiedBy ?? AuditHelper.SystemActivityUpdate);
         }
 
         /// <summary>
