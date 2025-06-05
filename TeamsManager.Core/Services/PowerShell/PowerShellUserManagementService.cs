@@ -1081,145 +1081,189 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<bool> AssignLicenseToUserAsync(string userUpn, string licenseSkuId)
         {
-            // TODO [ETAP5-AUDIT]: Zgodność z PowerShellServices.md sekcja 4.1
-            // ✅ CMDLET: Set-MgUserLicense zgodny ze specyfikacją
-            // ✅ FUNKCJONALNOŚĆ: Zgodne z wymaganiami
-            // PRIORYTET: LOW - implementacja dobra
+            // [ETAP5] Walidacja parametrów z PSParameterValidator
+            var validatedUserUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            var validatedLicenseSkuId = PSParameterValidator.ValidateGuid(licenseSkuId, nameof(licenseSkuId));
             
-            // TODO [ETAP5-VALIDATION]: Brak walidacji parametrów
-            // PROPONOWANY: PSParameterValidator.ValidateEmail(userUpn)
-            // PROPONOWANY: PSParameterValidator.ValidateGuid(licenseSkuId)
-            // PRIORYTET: HIGH
-            if (!_connectionService.ValidateRunspaceState()) return false;
-
-            if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(licenseSkuId))
+            if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("UserUpn i LicenseSkuId są wymagane.");
-                return false;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            _logger.LogInformation("Przypisywanie licencji {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
+            _logger.LogInformation("Przypisywanie licencji {LicenseSkuId} do użytkownika {UserUpn}", 
+                validatedLicenseSkuId, validatedUserUpn);
 
             try
             {
-                var userId = await _userResolver.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(validatedUserUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
-                    return false;
+                    throw new UserOperationException(
+                        $"User not found: {validatedUserUpn}",
+                        new PowerShellCommandExecutionException($"User {validatedUserUpn} not found", "UserResolver.GetUserIdAsync", null));
                 }
 
-                var script = $@"
-                    $addLicenses = @(@{{SkuId='{licenseSkuId}'}})
-                    Set-MgUserLicense -UserId '{userId}' -AddLicenses $addLicenses -RemoveLicenses @() -ErrorAction Stop
-                    $true
-                ";
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", userId),
+                    ("AddLicenses", new[] { new { SkuId = validatedLicenseSkuId } }),
+                    ("RemoveLicenses", new string[0])
+                );
 
-                var results = await _connectionService.ExecuteScriptAsync(script);
-                var success = results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Set-MgUserLicense",
+                    parameters
+                );
 
-                if (success)
-                {
-                    _logger.LogInformation("Pomyślnie przypisano licencję {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
-                    
-                    // [ETAP7-CACHE] Unieważnij cache licencji użytkownika
-                    _cacheService.Remove($"PowerShell_UserLicenses_{userUpn}");
-                    
-                    // Unieważnij cache szczegółów użytkownika (zmienił się stan)
-                    _cacheService.InvalidateUserCache(userUpn: userUpn);
-                    
-                    _logger.LogInformation("Cache licencji użytkownika {UserUpn} unieważniony", userUpn);
-                }
-
-                return success;
+                // Cache invalidation for license changes
+                _cacheService.Remove($"PowerShell_UserLicenses_{validatedUserUpn}");
+                _cacheService.InvalidateUserCache(userUpn: validatedUserUpn);
+                
+                _logger.LogInformation("Pomyślnie przypisano licencję {LicenseSkuId} do użytkownika {UserUpn}", 
+                    validatedLicenseSkuId, validatedUserUpn);
+                
+                return true;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd przypisywania licencji {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
-                return false;
+                _logger.LogError(ex, "Błąd przypisywania licencji {LicenseSkuId} do użytkownika {UserUpn}", 
+                    validatedLicenseSkuId, validatedUserUpn);
+                throw new UserOperationException(
+                    $"Failed to assign license {validatedLicenseSkuId} to user {validatedUserUpn}",
+                    ex);
             }
         }
 
         public async Task<bool> RemoveLicenseFromUserAsync(string userUpn, string licenseSkuId)
         {
-            if (!_connectionService.ValidateRunspaceState()) return false;
-
-            if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(licenseSkuId))
+            // [ETAP5] Walidacja parametrów z PSParameterValidator
+            var validatedUserUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            var validatedLicenseSkuId = PSParameterValidator.ValidateGuid(licenseSkuId, nameof(licenseSkuId));
+            
+            if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("UserUpn i LicenseSkuId są wymagane.");
-                return false;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            _logger.LogInformation("Usuwanie licencji {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
+            _logger.LogInformation("Usuwanie licencji {LicenseSkuId} od użytkownika {UserUpn}", 
+                validatedLicenseSkuId, validatedUserUpn);
 
             try
             {
-                var userId = await _userResolver.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(validatedUserUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
-                    return false;
+                    throw new UserOperationException(
+                        $"User not found: {validatedUserUpn}",
+                        new PowerShellCommandExecutionException($"User {validatedUserUpn} not found", "UserResolver.GetUserIdAsync", null));
                 }
 
-                var script = $@"
-                    $removeLicenses = @('{licenseSkuId}')
-                    Set-MgUserLicense -UserId '{userId}' -AddLicenses @() -RemoveLicenses $removeLicenses -ErrorAction Stop
-                    $true
-                ";
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", userId),
+                    ("AddLicenses", new string[0]),
+                    ("RemoveLicenses", new[] { validatedLicenseSkuId })
+                );
 
-                var results = await _connectionService.ExecuteScriptAsync(script);
-                var success = results?.FirstOrDefault()?.BaseObject as bool? ?? false;
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Set-MgUserLicense",
+                    parameters
+                );
 
-                if (success)
-                {
-                    _logger.LogInformation("Pomyślnie usunięto licencję {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
-                    
-                    // [ETAP7-CACHE] Unieważnij cache licencji użytkownika
-                    _cacheService.Remove($"PowerShell_UserLicenses_{userUpn}");
-                    
-                    // Unieważnij cache szczegółów użytkownika (zmienił się stan)
-                    _cacheService.InvalidateUserCache(userUpn: userUpn);
-                    
-                    _logger.LogInformation("Cache licencji użytkownika {UserUpn} unieważniony po usunięciu licencji", userUpn);
-                }
-
-                return success;
+                // Cache invalidation for license changes
+                _cacheService.Remove($"PowerShell_UserLicenses_{validatedUserUpn}");
+                _cacheService.InvalidateUserCache(userUpn: validatedUserUpn);
+                
+                _logger.LogInformation("Pomyślnie usunięto licencję {LicenseSkuId} od użytkownika {UserUpn}", 
+                    validatedLicenseSkuId, validatedUserUpn);
+                
+                return true;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd usuwania licencji {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
-                return false;
+                _logger.LogError(ex, "Błąd usuwania licencji {LicenseSkuId} od użytkownika {UserUpn}", 
+                    validatedLicenseSkuId, validatedUserUpn);
+                throw new UserOperationException(
+                    $"Failed to remove license {validatedLicenseSkuId} from user {validatedUserUpn}",
+                    ex);
             }
         }
 
         public async Task<Collection<PSObject>?> GetUserLicensesAsync(string userUpn)
         {
-            if (!_connectionService.ValidateRunspaceState()) return null;
-
-            if (string.IsNullOrWhiteSpace(userUpn))
+            // [ETAP5] Walidacja parametrów z PSParameterValidator
+            var validatedUserUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            
+            // Cache check
+            var cacheKey = $"PowerShell_UserLicenses_{validatedUserUpn}";
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedLicenses))
             {
-                _logger.LogError("UserUpn jest wymagany.");
-                return null;
+                _logger.LogDebug("Licencje użytkownika {UserUpn} znalezione w cache", validatedUserUpn);
+                return cachedLicenses;
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
-            _logger.LogInformation("Pobieranie licencji dla użytkownika {UserUpn}", userUpn);
+            _logger.LogInformation("Pobieranie licencji dla użytkownika {UserUpn}", validatedUserUpn);
 
             try
             {
-                var userId = await _userResolver.GetUserIdAsync(userUpn);
+                var userId = await _userResolver.GetUserIdAsync(validatedUserUpn);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
-                    return null;
+                    throw new UserOperationException(
+                        $"User not found: {validatedUserUpn}",
+                        new PowerShellCommandExecutionException($"User {validatedUserUpn} not found", "UserResolver.GetUserIdAsync", null));
                 }
 
-                var script = $"Get-MgUserLicenseDetail -UserId '{userId}' -ErrorAction Stop";
-                return await _connectionService.ExecuteScriptAsync(script);
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", userId)
+                );
+
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-MgUserLicenseDetail",
+                    parameters
+                );
+
+                if (results != null && results.Any())
+                {
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(10));
+                    _logger.LogInformation("Licencje użytkownika {UserUpn} pobrane i dodane do cache", validatedUserUpn);
+                }
+
+                return results;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas pobierania licencji dla użytkownika {UserUpn}", userUpn);
-                return null;
+                _logger.LogError(ex, "Błąd podczas pobierania licencji dla użytkownika {UserUpn}", validatedUserUpn);
+                throw new UserOperationException(
+                    $"Failed to retrieve licenses for user {validatedUserUpn}",
+                    ex);
             }
         }
 
