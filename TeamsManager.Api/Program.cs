@@ -22,6 +22,7 @@ using TeamsManager.Core.Services.Auth;
 using TeamsManager.Core.Services.UserContext;
 using TeamsManager.Data;
 using TeamsManager.Data.Repositories;
+using TeamsManager.Data.UnitOfWork;
 using System;
 using TeamsManager.Core.Enums;
 using Swashbuckle.AspNetCore.Annotations;
@@ -32,6 +33,10 @@ using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
 using TeamsManager.Core.Services.PowerShellServices; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
 using TeamsManager.Api.HealthChecks; // <-- Dodane dla DependencyInjectionHealthCheck
 using TeamsManager.Core.Abstractions.Services.PowerShell; // <-- Dodane dla interfejsów PowerShell
+using TeamsManager.Core.Abstractions.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
+using TeamsManager.Core.Abstractions.Services.Cache; // <-- Dodane dla CacheInvalidationService (Etap 7/8)
+using TeamsManager.Core.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
+using TeamsManager.Core.Services.Cache; // <-- Dodane dla implementacji Cache (Etap 7/8)
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -196,7 +201,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddMemoryCache();
 
-// Rejestracja Repozytoriów
+// Rejestracja Unit of Work
+builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+
+// Rejestracja Repozytoriów - ZACHOWUJEMY dla kompatybilności wstecznej!
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ITeamRepository, TeamRepository>();
@@ -213,6 +221,18 @@ builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<Us
 // ========== WCZEŚNIEJ DODANA REJESTRACJA - StubNotificationService ==========
 builder.Services.AddScoped<INotificationService, StubNotificationService>();
 // ==========================================================================
+
+// ========== NOWA REJESTRACJA - Synchronizatory Graph-DB (Etap 4/8) ==========
+builder.Services.AddScoped<IGraphSynchronizer<Team>, TeamSynchronizer>();
+builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
+builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
+
+// ETAP 7/8: Centralizacja inwalidacji cache
+builder.Services.AddSingleton<ICacheInvalidationService, CacheInvalidationService>();
+// W przyszłości dodaj więcej synchronizatorów:
+// builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
+// builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
+// ===========================================================================
 
 // Rejestracja Serwisów Aplikacyjnych
 builder.Services.AddPowerShellServices(); // To rejestruje IPowerShellConnectionService, IPowerShellCacheService, IPowerShellTeamManagementService, IPowerShellUserManagementService, IPowerShellBulkOperationsService, IPowerShellService
@@ -284,6 +304,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/notificationHub"))
+                {
+                    context.Token = accessToken;
+                    Console.WriteLine($"[API Auth] SignalR JWT token extracted from query string for path: {path}");
+                }
+                return Task.CompletedTask;
+            },
             OnAuthenticationFailed = context => {
                 Console.WriteLine($"[API Auth] BŁĄD autentykacji: {context.Exception.Message}");
                 System.Diagnostics.Debug.WriteLine($"[API Auth] BŁĄD autentykacji: {context.Exception.ToString()}");
