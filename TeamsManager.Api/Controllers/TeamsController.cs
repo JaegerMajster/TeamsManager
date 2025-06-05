@@ -41,7 +41,9 @@ namespace TeamsManager.Api.Controllers
         public string? Semester { get; set; }
         public bool RequiresApproval { get; set; }
         public int? MaxMembers { get; set; }
+        public TeamStatus Status { get; set; } = TeamStatus.Active;
         // Uwaga: Status zespołu (Active/Archived) jest zarządzany przez dedykowane endpointy Archive/Restore
+        // Status jest tu dla kompletności DTO, ale UpdateTeam go ignoruje
     }
 
     public class AddMemberRequestDto
@@ -183,30 +185,118 @@ namespace TeamsManager.Api.Controllers
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
-            // TODO: Rozważyć pobranie istniejącego zespołu i zmapowanie DTO na niego,
-            // zamiast tworzyć nowy obiekt Team, aby uniknąć nadpisania pól, których DTO nie zawiera.
-            // Na razie zakładamy, że serwis obsługuje aktualizację na podstawie przekazanego obiektu.
-            var teamToUpdate = new Team
+            // [ETAP4-REFACTOR] Wdrożenie wzorca częściowej aktualizacji (PATCH)
+            // Najpierw pobierz istniejący zespół, aby upewnić się, że istnieje
+            var existingTeam = await _teamService.GetTeamByIdAsync(teamId, accessToken: accessToken);
+            if (existingTeam == null)
             {
-                Id = teamId, // ID musi być ustawione dla serwisu
-                DisplayName = requestDto.DisplayName,
-                Description = requestDto.Description,
-                Owner = requestDto.OwnerUpn,
-                Visibility = requestDto.Visibility,
-                SchoolTypeId = requestDto.SchoolTypeId,
-                SchoolYearId = requestDto.SchoolYearId,
-                TemplateId = requestDto.TemplateId,
-                AcademicYear = requestDto.AcademicYear,
-                Semester = requestDto.Semester,
-                RequiresApproval = requestDto.RequiresApproval,
-                MaxMembers = requestDto.MaxMembers
-                // Status nie jest tutaj aktualizowany, użyj Archive/Restore
-            };
+                _logger.LogWarning("Nie znaleziono zespołu o ID: {TeamId} do aktualizacji.", teamId);
+                return NotFound(new { Message = $"Zespół o ID '{teamId}' nie został znaleziony." });
+            }
 
-            var success = await _teamService.UpdateTeamAsync(teamToUpdate, accessToken);
+            // Śledzenie zmian dla audytu
+            var changedFields = new List<string>();
+
+            // Mapuj tylko przekazane wartości (wzorzec z UsersController) 
+            // Używając walidacji niepustych stringów oraz null checking dla opcjonalnych pól
+            if (!string.IsNullOrWhiteSpace(requestDto.DisplayName) && requestDto.DisplayName != existingTeam.DisplayName)
+            {
+                changedFields.Add(nameof(Team.DisplayName));
+                existingTeam.DisplayName = requestDto.DisplayName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(requestDto.Description) && requestDto.Description != existingTeam.Description)
+            {
+                changedFields.Add(nameof(Team.Description));
+                existingTeam.Description = requestDto.Description;
+            }
+
+            if (!string.IsNullOrWhiteSpace(requestDto.OwnerUpn) && requestDto.OwnerUpn != existingTeam.Owner)
+            {
+                changedFields.Add(nameof(Team.Owner));
+                existingTeam.Owner = requestDto.OwnerUpn;
+            }
+
+            if (requestDto.Visibility != existingTeam.Visibility)
+            {
+                changedFields.Add(nameof(Team.Visibility));
+                existingTeam.Visibility = requestDto.Visibility;
+            }
+
+            // Walidacja biznesowa: MaxMembers nie może być mniejsze niż obecna liczba członków
+            if (requestDto.MaxMembers.HasValue && requestDto.MaxMembers != existingTeam.MaxMembers)
+            {
+                if (requestDto.MaxMembers < existingTeam.MemberCount)
+                {
+                    return BadRequest(new { 
+                        Message = $"MaxMembers ({requestDto.MaxMembers}) nie może być mniejsze niż obecna liczba członków ({existingTeam.MemberCount})" 
+                    });
+                }
+                changedFields.Add(nameof(Team.MaxMembers));
+                existingTeam.MaxMembers = requestDto.MaxMembers;
+            }
+
+            // Pola opcjonalne - sprawdzaj różnice z istniejącymi wartościami
+            if (requestDto.SchoolTypeId != existingTeam.SchoolTypeId)
+            {
+                changedFields.Add(nameof(Team.SchoolTypeId));
+                existingTeam.SchoolTypeId = requestDto.SchoolTypeId;
+            }
+
+            if (requestDto.SchoolYearId != existingTeam.SchoolYearId)
+            {
+                changedFields.Add(nameof(Team.SchoolYearId));
+                existingTeam.SchoolYearId = requestDto.SchoolYearId;
+            }
+
+            if (requestDto.TemplateId != existingTeam.TemplateId)
+            {
+                changedFields.Add(nameof(Team.TemplateId));
+                existingTeam.TemplateId = requestDto.TemplateId;
+            }
+
+            if (requestDto.AcademicYear != existingTeam.AcademicYear)
+            {
+                changedFields.Add(nameof(Team.AcademicYear));
+                existingTeam.AcademicYear = requestDto.AcademicYear;
+            }
+
+            if (requestDto.Semester != existingTeam.Semester)
+            {
+                changedFields.Add(nameof(Team.Semester));
+                existingTeam.Semester = requestDto.Semester;
+            }
+
+            if (requestDto.RequiresApproval != existingTeam.RequiresApproval)
+            {
+                changedFields.Add(nameof(Team.RequiresApproval));
+                existingTeam.RequiresApproval = requestDto.RequiresApproval;
+            }
+
+            // Loguj zmiany dla audytu
+            if (changedFields.Any())
+            {
+                _logger.LogInformation("Aktualizacja zespołu {TeamId}: zmieniono pola {Fields}", 
+                    teamId, string.Join(", ", changedFields));
+            }
+            else
+            {
+                _logger.LogInformation("Aktualizacja zespołu {TeamId}: brak zmian do zastosowania", teamId);
+                return NoContent(); // 204 No Content - brak zmian, ale sukces
+            }
+
+            // UWAGA: Status zespołu NIE jest aktualizowany przez UpdateTeam - użyj Archive/Restore
+            if (requestDto.Status != existingTeam.Status)
+            {
+                _logger.LogWarning("Próba zmiany statusu zespołu {TeamId} z {OldStatus} na {NewStatus} przez UpdateTeam - ignorowana. Użyj ArchiveTeam/RestoreTeam.", 
+                    teamId, existingTeam.Status, requestDto.Status);
+            }
+
+            var success = await _teamService.UpdateTeamAsync(existingTeam, accessToken);
             if (success)
             {
-                _logger.LogInformation("Zespół ID: {TeamId} zaktualizowany pomyślnie.", teamId);
+                _logger.LogInformation("Zespół ID: {TeamId} zaktualizowany pomyślnie. Zmienione pola: {ChangedFields}", 
+                    teamId, string.Join(", ", changedFields));
                 return NoContent(); // 204 No Content
             }
             _logger.LogWarning("Nie udało się zaktualizować zespołu ID: {TeamId}.", teamId);

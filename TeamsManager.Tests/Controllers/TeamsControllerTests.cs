@@ -203,6 +203,13 @@ namespace TeamsManager.Tests.Controllers
         {
             // Arrange
             var teamId = "team123";
+            var existingTeam = new Team 
+            { 
+                Id = teamId, 
+                DisplayName = "Original Team", 
+                Description = "Original Description",
+                Owner = "original@example.com"
+            };
             var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto
             {
                 DisplayName = "Updated Team",
@@ -210,6 +217,10 @@ namespace TeamsManager.Tests.Controllers
                 OwnerUpn = "newowner@example.com"
             };
             SetupControllerContext(_validAccessToken);
+            
+            // [ETAP4-REFACTOR] Nowy wzorzec wymaga GetTeamByIdAsync
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync(existingTeam);
             
             _mockTeamService.Setup(s => s.UpdateTeamAsync(It.IsAny<Team>(), _accessTokenValue))
                            .ReturnsAsync(true);
@@ -238,12 +249,36 @@ namespace TeamsManager.Tests.Controllers
         }
 
         [Fact]
-        public async Task UpdateTeam_ServiceReturnsFalse_ShouldReturnBadRequest()
+        public async Task UpdateTeam_TeamNotFound_ShouldReturnNotFound()
         {
             // Arrange
             var teamId = "team123";
             var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto { DisplayName = "Updated" };
             SetupControllerContext(_validAccessToken);
+            
+            // [ETAP4-REFACTOR] GetTeamByIdAsync zwraca null dla nieistniejącego zespołu
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync((Team?)null);
+
+            // Act
+            var result = await _controller.UpdateTeam(teamId, requestDto);
+
+            // Assert
+            var notFoundResult = result.Should().BeOfType<NotFoundObjectResult>().Subject;
+            notFoundResult.Value.Should().BeEquivalentTo(new { Message = $"Zespół o ID '{teamId}' nie został znaleziony." });
+        }
+
+        [Fact]
+        public async Task UpdateTeam_ServiceReturnsFalse_ShouldReturnBadRequest()
+        {
+            // Arrange
+            var teamId = "team123";
+            var existingTeam = new Team { Id = teamId, DisplayName = "Original Team" };
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto { DisplayName = "Updated" };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync(existingTeam);
             
             _mockTeamService.Setup(s => s.UpdateTeamAsync(It.IsAny<Team>(), _accessTokenValue))
                            .ReturnsAsync(false);
@@ -254,6 +289,128 @@ namespace TeamsManager.Tests.Controllers
             // Assert
             var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
             badRequestResult.Value.Should().BeEquivalentTo(new { Message = "Nie udało się zaktualizować zespołu." });
+        }
+
+        [Fact]
+        public async Task UpdateTeam_MaxMembersSmallerThanCurrentCount_ShouldReturnBadRequest()
+        {
+            // Arrange
+            var teamId = "team123";
+            var existingTeam = new Team 
+            { 
+                Id = teamId, 
+                DisplayName = "Original Team", 
+                MaxMembers = 15
+            };
+            
+            // Symulacja 10 aktywnych członków
+            for (int i = 1; i <= 10; i++)
+            {
+                existingTeam.Members.Add(new TeamMember 
+                { 
+                    Id = $"member{i}", 
+                    UserId = $"user{i}", 
+                    TeamId = teamId,
+                    Role = TeamMemberRole.Member,
+                    User = new User { Id = $"user{i}", IsActive = true },
+                    IsActive = true
+                });
+            }
+            
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto 
+            { 
+                MaxMembers = 5 // Próba ustawienia na 5 (mniej niż 10)
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync(existingTeam);
+
+            // Act
+            var result = await _controller.UpdateTeam(teamId, requestDto);
+
+            // Assert
+            var badRequestResult = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+            badRequestResult.Value.Should().BeEquivalentTo(new { 
+                Message = "MaxMembers (5) nie może być mniejsze niż obecna liczba członków (10)" 
+            });
+        }
+
+        [Fact]
+        public async Task UpdateTeam_NoChangesToApply_ShouldReturnNoContent()
+        {
+            // Arrange
+            var teamId = "team123";
+            var existingTeam = new Team 
+            { 
+                Id = teamId, 
+                DisplayName = "Team Name",
+                Description = "Team Description", 
+                Owner = "owner@example.com",
+                Visibility = TeamVisibility.Private, // Jawnie ustawiam domyślną wartość
+                RequiresApproval = true // Jawnie ustawiam domyślną wartość
+            };
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto 
+            { 
+                DisplayName = "", // Pusty string - brak zmiany
+                Description = "", // Pusty string - brak zmiany  
+                OwnerUpn = "", // Pusty string - brak zmiany
+                Visibility = TeamVisibility.Private, // Jawnie ustawiam taką samą wartość
+                RequiresApproval = true // Jawnie ustawiam taką samą wartość
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync(existingTeam);
+
+            // Act
+            var result = await _controller.UpdateTeam(teamId, requestDto);
+
+            // Assert - Powinien zwrócić NoContent bez wywoływania UpdateTeamAsync
+            result.Should().BeOfType<NoContentResult>();
+            _mockTeamService.Verify(s => s.UpdateTeamAsync(It.IsAny<Team>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task UpdateTeam_PartialUpdate_ShouldOnlyChangeSpecifiedFields()
+        {
+            // Arrange
+            var teamId = "team123";
+            var existingTeam = new Team 
+            { 
+                Id = teamId, 
+                DisplayName = "Original Name",
+                Description = "Original Description", 
+                Owner = "original@example.com",
+                Visibility = TeamVisibility.Private
+            };
+            var requestDto = new TeamsManager.Api.Controllers.UpdateTeamRequestDto 
+            { 
+                DisplayName = "New Name", // Tylko ta zmiana
+                // Description i OwnerUpn puste - nie zmieniane
+                Visibility = TeamVisibility.Public // Ta zmiana też
+            };
+            SetupControllerContext(_validAccessToken);
+            
+            _mockTeamService.Setup(s => s.GetTeamByIdAsync(teamId, false, false, false, _accessTokenValue))
+                           .ReturnsAsync(existingTeam);
+            
+            _mockTeamService.Setup(s => s.UpdateTeamAsync(It.IsAny<Team>(), _accessTokenValue))
+                           .ReturnsAsync(true);
+
+            // Act
+            var result = await _controller.UpdateTeam(teamId, requestDto);
+
+            // Assert
+            result.Should().BeOfType<NoContentResult>();
+            
+            // Sprawdź, że UpdateTeamAsync został wywołany z zespołem z prawidłowymi zmianami
+            _mockTeamService.Verify(s => s.UpdateTeamAsync(It.Is<Team>(t => 
+                t.DisplayName == "New Name" &&           // Zmienione
+                t.Description == "Original Description" &&  // Niezmienione
+                t.Owner == "original@example.com" &&        // Niezmienione
+                t.Visibility == TeamVisibility.Public       // Zmienione
+            ), _accessTokenValue), Times.Once);
         }
 
         #endregion
