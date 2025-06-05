@@ -1,6 +1,6 @@
 # Audyt Architektury - Synchronizacja Graph-DB (Etap 1/8)
 
-**Data audytu:** 2024-12-19  
+**Data audytu:** 2025-06-05  
 **Gałąź:** `refaktoryzacja`  
 **Cel:** Zmapowanie istniejących mechanizmów przed implementacją synchronizacji Graph↔DB  
 
