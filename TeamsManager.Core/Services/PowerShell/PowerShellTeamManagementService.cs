@@ -501,6 +501,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         /// <summary>
         /// Pobiera wszystkich członków zespołu z cache i walidacją (P0-CRITICAL)
+        /// MIGRACJA ETAP 5/6: Teams module → Microsoft.Graph API
         /// </summary>
         /// <param name="teamId">ID zespołu (GUID)</param>
         /// <returns>Kolekcja członków zespołu z rolami</returns>
@@ -524,33 +525,36 @@ namespace TeamsManager.Core.Services.PowerShellServices
             
             try
             {
+                // ETAP 5/6: Migracja Get-TeamUser → Get-MgTeamMember
                 var parameters = PSParameterValidator.CreateSafeParameters(
-                    ("GroupId", validatedTeamId)
+                    ("TeamId", validatedTeamId), // Graph używa TeamId zamiast GroupId
+                    ("All", true) // Pobierz wszystkich członków
                 );
                 
                 var results = await _connectionService.ExecuteCommandWithRetryAsync(
-                    "Get-TeamUser",
+                    "Get-MgTeamMember",
                     parameters
                 );
                 
                 if (results != null && results.Any())
                 {
                     _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(5));
-                    _logger.LogDebug("Członkowie zespołu {TeamId} dodani do cache.", teamId);
+                    _logger.LogDebug("Członkowie zespołu {TeamId} dodani do cache (Graph API).", teamId);
                 }
                 
                 return results;
             }
             catch (PowerShellCommandExecutionException ex)
             {
-                _logger.LogError(ex, "Failed to get team members for {TeamId}", teamId);
+                _logger.LogError(ex, "Failed to get team members for {TeamId} using Graph API", teamId);
                 throw new TeamOperationException(
-                    $"Failed to retrieve members for team {teamId}", ex);
+                    $"Failed to retrieve members for team {teamId} using Graph API", ex);
             }
         }
 
         /// <summary>
         /// Pobiera pojedynczego członka zespołu z walidacją (P0-CRITICAL)
+        /// MIGRACJA ETAP 5/6: Teams module → Microsoft.Graph API
         /// </summary>
         /// <param name="teamId">ID zespołu (GUID)</param>
         /// <param name="userUpn">UPN użytkownika</param>
@@ -568,35 +572,40 @@ namespace TeamsManager.Core.Services.PowerShellServices
             
             try
             {
-                var parameters = PSParameterValidator.CreateSafeParameters(
-                    ("GroupId", validatedTeamId),
-                    ("User", validatedUpn)
-                );
+                // ETAP 5/6: Pobierz userId z Graph (Graph API wymaga ID, nie UPN)
+                var userId = await _userResolver.GetUserIdAsync(validatedUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogWarning("Cannot find user {UserUpn} in Microsoft Graph", userUpn);
+                    return null;
+                }
                 
-                var results = await _connectionService.ExecuteCommandWithRetryAsync(
-                    "Get-TeamUser",
-                    parameters
-                );
+                // ETAP 5/6: Migracja Get-TeamUser → Get-MgTeamMember z userId
+                var script = $"Get-MgTeamMember -TeamId '{validatedTeamId}' -UserId '{userId}' -ErrorAction Stop";
+                
+                var results = await _connectionService.ExecuteScriptAsync(script);
                 
                 return results?.FirstOrDefault();
             }
             catch (PowerShellCommandExecutionException ex)
             {
-                _logger.LogError(ex, "Failed to get team member {UserUpn} for team {TeamId}", userUpn, teamId);
+                _logger.LogError(ex, "Failed to get team member {UserUpn} for team {TeamId} using Graph API", userUpn, teamId);
                 
                 // Sprawdź czy to błąd "user not found" czy rzeczywisty błąd
-                if (ex.ErrorRecords?.Any(e => e.FullyQualifiedErrorId.Contains("UserNotFound")) == true)
+                if (ex.ErrorRecords?.Any(e => e.FullyQualifiedErrorId.Contains("UserNotFound") || 
+                                               e.FullyQualifiedErrorId.Contains("MemberNotFound")) == true)
                 {
                     return null; // User not found is not an error
                 }
                 
                 throw new TeamOperationException(
-                    $"Failed to retrieve team member {userUpn} for team {teamId}", ex);
+                    $"Failed to retrieve team member {userUpn} for team {teamId} using Graph API", ex);
             }
         }
 
         /// <summary>
         /// Zmienia rolę członka zespołu (Owner to Member) (P0-CRITICAL)
+        /// MIGRACJA ETAP 5/6: Teams module → Microsoft.Graph API
         /// </summary>
         /// <param name="teamId">ID zespołu (GUID)</param>
         /// <param name="userUpn">UPN użytkownika</param>
@@ -620,26 +629,38 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 return false;
             }
             
-            _logger.LogInformation("Changing role of user {UserUpn} in team {TeamId} to {NewRole}",
+            _logger.LogInformation("Changing role of user {UserUpn} in team {TeamId} to {NewRole} using Microsoft.Graph API",
                 userUpn, teamId, newRole);
             
             try
             {
-                // Graph nie ma Update, więc Remove + Add
+                // ETAP 5/6: Krok 1 - Pobierz userId z Graph (nie UPN)
+                var userId = await _userResolver.GetUserIdAsync(validatedUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Cannot find user {UserUpn} in Microsoft Graph", userUpn);
+                    return false;
+                }
+                
+                // ETAP 5/6: Krok 2 - Remove z Microsoft.Graph
                 var removeParams = PSParameterValidator.CreateSafeParameters(
                     ("GroupId", validatedTeamId),
-                    ("User", validatedUpn)
+                    ("DirectoryObjectId", userId) // Graph używa ID, nie UPN
                 );
                 
-                await _connectionService.ExecuteCommandWithRetryAsync("Remove-TeamUser", removeParams);
+                await _connectionService.ExecuteCommandWithRetryAsync("Remove-MgGroupMember", removeParams);
                 
-                var addParams = PSParameterValidator.CreateSafeParameters(
-                    ("GroupId", validatedTeamId),
-                    ("User", validatedUpn),
-                    ("Role", validatedRole)
-                );
+                // ETAP 5/6: Krok 3 - Add z Microsoft.Graph jako konwersacyjny członek zespołu
+                var memberScript = $@"
+$memberToAdd = @{{
+    '@odata.type' = '#microsoft.graph.aadUserConversationMember'
+    roles = @('{validatedRole.ToLowerInvariant()}')
+    'user@odata.bind' = 'https://graph.microsoft.com/v1.0/users(''{userId}'')'
+}}
+New-MgTeamMember -TeamId '{validatedTeamId}' -BodyParameter $memberToAdd -ErrorAction Stop
+";
                 
-                await _connectionService.ExecuteCommandWithRetryAsync("Add-TeamUser", addParams);
+                await _connectionService.ExecuteScriptAsync(memberScript);
                 
                 // [ETAP7-CACHE] Cache invalidation
                 _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
@@ -650,17 +671,74 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     _cacheService.InvalidateTeamsByOwner(userUpn);
                 }
                 
-                _logger.LogInformation("Successfully updated role of {UserUpn} in team {TeamId} to {NewRole}",
+                _logger.LogInformation("Successfully updated role of {UserUpn} in team {TeamId} to {NewRole} using Graph API",
                     userUpn, teamId, newRole);
                 
                 return true;
             }
             catch (PowerShellCommandExecutionException ex)
             {
-                _logger.LogError(ex, "Failed to update role of {UserUpn} in team {TeamId} to {NewRole}",
+                _logger.LogError(ex, "Failed to update role of {UserUpn} in team {TeamId} to {NewRole} using Graph API",
                     userUpn, teamId, newRole);
                 throw new TeamOperationException(
-                    $"Failed to update team member role for {userUpn} in team {teamId}", ex);
+                    $"Failed to update team member role for {userUpn} in team {teamId} using Graph API", ex);
+            }
+        }
+
+        /// <summary>
+        /// Weryfikuje uprawnienia Microsoft.Graph dla operacji Team Members
+        /// ETAP 5/6: Diagnostyka uprawnień Graph API
+        /// </summary>
+        /// <returns>True jeśli wymagane uprawnienia są dostępne</returns>
+        public async Task<bool> VerifyGraphPermissionsAsync()
+        {
+            try
+            {
+                var script = @"
+$context = Get-MgContext
+if ($context -eq $null) {
+    Write-Output 'NotConnected'
+    return
+}
+
+$requiredScopes = @('TeamMember.ReadWrite.All', 'Group.ReadWrite.All', 'User.Read.All')
+$availableScopes = $context.Scopes
+
+foreach ($scope in $requiredScopes) {
+    if ($availableScopes -contains $scope) {
+        Write-Output ""Found: $scope""
+    }
+}
+
+$availableScopes | Where-Object { 
+    $_ -like '*TeamMember*' -or 
+    $_ -like '*Group.ReadWrite*' -or
+    $_ -like '*User.Read*'
+} | ForEach-Object { Write-Output ""Available: $_"" }
+";
+                
+                var results = await _connectionService.ExecuteScriptAsync(script);
+                var permissions = results?.Select(r => r.BaseObject?.ToString()).ToList() ?? new List<string>();
+                
+                _logger.LogInformation("Graph API permissions check: {Permissions}", 
+                    string.Join(", ", permissions));
+                
+                var hasRequiredPermissions = permissions.Any(p => 
+                    p.Contains("TeamMember.ReadWrite") || 
+                    p.Contains("Group.ReadWrite"));
+                
+                if (!hasRequiredPermissions)
+                {
+                    _logger.LogWarning("Missing required Graph API permissions for team member operations. " +
+                                     "Required: TeamMember.ReadWrite.All or Group.ReadWrite.All");
+                }
+                
+                return hasRequiredPermissions;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to verify Graph API permissions");
+                return false;
             }
         }
 

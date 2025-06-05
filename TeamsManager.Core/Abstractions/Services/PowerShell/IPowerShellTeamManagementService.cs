@@ -111,6 +111,13 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>True jeśli operacja się powiodła</returns>
         Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole);
 
+        /// <summary>
+        /// Weryfikuje uprawnienia Microsoft.Graph dla operacji Team Members
+        /// ETAP 5/6: Diagnostyka uprawnień Graph API
+        /// </summary>
+        /// <returns>True jeśli wymagane uprawnienia są dostępne</returns>
+        Task<bool> VerifyGraphPermissionsAsync();
+
         #endregion
 
         #region Channel Operations

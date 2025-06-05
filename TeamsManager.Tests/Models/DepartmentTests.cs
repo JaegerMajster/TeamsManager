@@ -338,7 +338,7 @@ namespace TeamsManager.Tests.Models
             var chain = dept3.GetParentChain();
             
             // Sprawdzenie
-            chain.Should().HaveCountLessOrEqualTo(3);
+            chain.Should().HaveCountLessThanOrEqualTo(3);
             chain.Select(d => d.Id).Should().OnlyHaveUniqueItems();
         }
 
