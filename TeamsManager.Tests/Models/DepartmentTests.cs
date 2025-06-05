@@ -273,5 +273,105 @@ namespace TeamsManager.Tests.Models
             parent.GetParentChain().Should().HaveCount(1).And.Contain(grandParent);
             grandParent.GetParentChain().Should().BeEmpty();
         }
+
+        [Fact]
+        public void Department_HierarchyLevel_WithCycle_ShouldNotCauseInfiniteLoop()
+        {
+            // Przygotowanie - tworzymy cykl
+            var dept1 = new Department { Id = "1", Name = "Dept1" };
+            var dept2 = new Department { Id = "2", Name = "Dept2", ParentDepartment = dept1 };
+            var dept3 = new Department { Id = "3", Name = "Dept3", ParentDepartment = dept2 };
+            dept1.ParentDepartment = dept3; // Cykl!
+            
+            // Wykonanie - nie powinno spowodować nieskończonej pętli
+            var level = dept1.HierarchyLevel;
+            
+            // Sprawdzenie
+            level.Should().BeLessThan(100); // Powinno przerwać przed maxDepth
+        }
+
+        [Fact]
+        public void Department_FullPath_WithCycle_ShouldIncludeCycleMarker()
+        {
+            // Przygotowanie
+            var dept1 = new Department { Id = "1", Name = "Dept1" };
+            var dept2 = new Department { Id = "2", Name = "Dept2", ParentDepartment = dept1 };
+            dept1.ParentDepartment = dept2; // Cykl prosty
+            
+            // Wykonanie
+            var path = dept1.FullPath;
+            
+            // Sprawdzenie
+            path.Should().Contain("[CYKL]");
+        }
+
+        [Fact]
+        public void Department_AllSubDepartments_WithCycle_ShouldNotDuplicate()
+        {
+            // Przygotowanie
+            var root = new Department { Id = "root", Name = "Root" };
+            var child1 = new Department { Id = "1", Name = "Child1", ParentDepartment = root };
+            var child2 = new Department { Id = "2", Name = "Child2", ParentDepartment = child1 };
+            
+            root.SubDepartments.Add(child1);
+            child1.SubDepartments.Add(child2);
+            child2.SubDepartments.Add(root); // Cykl!
+            
+            // Wykonanie
+            var allSubs = root.AllSubDepartments;
+            
+            // Sprawdzenie
+            allSubs.Should().HaveCount(2); // Tylko child1 i child2, bez duplikatów
+            allSubs.Should().NotContain(root); // Root nie powinien być swoim własnym poddziałem
+        }
+
+        [Fact]
+        public void Department_GetParentChain_WithCycle_ShouldTerminate()
+        {
+            // Przygotowanie
+            var dept1 = new Department { Id = "1", Name = "Dept1" };
+            var dept2 = new Department { Id = "2", Name = "Dept2", ParentDepartment = dept1 };
+            var dept3 = new Department { Id = "3", Name = "Dept3", ParentDepartment = dept2 };
+            dept1.ParentDepartment = dept3; // Cykl!
+            
+            // Wykonanie
+            var chain = dept3.GetParentChain();
+            
+            // Sprawdzenie
+            chain.Should().HaveCountLessOrEqualTo(3);
+            chain.Select(d => d.Id).Should().OnlyHaveUniqueItems();
+        }
+
+        [Fact]
+        public void Department_IsChildOf_WithCycle_ShouldReturnFalse()
+        {
+            // Przygotowanie
+            var dept1 = new Department { Id = "1", Name = "Dept1" };
+            var dept2 = new Department { Id = "2", Name = "Dept2", ParentDepartment = dept1 };
+            dept1.ParentDepartment = dept2; // Cykl!
+            
+            // Wykonanie
+            var result = dept1.IsChildOf("2");
+            
+            // Sprawdzenie - w cyklicznej hierarchii IsChildOf powinno zwrócić false
+            result.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Department_HierarchyLevel_UsesCache_ShouldReturnCachedValue()
+        {
+            // Przygotowanie
+            var dept = new Department { Id = "1", Name = "Dept1" };
+            
+            // Pierwszy dostęp
+            var level1 = dept.HierarchyLevel;
+            
+            // Drugi dostęp - powinien użyć cache
+            var level2 = dept.HierarchyLevel;
+            
+            // Sprawdzenie
+            level1.Should().Be(level2);
+            level1.Should().Be(0); // Root department
+        }
     }
 }

@@ -9,6 +9,10 @@ namespace TeamsManager.Core.Models
     /// </summary>
     public class Department : BaseEntity
     {
+        // ===== POLA PRYWATNE =====
+        private int? _hierarchyLevel;
+        private bool _hierarchyLevelCalculated = false;
+
         /// <summary>
         /// Nazwa działu (np. "Matematyka", "Informatyka", "Administracja")
         /// </summary>
@@ -82,13 +86,38 @@ namespace TeamsManager.Core.Models
         {
             get
             {
+                if (_hierarchyLevelCalculated && _hierarchyLevel.HasValue)
+                    return _hierarchyLevel.Value;
+
+                var visited = new HashSet<string>();
                 var level = 0;
+                var current = this;
+                
+                // Dodaj bieżący element aby wykryć cykl zawierający sam siebie
+                if (!string.IsNullOrEmpty(current.Id))
+                    visited.Add(current.Id);
+                
                 var parent = ParentDepartment;
-                while (parent != null)
+                const int maxDepth = 100; // Zabezpieczenie przed zbyt głęboką hierarchią
+                
+                while (parent != null && level < maxDepth)
                 {
+                    if (!string.IsNullOrEmpty(parent.Id))
+                    {
+                        if (!visited.Add(parent.Id))
+                        {
+                            // Wykryto cykl! Logowanie jest opcjonalne - może wymagać ILogger
+                            // Zwracamy aktualny poziom zamiast rzucać wyjątek
+                            break;
+                        }
+                    }
+                    
                     level++;
                     parent = parent.ParentDepartment;
                 }
+                
+                _hierarchyLevel = level;
+                _hierarchyLevelCalculated = true;
                 return level;
             }
         }
@@ -102,12 +131,26 @@ namespace TeamsManager.Core.Models
             get
             {
                 var path = new List<string>();
+                var visited = new HashSet<string>();
                 var current = this;
+                const int maxDepth = 100;
+                var depth = 0;
 
-                while (current != null)
+                while (current != null && depth < maxDepth)
                 {
+                    if (!string.IsNullOrEmpty(current.Id))
+                    {
+                        if (!visited.Add(current.Id))
+                        {
+                            // Wykryto cykl - dodaj marker i przerwij
+                            path.Insert(0, "[CYKL]");
+                            break;
+                        }
+                    }
+                    
                     path.Insert(0, current.Name);
                     current = current.ParentDepartment;
+                    depth++;
                 }
 
                 return string.Join("/", path);
@@ -171,18 +214,46 @@ namespace TeamsManager.Core.Models
             get
             {
                 var allSubs = new List<Department>();
-
-                foreach (var subDept in SubDepartments.Where(sd => sd.IsActive))
-                {
-                    allSubs.Add(subDept);
-                    allSubs.AddRange(subDept.AllSubDepartments);
-                }
-
+                var visited = new HashSet<string>();
+                
+                // Dodaj bieżący departament do visited
+                if (!string.IsNullOrEmpty(Id))
+                    visited.Add(Id);
+                
+                CollectSubDepartmentsRecursive(this, allSubs, visited);
                 return allSubs;
             }
         }
 
         // ===== METODY POMOCNICZE =====
+
+        /// <summary>
+        /// Nowa metoda pomocnicza do bezpiecznego zbierania poddziałów
+        /// </summary>
+        private void CollectSubDepartmentsRecursive(Department parent, List<Department> result, HashSet<string> visited)
+        {
+            foreach (var subDept in parent.SubDepartments.Where(sd => sd.IsActive))
+            {
+                if (!string.IsNullOrEmpty(subDept.Id) && !visited.Add(subDept.Id))
+                {
+                    // Cykl wykryty - pomijamy ten poddział
+                    continue;
+                }
+                
+                result.Add(subDept);
+                CollectSubDepartmentsRecursive(subDept, result, visited);
+            }
+        }
+
+        // ===== METODY WEWNĘTRZNE =====
+        /// <summary>
+        /// Invaliduje cache hierarchii - używane przy zmianach struktury
+        /// </summary>
+        internal void InvalidateHierarchyCache()
+        {
+            _hierarchyLevel = null;
+            _hierarchyLevelCalculated = false;
+        }
 
         /// <summary>
         /// Sprawdza czy dany dział jest poddziałem tego działu (rekurencyjnie)
@@ -201,13 +272,36 @@ namespace TeamsManager.Core.Models
         /// <returns>True jeśli jest działem nadrzędnym</returns>
         public bool IsChildOf(string departmentId)
         {
+            if (string.IsNullOrEmpty(departmentId))
+                return false;
+                
+            var visited = new HashSet<string>();
             var parent = ParentDepartment;
-            while (parent != null)
+            const int maxDepth = 100;
+            var depth = 0;
+            
+            // Dodaj bieżący element
+            if (!string.IsNullOrEmpty(Id))
+                visited.Add(Id);
+            
+            while (parent != null && depth < maxDepth)
             {
                 if (parent.Id == departmentId)
                     return true;
+                    
+                if (!string.IsNullOrEmpty(parent.Id))
+                {
+                    if (!visited.Add(parent.Id))
+                    {
+                        // Cykl - element nie może być dzieckiem w cyklicznej hierarchii
+                        return false;
+                    }
+                }
+                
                 parent = parent.ParentDepartment;
+                depth++;
             }
+            
             return false;
         }
 
@@ -218,15 +312,33 @@ namespace TeamsManager.Core.Models
         public List<Department> GetParentChain()
         {
             var parents = new List<Department>();
+            var visited = new HashSet<string>();
             var parent = ParentDepartment;
+            const int maxDepth = 100;
+            var depth = 0;
+            
+            // Dodaj bieżący element do visited
+            if (!string.IsNullOrEmpty(Id))
+                visited.Add(Id);
 
-            while (parent != null)
+            while (parent != null && depth < maxDepth)
             {
+                if (!string.IsNullOrEmpty(parent.Id))
+                {
+                    if (!visited.Add(parent.Id))
+                    {
+                        // Cykl wykryty - przerywamy
+                        break;
+                    }
+                }
+                
                 parents.Add(parent);
                 parent = parent.ParentDepartment;
+                depth++;
             }
 
             return parents;
         }
+
     }
 }
