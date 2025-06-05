@@ -28,14 +28,14 @@ namespace TeamsManager.Core.Helpers.PowerShell
         private static readonly Dictionary<char, string> PowerShellEscapeChars = new()
         {
             { '\'', "''" },      // Pojedynczy apostrof
-            { '"', '`"' },       // Cudzysłów
-            { '`', '``' },       // Backtick
-            { '$', '`$' },       // Dollar
-            { '\r', '`r' },      // Carriage return
-            { '\n', '`n' },      // New line
-            { '\t', '`t' },      // Tab
-            { '\0', '`0' },      // Null
-            { '\\', '\\\\' }     // Backslash (dla ścieżek)
+            { '"', "`\"" },      // Cudzysłów
+            { '`', "``" },       // Backtick
+            { '$', "`$" },       // Dollar
+            { '\r', "`r" },      // Carriage return
+            { '\n', "`n" },      // New line
+            { '\t', "`t" },      // Tab
+            { '\0', "`0" },      // Null
+            { '\\', "\\\\" }     // Backslash (dla ścieżek)
         };
 
         // Backward compatibility - stare nazwy dla istniejącego kodu
