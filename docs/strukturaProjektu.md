@@ -28,6 +28,7 @@ ui_output.log
 docs/
 ├── Analiza_Cache_UserService_Etap1.md
 ├── Analiza_Cache_UserService_PODSUMOWANIE_FINAL.md
+├── Etap1-Audyt-Analiza-Raport.md
 ├── PlanRefaktoryzacji.md
 ├── PowerShellServices.md
 ├── Refaktoryzacja001.md
@@ -136,6 +137,7 @@ TeamsManager.Core/
 ├── Extensions/
 │   └── PowerShellServiceExtensions.cs
 ├── Helpers/
+│   ├── AuditHelper.cs
 │   └── PowerShell/
 │       ├── PSObjectMapper.cs
 │       └── PSParameterValidator.cs
@@ -384,8 +386,9 @@ TeamsApiApp/
 ### 28 stycznia 2025, 01:30
 - **Ukończenie Etapu 3/7** - Poprawa mapowania PSObject
 - **Dodane komponenty:**
-  - `TeamsManager.Core/Helpers/PowerShell/PSObjectMapper.cs` - Bezpieczne mapowanie właściwości PSObject
-  - `TeamsManager.Core/Helpers/PowerShell/PSParameterValidator.cs` - Walidacja i sanitacja parametrów PowerShell
+  - `TeamsManager.Core/Helpers/AuditHelper.cs` - Klasa pomocnicza dla spójnych wartości audytu
+- `TeamsManager.Core/Helpers/PowerShell/PSObjectMapper.cs` - Bezpieczne mapowanie właściwości PSObject
+- `TeamsManager.Core/Helpers/PowerShell/PSParameterValidator.cs` - Walidacja i sanitacja parametrów PowerShell
 - **Zmodyfikowane komponenty:**
   - `PowerShellService.cs` - Ulepszona obsługa błędów z rzucaniem wyjątków
   - `ChannelService.cs` - Refaktoryzacja mapowania z użyciem PSObjectMapper
