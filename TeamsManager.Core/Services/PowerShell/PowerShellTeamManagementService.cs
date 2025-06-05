@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -117,56 +118,36 @@ namespace TeamsManager.Core.Services.PowerShellServices
             TeamVisibility visibility = TeamVisibility.Private,
             string? template = null)
         {
-            // TODO [ETAP4-VALIDATION]: Dodać walidację parametrów zgodnie z Etapem 3
-            // OBECNY: Tylko podstawowe string.IsNullOrWhiteSpace
-            // PROPONOWANY: 
-            // - PSParameterValidator.ValidateAndSanitizeString(displayName, maxLength: 256)
-            // - PSParameterValidator.ValidateAndSanitizeString(description, maxLength: 1024)  
-            // - PSParameterValidator.ValidateEmail(ownerUpn)
-            // PRIORYTET: HIGH
-            // KORZYŚCI: Ochrona przed injection, type safety, spójna walidacja
-
-            // TODO [ETAP4-ERROR]: Ulepszona obsługa błędów zgodnie z Etapem 3
-            // OBECNY: return null w przypadku błędów
-            // PROPONOWANY: Rzucać specificzne wyjątki:
-            // - PowerShellCommandExecutionException dla błędów PowerShell
-            // - ArgumentException dla niepoprawnych parametrów
-            // PRIORYTET: HIGH
-            // UWAGI: Konsystencja z CreateTeamChannelAsync() która już to robi
+            // [ETAP3] Walidacja parametrów z PSParameterValidator
+            var validatedDisplayName = PSParameterValidator.ValidateAndSanitizeString(displayName, nameof(displayName), maxLength: 256);
+            var validatedDescription = PSParameterValidator.ValidateAndSanitizeString(description, nameof(description), maxLength: 1024, allowEmpty: true);
+            var validatedOwnerUpn = PSParameterValidator.ValidateEmail(ownerUpn, nameof(ownerUpn));
+            
             if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
-                return null;
-            }
-
-            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(ownerUpn))
-            {
-                _logger.LogError("DisplayName i OwnerUpn są wymagane.");
-                return null;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
 
             // Pobierz ID właściciela z cache lub Graph
-            var ownerId = await _userResolver.GetUserIdAsync(ownerUpn);
+            var ownerId = await _userResolver.GetUserIdAsync(validatedOwnerUpn);
             if (string.IsNullOrEmpty(ownerId))
             {
-                _logger.LogError("Nie znaleziono właściciela {OwnerUpn}", ownerUpn);
-                return null;
+                throw new PowerShellCommandExecutionException(
+                    $"Owner user not found: {validatedOwnerUpn}",
+                    command: "UserResolver.GetUserIdAsync",
+                    innerException: null);
             }
 
             _logger.LogInformation("Tworzenie zespołu '{DisplayName}' dla właściciela {OwnerUpn}",
-                displayName, ownerUpn);
+                validatedDisplayName, validatedOwnerUpn);
 
             try
             {
-                // TODO [ETAP4-INJECTION]: Obecne escape tylko ' - niepełne
-                // OBECNY: displayName.Replace("'", "''") - tylko pojedynczy apostrof
-                // PROPONOWANY: PSParameterValidator.ValidateAndSanitizeString() która obsługuje ', `, $
-                // PRIORYTET: HIGH
-                // UWAGI: Potencjalne luki bezpieczeństwa z backtick i dollar
+                // [ETAP3] Używam zwalidowanych i zsanityzowanych parametrów
                 var scriptBuilder = new StringBuilder();
                 scriptBuilder.AppendLine("$teamBody = @{");
-                scriptBuilder.AppendLine($"    displayName = '{displayName.Replace("'", "''")}'");
-                scriptBuilder.AppendLine($"    description = '{description.Replace("'", "''")}'");
+                scriptBuilder.AppendLine($"    displayName = '{validatedDisplayName}'");
+                scriptBuilder.AppendLine($"    description = '{validatedDescription}'");
                 scriptBuilder.AppendLine($"    visibility = '{visibility.ToString()}'");
                 scriptBuilder.AppendLine("    members = @(");
                 scriptBuilder.AppendLine("        @{");
@@ -194,26 +175,40 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 if (!string.IsNullOrEmpty(teamId))
                 {
                     _logger.LogInformation("Utworzono zespół '{DisplayName}' o ID: {TeamId}",
-                        displayName, teamId);
+                        validatedDisplayName, teamId);
 
-                    // [ETAP7-CACHE] Granularna inwalidacja cache po utworzeniu zespołu
+                    // [ETAP3] Granularna inwalidacja cache po utworzeniu zespołu
                     _cacheService.InvalidateAllActiveTeamsList();
-                    _cacheService.InvalidateTeamsByOwner(ownerUpn);
+                    _cacheService.InvalidateTeamsByOwner(validatedOwnerUpn);
                     _cacheService.Remove(AllTeamsCacheKey); // lista wszystkich zespołów
                     
                     _logger.LogInformation("Cache unieważniony po utworzeniu zespołu {TeamId}", teamId);
+
+                    return teamId;
                 }
                 else
                 {
-                    _logger.LogError("Nie otrzymano ID zespołu dla zespołu '{DisplayName}'", displayName);
+                    throw new PowerShellCommandExecutionException(
+                        $"Failed to create team '{validatedDisplayName}' - no ID returned",
+                        command: "New-MgTeam",
+                        innerException: null);
                 }
-
-                return teamId;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd tworzenia zespołu '{DisplayName}'", displayName);
-                return null;
+                _logger.LogError(ex, "Błąd tworzenia zespołu '{DisplayName}'", validatedDisplayName);
+                throw new PowerShellCommandExecutionException(
+                    $"Failed to create team '{validatedDisplayName}'",
+                    command: "New-MgTeam",
+                    parameters: null,
+                    executionTime: null,
+                    exitCode: null,
+                    errorRecords: null,
+                    innerException: ex);
             }
         }
 
@@ -739,6 +734,94 @@ $availableScopes | Where-Object {
             {
                 _logger.LogError(ex, "Failed to verify Graph API permissions");
                 return false;
+            }
+        }
+
+        #endregion
+
+        #region Diagnostic Operations - HIGH Priority
+
+        /// <summary>
+        /// [ETAP3] Testuje połączenie z Microsoft Graph
+        /// </summary>
+        /// <returns>True jeśli połączenie aktywne</returns>
+        public async Task<bool> TestConnectionAsync()
+        {
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                return false;
+            }
+            
+            try
+            {
+                // Użyj Get-MgOrganization zamiast Get-CsTenant (Graph API)
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgOrganization");
+                return results != null && results.Any();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Connection test failed");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// [ETAP3] Waliduje uprawnienia Graph API
+        /// </summary>
+        /// <returns>Słownik uprawnień i ich statusu</returns>
+        public async Task<Dictionary<string, bool>> ValidatePermissionsAsync()
+        {
+            var permissions = new Dictionary<string, bool>();
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
+            }
+            
+            try
+            {
+                var script = @"
+$context = Get-MgContext
+if ($context -eq $null) {
+    @{}
+} else {
+    $requiredScopes = @(
+        'Team.ReadWrite.All',
+        'TeamMember.ReadWrite.All', 
+        'Group.ReadWrite.All',
+        'User.Read.All',
+        'Channel.ReadWrite.All'
+    )
+    
+    $result = @{}
+    foreach ($scope in $requiredScopes) {
+        $result[$scope] = $context.Scopes -contains $scope
+    }
+    $result
+}";
+                
+                var results = await _connectionService.ExecuteScriptAsync(script);
+                if (results?.FirstOrDefault() != null)
+                {
+                    var resultObj = results.First();
+                    if (resultObj.BaseObject is Hashtable ht)
+                    {
+                        foreach (DictionaryEntry entry in ht)
+                        {
+                            permissions[entry.Key.ToString()] = Convert.ToBoolean(entry.Value);
+                        }
+                    }
+                }
+                
+                return permissions;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to validate permissions");
+                throw new PowerShellCommandExecutionException(
+                    "Failed to validate Graph API permissions",
+                    command: "Get-MgContext",
+                    innerException: ex);
             }
         }
 

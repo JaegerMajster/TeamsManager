@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Management.Automation;
 using System.Threading.Tasks;
@@ -117,6 +118,22 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// </summary>
         /// <returns>True jeśli wymagane uprawnienia są dostępne</returns>
         Task<bool> VerifyGraphPermissionsAsync();
+
+        #endregion
+
+        #region Diagnostic Operations
+
+        /// <summary>
+        /// [ETAP3] Testuje połączenie z Microsoft Graph
+        /// </summary>
+        /// <returns>True jeśli połączenie aktywne</returns>
+        Task<bool> TestConnectionAsync();
+
+        /// <summary>
+        /// [ETAP3] Waliduje uprawnienia Graph API
+        /// </summary>
+        /// <returns>Słownik uprawnień i ich statusu</returns>
+        Task<Dictionary<string, bool>> ValidatePermissionsAsync();
 
         #endregion
 

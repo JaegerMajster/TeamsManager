@@ -1023,89 +1023,57 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
-        
+
+
         /// <summary>
-        /// Zmienia rolę członka zespołu (Owner to Member) - duplikacja z TeamManagementService (P0-CRITICAL)
+        /// [ETAP3] Pobiera użytkowników z określonego działu
         /// </summary>
-        /// <param name="teamId">ID zespołu (GUID)</param>
-        /// <param name="userUpn">UPN użytkownika</param>
-        /// <param name="newRole">Nowa rola: Owner lub Member</param>
-        /// <returns>True jeśli operacja się powiodła</returns>
-        public async Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole)
+        /// <param name="department">Nazwa działu</param>
+        /// <returns>Kolekcja użytkowników</returns>
+        public async Task<Collection<PSObject>?> GetUsersByDepartmentAsync(string department)
         {
-            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
-            var validatedUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
-            var validatedRole = PSParameterValidator.ValidateAndSanitizeString(newRole, nameof(newRole));
+            var validatedDepartment = PSParameterValidator.ValidateAndSanitizeString(department, nameof(department));
             
-            if (!validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase) &&
-                !validatedRole.Equals("Member", StringComparison.OrdinalIgnoreCase))
+            var cacheKey = $"PowerShell_UsersByDepartment_{validatedDepartment.GetHashCode()}";
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedUsers))
             {
-                throw new ArgumentException("Role must be 'Owner' or 'Member'", nameof(newRole));
+                _logger.LogDebug("Users for department '{Department}' found in cache", department);
+                return cachedUsers;
             }
             
             if (!_connectionService.ValidateRunspaceState())
             {
-                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
-                return false;
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
             }
-            
-            _logger.LogInformation("Changing role of user {UserUpn} in team {TeamId} to {NewRole}",
-                userUpn, teamId, newRole);
             
             try
             {
-                // Pobierz ID użytkownika z cache
-                var userId = await _userResolver.GetUserIdAsync(validatedUpn);
-                if (string.IsNullOrEmpty(userId))
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("Filter", $"department eq '{validatedDepartment}'"),
+                    ("Properties", new[] { "Id", "DisplayName", "Mail", "UserPrincipalName", "Department", "JobTitle" }),
+                    ("Top", 999)
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgUser", parameters);
+                
+                if (results != null && results.Any())
                 {
-                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
-                    return false;
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(10));
+                    _logger.LogInformation("Found {Count} users in department '{Department}'", results.Count, department);
                 }
                 
-                // Graph nie ma Update, więc Remove + Add
-                var removeScript = $@"
-                    $teamId = '{validatedTeamId}'
-                    $userId = '{userId}'
-                    
-                    $isOwner = (Get-MgTeamOwner -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
-                    $isMember = (Get-MgTeamMember -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
-                    
-                    if ($isOwner) {{
-                        Remove-MgTeamOwner -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
-                    }} elseif ($isMember) {{
-                        Remove-MgTeamMember -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
-                    }}
-                ";
-                
-                await _connectionService.ExecuteScriptAsync(removeScript);
-                
-                // Dodaj z nową rolą
-                var addCmdlet = validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase)
-                    ? "Add-MgTeamOwner"
-                    : "Add-MgTeamMember";
-                
-                var addScript = $"{addCmdlet} -TeamId '{validatedTeamId}' -UserId '{userId}' -ErrorAction Stop";
-                await _connectionService.ExecuteScriptAsync(addScript);
-                
-                // [ETAP7-CACHE] Cache invalidation
-                _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
-                _cacheService.Remove($"PowerShell_UserTeams_{userUpn}");
-                
-                if (validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase))
-                {
-                    _cacheService.InvalidateTeamsByOwner(userUpn);
-                }
-                
-                _logger.LogInformation("Successfully updated role of {UserUpn} in team {TeamId} to {NewRole}",
-                    userUpn, teamId, newRole);
-                
-                return true;
+                return results;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update role of {UserUpn} in team {TeamId} to {NewRole}",
-                    userUpn, teamId, newRole);
-                return false;
+                throw new PowerShellCommandExecutionException(
+                    $"Failed to get users for department '{department}'",
+                    command: "Get-MgUser",
+                    innerException: ex);
             }
         }
 
@@ -1258,7 +1226,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
         #endregion
         
         // TODO [ETAP5-MISSING]: POZOSTAŁE BRAKUJĄCE SEKCJE Z SPECYFIKACJI
-        // ==============================================================
         // SEKCJA 5. POŁĄCZENIA - PRIORYTET LOW (automatyczne w Graph):
         // - ConnectToAzureADAsync() - Graph handle automatycznie
         // - ConnectToExchangeOnlineAsync() - Graph handle automatycznie
@@ -1270,7 +1237,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
         //
         // SEKCJA 8. OPERACJE MASOWE - PRIORYTET LOW:
         // - BulkAddUsersToTeamAsync() - masowe dodawanie do zespołu
-        // ==============================================================
 
         #region Private Methods
 

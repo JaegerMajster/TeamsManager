@@ -110,6 +110,13 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Kolekcja użytkowników pasujących do wyszukiwania</returns>
         Task<Collection<PSObject>?> SearchM365UsersAsync(string searchTerm);
 
+        /// <summary>
+        /// [ETAP3] Pobiera użytkowników z określonego działu
+        /// </summary>
+        /// <param name="department">Nazwa działu</param>
+        /// <returns>Kolekcja użytkowników</returns>
+        Task<Collection<PSObject>?> GetUsersByDepartmentAsync(string department);
+
         #endregion
 
         #region Team Membership Operations
@@ -146,14 +153,7 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Obiekt PSObject z danymi członka lub null</returns>
         Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn);
 
-        /// <summary>
-        /// Zmienia rolę członka zespołu (Owner to Member) (P0-CRITICAL)
-        /// </summary>
-        /// <param name="teamId">ID zespołu (GUID)</param>
-        /// <param name="userUpn">UPN użytkownika</param>
-        /// <param name="newRole">Nowa rola: Owner lub Member</param>
-        /// <returns>True jeśli operacja się powiodła</returns>
-        Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole);
+
 
         #endregion
 
