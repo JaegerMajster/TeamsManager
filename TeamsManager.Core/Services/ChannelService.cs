@@ -14,6 +14,7 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Helpers.PowerShell;
 
 namespace TeamsManager.Core.Services
 {
@@ -62,7 +63,14 @@ namespace TeamsManager.Core.Services
 
         private Channel MapPsObjectToLocalChannel(PSObject psChannel, string localTeamId)
         {
-            var graphChannelId = psChannel.Properties["Id"]?.Value?.ToString();
+            // Użyj PSObjectMapper dla debugowania (opcjonalne)
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                PSObjectMapper.LogProperties(psChannel, _logger, $"Channel for team {localTeamId}");
+            }
+
+            // Walidacja i pobranie ID
+            var graphChannelId = PSObjectMapper.GetString(psChannel, "Id");
             if (string.IsNullOrWhiteSpace(graphChannelId))
             {
                 graphChannelId = Guid.NewGuid().ToString();
@@ -72,30 +80,41 @@ namespace TeamsManager.Core.Services
             var channel = new Channel
             {
                 Id = graphChannelId,
-                DisplayName = psChannel.Properties["DisplayName"]?.Value?.ToString() ?? string.Empty,
-                Description = psChannel.Properties["Description"]?.Value?.ToString() ?? string.Empty,
+                DisplayName = PSObjectMapper.GetString(psChannel, "DisplayName", defaultValue: string.Empty)!,
+                Description = PSObjectMapper.GetString(psChannel, "Description", defaultValue: string.Empty)!,
                 TeamId = localTeamId,
-                ChannelType = psChannel.Properties["MembershipType"]?.Value?.ToString() ?? "Standard",
-                ExternalUrl = psChannel.Properties["WebUrl"]?.Value?.ToString(),
-                // Nowe mapowania dla pełnej synchronizacji
-                FilesCount = psChannel.Properties["FilesCount"]?.Value as int? ?? 0,
-                FilesSize = psChannel.Properties["FilesSize"]?.Value as long? ?? 0,
-                LastActivityDate = psChannel.Properties["LastActivityDate"]?.Value as DateTime?,
-                LastMessageDate = psChannel.Properties["LastMessageDate"]?.Value as DateTime?,
-                MessageCount = psChannel.Properties["MessageCount"]?.Value as int? ?? 0,
-                NotificationSettings = psChannel.Properties["NotificationSettings"]?.Value?.ToString(),
-                IsModerationEnabled = psChannel.Properties["IsModerationEnabled"]?.Value as bool? ?? false,
-                Category = psChannel.Properties["Category"]?.Value?.ToString(),
-                Tags = psChannel.Properties["Tags"]?.Value?.ToString(),
-                SortOrder = psChannel.Properties["SortOrder"]?.Value as int? ?? 0
+                ChannelType = PSObjectMapper.GetString(psChannel, "MembershipType", defaultValue: "Standard")!,
+                ExternalUrl = PSObjectMapper.GetString(psChannel, "WebUrl"),
+                
+                // Użyj typowanych metod dla różnych typów
+                FilesCount = PSObjectMapper.GetInt32(psChannel, "FilesCount", defaultValue: 0),
+                FilesSize = PSObjectMapper.GetInt64(psChannel, "FilesSize", defaultValue: 0),
+                LastActivityDate = PSObjectMapper.GetDateTime(psChannel, "LastActivityDate"),
+                LastMessageDate = PSObjectMapper.GetDateTime(psChannel, "LastMessageDate"),
+                MessageCount = PSObjectMapper.GetInt32(psChannel, "MessageCount", defaultValue: 0),
+                NotificationSettings = PSObjectMapper.GetString(psChannel, "NotificationSettings"),
+                IsModerationEnabled = PSObjectMapper.GetBoolean(psChannel, "IsModerationEnabled", defaultValue: false),
+                Category = PSObjectMapper.GetString(psChannel, "Category"),
+                Tags = PSObjectMapper.GetString(psChannel, "Tags"),
+                SortOrder = PSObjectMapper.GetInt32(psChannel, "SortOrder", defaultValue: 0),
+                
+                // Ustaw domyślne wartości dla właściwości z BaseEntity
+                // IsActive jest obliczane na podstawie Status, nie ustawiamy go bezpośrednio
+                CreatedDate = DateTime.UtcNow,
+                CreatedBy = "PowerShell Sync"
             };
+
+            // Dodatkowa walidacja biznesowa
+            if (channel.FilesCount < 0) channel.FilesCount = 0;
+            if (channel.FilesSize < 0) channel.FilesSize = 0;
+            if (channel.MessageCount < 0) channel.MessageCount = 0;
 
             if (channel.ChannelType.Equals("private", StringComparison.OrdinalIgnoreCase))
             {
                 channel.IsPrivate = true;
             }
 
-            bool? isFavoriteByDefault = psChannel.Properties["isFavoriteByDefault"]?.Value as bool?;
+            bool? isFavoriteByDefault = PSObjectMapper.GetBoolean(psChannel, "isFavoriteByDefault");
             if ((channel.DisplayName.Equals("General", StringComparison.OrdinalIgnoreCase) ||
                  channel.DisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase)) ||
                  isFavoriteByDefault == true)

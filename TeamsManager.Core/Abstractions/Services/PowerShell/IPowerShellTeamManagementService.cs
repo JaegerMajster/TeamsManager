@@ -85,6 +85,34 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
 
         #endregion
 
+        #region Team Member Management - Critical P0 Methods
+
+        /// <summary>
+        /// Pobiera wszystkich członków zespołu z cache i walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <returns>Kolekcja członków zespołu z rolami</returns>
+        Task<Collection<PSObject>?> GetTeamMembersAsync(string teamId);
+
+        /// <summary>
+        /// Pobiera pojedynczego członka zespołu z walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <returns>Informacje o członku zespołu lub null jeśli nie jest członkiem</returns>
+        Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn);
+
+        /// <summary>
+        /// Zmienia rolę członka zespołu (Owner to Member) (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <param name="newRole">Nowa rola: Owner lub Member</param>
+        /// <returns>True jeśli operacja się powiodła</returns>
+        Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole);
+
+        #endregion
+
         #region Channel Operations
 
         /// <summary>

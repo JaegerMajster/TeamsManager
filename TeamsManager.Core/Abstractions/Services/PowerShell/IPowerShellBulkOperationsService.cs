@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Abstractions.Services.PowerShell
 {
@@ -51,5 +52,38 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="teamId">ID zespołu do archiwizacji</param>
         /// <returns>Słownik z wynikiem operacji dla zespołu</returns>
         Task<Dictionary<string, bool>> ArchiveTeamAndDeactivateExclusiveUsersAsync(string teamId);
+
+        #region Enhanced V2 Methods with BulkOperationResult (Etap 6/7)
+
+        /// <summary>
+        /// [ETAP6] Masowo dodaje użytkowników do zespołu z zaawansowanym raportowaniem
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        /// <param name="userUpns">Lista UPN użytkowników do dodania</param>
+        /// <param name="role">Rola użytkowników (Member/Owner)</param>
+        /// <returns>Słownik z szczegółowymi wynikami operacji dla każdego użytkownika</returns>
+        Task<Dictionary<string, BulkOperationResult>> BulkAddUsersToTeamV2Async(
+            string teamId,
+            List<string> userUpns,
+            string role = "Member");
+
+        /// <summary>
+        /// [ETAP6] Masowo usuwa użytkowników z zespołu z zaawansowanym raportowaniem
+        /// </summary>
+        /// <param name="teamId">ID zespołu</param>
+        /// <param name="userUpns">Lista UPN użytkowników do usunięcia</param>
+        /// <returns>Słownik z szczegółowymi wynikami operacji dla każdego użytkownika</returns>
+        Task<Dictionary<string, BulkOperationResult>> BulkRemoveUsersFromTeamV2Async(
+            string teamId,
+            List<string> userUpns);
+
+        /// <summary>
+        /// [ETAP6] Masowo archiwizuje zespoły z zaawansowanym raportowaniem
+        /// </summary>
+        /// <param name="teamIds">Lista ID zespołów do archiwizacji</param>
+        /// <returns>Słownik z szczegółowymi wynikami operacji dla każdego zespołu</returns>
+        Task<Dictionary<string, BulkOperationResult>> BulkArchiveTeamsV2Async(List<string> teamIds);
+
+        #endregion
     }
 }

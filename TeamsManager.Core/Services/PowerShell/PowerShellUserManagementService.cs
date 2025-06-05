@@ -8,6 +8,84 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Exceptions;
+using TeamsManager.Core.Exceptions.PowerShell;
+using TeamsManager.Core.Helpers;
+using TeamsManager.Core.Helpers.PowerShell;
+
+// TODO [ETAP5-AUDIT]: GŁÓWNE USTALENIA AUDYTU PowerShellUserManagementService
+// ============================================================================
+// ZGODNOŚĆ Z PowerShellServices_Refaktoryzacja.md i synchronizacja z TeamManagementService:
+//
+// ✅ OBECNE - Częściowo zgodne z specyfikacją:
+//    - CreateM365UserAsync() - podstawowe tworzenie użytkowników ✅
+//    - GetM365UserByIdAsync() -> sekcja 3.1 (Get-MgUser) ✅ 
+//    - AssignLicenseToUserAsync() -> sekcja 4.1 (Set-MgUserLicense) ✅
+//    - RemoveLicenseFromUserAsync() -> sekcja 4.2 (Set-MgUserLicense) ✅
+//    - GetUserLicensesAsync() -> sekcja 4.3 (Get-MgUserLicenseDetail) ✅
+//    - GetTeamMembersAsync() -> sekcja 2.1 (Get-MgTeamMember) ✅
+//    - GetTeamMemberAsync() -> sekcja 2.2 (Get-MgTeamMember) ✅
+//
+// ❌ BRAKUJĄCE - Metody z specyfikacji nieobecne w implementacji:
+//    PRIORYTET HIGH:
+//    - GetM365UserAsync(string userUpn) - sekcja 3.1 (Get-MgUser -UserId $userUpn)
+//    - SearchM365UsersAsync(string searchTerm) - sekcja 3.2 (Get-MgUser -SearchString)
+//    - UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole) - sekcja 2.3
+//    
+//    PRIORYTET MEDIUM:
+//    - GetUsersByDepartmentAsync(string department) - sekcja 3.3 (Get-MgUser -Filter)
+//    - GetAvailableLicensesAsync() - sekcja 4.4 (Get-MgSubscribedSku)
+//    - TestConnectionAsync() - sekcja 7.1 (Get-CsTenant)
+//    - ValidatePermissionsAsync() - sekcja 7.2
+//    - SyncTeamDataAsync() - sekcja 7.3
+//
+//    PRIORYTET LOW:
+//    - BulkAddUsersToTeamAsync() - sekcja 8.3
+//    - ConnectToAzureADAsync() - sekcja 5.1
+//    - ConnectToExchangeOnlineAsync() - sekcja 5.2
+//
+// ⚠️ PROBLEMY SYNCHRONIZACJI Z TeamManagementService:
+//    ❌ Brak PSParameterValidator w większości metod (TeamManagement ma w CreateTeamChannelAsync)
+//    ❌ Return null zamiast granularnych wyjątków (TeamManagement ma w CreateTeamChannelAsync)
+//    ❌ Brak spójnych wzorców cache invalidation
+//    ❌ Brak using TeamsManager.Core.Exceptions.PowerShell
+//    ❌ Brak using TeamsManager.Core.Helpers.PowerShell
+//
+// 🛡️ BEZPIECZEŃSTWO - Podobne problemy co TeamManagementService:
+//    ❌ Tylko podstawowe Replace("'", "''") - niepełna ochrona injection
+//    ❌ Brak walidacji email, GUID w większości metod
+//    ❌ Brak sanitacji parametrów przed PowerShell scripts
+//
+// 📦 CACHE - Lepiej niż TeamManagementService:
+//    ✅ Cache dla GetM365UserByIdAsync() i GetM365UsersByAccountEnabledStateAsync()
+//    ✅ Cache invalidation w operacjach modyfikujących
+//    ❌ Brak granularnego cache dla członków zespołu (nie ma TeamMembers cache keys)
+//
+// 🔄 MAPOWANIE - Gorsze niż TeamManagementService:
+//    ❌ Brak użycia PSObjectMapper w żadnej metodzie
+//    ❌ Wszystkie operacje bezpośrednie na PSObject
+//
+// 🎯 OBSŁUGA BŁĘDÓW - Gorsza niż TeamManagementService:
+//    ❌ Wszystkie metody return null zamiast rzucania wyjątków
+//    ❌ Brak PowerShellCommandExecutionException w żadnej metodzie
+//
+// 🔀 CMDLETY - Lepiej zgodne z Microsoft.Graph niż specyfikacja:
+//    - New-MgUser ✅ (zamiast New-AzureADUser)
+//    - Update-MgUser ✅ (zamiast Set-AzureADUser)
+//    - Get-MgUser ✅ (zamiast Get-AzureADUser)
+//    - Set-MgUserLicense ✅ (zamiast Set-AzureADUserLicense)
+//    - Get-MgUserLicenseDetail ✅ (zamiast Get-AzureADUserLicenseDetail)
+//    - Get-MgTeamMember ✅ (zgodny z Teams)
+//
+// 📊 METRYKI AUDYTU:
+//    - Metod przeanalizowanych: 14
+//    - Zgodnych ze specyfikacją: 7/14 (50%)
+//    - Brakujących HIGH priority: 3
+//    - Brakujących MEDIUM priority: 5  
+//    - Brakujących LOW priority: 2
+//    - Problemów bezpieczeństwa: 14 (wszystkie metody)
+//    - Problemów z error handling: 14 (wszystkie metody)
+// ============================================================================
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -46,6 +124,24 @@ namespace TeamsManager.Core.Services.PowerShellServices
             List<string>? licenseSkuIds = null,
             bool accountEnabled = true)
         {
+            // TODO [ETAP5-VALIDATION]: Brak walidacji parametrów - sync z TeamManagementService
+            // OBECNY: Tylko string.IsNullOrWhiteSpace
+            // PROPONOWANY:
+            // - PSParameterValidator.ValidateAndSanitizeString(displayName, maxLength: 256)
+            // - PSParameterValidator.ValidateEmail(userPrincipalName)
+            // - PSParameterValidator.ValidateAndSanitizeString(password, allowEmpty: false)
+            // PRIORYTET: HIGH
+            
+            // TODO [ETAP5-ERROR]: Return null zamiast wyjątków - sync z TeamManagementService
+            // OBECNY: return null w przypadku błędów
+            // PROPONOWANY: PowerShellCommandExecutionException, ArgumentException
+            // PRIORYTET: HIGH
+            
+            // TODO [ETAP5-INJECTION]: Tylko podstawowe escape - sync z TeamManagementService
+            // OBECNY: Replace("'", "''") - niepełne
+            // PROPONOWANY: PSParameterValidator.ValidateAndSanitizeString()
+            // PRIORYTET: HIGH
+            // UWAGI: Brak ochrony przed backtick i dollar
             if (!_connectionService.ValidateRunspaceState())
             {
                 _logger.LogError("Środowisko PowerShell nie jest gotowe.");
@@ -104,8 +200,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 _logger.LogInformation("Utworzono użytkownika {UserPrincipalName} o ID: {UserId}",
                     userPrincipalName, userId);
 
-                // Invalidate user cache
+                // [ETAP7-CACHE] Unieważnij cache użytkowników
+                _cacheService.InvalidateUserListCache();
+                _cacheService.InvalidateAllActiveUsersList();
+                
+                // Unieważnij cache szczegółów użytkownika
                 _cacheService.InvalidateUserCache(userId: userId, userUpn: userPrincipalName);
+                
+                _logger.LogInformation("Cache użytkowników unieważniony po utworzeniu {UserPrincipalName}", userPrincipalName);
 
                 return userId;
             }
@@ -193,6 +295,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
             string? firstName = null,
             string? lastName = null)
         {
+            // TODO [ETAP5-MISSING]: Metoda istnieje ale nie w specyfikacji PowerShellServices.md
+            // OBECNY: UpdateM365UserPropertiesAsync() - własna implementacja
+            // SPECYFIKACJA: Brak takiej metody w PowerShellServices_Refaktoryzacja.md
+            // PRIORYTET: LOW - metoda użyteczna, zachować
+            // UWAGI: Może być wykorzystana w przyszłych wersjach specyfikacji
+            
+            // TODO [ETAP5-VALIDATION]: Brak walidacji email dla userUpn
+            // PROPONOWANY: PSParameterValidator.ValidateEmail(userUpn)
+            // PRIORYTET: MEDIUM
             if (!_connectionService.ValidateRunspaceState()) return false;
 
             if (string.IsNullOrWhiteSpace(userUpn))
@@ -228,8 +339,19 @@ namespace TeamsManager.Core.Services.PowerShellServices
             {
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("Update-MgUser", parameters);
 
-                // Invalidate user cache
-                _cacheService.InvalidateUserCache(userUpn: userUpn);
+                if (results != null)
+                {
+                    // [ETAP7-CACHE] Kompleksowa inwalidacja cache użytkownika
+                    _cacheService.InvalidateUserCache(userUpn: userUpn);
+                    
+                    // Inwalidacja cache działów jeśli zmieniono department
+                    if (!string.IsNullOrWhiteSpace(department))
+                    {
+                        _cacheService.Remove($"PowerShell_Department_Users_{department}");
+                    }
+                    
+                    _logger.LogInformation("Cache użytkownika {UserUpn} unieważniony po aktualizacji", userUpn);
+                }
 
                 return results != null;
             }
@@ -378,6 +500,20 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<PSObject?> GetM365UserByIdAsync(string userId)
         {
+            // TODO [ETAP5-AUDIT]: Zgodność z PowerShellServices.md sekcja 3.1 częściowa
+            // OBECNY: GetM365UserByIdAsync(string userId) - pobiera po ID
+            // SPECYFIKACJA: GetM365UserAsync(string userUpn) - pobiera po UPN
+            // PRIORYTET: HIGH - brakuje wersji po UPN
+            // UWAGI: Obecna metoda jest użyteczna, ale nie pokrywa specyfikacji
+            
+            // TODO [ETAP5-VALIDATION]: Brak walidacji GUID
+            // PROPONOWANY: PSParameterValidator.ValidateGuid(userId, nameof(userId))
+            // PRIORYTET: MEDIUM
+            
+            // TODO [ETAP5-CACHE]: Dobra implementacja cache - wzór dla innych metod
+            // ✅ Używa cache keys, timeouts
+            // ✅ Cache invalidation
+            // WZÓR DO KOPIOWANIA: Do других metod
             if (!_connectionService.ValidateRunspaceState()) return null;
 
             if (string.IsNullOrWhiteSpace(userId))
@@ -464,6 +600,190 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
+        
+        // ✅ ETAP5-MISSING ZREALIZOWANE: 3 METODY P0 ZAIMPLEMENTOWANE  
+        // GetM365UserAsync, SearchM365UsersAsync, GetAvailableLicensesAsync
+
+        #region M365 User Management - Critical P0 Methods
+
+        /// <summary>
+        /// Pobiera użytkownika M365 po UPN z cache i walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <returns>Informacje o użytkowniku M365 lub null jeśli nie istnieje</returns>
+        public async Task<PSObject?> GetM365UserAsync(string userUpn)
+        {
+            var validatedUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            
+            // Cache check
+            var cacheKey = $"PowerShell_M365User_{validatedUpn}";
+            if (_cacheService.TryGetValue(cacheKey, out PSObject? cachedUser))
+            {
+                _logger.LogDebug("M365 user {UserUpn} found in cache", userUpn);
+                return cachedUser;
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return null;
+            }
+            
+            try
+            {
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", validatedUpn),
+                    ("Properties", new[] { 
+                        "Id", "DisplayName", "Mail", "UserPrincipalName", 
+                        "Department", "JobTitle", "AccountEnabled" 
+                    })
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-MgUser",
+                    parameters
+                );
+                
+                var user = results?.FirstOrDefault();
+                if (user != null)
+                {
+                    _cacheService.Set(cacheKey, user, TimeSpan.FromMinutes(15));
+                    _logger.LogInformation("M365 user {UserUpn} retrieved and cached", userUpn);
+                }
+                else
+                {
+                    _logger.LogWarning("M365 user {UserUpn} not found", userUpn);
+                }
+                
+                return user;
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to get M365 user {UserUpn}", userUpn);
+                
+                // Sprawdź czy to 404 (user not found) czy inny błąd
+                if (ex.ErrorRecords?.Any(e => e.FullyQualifiedErrorId.Contains("Request_ResourceNotFound")) == true)
+                {
+                    return null; // User not found is not an error
+                }
+                
+                throw new UserOperationException($"Failed to retrieve M365 user {userUpn}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Wyszukuje użytkowników M365 z walidacją i cache (P0-CRITICAL)
+        /// </summary>
+        /// <param name="searchTerm">Termin wyszukiwania (nazwa lub email)</param>
+        /// <returns>Kolekcja użytkowników pasujących do wyszukiwania</returns>
+        public async Task<Collection<PSObject>?> SearchM365UsersAsync(string searchTerm)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+            {
+                throw new ArgumentException("Search term cannot be empty", nameof(searchTerm));
+            }
+            
+            var validatedSearchTerm = PSParameterValidator.ValidateAndSanitizeString(
+                searchTerm, nameof(searchTerm), maxLength: 100);
+            
+            // Cache key includes search term hash for uniqueness
+            var cacheKey = $"PowerShell_M365Search_{validatedSearchTerm.GetHashCode()}";
+            
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedResults))
+            {
+                _logger.LogDebug("Search results for '{SearchTerm}' found in cache", searchTerm);
+                return cachedResults;
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return null;
+            }
+            
+            try
+            {
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("Search", $"\"displayName:{validatedSearchTerm}\" OR \"mail:{validatedSearchTerm}\""),
+                    ("Top", 50), // Limit results
+                    ("Properties", new[] { 
+                        "Id", "DisplayName", "Mail", "UserPrincipalName", 
+                        "Department", "AccountEnabled" 
+                    })
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-MgUser",
+                    parameters
+                );
+                
+                if (results != null && results.Any())
+                {
+                    // Cache for shorter time as search results change more frequently
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(2));
+                    _logger.LogInformation("Found {Count} users matching '{SearchTerm}'", 
+                        results.Count, searchTerm);
+                }
+                
+                return results;
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to search M365 users with term '{SearchTerm}'", searchTerm);
+                throw new UserOperationException($"Failed to search users with term '{searchTerm}'", ex);
+            }
+        }
+
+        /// <summary>
+        /// Pobiera dostępne licencje M365 z cache (P0-CRITICAL)
+        /// </summary>
+        /// <returns>Kolekcja dostępnych licencji SKU</returns>
+        public async Task<Collection<PSObject>?> GetAvailableLicensesAsync()
+        {
+            const string cacheKey = "PowerShell_AvailableLicenses";
+            
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedLicenses))
+            {
+                _logger.LogDebug("Available licenses found in cache");
+                return cachedLicenses;
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return null;
+            }
+            
+            try
+            {
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("Properties", new[] { 
+                        "SkuId", "SkuPartNumber", "ServicePlans", "PrepaidUnits" 
+                    })
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-MgSubscribedSku",
+                    parameters
+                );
+                
+                if (results != null && results.Any())
+                {
+                    // Cache for longer time as licenses don't change frequently
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromHours(1));
+                    _logger.LogInformation("Retrieved {Count} available licenses", results.Count);
+                }
+                
+                return results;
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to get available licenses");
+                throw new UserOperationException("Failed to retrieve available licenses", ex);
+            }
+        }
+
+        #endregion
 
         #region Team Membership Operations
 
@@ -513,8 +833,19 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     _logger.LogInformation("Pomyślnie dodano użytkownika {UserUpn} do zespołu {TeamId}",
                         userUpn, teamId);
 
-                    // Invalidate team cache
-                    _cacheService.InvalidateTeamCache(teamId);
+                    // [ETAP7-CACHE] Unieważnij cache członków zespołu
+                    _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                    
+                    // Unieważnij cache zespołów użytkownika
+                    _cacheService.Remove($"PowerShell_UserTeams_{userUpn}");
+                    
+                    // Jeśli Owner, unieważnij cache właścicieli
+                    if (role.Equals("Owner", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _cacheService.InvalidateTeamsByOwner(userUpn);
+                    }
+                    
+                    _logger.LogInformation("Cache członków zespołu {TeamId} unieważniony po dodaniu {UserUpn}", teamId, userUpn);
 
                     return true;
                 }
@@ -582,8 +913,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     _logger.LogInformation("Pomyślnie usunięto użytkownika {UserUpn} z zespołu {TeamId}",
                         userUpn, teamId);
 
-                    // Invalidate cache
-                    _cacheService.InvalidateTeamCache(teamId);
+                    // [ETAP7-CACHE] Unieważnij cache członków i zespołów użytkownika
+                    _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                    _cacheService.Remove($"PowerShell_UserTeams_{userUpn}");
+                    _cacheService.InvalidateTeamsByOwner(userUpn); // na wypadek gdyby był właścicielem
+                    
+                    _logger.LogInformation("Cache członków zespołu {TeamId} unieważniony po usunięciu {UserUpn}", teamId, userUpn);
                 }
                 else
                 {
@@ -603,12 +938,30 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<Collection<PSObject>?> GetTeamMembersAsync(string teamId)
         {
+            // TODO [ETAP5-AUDIT]: Zgodność z PowerShellServices.md sekcja 2.1
+            // ✅ CMDLET: Get-MgTeamMember vs specyfikacja Get-TeamUser -GroupId $teamId
+            // PRIORYTET: LOW - funkcjonalnie równoważne, Graph API lepsze
+            // UWAGI: Używamy Microsoft.Graph zamiast Teams module
+            
+            // TODO [ETAP5-VALIDATION]: Brak walidacji GUID
+            // PROPONOWANY: PSParameterValidator.ValidateGuid(teamId, nameof(teamId))
+            // PRIORYTET: MEDIUM
+            
+            // [ETAP7-CACHE] Implementacja cache dla członków zespołu
             if (!_connectionService.ValidateRunspaceState()) return null;
 
             if (string.IsNullOrWhiteSpace(teamId))
             {
                 _logger.LogError("TeamID nie może być puste.");
                 return null;
+            }
+
+            string cacheKey = $"PowerShell_TeamMembers_{teamId}";
+
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedMembers))
+            {
+                _logger.LogDebug("Członkowie zespołu {TeamId} znalezieni w cache.", teamId);
+                return cachedMembers;
             }
 
             _logger.LogInformation("Pobieranie wszystkich członków zespołu {TeamId}", teamId);
@@ -620,7 +973,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     { "TeamId", teamId }
                 };
 
-                return await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeamMember", parameters);
+                var results = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgTeamMember", parameters);
+                
+                if (results != null)
+                {
+                    _cacheService.Set(cacheKey, results);
+                    _logger.LogDebug("Członkowie zespołu {TeamId} dodani do cache.", teamId);
+                }
+
+                return results;
             }
             catch (Exception ex)
             {
@@ -662,11 +1023,105 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
+        
+        /// <summary>
+        /// Zmienia rolę członka zespołu (Owner to Member) - duplikacja z TeamManagementService (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <param name="newRole">Nowa rola: Owner lub Member</param>
+        /// <returns>True jeśli operacja się powiodła</returns>
+        public async Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole)
+        {
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            var validatedUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            var validatedRole = PSParameterValidator.ValidateAndSanitizeString(newRole, nameof(newRole));
+            
+            if (!validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase) &&
+                !validatedRole.Equals("Member", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Role must be 'Owner' or 'Member'", nameof(newRole));
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return false;
+            }
+            
+            _logger.LogInformation("Changing role of user {UserUpn} in team {TeamId} to {NewRole}",
+                userUpn, teamId, newRole);
+            
+            try
+            {
+                // Pobierz ID użytkownika z cache
+                var userId = await _userResolver.GetUserIdAsync(validatedUpn);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogError("Nie znaleziono użytkownika {UserUpn}", userUpn);
+                    return false;
+                }
+                
+                // Graph nie ma Update, więc Remove + Add
+                var removeScript = $@"
+                    $teamId = '{validatedTeamId}'
+                    $userId = '{userId}'
+                    
+                    $isOwner = (Get-MgTeamOwner -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
+                    $isMember = (Get-MgTeamMember -TeamId $teamId | Where-Object Id -eq $userId) -ne $null
+                    
+                    if ($isOwner) {{
+                        Remove-MgTeamOwner -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                    }} elseif ($isMember) {{
+                        Remove-MgTeamMember -TeamId $teamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                    }}
+                ";
+                
+                await _connectionService.ExecuteScriptAsync(removeScript);
+                
+                // Dodaj z nową rolą
+                var addCmdlet = validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase)
+                    ? "Add-MgTeamOwner"
+                    : "Add-MgTeamMember";
+                
+                var addScript = $"{addCmdlet} -TeamId '{validatedTeamId}' -UserId '{userId}' -ErrorAction Stop";
+                await _connectionService.ExecuteScriptAsync(addScript);
+                
+                // [ETAP7-CACHE] Cache invalidation
+                _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                _cacheService.Remove($"PowerShell_UserTeams_{userUpn}");
+                
+                if (validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase))
+                {
+                    _cacheService.InvalidateTeamsByOwner(userUpn);
+                }
+                
+                _logger.LogInformation("Successfully updated role of {UserUpn} in team {TeamId} to {NewRole}",
+                    userUpn, teamId, newRole);
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update role of {UserUpn} in team {TeamId} to {NewRole}",
+                    userUpn, teamId, newRole);
+                return false;
+            }
+        }
 
         #region License Operations
 
         public async Task<bool> AssignLicenseToUserAsync(string userUpn, string licenseSkuId)
         {
+            // TODO [ETAP5-AUDIT]: Zgodność z PowerShellServices.md sekcja 4.1
+            // ✅ CMDLET: Set-MgUserLicense zgodny ze specyfikacją
+            // ✅ FUNKCJONALNOŚĆ: Zgodne z wymaganiami
+            // PRIORYTET: LOW - implementacja dobra
+            
+            // TODO [ETAP5-VALIDATION]: Brak walidacji parametrów
+            // PROPONOWANY: PSParameterValidator.ValidateEmail(userUpn)
+            // PROPONOWANY: PSParameterValidator.ValidateGuid(licenseSkuId)
+            // PRIORYTET: HIGH
             if (!_connectionService.ValidateRunspaceState()) return false;
 
             if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(licenseSkuId))
@@ -698,6 +1153,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 if (success)
                 {
                     _logger.LogInformation("Pomyślnie przypisano licencję {LicenseSkuId} do użytkownika {UserUpn}", licenseSkuId, userUpn);
+                    
+                    // [ETAP7-CACHE] Unieważnij cache licencji użytkownika
+                    _cacheService.Remove($"PowerShell_UserLicenses_{userUpn}");
+                    
+                    // Unieważnij cache szczegółów użytkownika (zmienił się stan)
+                    _cacheService.InvalidateUserCache(userUpn: userUpn);
+                    
+                    _logger.LogInformation("Cache licencji użytkownika {UserUpn} unieważniony", userUpn);
                 }
 
                 return success;
@@ -742,6 +1205,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 if (success)
                 {
                     _logger.LogInformation("Pomyślnie usunięto licencję {LicenseSkuId} od użytkownika {UserUpn}", licenseSkuId, userUpn);
+                    
+                    // [ETAP7-CACHE] Unieważnij cache licencji użytkownika
+                    _cacheService.Remove($"PowerShell_UserLicenses_{userUpn}");
+                    
+                    // Unieważnij cache szczegółów użytkownika (zmienił się stan)
+                    _cacheService.InvalidateUserCache(userUpn: userUpn);
+                    
+                    _logger.LogInformation("Cache licencji użytkownika {UserUpn} unieważniony po usunięciu licencji", userUpn);
                 }
 
                 return success;
@@ -785,11 +1256,35 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
+        
+        // TODO [ETAP5-MISSING]: POZOSTAŁE BRAKUJĄCE SEKCJE Z SPECYFIKACJI
+        // ==============================================================
+        // SEKCJA 5. POŁĄCZENIA - PRIORYTET LOW (automatyczne w Graph):
+        // - ConnectToAzureADAsync() - Graph handle automatycznie
+        // - ConnectToExchangeOnlineAsync() - Graph handle automatycznie
+        //
+        // SEKCJA 7. ADMINISTRACJA - PRIORYTET MEDIUM:
+        // - TestConnectionAsync() - sprawdzenie połączenia (Get-CsTenant)
+        // - ValidatePermissionsAsync() - walidacja uprawnień
+        // - SyncTeamDataAsync() - synchronizacja danych
+        //
+        // SEKCJA 8. OPERACJE MASOWE - PRIORYTET LOW:
+        // - BulkAddUsersToTeamAsync() - masowe dodawanie do zespołu
+        // ==============================================================
 
         #region Private Methods
 
         private async Task<bool> AssignLicensesToUserAsync(string userId, List<string> licenseSkuIds)
         {
+            // TODO [ETAP5-INJECTION]: Brak sanitacji parametrów w prywatnej metodzie
+            // OBECNY: Bezpośrednie wstawianie do skryptu
+            // PROPONOWANY: PSParameterValidator dla wszystkich parametrów
+            // PRIORYTET: HIGH
+            
+            // TODO [ETAP5-MAPPING]: Budowanie skryptu w C# zamiast PSObject
+            // OBECNY: String interpolation do PowerShell
+            // PROPONOWANY: Hashtable parameters + ExecuteCommandWithRetryAsync()
+            // PRIORYTET: MEDIUM
             try
             {
                 var addLicenses = string.Join(",",

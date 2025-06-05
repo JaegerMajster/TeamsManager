@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using TeamsManager.Core.Abstractions;
@@ -26,6 +27,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<ITokenManager> _mockTokenManager;
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<IConfiguration> _mockConfiguration;
+        private readonly Mock<IServiceScopeFactory> _mockServiceScopeFactory;
         private readonly PowerShellConnectionService _service;
 
         public PowerShellConnectionServiceTests()
@@ -37,14 +39,15 @@ namespace TeamsManager.Tests.Services
             _mockTokenManager = new Mock<ITokenManager>();
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockConfiguration = new Mock<IConfiguration>();
+            _mockServiceScopeFactory = new Mock<IServiceScopeFactory>();
 
             SetupConfiguration();
             SetupOperationHistory();
+            SetupServiceScopeFactory();
 
             _service = new PowerShellConnectionService(
                 _mockLogger.Object,
-                _mockCurrentUserService.Object,
-                _mockNotificationService.Object,
+                _mockServiceScopeFactory.Object,
                 _mockCacheService.Object,
                 _mockTokenManager.Object,
                 _mockOperationHistoryService.Object,
@@ -115,6 +118,23 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>(),
                     It.IsAny<string>()))
                 .ReturnsAsync(operationHistory);
+        }
+
+        private void SetupServiceScopeFactory()
+        {
+            var mockScope = new Mock<IServiceScope>();
+            var mockServiceProvider = new Mock<IServiceProvider>();
+
+            // Setup CurrentUserService in scope
+            mockServiceProvider.Setup(p => p.GetRequiredService<ICurrentUserService>())
+                              .Returns(_mockCurrentUserService.Object);
+
+            // Setup NotificationService in scope
+            mockServiceProvider.Setup(p => p.GetRequiredService<INotificationService>())
+                              .Returns(_mockNotificationService.Object);
+
+            mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+            _mockServiceScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
         }
 
         [Fact]

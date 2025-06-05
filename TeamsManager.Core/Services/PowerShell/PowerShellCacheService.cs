@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +10,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Services.Cache;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -586,5 +589,263 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Remove(ApplicationSettingServiceAllActiveKey);
             _logger.LogDebug("Unieważniono cache listy wszystkich aktywnych ustawień aplikacji.");
         }
+
+        #region P2 Cache Optimization Features
+
+        /// <summary>
+        /// [P2-OPTIMIZATION] Smart batch invalidation to reduce cache stampedes
+        /// </summary>
+        public void BatchInvalidateKeys(IEnumerable<string> cacheKeys, string operationName = "BatchInvalidation")
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var invalidatedCount = 0;
+            var keysList = cacheKeys.ToList();
+            
+            _logger.LogDebug("[P2-CACHE] Starting batch invalidation of {Count} keys for operation: {Operation}", 
+                keysList.Count, operationName);
+            
+            // Group similar keys to optimize invalidation
+            var keyGroups = keysList.GroupBy(key => key.Split('_')[0]).ToList();
+            
+            foreach (var group in keyGroups)
+            {
+                _logger.LogDebug("[P2-CACHE] Invalidating {Count} keys with prefix: {Prefix}", 
+                    group.Count(), group.Key);
+                
+                foreach (var key in group)
+                {
+                    _cache.Remove(key);
+                    invalidatedCount++;
+                }
+            }
+            
+            stopwatch.Stop();
+            
+            _logger.LogInformation("[P2-CACHE] Batch invalidation completed. Operation: {Operation}, " +
+                "Keys: {InvalidatedCount}/{TotalCount}, Duration: {ElapsedMs}ms", 
+                operationName, invalidatedCount, keysList.Count, stopwatch.ElapsedMilliseconds);
+                
+            // Track metrics
+            RecordCacheOperation("BatchInvalidation", stopwatch.ElapsedMilliseconds, invalidatedCount);
+        }
+
+        /// <summary>
+        /// [P2-OPTIMIZATION] Smart cache warming for frequently accessed data
+        /// </summary>
+        public async Task WarmCacheAsync(string cacheKey, Func<Task<object>> dataLoader, TimeSpan? duration = null)
+        {
+            if (_cache.TryGetValue(cacheKey, out _))
+            {
+                _logger.LogDebug("[P2-CACHE] Cache key {CacheKey} already warm", cacheKey);
+                return;
+            }
+            
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            try
+            {
+                _logger.LogDebug("[P2-CACHE] Warming cache for key: {CacheKey}", cacheKey);
+                
+                var data = await dataLoader();
+                if (data != null)
+                {
+                    Set(cacheKey, data, duration ?? _defaultCacheDuration);
+                    
+                    stopwatch.Stop();
+                    _logger.LogInformation("[P2-CACHE] Cache warmed for key: {CacheKey}, Duration: {ElapsedMs}ms", 
+                        cacheKey, stopwatch.ElapsedMilliseconds);
+                        
+                    RecordCacheOperation("WarmCache", stopwatch.ElapsedMilliseconds, 1);
+                }
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "[P2-CACHE] Failed to warm cache for key: {CacheKey}, Duration: {ElapsedMs}ms", 
+                    cacheKey, stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// [P2-OPTIMIZATION] Pagination support for large data sets
+        /// </summary>
+        public bool TryGetPagedValue<T>(string baseCacheKey, int pageNumber, int pageSize, out T? value)
+        {
+            var pagedKey = $"{baseCacheKey}_Page_{pageNumber}_Size_{pageSize}";
+            var result = TryGetValue(pagedKey, out value);
+            
+            if (result)
+            {
+                _logger.LogDebug("[P2-CACHE] Paged cache HIT: {PagedKey}", pagedKey);
+                RecordCacheOperation("PagedHit", 0, 1);
+            }
+            else
+            {
+                _logger.LogDebug("[P2-CACHE] Paged cache MISS: {PagedKey}", pagedKey);
+                RecordCacheOperation("PagedMiss", 0, 1);
+            }
+            
+            return result;
+        }
+
+        /// <summary>
+        /// [P2-OPTIMIZATION] Set paged data in cache
+        /// </summary>
+        public void SetPagedValue<T>(string baseCacheKey, int pageNumber, int pageSize, T value, TimeSpan? duration = null)
+        {
+            var pagedKey = $"{baseCacheKey}_Page_{pageNumber}_Size_{pageSize}";
+            Set(pagedKey, value, duration);
+            
+            _logger.LogDebug("[P2-CACHE] Paged cache SET: {PagedKey}", pagedKey);
+            RecordCacheOperation("PagedSet", 0, 1);
+        }
+
+        /// <summary>
+        /// [P2-OPTIMIZATION] Smart pattern-based invalidation for large organizations
+        /// </summary>
+        public void InvalidateByPattern(string pattern, string operationName = "PatternInvalidation")
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var invalidatedCount = 0;
+            
+            _logger.LogDebug("[P2-CACHE] Starting pattern-based invalidation: {Pattern} for operation: {Operation}", 
+                pattern, operationName);
+            
+            // For IMemoryCache, we need to track keys ourselves or use reflection
+            // This is a simplified implementation - in production, consider using Redis with pattern support
+            var fieldsInfo = typeof(MemoryCache).GetField("_coherentState", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            
+            if (fieldsInfo?.GetValue(_cache) is IDictionary cacheDict)
+            {
+                var keysToRemove = new List<object>();
+                
+                foreach (DictionaryEntry entry in cacheDict)
+                {
+                    var key = entry.Key.ToString();
+                    if (!string.IsNullOrEmpty(key) && key.Contains(pattern))
+                    {
+                        keysToRemove.Add(entry.Key);
+                    }
+                }
+                
+                foreach (var key in keysToRemove)
+                {
+                    _cache.Remove(key);
+                    invalidatedCount++;
+                }
+            }
+            
+            stopwatch.Stop();
+            
+            _logger.LogInformation("[P2-CACHE] Pattern invalidation completed. Pattern: {Pattern}, " +
+                "Operation: {Operation}, Keys: {InvalidatedCount}, Duration: {ElapsedMs}ms", 
+                pattern, operationName, invalidatedCount, stopwatch.ElapsedMilliseconds);
+                
+            RecordCacheOperation("PatternInvalidation", stopwatch.ElapsedMilliseconds, invalidatedCount);
+        }
+
+        #endregion
+        
+        #region P2 Cache Metrics & Monitoring
+        
+        private static readonly object _metricsLock = new object();
+        private static long _cacheHits = 0;
+        private static long _cacheMisses = 0;
+        private static long _cacheInvalidations = 0;
+        private static long _totalOperationTimeMs = 0;
+        
+        /// <summary>
+        /// [P2-MONITORING] Record cache operation for metrics
+        /// </summary>
+        private void RecordCacheOperation(string operationType, long durationMs, int itemCount = 1)
+        {
+            lock (_metricsLock)
+            {
+                switch (operationType)
+                {
+                    case "Hit":
+                    case "PagedHit":
+                        _cacheHits += itemCount;
+                        break;
+                    case "Miss":
+                    case "PagedMiss":
+                        _cacheMisses += itemCount;
+                        break;
+                    case "Invalidation":
+                    case "BatchInvalidation":
+                    case "PatternInvalidation":
+                        _cacheInvalidations += itemCount;
+                        break;
+                }
+                
+                _totalOperationTimeMs += durationMs;
+            }
+        }
+        
+        /// <summary>
+        /// [P2-MONITORING] Get comprehensive cache metrics
+        /// </summary>
+        public CacheMetrics GetCacheMetrics()
+        {
+            lock (_metricsLock)
+            {
+                var totalOperations = _cacheHits + _cacheMisses;
+                var hitRate = totalOperations > 0 ? (double)_cacheHits / totalOperations * 100 : 0;
+                
+                return new CacheMetrics
+                {
+                    CacheHits = _cacheHits,
+                    CacheMisses = _cacheMisses,
+                    CacheInvalidations = _cacheInvalidations,
+                    HitRate = hitRate,
+                    TotalOperations = totalOperations,
+                    AverageOperationTimeMs = totalOperations > 0 ? (double)_totalOperationTimeMs / totalOperations : 0,
+                    TotalOperationTimeMs = _totalOperationTimeMs
+                };
+            }
+        }
+        
+        /// <summary>
+        /// [P2-MONITORING] Reset cache metrics
+        /// </summary>
+        public void ResetMetrics()
+        {
+            lock (_metricsLock)
+            {
+                _cacheHits = 0;
+                _cacheMisses = 0;
+                _cacheInvalidations = 0;
+                _totalOperationTimeMs = 0;
+                
+                _logger.LogInformation("[P2-CACHE] Cache metrics reset");
+            }
+        }
+        
+        #endregion
+
+        #region Enhanced TryGetValue with Metrics
+        
+        public bool TryGetValueWithMetrics<T>(string key, out T? value)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = TryGetValue(key, out value);
+            stopwatch.Stop();
+            
+            RecordCacheOperation(result ? "Hit" : "Miss", stopwatch.ElapsedMilliseconds);
+            
+            if (result)
+            {
+                _logger.LogDebug("[P2-CACHE] Cache HIT: {Key}, Duration: {ElapsedMs}ms", key, stopwatch.ElapsedMilliseconds);
+            }
+            else
+            {
+                _logger.LogDebug("[P2-CACHE] Cache MISS: {Key}, Duration: {ElapsedMs}ms", key, stopwatch.ElapsedMilliseconds);
+            }
+            
+            return result;
+        }
+        
+        #endregion
     }
 }

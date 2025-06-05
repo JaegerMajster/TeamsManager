@@ -1,8 +1,65 @@
 # PowerShellService - Rozszerzenie funkcjonalności
 
-## Status: 🔄 W planach
+## Status: 🔄 W trakcie refaktoryzacji (Etap 3/7 ukończony)
 
 Aktualna implementacja `PowerShellService` jest funkcjonalna, ale brakuje jej kilku ważnych funkcjonalności typu "read-only" oraz zaawansowanych operacji zarządzania. Poniżej lista zadań do implementacji.
+
+## 🎯 **Status refaktoryzacji PowerShell Services**
+
+### ✅ **Ukończone etapy:**
+- **Etap 1/7**: Hierarchia wyjątków PowerShell
+  - ✅ `PowerShellException` (bazowy)
+  - ✅ `PowerShellConnectionException` 
+  - ✅ `PowerShellCommandExecutionException`
+  - ✅ `PowerShellExceptionBuilder`
+
+- **Etap 2/7**: Rozwiązanie Captive Dependency
+  - ✅ Refaktoryzacja `PowerShellConnectionService`
+  - ✅ Użycie `IServiceScopeFactory` zamiast bezpośrednich serwisów scoped
+  - ✅ Thread-safe zarządzanie scope'ami
+
+- **Etap 3/7**: Ulepszenie obsługi błędów i mapowania
+  - ✅ `PSObjectMapper` - centralizacja mapowania PSObject
+  - ✅ `PSParameterValidator` - walidacja i sanitacja parametrów
+  - ✅ Ulepszona obsługa błędów w `PowerShellService`
+  - ✅ Refaktoryzacja mapowania w `ChannelService`
+  - ✅ Ochrona przed PowerShell injection
+
+### 🔄 **Następne etapy:**
+- **Etap 4/7**: Wprowadzenie fabryki PSObjects
+- **Etap 5/7**: Centralizacja zarządzania sesjami
+- **Etap 6/7**: Optymalizacja cache i bulk operations
+- **Etap 7/7**: Monitoring i diagnostyka
+
+---
+
+## 🛡️ **Nowe komponenty architektoniczne (po Etapie 3/7)**
+
+### 📦 **PSObjectMapper** (`TeamsManager.Core/Helpers/PowerShell/PSObjectMapper.cs`)
+Bezpieczne mapowanie właściwości PSObject na typy .NET:
+- `GetString()` - bezpieczne pobieranie stringów z sanitacją
+- `GetInt32()` / `GetInt64()` - typowane mapowanie liczb
+- `GetBoolean()` - mapowanie bool z obsługą różnych formatów
+- `GetDateTime()` - obsługa dat z różnych źródeł
+- `LogProperties()` - debugging PSObject
+
+### 🔐 **PSParameterValidator** (`TeamsManager.Core/Helpers/PowerShell/PSParameterValidator.cs`)
+Walidacja i sanitacja parametrów przed PowerShell:
+- `ValidateAndSanitizeString()` - escape injection chars (`'`, `` ` ``, `$`)
+- `ValidateEmail()` - regex walidacja adresów email
+- `ValidateGuid()` - walidacja identyfikatorów GUID
+- `CreateSafeParameters()` - bezpieczne słowniki parametrów
+
+---
+
+## 📝 **Aktualizacja priorytetów po Etapie 3/7**
+
+W kontekście ulepszeń z Etapu 3, niektóre zadania zyskały wyższą jakość implementacyjną:
+
+### **Wysokiej jakości (zaimplementowane wzorce z Etapu 3):**
+- Wszystkie nowe metody powinny używać `PSObjectMapper` zamiast bezpośredniego `.Value?.ToString()`
+- Walidacja parametrów przez `PSParameterValidator` przed każdym wywołaniem PowerShell
+- Rzucanie granularnych wyjątków zamiast zwracania `null`
 
 ---
 
@@ -199,15 +256,37 @@ Aktualna implementacja `PowerShellService` jest funkcjonalna, ale brakuje jej ki
 
 ## 📝 **Uwagi implementacyjne**
 
-1. **Bezpieczeństwo**: Wszystkie nowe metody muszą używać `SecureString` dla haseł
-2. **Logging**: Konsekwentne logowanie na poziomach Debug/Info/Warning/Error
-3. **Error handling**: Obsługa błędów PowerShell i wyjątków .NET
-4. **Testing**: Każda nowa metoda wymaga testów jednostkowych w `PowerShellServiceTests.cs`
-5. **Cache**: Rozważyć cache'owanie wyników dla często odpytywanych danych (lista zespołów, użytkownicy)
-6. **Performance**: Operacje masowe powinny być optymalizowane pod kątem wydajności
+### 🔧 **Obowiązkowe wzorce (po Etapie 3/7):**
+1. **PSObjectMapper**: Użyj `PSObjectMapper.GetString()`, `GetInt32()`, etc. zamiast `.Value?.ToString()`
+2. **PSParameterValidator**: Wszystkie parametry przez `ValidateAndSanitizeString()` przed PowerShell
+3. **Granularne wyjątki**: Rzucaj `PowerShellConnectionException`, `PowerShellCommandExecutionException` 
+4. **Logging**: Użyj `PSObjectMapper.LogProperties()` dla debugging PSObject
+
+### 🛡️ **Bezpieczeństwo:**
+1. **SecureString**: Wszystkie hasła przez `SecureString`
+2. **Injection protection**: Escape `'`, `` ` ``, `$` w parametrach
+3. **Guid validation**: Waliduj identyfikatory przez `PSParameterValidator.ValidateGuid()`
+4. **Email validation**: Waliduj adresy przez `PSParameterValidator.ValidateEmail()`
+
+### 🧪 **Testing:**
+1. **Unit tests**: Każda nowa metoda w `PowerShellServiceTests.cs`
+2. **Injection tests**: Testuj ochronę przed PowerShell injection
+3. **Error handling**: Testuj wszystkie przypadki błędów
+
+### ⚡ **Performance:**
+1. **Cache**: Rozważyć cache'owanie wyników dla często odpytywanych danych
+2. **Bulk operations**: Optymalizacja operacji masowych
+3. **Connection pooling**: Efektywne zarządzanie połączeniami PowerShell
 
 ---
 
 **Data utworzenia**: 01.06.2025  
-**Ostatnia aktualizacja**: 01.06.2025  
-**Status**: ✅ Lista zadań kompletna - gotowa do implementacji 
+**Ostatnia aktualizacja**: 05 czerwca 2025, 10:49  
+**Status**: 🔄 W trakcie refaktoryzacji (Etap 3/7 ukończony) - gotowa do Etapu 4/7
+
+### 📈 **Postęp refaktoryzacji:**
+- **Ukończone**: 3/7 etapów (43%)
+- **Nowe komponenty**: 2 (PSObjectMapper, PSParameterValidator)
+- **Bezpieczeństwo**: ✅ PowerShell injection protection
+- **Type safety**: ✅ Granularne mapowanie PSObject
+- **Error handling**: ✅ Granularne wyjątki PowerShell 

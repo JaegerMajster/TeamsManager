@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
@@ -15,6 +16,7 @@ using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Common;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Exceptions.PowerShell;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -24,8 +26,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
     public class PowerShellConnectionService : IPowerShellConnectionService
     {
         private readonly ILogger<PowerShellConnectionService> _logger;
-        private readonly ICurrentUserService _currentUserService;
-        private readonly INotificationService _notificationService;
+        private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IPowerShellCacheService _cacheService;
         private readonly ITokenManager _tokenManager;
         private readonly IOperationHistoryService _operationHistoryService;
@@ -53,16 +54,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public PowerShellConnectionService(
             ILogger<PowerShellConnectionService> logger,
-            ICurrentUserService currentUserService,
-            INotificationService notificationService,
+            IServiceScopeFactory serviceScopeFactory,
             IPowerShellCacheService cacheService,
             ITokenManager tokenManager,
             IOperationHistoryService operationHistoryService,
             IConfiguration configuration)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _serviceScopeFactory = serviceScopeFactory ?? throw new ArgumentNullException(nameof(serviceScopeFactory));
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
             _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
@@ -89,6 +88,89 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         public bool IsConnected => _sharedIsConnected;
+
+        /// <summary>
+        /// Wykonuje akcję w nowym scope z dostępem do scoped services
+        /// </summary>
+        private async Task ExecuteWithScopedServicesAsync(Func<ICurrentUserService, INotificationService, Task> action)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            await action(currentUserService, notificationService);
+        }
+
+        /// <summary>
+        /// Wykonuje funkcję w nowym scope z dostępem do scoped services
+        /// </summary>
+        private async Task<T> ExecuteWithScopedServicesAsync<T>(Func<ICurrentUserService, INotificationService, Task<T>> func)
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            return await func(currentUserService, notificationService);
+        }
+
+        /// <summary>
+        /// Pobiera Current User UPN w nowym scope
+        /// </summary>
+        private string GetCurrentUserUpnScoped()
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+            return currentUserService.GetCurrentUserUpn() ?? "system";
+        }
+
+        /// <summary>
+        /// Pobiera Current User UPN bezpiecznie w nowym scope
+        /// </summary>
+        private async Task<string> GetCurrentUserUpnSafeAsync()
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+                return currentUserService.GetCurrentUserUpn() ?? "system";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd pobierania UPN bieżącego użytkownika");
+                return "system";
+            }
+        }
+
+        /// <summary>
+        /// Tworzy metodę fabryczną dla nowych wyjątków z dodatkowym kontekstem
+        /// </summary>
+        private PowerShellConnectionException CreateConnectionException(
+            string message, 
+            Exception? innerException = null,
+            string? connectionUri = null,
+            int? attemptCount = null)
+        {
+            var contextData = new Dictionary<string, object?>
+            {
+                ["RunspaceState"] = _sharedRunspace?.RunspaceStateInfo.State.ToString(),
+                ["IsConnected"] = _sharedIsConnected,
+                ["CircuitBreakerState"] = _connectionCircuitBreaker.State.ToString(),
+                ["LastSuccessfulConnection"] = _lastSuccessfulConnection
+            };
+
+            if (attemptCount.HasValue)
+            {
+                contextData["AttemptCount"] = attemptCount.Value;
+            }
+
+            return new PowerShellConnectionException(
+                message, 
+                new List<ErrorRecord>(),
+                contextData,
+                connectionUri ?? "https://graph.microsoft.com",
+                "AccessToken",
+                innerException);
+        }
 
         /// <summary>
         /// Sprawdza stan połączenia i automatycznie łączy się ponownie jeśli to konieczne
@@ -133,11 +215,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         _connectionCircuitBreaker.State);
                     
                     // Powiadomienie o próbie reconnect
-                    await _notificationService.SendNotificationToUserAsync(
-                        _currentUserService.GetCurrentUserUpn() ?? "system",
-                        $"🔄 Automatyczna próba odnowienia połączenia z Microsoft Graph (Circuit Breaker: {_connectionCircuitBreaker.State})",
-                        "info"
-                    );
+                    await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            currentUserService.GetCurrentUserUpn() ?? "system",
+                            $"🔄 Automatyczna próba odnowienia połączenia z Microsoft Graph (Circuit Breaker: {_connectionCircuitBreaker.State})",
+                            "info"
+                        );
+                    });
                     
                     // Pobierz świeży token
                     var token = await _tokenManager.GetValidAccessTokenAsync(_lastConnectedUserUpn, _lastApiAccessToken);
@@ -172,10 +257,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 );
                 
                 _logger.LogWarning(ex, "Circuit breaker is open. Connection attempts are temporarily suspended.");
-                await _notificationService.SendNotificationToUserAsync(
-                    _currentUserService.GetCurrentUserUpn() ?? "system",
-                    "⚠️ Połączenie z Microsoft Graph jest tymczasowo niedostępne. Spróbuj ponownie za chwilę.",
-                    "warning");
+                await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                {
+                    await notificationService.SendNotificationToUserAsync(
+                        currentUserService.GetCurrentUserUpn() ?? "system",
+                        "⚠️ Połączenie z Microsoft Graph jest tymczasowo niedostępne. Spróbuj ponownie za chwilę.",
+                        "warning");
+                });
                 return false;
             }
             catch (Exception ex)
@@ -231,9 +319,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<bool> ConnectWithAccessTokenAsync(string accessToken, string[]? scopes = null)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            // Pobierz UPN używając scope
+            string currentUserUpn;
+            using (var scope = _serviceScopeFactory.CreateScope())
+            {
+                var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+                currentUserUpn = currentUserService.GetCurrentUserUpn() ?? "system";
+            }
+            
             var operationId = Guid.NewGuid().ToString();
-
             _lastConnectionAttempt = DateTime.UtcNow;
             
             // Audyt rozpoczęcia połączenia
@@ -259,37 +353,52 @@ namespace TeamsManager.Core.Services.PowerShellServices
             {
                 _logger.LogError("Nie można połączyć z Microsoft Graph: środowisko PowerShell nie jest poprawnie zainicjalizowane.");
                 
-                // Audyt niepowodzenia
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operationHistory.Id,
                     OperationStatus.Failed,
                     "PowerShell environment not initialized"
                 );
                 
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                    "Błąd inicjalizacji PowerShell: środowisko nie jest gotowe", "error");
-                return false;
+                // Użyj nowego wyjątku z Etapu 1
+                throw PowerShellConnectionException.ForConnectionFailed(
+                    "Środowisko PowerShell nie jest gotowe do nawiązania połączenia",
+                    connectionUri: "https://graph.microsoft.com"
+                );
             }
 
             if (string.IsNullOrWhiteSpace(accessToken))
             {
                 _logger.LogError("Nie można połączyć z Microsoft Graph: token dostępu nie może być pusty.");
                 
-                // Audyt niepowodzenia
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operationHistory.Id,
                     OperationStatus.Failed,
                     "Access token is null or empty"
                 );
                 
-                await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                    "Błąd połączenia: brak tokenu dostępu", "error");
-                return false;
+                // Użyj nowego wyjątku z Etapu 1
+                throw PowerShellConnectionException.ForTokenError(
+                    "Brak tokenu dostępu do Microsoft Graph"
+                );
+            }
+
+            // Helper method dla powiadomień
+            async Task SendProgressAsync(int progress, string message)
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                await notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, progress, message);
+            }
+
+            async Task SendNotificationAsync(string message, string type)
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                await notificationService.SendNotificationToUserAsync(currentUserUpn, message, type);
             }
 
             // Powiadomienie o rozpoczęciu połączenia
-            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 5,
-                "Rozpoczynanie połączenia z Microsoft Graph API...");
+            await SendProgressAsync(5, "Rozpoczynanie połączenia z Microsoft Graph API...");
 
             return await Task.Run(async () =>
             {
@@ -298,8 +407,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     _logger.LogInformation("Próba połączenia z Microsoft Graph API. Scopes: [{Scopes}]",
                         scopes != null ? string.Join(", ", scopes) : "Brak");
 
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 20,
-                        "Importowanie modułów PowerShell...");
+                    await SendProgressAsync(20, "Importowanie modułów PowerShell...");
 
                     using (var ps = PowerShell.Create())
                     {
@@ -314,8 +422,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         ps.Invoke();
                         ps.Commands.Clear();
 
-                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 50,
-                            "Uwierzytelnianie w Microsoft Graph...");
+                        await SendProgressAsync(50, "Uwierzytelnianie w Microsoft Graph...");
 
                         // Połączenie
                         var command = ps.AddCommand("Connect-MgGraph")
@@ -332,27 +439,34 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         if (ps.HadErrors)
                         {
                             var errorMessages = ps.Streams.Error.Select(e => e.ToString()).ToList();
+                            var errorRecords = ps.Streams.Error.ToList();
+                            
                             foreach (var error in errorMessages)
                             {
                                 _logger.LogError("Błąd PowerShell podczas łączenia: {Error}", error);
                             }
 
-                            // Audyt niepowodzenia PowerShell
                             await _operationHistoryService.UpdateOperationStatusAsync(
                                 operationHistory.Id,
                                 OperationStatus.Failed,
                                 $"PowerShell errors: {string.Join("; ", errorMessages)}"
                             );
 
-                            await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                                $"Błąd połączenia z Graph API: {string.Join("; ", errorMessages)}", "error");
-                            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
-                                "Połączenie zakończone niepowodzeniem");
-                            return false;
+                            await SendNotificationAsync(
+                                $"Błąd połączenia z Graph API: {string.Join("; ", errorMessages)}", 
+                                "error"
+                            );
+                            await SendProgressAsync(100, "Połączenie zakończone niepowodzeniem");
+                            
+                            // Użyj nowego wyjątku z Etapu 1
+                            throw PowerShellCommandExecutionException.ForCmdlet(
+                                "Connect-MgGraph",
+                                errorRecords,
+                                scopes?.Length > 0 ? new Dictionary<string, object?> { ["Scopes"] = scopes } : null
+                            );
                         }
 
-                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 80,
-                            "Weryfikacja połączenia...");
+                        await SendProgressAsync(80, "Weryfikacja połączenia...");
 
                         // Weryfikacja połączenia i cache kontekstu
                         ps.Commands.Clear();
@@ -362,18 +476,22 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         {
                             _logger.LogError("Połączenie z Microsoft Graph nie zostało ustanowione.");
                             
-                            // Audyt niepowodzenia weryfikacji
                             await _operationHistoryService.UpdateOperationStatusAsync(
                                 operationHistory.Id,
                                 OperationStatus.Failed,
                                 "Graph connection verification failed - no context returned"
                             );
                             
-                            await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                                "Nie udało się ustanowić połączenia z Microsoft Graph", "error");
-                            await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
-                                "Weryfikacja połączenia zakończona niepowodzeniem");
-                            return false;
+                            await SendNotificationAsync(
+                                "Nie udało się ustanowić połączenia z Microsoft Graph", 
+                                "error"
+                            );
+                            await SendProgressAsync(100, "Weryfikacja połączenia zakończona niepowodzeniem");
+                            
+                            throw PowerShellConnectionException.ForConnectionFailed(
+                                "Weryfikacja połączenia z Microsoft Graph nie powiodła się",
+                                connectionUri: "https://graph.microsoft.com"
+                            );
                         }
 
                         _sharedIsConnected = true;
@@ -403,10 +521,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         var context = contextCheckResult.First();
                         _cacheService.Set("PowerShell_GraphContext", context);
 
-                        await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
-                            "Połączenie z Microsoft Graph ustanowione pomyślnie");
-                        await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                            "✅ Pomyślnie połączono z Microsoft Graph API", "success");
+                        await SendProgressAsync(100, "Połączenie z Microsoft Graph ustanowione pomyślnie");
+                        await SendNotificationAsync("✅ Pomyślnie połączono z Microsoft Graph API", "success");
 
                         // Audyt sukcesu
                         await _operationHistoryService.UpdateOperationStatusAsync(
@@ -419,11 +535,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         return true;
                     }
                 }
+                catch (PowerShellException)
+                {
+                    // Przekaż dalej nasze własne wyjątki
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Wyjątek podczas łączenia z Microsoft Graph");
                     
-                    // Audyt niepowodzenia
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operationHistory.Id,
                         OperationStatus.Failed,
@@ -431,11 +551,16 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         ex.ToString()
                     );
                     
-                    await _notificationService.SendNotificationToUserAsync(currentUserUpn,
-                        $"Błąd krytyczny podczas łączenia: {ex.Message}", "error");
-                    await _notificationService.SendOperationProgressToUserAsync(currentUserUpn, operationId, 100,
-                        "Połączenie zakończone błędem krytycznym");
-                    return false;
+                    await SendNotificationAsync($"Błąd krytyczny podczas łączenia: {ex.Message}", "error");
+                    await SendProgressAsync(100, "Połączenie zakończone błędem krytycznym");
+                    
+                    // Opakuj w nasz wyjątek
+                    throw PowerShellConnectionException.ForConnectionFailed(
+                        $"Nieoczekiwany błąd podczas łączenia z Microsoft Graph: {ex.Message}",
+                        ex,
+                        connectionUri: "https://graph.microsoft.com",
+                        authenticationMethod: "AccessToken"
+                    );
                 }
             });
         }
@@ -498,13 +623,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
             if (_sharedRunspace == null || _sharedRunspace.RunspaceStateInfo.State != RunspaceState.Opened)
             {
                 _logger.LogError("Środowisko PowerShell nie jest zainicjalizowane.");
-                return null;
+                throw PowerShellConnectionException.ForConnectionFailed(
+                    "Środowisko PowerShell nie jest gotowe do wykonania skryptu"
+                );
             }
 
             if (string.IsNullOrWhiteSpace(script))
             {
                 _logger.LogError("Skrypt nie może być pusty.");
-                return null;
+                throw new ArgumentException("Skrypt PowerShell nie może być pusty", nameof(script));
             }
 
             // Podstawowa sanityzacja
@@ -538,18 +665,32 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                             if (ps.HadErrors && results.Count == 0)
                             {
+                                var errorRecords = ps.Streams.Error.ToList();
                                 _logger.LogError("Skrypt zakończył się błędami.");
-                                return null;
+                                
+                                throw PowerShellCommandExecutionException.ForScript(
+                                    script,
+                                    errorRecords,
+                                    parameters as IDictionary<string, object?>
+                                );
                             }
 
                             _logger.LogDebug("Skrypt wykonany. Wyniki: {Count}", results.Count);
                             return results;
                         }
                     }
+                    catch (PowerShellException)
+                    {
+                        throw; // Przekaż nasze wyjątki bez zmian
+                    }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Błąd wykonywania skryptu PowerShell");
-                        return null;
+                        throw PowerShellCommandExecutionException.ForScript(
+                            script,
+                            new List<ErrorRecord>(),
+                            parameters as IDictionary<string, object?>
+                        );
                     }
                 }
             });
@@ -579,7 +720,6 @@ namespace TeamsManager.Core.Services.PowerShellServices
             
             if (!ValidateRunspaceState()) 
             {
-                // Spróbuj auto-reconnect przed rezygnacją
                 if (!await ConnectIfNotConnectedAsync())
                 {
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -589,12 +729,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     );
                     
                     _logger.LogError("Cannot execute command: PowerShell is not connected and reconnection failed.");
-                    return null;
+                    throw PowerShellConnectionException.ForConnectionFailed(
+                        $"Nie można wykonać komendy '{commandName}': środowisko PowerShell nie jest połączone"
+                    );
                 }
             }
 
             int attempt = 0;
             Exception? lastException = null;
+            var errorRecordsList = new List<ErrorRecord>();
 
             while (attempt < maxRetries)
             {
@@ -622,8 +765,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
                         if (ps.HadErrors)
                         {
+                            errorRecordsList.AddRange(ps.Streams.Error);
                             var errors = string.Join("; ", ps.Streams.Error.Select(e => e.ToString()));
-                            throw new InvalidOperationException($"PowerShell errors: {errors}");
+                            throw PowerShellCommandExecutionException.ForCmdlet(
+                                commandName,
+                                ps.Streams.Error,
+                                parameters as IDictionary<string, object?>
+                            );
                         }
 
                         _logger.LogDebug("Command '{CommandName}' executed successfully. Results: {Count}",
@@ -639,41 +787,42 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         return results;
                     }
                 }
+                catch (PowerShellCommandExecutionException ex) when (IsTransientError(ex) && attempt < maxRetries)
+                {
+                    lastException = ex;
+                    var delay = CalculateRetryDelay(attempt);
+                    
+                    _logger.LogWarning(ex,
+                        "Attempt {Attempt}/{MaxRetries} failed for command '{CommandName}'. Retrying in {Delay}s",
+                        attempt, maxRetries, commandName, delay.TotalSeconds);
+
+                    await Task.Delay(delay);
+                }
+                catch (Exception ex) when (IsConnectionError(ex))
+                {
+                    lastException = ex;
+                    _logger.LogWarning("Connection error detected. Attempting to reconnect...");
+                    _sharedIsConnected = false;
+                    
+                    if (!await ConnectIfNotConnectedAsync())
+                    {
+                        _logger.LogError("Failed to reconnect after connection error.");
+                        
+                        throw PowerShellConnectionException.ForConnectionFailed(
+                            $"Utracono połączenie podczas wykonywania komendy '{commandName}'",
+                            ex,
+                            connectionUri: "https://graph.microsoft.com"
+                        );
+                    }
+                }
                 catch (Exception ex)
                 {
                     lastException = ex;
-
-                    // Sprawdź czy to błąd związany z połączeniem
-                    if (IsConnectionError(ex))
-                    {
-                        _logger.LogWarning("Connection error detected. Attempting to reconnect...");
-                        _sharedIsConnected = false; // Force reconnection
-                        
-                        if (!await ConnectIfNotConnectedAsync())
-                        {
-                            _logger.LogError("Failed to reconnect after connection error.");
-                            break;
-                        }
-                    }
-                    else if (IsTransientError(ex) && attempt < maxRetries)
-                    {
-                        // Oblicz delay z uwzględnieniem konfiguracji
-                        var delay = CalculateRetryDelay(attempt);
-                        
-                        _logger.LogWarning(ex,
-                            "Attempt {Attempt}/{MaxRetries} failed for command '{CommandName}'. Retrying in {Delay}s",
-                            attempt, maxRetries, commandName, delay.TotalSeconds);
-
-                        await Task.Delay(delay);
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    break;
                 }
             }
 
-            // Audyt ostatecznego niepowodzenia
+            // Ostateczne niepowodzenie
             await _operationHistoryService.UpdateOperationStatusAsync(
                 operationHistory.Id,
                 OperationStatus.Failed,
@@ -683,7 +832,18 @@ namespace TeamsManager.Core.Services.PowerShellServices
             
             _logger.LogError(lastException, "Failed to execute command '{CommandName}' after {MaxRetries} attempts.",
                 commandName, maxRetries);
-            return null;
+            
+            // Rzuć odpowiedni wyjątek w zależności od typu błędu
+            if (lastException is PowerShellException)
+            {
+                throw lastException;
+            }
+            
+            throw PowerShellCommandExecutionException.ForCmdlet(
+                commandName,
+                errorRecordsList,
+                parameters as IDictionary<string, object?>
+            );
         }
 
         private TimeSpan CalculateRetryDelay(int attemptNumber)
@@ -697,11 +857,28 @@ namespace TeamsManager.Core.Services.PowerShellServices
             return totalDelay > _maxRetryDelay ? _maxRetryDelay : totalDelay;
         }
 
+        /// <summary>
+        /// Rozszerzona metoda IsTransientError obsługująca hierarchię wyjątków
+        /// </summary>
         private bool IsTransientError(Exception ex)
         {
+            // Sprawdź czy to nasz wyjątek z informacją o retry
+            if (ex is PowerShellCommandExecutionException cmdEx)
+            {
+                // Sprawdź ErrorRecords
+                var hasTransientError = cmdEx.ErrorRecords.Any(er =>
+                    er.Exception?.Message?.Contains("throttl", StringComparison.OrdinalIgnoreCase) == true ||
+                    er.Exception?.Message?.Contains("timeout", StringComparison.OrdinalIgnoreCase) == true ||
+                    er.CategoryInfo?.Reason?.Contains("Timeout") == true
+                );
+                
+                if (hasTransientError) return true;
+            }
+            
             return ex.Message.Contains("throttl", StringComparison.OrdinalIgnoreCase) ||
                    ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
-                   ex.Message.Contains("temporarily", StringComparison.OrdinalIgnoreCase);
+                   ex.Message.Contains("temporarily", StringComparison.OrdinalIgnoreCase) ||
+                   ex.Message.Contains("retry", StringComparison.OrdinalIgnoreCase);
         }
 
         private void LogPowerShellStreams(PowerShell ps)
@@ -793,15 +970,24 @@ namespace TeamsManager.Core.Services.PowerShellServices
         /// <summary>
         /// Sprawdza czy błąd jest związany z połączeniem
         /// </summary>
+        /// <summary>
+        /// Rozszerzona metoda IsConnectionError używająca hierarchii wyjątków
+        /// </summary>
         private bool IsConnectionError(Exception ex)
         {
+            // Najpierw sprawdź czy to nasz wyjątek
+            if (ex is PowerShellConnectionException)
+                return true;
+                
             var message = ex.Message?.ToLowerInvariant() ?? "";
             return message.Contains("unauthorized") ||
                    message.Contains("token") ||
                    message.Contains("expired") ||
                    message.Contains("invalid_grant") ||
                    message.Contains("not connected") ||
-                   message.Contains("connect-mggraph");
+                   message.Contains("connect-mggraph") ||
+                   message.Contains("runspace") ||
+                   message.Contains("disconnected");
         }
 
         public async Task<ConnectionHealthInfo> GetConnectionHealthAsync()
@@ -821,60 +1007,84 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         private async void OnCircuitBreakerStateChanged(object? sender, CircuitBreakerStateChangedEventArgs e)
         {
-            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
-            
-            // Audyt zmiany stanu
-            await _operationHistoryService.CreateNewOperationEntryAsync(
-                OperationType.ConfigurationChanged,
-                "CircuitBreaker",
-                "PowerShellConnection",
-                $"Circuit Breaker State Change: {e.OldState} -> {e.NewState}",
-                details: JsonSerializer.Serialize(new
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                
+                var currentUserUpn = currentUserService.GetCurrentUserUpn() ?? "system";
+                
+                // Audyt zmiany stanu
+                await _operationHistoryService.CreateNewOperationEntryAsync(
+                    OperationType.ConfigurationChanged,
+                    "CircuitBreaker",
+                    "PowerShellConnection",
+                    $"Circuit Breaker State Change: {e.OldState} -> {e.NewState}",
+                    details: JsonSerializer.Serialize(new
+                    {
+                        OldState = e.OldState.ToString(),
+                        NewState = e.NewState.ToString(),
+                        Timestamp = e.Timestamp,
+                        CurrentFailureCount = _connectionCircuitBreaker.FailureCount
+                    })
+                );
+                
+                // Powiadomienia o znaczących zmianach stanu
+                if (e.NewState == CircuitState.Open)
                 {
-                    OldState = e.OldState.ToString(),
-                    NewState = e.NewState.ToString(),
-                    Timestamp = e.Timestamp,
-                    CurrentFailureCount = _connectionCircuitBreaker.FailureCount
-                })
-            );
-            
-            // Powiadomienie o znaczących zmianach stanu
-            if (e.NewState == CircuitState.Open)
-            {
-                await _notificationService.SendNotificationToUserAsync(
-                    currentUserUpn,
-                    "🚫 Circuit Breaker otwarty - zbyt wiele nieudanych prób połączenia. Połączenia zostały tymczasowo wstrzymane.",
-                    "error"
-                );
+                    await notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "🚫 Circuit Breaker otwarty - zbyt wiele nieudanych prób połączenia. Połączenia zostały tymczasowo wstrzymane.",
+                        "error"
+                    );
+                }
+                else if (e.OldState == CircuitState.Open && e.NewState == CircuitState.HalfOpen)
+                {
+                    await notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "🔄 Circuit Breaker w trybie testowym - próba przywrócenia połączenia.",
+                        "info"
+                    );
+                }
+                else if (e.OldState != CircuitState.Closed && e.NewState == CircuitState.Closed)
+                {
+                    await notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "✅ Circuit Breaker zamknięty - połączenie przywrócone.",
+                        "success"
+                    );
+                }
             }
-            else if (e.OldState == CircuitState.Open && e.NewState == CircuitState.HalfOpen)
+            catch (Exception ex)
             {
-                await _notificationService.SendNotificationToUserAsync(
-                    currentUserUpn,
-                    "🔄 Circuit Breaker w trybie testowym - próba przywrócenia połączenia.",
-                    "info"
-                );
-            }
-            else if (e.OldState != CircuitState.Closed && e.NewState == CircuitState.Closed)
-            {
-                await _notificationService.SendNotificationToUserAsync(
-                    currentUserUpn,
-                    "✅ Circuit Breaker zamknięty - połączenie przywrócone.",
-                    "success"
-                );
+                // W event handlerze nie możemy rzucić wyjątku, tylko zalogować
+                _logger.LogError(ex, "Błąd w obsłudze zmiany stanu Circuit Breaker");
             }
         }
 
         private async void OnCircuitBreakerFailureRecorded(object? sender, CircuitBreakerFailureEventArgs e)
         {
-            // Powiadomienie tylko gdy zbliżamy się do limitu
-            if (e.CurrentFailureCount >= e.Threshold - 1)
+            try
             {
-                await _notificationService.SendNotificationToUserAsync(
-                    _currentUserService.GetCurrentUserUpn() ?? "system",
-                    $"⚠️ Uwaga: {e.CurrentFailureCount}/{e.Threshold} prób połączenia zakończonych niepowodzeniem. Jeszcze jedna nieudana próba spowoduje tymczasowe wstrzymanie połączeń.",
-                    "warning"
-                );
+                // Powiadomienie tylko gdy zbliżamy się do limitu
+                if (e.CurrentFailureCount >= e.Threshold - 1)
+                {
+                    using var scope = _serviceScopeFactory.CreateScope();
+                    var currentUserService = scope.ServiceProvider.GetRequiredService<ICurrentUserService>();
+                    var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                    
+                    await notificationService.SendNotificationToUserAsync(
+                        currentUserService.GetCurrentUserUpn() ?? "system",
+                        $"⚠️ Uwaga: {e.CurrentFailureCount}/{e.Threshold} prób połączenia zakończonych niepowodzeniem. Jeszcze jedna nieudana próba spowoduje tymczasowe wstrzymanie połączeń.",
+                        "warning"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                // W event handlerze nie możemy rzucić wyjątku, tylko zalogować
+                _logger.LogError(ex, "Błąd w obsłudze zapisu błędu Circuit Breaker");
             }
         }
     }

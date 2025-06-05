@@ -6,6 +6,8 @@ using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Exceptions.PowerShell;
+using TeamsManager.Core.Helpers.PowerShell;
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -119,9 +121,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 
                 if (string.IsNullOrEmpty(graphToken))
                 {
-                    _logger.LogError("ExecuteWithAutoConnectAsync: Nie udało się uzyskać Graph token dla operacji: {Operation}", 
-                        operationDescription ?? "Nieznana operacja");
-                    return default(T);
+                    var errorMessage = $"Nie udało się uzyskać Graph token dla operacji: {operationDescription ?? "Nieznana operacja"}";
+                    _logger.LogError("ExecuteWithAutoConnectAsync: {Error}", errorMessage);
+                    
+                    // Rzuć PowerShellConnectionException zamiast zwracać default
+                    throw PowerShellConnectionException.ForTokenError(errorMessage);
                 }
 
                 // Upewnij się że mamy połączenie z Graph token
@@ -130,19 +134,36 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     var connected = await _connectionService.ConnectWithAccessTokenAsync(graphToken);
                     if (!connected)
                     {
-                        _logger.LogError("ExecuteWithAutoConnectAsync: Nie udało się połączyć z Microsoft Graph");
-                        return default(T);
+                        var errorMessage = "Nie udało się połączyć z Microsoft Graph";
+                        _logger.LogError("ExecuteWithAutoConnectAsync: {Error}", errorMessage);
+                        
+                        // Rzuć PowerShellConnectionException
+                        throw PowerShellConnectionException.ForConnectionFailed(
+                            errorMessage,
+                            connectionUri: "https://graph.microsoft.com",
+                            authenticationMethod: "AccessToken"
+                        );
                     }
                 }
                 
                 // Wykonaj operację bezpośrednio
                 return await operation();
             }
+            catch (PowerShellException)
+            {
+                // Przekaż własne wyjątki PowerShell bez zmian
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "ExecuteWithAutoConnectAsync: Błąd podczas wykonania operacji {Operation}", 
                     operationDescription ?? "Nieznana operacja");
-                return default(T);
+                
+                // Opakuj inne wyjątki w PowerShellCommandExecutionException
+                throw new PowerShellCommandExecutionException(
+                    $"Błąd podczas wykonania operacji: {operationDescription ?? "Nieznana operacja"}",
+                    innerException: ex
+                );
             }
         }
 

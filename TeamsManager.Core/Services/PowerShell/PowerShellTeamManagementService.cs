@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management.Automation;
@@ -7,6 +8,75 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Exceptions.PowerShell;
+using TeamsManager.Core.Helpers.PowerShell;
+
+// TODO [ETAP4-AUDIT]: GŁÓWNE USTALENIA AUDYTU PowerShellTeamManagementService
+// ============================================================================
+// ZGODNOŚĆ Z PowerShellServices_Refaktoryzacja.md:
+// ✅ OBECNE - Zgodne z specyfikacją:
+//    - CreateTeamAsync() -> sekcja 1.1 (New-MgTeam)
+//    - GetTeamAsync() -> sekcja 1.1 (Get-Team)
+//    - GetAllTeamsAsync() -> sekcja 1.2 (Get-Team)
+//    - GetTeamsByOwnerAsync() -> sekcja 1.3 (Get-Team)
+//
+// ❌ BRAKUJĄCE - Metody z specyfikacji nieobecne w implementacji:
+//    PRIORYTET HIGH:
+//    - GetTeamMembersAsync(string teamId) - sekcja 2.1 (Get-TeamUser)
+//    - GetTeamMemberAsync(string teamId, string userUpn) - sekcja 2.2 (Get-TeamUser)
+//    - UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole) - sekcja 2.3 (Add-TeamUser)
+//    - GetM365UserAsync(string userUpn) - sekcja 3.1 (Get-AzureADUser)
+//    - SearchM365UsersAsync(string searchTerm) - sekcja 3.2 (Get-AzureADUser)
+//    
+//    PRIORYTET MEDIUM:
+//    - GetUsersByDepartmentAsync(string department) - sekcja 3.3 (Get-AzureADUser)
+//    - AssignLicenseToUserAsync() - sekcja 4.1 (Set-AzureADUserLicense)
+//    - RemoveLicenseFromUserAsync() - sekcja 4.2 (Set-AzureADUserLicense)
+//    - GetUserLicensesAsync() - sekcja 4.3 (Get-AzureADUserLicenseDetail)
+//    - GetAvailableLicensesAsync() - sekcja 4.4 (Get-AzureADSubscribedSku)
+//    - TestConnectionAsync() - sekcja 7.1 (Get-CsTenant)
+//    - ValidatePermissionsAsync() - sekcja 7.2
+//    - SyncTeamDataAsync() - sekcja 7.3
+//
+//    PRIORYTET LOW:
+//    - CloneTeamAsync() - sekcja 8.1
+//    - BackupTeamSettingsAsync() - sekcja 8.2
+//    - BulkAddUsersToTeamAsync() - sekcja 8.3
+//    - GetTeamUsageReportAsync() - sekcja 6.1
+//    - GetUserActivityReportAsync() - sekcja 6.2
+//    - GetTeamsHealthReportAsync() - sekcja 6.3
+//    - ConnectToAzureADAsync() - sekcja 5.1
+//    - ConnectToExchangeOnlineAsync() - sekcja 5.2
+//
+// ⚠️ CMDLETY - Sprawdzić zgodność z najnowszymi wersjami Microsoft.Graph:
+//    - New-MgTeam - ZGODNY
+//    - Get-MgTeam - ZGODNY, ale w specyfikacji: Get-Team (Teams module, nie Graph)
+//    - Update-MgTeam - ZGODNY
+//    - Remove-MgGroup - ZGODNY dla usuwania zespołu
+//    - New-MgTeamChannel - ZGODNY
+//    - Get-MgTeamChannel - ZGODNY
+//    - Update-MgTeamChannel - ZGODNY  
+//    - Remove-MgTeamChannel - ZGODNY
+//
+// 🛡️ BEZPIECZEŃSTWO - Tylko częściowo zaimplementowane:
+//    ✅ PSParameterValidator używany w CreateTeamChannelAsync()
+//    ❌ Brak walidacji w innych metodach
+//    ❌ Brak escape injection chars w większości metod (tylko w CreateTeamAsync string replace)
+//
+// 📦 CACHE - Podstawowo zaimplementowany:
+//    ✅ Cache invalidation w operacjach modyfikujących
+//    ❌ Brak bulk cache operations
+//    ❌ Brak granularnego cache dla członków zespołu
+//
+// 🔄 MAPOWANIE - Mieszane podejście:
+//    ❌ Bezpośrednie Properties["..."] w GetTeamChannelAsync()
+//    ✅ PSParameterValidator w CreateTeamChannelAsync()
+//    ❌ Brak PSObjectMapper w pozostałych metodach
+//
+// 🎯 OBSŁUGA BŁĘDÓW - Częściowo zgodna z Etapem 3:
+//    ✅ PowerShellCommandExecutionException w CreateTeamChannelAsync()
+//    ❌ Return null w większości przypadków zamiast rzucania wyjątków
+// ============================================================================
 
 namespace TeamsManager.Core.Services.PowerShellServices
 {
@@ -47,6 +117,22 @@ namespace TeamsManager.Core.Services.PowerShellServices
             TeamVisibility visibility = TeamVisibility.Private,
             string? template = null)
         {
+            // TODO [ETAP4-VALIDATION]: Dodać walidację parametrów zgodnie z Etapem 3
+            // OBECNY: Tylko podstawowe string.IsNullOrWhiteSpace
+            // PROPONOWANY: 
+            // - PSParameterValidator.ValidateAndSanitizeString(displayName, maxLength: 256)
+            // - PSParameterValidator.ValidateAndSanitizeString(description, maxLength: 1024)  
+            // - PSParameterValidator.ValidateEmail(ownerUpn)
+            // PRIORYTET: HIGH
+            // KORZYŚCI: Ochrona przed injection, type safety, spójna walidacja
+
+            // TODO [ETAP4-ERROR]: Ulepszona obsługa błędów zgodnie z Etapem 3
+            // OBECNY: return null w przypadku błędów
+            // PROPONOWANY: Rzucać specificzne wyjątki:
+            // - PowerShellCommandExecutionException dla błędów PowerShell
+            // - ArgumentException dla niepoprawnych parametrów
+            // PRIORYTET: HIGH
+            // UWAGI: Konsystencja z CreateTeamChannelAsync() która już to robi
             if (!_connectionService.ValidateRunspaceState())
             {
                 _logger.LogError("Środowisko PowerShell nie jest gotowe.");
@@ -72,6 +158,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
             try
             {
+                // TODO [ETAP4-INJECTION]: Obecne escape tylko ' - niepełne
+                // OBECNY: displayName.Replace("'", "''") - tylko pojedynczy apostrof
+                // PROPONOWANY: PSParameterValidator.ValidateAndSanitizeString() która obsługuje ', `, $
+                // PRIORYTET: HIGH
+                // UWAGI: Potencjalne luki bezpieczeństwa z backtick i dollar
                 var scriptBuilder = new StringBuilder();
                 scriptBuilder.AppendLine("$teamBody = @{");
                 scriptBuilder.AppendLine($"    displayName = '{displayName.Replace("'", "''")}'");
@@ -105,9 +196,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     _logger.LogInformation("Utworzono zespół '{DisplayName}' o ID: {TeamId}",
                         displayName, teamId);
 
-                    // Invalidate cache
-                    _cacheService.InvalidateTeamCache(teamId);
-                    _cacheService.Remove(AllTeamsCacheKey);
+                    // [ETAP7-CACHE] Granularna inwalidacja cache po utworzeniu zespołu
+                    _cacheService.InvalidateAllActiveTeamsList();
+                    _cacheService.InvalidateTeamsByOwner(ownerUpn);
+                    _cacheService.Remove(AllTeamsCacheKey); // lista wszystkich zespołów
+                    
+                    _logger.LogInformation("Cache unieważniony po utworzeniu zespołu {TeamId}", teamId);
                 }
                 else
                 {
@@ -178,8 +272,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 {
                     _logger.LogInformation("Zaktualizowano właściwości zespołu {TeamId}", teamId);
 
-                    // Invalidate cache
+                    // [ETAP7-CACHE] Unieważnij wszystkie cache związane z zespołem
                     _cacheService.InvalidateTeamCache(teamId);
+                    _cacheService.InvalidateTeamById(teamId);
+                    _cacheService.InvalidateAllActiveTeamsList();
+                    
+                    _logger.LogInformation("Cache zespołu {TeamId} unieważniony po aktualizacji", teamId);
 
                     return true;
                 }
@@ -240,9 +338,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 {
                     _logger.LogInformation("Pomyślnie usunięto zespół {TeamId}", teamId);
 
-                    // Invalidate cache
+                    // [ETAP7-CACHE] Kompletna inwalidacja po usunięciu zespołu
                     _cacheService.InvalidateTeamCache(teamId);
-                    _cacheService.InvalidateAllCache();
+                    _cacheService.InvalidateTeamById(teamId);
+                    _cacheService.InvalidateAllActiveTeamsList();
+                    _cacheService.InvalidateArchivedTeamsList();
+                    _cacheService.InvalidateChannelsForTeam(teamId);
+                    
+                    _logger.LogInformation("Cache unieważniony po usunięciu zespołu {TeamId}", teamId);
 
                     return true;
                 }
@@ -261,6 +364,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<PSObject?> GetTeamAsync(string teamId)
         {
+            // TODO [ETAP4-AUDIT]: Zgodność z PowerShellServices.md sekcja 1.1
+            // ✅ CMDLET: Get-MgTeam vs specyfikacja Get-Team -GroupId $teamId
+            // UWAGI: Używamy Microsoft.Graph cmdletów zamiast Teams module
+            // PRIORYTET: LOW - funkcjonalnie równoważne
+            
+            // TODO [ETAP4-VALIDATION]: Brak walidacji parametrów
+            // PROPONOWANY: PSParameterValidator.ValidateGuid(teamId, nameof(teamId))
+            // PRIORYTET: MEDIUM
             if (!_connectionService.ValidateRunspaceState()) return null;
 
             if (string.IsNullOrWhiteSpace(teamId))
@@ -305,6 +416,14 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<Collection<PSObject>?> GetAllTeamsAsync()
         {
+            // TODO [ETAP4-AUDIT]: Zgodność z PowerShellServices.md sekcja 1.2
+            // ✅ CMDLET: Get-MgTeam vs specyfikacja Get-Team
+            // PRIORYTET: LOW - funkcjonalnie równoważne
+            
+            // TODO [ETAP4-CACHE]: Rozważyć pagination i bulk cache operations
+            // OBECNY: Pobiera wszystkie zespoły na raz
+            // PROPONOWANY: Implementacja pagination dla dużych organizacji
+            // PRIORYTET: LOW - zależy od rozmiaru organizacji
             if (!_connectionService.ValidateRunspaceState()) return null;
 
             if (_cacheService.TryGetValue(AllTeamsCacheKey, out Collection<PSObject>? cachedTeams))
@@ -335,6 +454,15 @@ namespace TeamsManager.Core.Services.PowerShellServices
 
         public async Task<Collection<PSObject>?> GetTeamsByOwnerAsync(string ownerUpn)
         {
+            // TODO [ETAP4-AUDIT]: Różnica w implementacji vs specyfikacja sekcja 1.3
+            // OBECNY: Get-MgUserOwnedTeam -UserId $userId
+            // SPECYFIKACJA: Get-Team | Where-Object { $_.Owner -eq $ownerUpn }
+            // PRIORYTET: LOW - obecna implementacja lepsza (mniej danych)
+            // UWAGI: Obecna używa Graph API bezpośrednio, bardziej efektywna
+            
+            // TODO [ETAP4-VALIDATION]: Brak walidacji email
+            // PROPONOWANY: PSParameterValidator.ValidateEmail(ownerUpn)
+            // PRIORYTET: MEDIUM
             if (!_connectionService.ValidateRunspaceState()) return null;
 
             if (string.IsNullOrWhiteSpace(ownerUpn))
@@ -365,6 +493,178 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
+        
+        // ✅ ETAP4-MISSING ZREALIZOWANE: WSZYSTKIE 3 METODY P0 ZAIMPLEMENTOWANE
+        // GetTeamMembersAsync, GetTeamMemberAsync, UpdateTeamMemberRoleAsync
+
+        #region Team Member Management - Critical P0 Methods
+
+        /// <summary>
+        /// Pobiera wszystkich członków zespołu z cache i walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <returns>Kolekcja członków zespołu z rolami</returns>
+        public async Task<Collection<PSObject>?> GetTeamMembersAsync(string teamId)
+        {
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            
+            string cacheKey = $"PowerShell_TeamMembers_{validatedTeamId}";
+            
+            if (_cacheService.TryGetValue(cacheKey, out Collection<PSObject>? cachedMembers))
+            {
+                _logger.LogDebug("Członkowie zespołu {TeamId} znalezieni w cache.", teamId);
+                return cachedMembers;
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return null;
+            }
+            
+            try
+            {
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("GroupId", validatedTeamId)
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-TeamUser",
+                    parameters
+                );
+                
+                if (results != null && results.Any())
+                {
+                    _cacheService.Set(cacheKey, results, TimeSpan.FromMinutes(5));
+                    _logger.LogDebug("Członkowie zespołu {TeamId} dodani do cache.", teamId);
+                }
+                
+                return results;
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to get team members for {TeamId}", teamId);
+                throw new TeamOperationException(
+                    $"Failed to retrieve members for team {teamId}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Pobiera pojedynczego członka zespołu z walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <returns>Informacje o członku zespołu lub null jeśli nie jest członkiem</returns>
+        public async Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn)
+        {
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            var validatedUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return null;
+            }
+            
+            try
+            {
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("GroupId", validatedTeamId),
+                    ("User", validatedUpn)
+                );
+                
+                var results = await _connectionService.ExecuteCommandWithRetryAsync(
+                    "Get-TeamUser",
+                    parameters
+                );
+                
+                return results?.FirstOrDefault();
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to get team member {UserUpn} for team {TeamId}", userUpn, teamId);
+                
+                // Sprawdź czy to błąd "user not found" czy rzeczywisty błąd
+                if (ex.ErrorRecords?.Any(e => e.FullyQualifiedErrorId.Contains("UserNotFound")) == true)
+                {
+                    return null; // User not found is not an error
+                }
+                
+                throw new TeamOperationException(
+                    $"Failed to retrieve team member {userUpn} for team {teamId}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Zmienia rolę członka zespołu (Owner to Member) (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <param name="newRole">Nowa rola: Owner lub Member</param>
+        /// <returns>True jeśli operacja się powiodła</returns>
+        public async Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole)
+        {
+            var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            var validatedUpn = PSParameterValidator.ValidateEmail(userUpn, nameof(userUpn));
+            var validatedRole = PSParameterValidator.ValidateAndSanitizeString(newRole, nameof(newRole));
+            
+            if (!validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase) &&
+                !validatedRole.Equals("Member", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Role must be 'Owner' or 'Member'", nameof(newRole));
+            }
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return false;
+            }
+            
+            _logger.LogInformation("Changing role of user {UserUpn} in team {TeamId} to {NewRole}",
+                userUpn, teamId, newRole);
+            
+            try
+            {
+                // Graph nie ma Update, więc Remove + Add
+                var removeParams = PSParameterValidator.CreateSafeParameters(
+                    ("GroupId", validatedTeamId),
+                    ("User", validatedUpn)
+                );
+                
+                await _connectionService.ExecuteCommandWithRetryAsync("Remove-TeamUser", removeParams);
+                
+                var addParams = PSParameterValidator.CreateSafeParameters(
+                    ("GroupId", validatedTeamId),
+                    ("User", validatedUpn),
+                    ("Role", validatedRole)
+                );
+                
+                await _connectionService.ExecuteCommandWithRetryAsync("Add-TeamUser", addParams);
+                
+                // [ETAP7-CACHE] Cache invalidation
+                _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                _cacheService.Remove($"PowerShell_UserTeams_{userUpn}");
+                
+                if (validatedRole.Equals("Owner", StringComparison.OrdinalIgnoreCase))
+                {
+                    _cacheService.InvalidateTeamsByOwner(userUpn);
+                }
+                
+                _logger.LogInformation("Successfully updated role of {UserUpn} in team {TeamId} to {NewRole}",
+                    userUpn, teamId, newRole);
+                
+                return true;
+            }
+            catch (PowerShellCommandExecutionException ex)
+            {
+                _logger.LogError(ex, "Failed to update role of {UserUpn} in team {TeamId} to {NewRole}",
+                    userUpn, teamId, newRole);
+                throw new TeamOperationException(
+                    $"Failed to update team member role for {userUpn} in team {teamId}", ex);
+            }
+        }
+
+        #endregion
 
         #region Channel Operations
 
@@ -376,39 +676,60 @@ namespace TeamsManager.Core.Services.PowerShellServices
         {
             if (!_connectionService.ValidateRunspaceState()) return null;
 
-            if (string.IsNullOrWhiteSpace(teamId) || string.IsNullOrWhiteSpace(displayName))
-            {
-                _logger.LogError("TeamID i DisplayName są wymagane.");
-                return null;
-            }
-
-            _logger.LogInformation("Tworzenie kanału '{DisplayName}' w zespole {TeamId}. Prywatny: {IsPrivate}", 
-                displayName, teamId, isPrivate);
-
             try
             {
-                var parameters = new Dictionary<string, object>
-                {
-                    { "TeamId", teamId },
-                    { "DisplayName", displayName }
-                };
+                // Walidacja parametrów przed wywołaniem PowerShell
+                var validatedTeamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+                var validatedDisplayName = PSParameterValidator.ValidateAndSanitizeString(displayName, nameof(displayName), maxLength: 50);
+                var validatedDescription = description != null 
+                    ? PSParameterValidator.ValidateAndSanitizeString(description, nameof(description), allowEmpty: true, maxLength: 1024)
+                    : null;
+
+                _logger.LogInformation("Tworzenie kanału '{DisplayName}' w zespole {TeamId}. Prywatny: {IsPrivate}", 
+                    validatedDisplayName, validatedTeamId, isPrivate);
+
+                // Przygotuj bezpieczne parametry
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamId", validatedTeamId),
+                    ("DisplayName", validatedDisplayName)
+                );
 
                 if (isPrivate)
                 {
                     parameters.Add("MembershipType", "Private");
                 }
 
-                if (!string.IsNullOrWhiteSpace(description))
+                if (validatedDescription != null)
                 {
-                    parameters.Add("Description", description);
+                    parameters.Add("Description", validatedDescription);
                 }
 
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("New-MgTeamChannel", parameters);
 
-                // Invalidate channels cache for this team
-                _cacheService.InvalidateChannelsForTeam(teamId);
+                if (results?.FirstOrDefault() != null)
+                {
+                    // [ETAP7-CACHE] Unieważnij cache kanałów zespołu
+                    _cacheService.InvalidateChannelsForTeam(validatedTeamId);
+                    
+                    // Unieważnij też cache samego zespołu (zmienił się stan)
+                    _cacheService.InvalidateTeamCache(validatedTeamId);
+                    
+                    _logger.LogInformation("Cache kanałów unieważniony dla zespołu {TeamId}", validatedTeamId);
+                }
 
                 return results?.FirstOrDefault();
+            }
+            catch (ArgumentException ex)
+            {
+                // Przekształć błędy walidacji na PowerShellCommandExecutionException
+                throw new PowerShellCommandExecutionException(
+                    $"Błąd walidacji parametrów dla CreateTeamChannelAsync: {ex.Message}",
+                    command: "New-MgTeamChannel",
+                    parameters: null,
+                    executionTime: null,
+                    exitCode: null,
+                    errorRecords: null,
+                    innerException: ex);
             }
             catch (Exception ex)
             {
@@ -584,6 +905,11 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     return null;
                 }
 
+                // TODO [ETAP4-MAPPING]: Zastąpić bezpośrednie Properties przez PSObjectMapper
+                // OBECNY: c.Properties["DisplayName"]?.Value?.ToString()
+                // PROPONOWANY: PSObjectMapper.GetString(c, "DisplayName")
+                // PRIORYTET: MEDIUM
+                // KORZYŚCI: Type safety, null handling, spójne logowanie
                 var foundChannel = allChannels.FirstOrDefault(c =>
                     c.Properties["DisplayName"]?.Value?.ToString()?.Equals(channelDisplayName, StringComparison.OrdinalIgnoreCase) ?? false);
 
@@ -654,6 +980,39 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         #endregion
+        
+        // TODO [ETAP4-MISSING]: BRAKUJĄCE METODY Z SPECYFIKACJI - POZOSTAŁE SEKCJE
+        // =========================================================================
+        // SEKCJA 3. POBIERANIE INFORMACJI O UŻYTKOWNIKACH M365 - PRIORYTET HIGH:
+        // - GetM365UserAsync(string userUpn) - Get-AzureADUser -ObjectId $userUpn
+        // - SearchM365UsersAsync(string searchTerm) - Get-AzureADUser -SearchString $searchTerm
+        // - GetUsersByDepartmentAsync(string department) - Get-AzureADUser -Filter "department eq '$department'"
+        //
+        // SEKCJA 4. ZARZĄDZANIE LICENCJAMI - PRIORYTET MEDIUM:
+        // - AssignLicenseToUserAsync(string userUpn, string licenseSkuId)
+        // - RemoveLicenseFromUserAsync(string userUpn, string licenseSkuId)  
+        // - GetUserLicensesAsync(string userUpn)
+        // - GetAvailableLicensesAsync()
+        //
+        // SEKCJA 7. NARZĘDZIA DIAGNOSTYCZNE - PRIORYTET MEDIUM:
+        // - TestConnectionAsync() - Get-CsTenant
+        // - ValidatePermissionsAsync() - Dictionary<string, bool>
+        // - SyncTeamDataAsync(string teamId) - bool
+        //
+        // SEKCJA 8. ZAAWANSOWANE OPERACJE - PRIORYTET LOW:
+        // - CloneTeamAsync() - Klonowanie zespołu
+        // - BackupTeamSettingsAsync() - Backup ustawień
+        // - BulkAddUsersToTeamAsync() - Masowe dodawanie użytkowników
+        //
+        // SEKCJA 6. RAPORTOWANIE - PRIORYTET LOW:
+        // - GetTeamUsageReportAsync() - Raporty wykorzystania
+        // - GetUserActivityReportAsync() - Aktywność użytkowników
+        // - GetTeamsHealthReportAsync() - Status zdrowia zespołów
+        //
+        // SEKCJA 5. ROZSZERZENIE POŁĄCZEŃ - PRIORYTET LOW:
+        // - ConnectToAzureADAsync() - Połączenie z Azure AD
+        // - ConnectToExchangeOnlineAsync() - Połączenie z Exchange Online
+        // =========================================================================
 
         #region Private Methods
 

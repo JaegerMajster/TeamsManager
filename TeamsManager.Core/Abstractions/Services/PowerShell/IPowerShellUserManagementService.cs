@@ -96,6 +96,20 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Kolekcja użytkowników lub null</returns>
         Task<Collection<PSObject>?> GetM365UsersByAccountEnabledStateAsync(bool accountEnabled);
 
+        /// <summary>
+        /// Pobiera użytkownika M365 po UPN z cache i walidacją (P0-CRITICAL)
+        /// </summary>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <returns>Informacje o użytkowniku M365 lub null jeśli nie istnieje</returns>
+        Task<PSObject?> GetM365UserAsync(string userUpn);
+
+        /// <summary>
+        /// Wyszukuje użytkowników M365 z walidacją i cache (P0-CRITICAL)
+        /// </summary>
+        /// <param name="searchTerm">Termin wyszukiwania (nazwa lub email)</param>
+        /// <returns>Kolekcja użytkowników pasujących do wyszukiwania</returns>
+        Task<Collection<PSObject>?> SearchM365UsersAsync(string searchTerm);
+
         #endregion
 
         #region Team Membership Operations
@@ -132,6 +146,15 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <returns>Obiekt PSObject z danymi członka lub null</returns>
         Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn);
 
+        /// <summary>
+        /// Zmienia rolę członka zespołu (Owner to Member) (P0-CRITICAL)
+        /// </summary>
+        /// <param name="teamId">ID zespołu (GUID)</param>
+        /// <param name="userUpn">UPN użytkownika</param>
+        /// <param name="newRole">Nowa rola: Owner lub Member</param>
+        /// <returns>True jeśli operacja się powiodła</returns>
+        Task<bool> UpdateTeamMemberRoleAsync(string teamId, string userUpn, string newRole);
+
         #endregion
 
         #region License Operations
@@ -158,6 +181,12 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="userUpn">UPN użytkownika</param>
         /// <returns>Kolekcja licencji lub null</returns>
         Task<Collection<PSObject>?> GetUserLicensesAsync(string userUpn);
+
+        /// <summary>
+        /// Pobiera dostępne licencje M365 z cache (P0-CRITICAL)
+        /// </summary>
+        /// <returns>Kolekcja dostępnych licencji SKU</returns>
+        Task<Collection<PSObject>?> GetAvailableLicensesAsync();
 
         #endregion
     }
