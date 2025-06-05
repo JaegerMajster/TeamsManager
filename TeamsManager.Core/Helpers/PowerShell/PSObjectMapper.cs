@@ -153,6 +153,31 @@ namespace TeamsManager.Core.Helpers.PowerShell
         }
 
         /// <summary>
+        /// Bezpiecznie pobiera wartość nullable bool z PSObject
+        /// </summary>
+        public static bool? GetNullableBoolean(PSObject psObject, string propertyName)
+        {
+            try
+            {
+                var value = psObject.Properties[propertyName]?.Value;
+                if (value == null) return null;
+
+                return value switch
+                {
+                    bool boolValue => boolValue,
+                    string strValue => strValue.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                                      strValue.Equals("1", StringComparison.Ordinal),
+                    int intValue => intValue != 0,
+                    _ => null
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Bezpiecznie pobiera wartość DateTime z PSObject
         /// </summary>
         public static DateTime? GetDateTime(PSObject psObject, string propertyName)

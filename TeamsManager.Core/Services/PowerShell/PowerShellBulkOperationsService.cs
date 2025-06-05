@@ -939,44 +939,338 @@ namespace TeamsManager.Core.Services.PowerShellServices
         }
 
         /// <summary>
-        /// [ETAP6] Ulepszona wersja BulkRemoveUsersFromTeamAsync z zaawansowanym raportowaniem  
+        /// [ETAP2] Ulepszona wersja BulkRemoveUsersFromTeamAsync z zaawansowanym raportowaniem  
         /// </summary>
         public async Task<Dictionary<string, BulkOperationResult>> BulkRemoveUsersFromTeamV2Async(
             string teamId,
             List<string> userUpns)
         {
-            // TODO: Implementacja analogiczna do BulkAddUsersToTeamV2Async
-            // Ze względu na ograniczenia miejsca, implementuję podstawową wersję
-            var results = new Dictionary<string, BulkOperationResult>();
-            var legacyResults = await BulkRemoveUsersFromTeamAsync(teamId, userUpns);
-
-            foreach (var kvp in legacyResults)
+            // KROK 1: Walidacja parametrów z PSParameterValidator
+            teamId = PSParameterValidator.ValidateGuid(teamId, nameof(teamId));
+            
+            if (!userUpns?.Any() ?? true)
             {
-                results[kvp.Key] = kvp.Value
-                    ? BulkOperationResult.CreateSuccess("BulkRemoveUsersFromTeam")
-                    : BulkOperationResult.CreateError("Legacy method failed", "BulkRemoveUsersFromTeam");
+                _logger.LogWarning("Lista użytkowników jest pusta.");
+                return new Dictionary<string, BulkOperationResult>();
             }
 
-            return results;
+            // Walidacja wszystkich email addresses
+            var validatedUpns = new List<string>();
+            foreach (var upn in userUpns)
+            {
+                try
+                {
+                    validatedUpns.Add(PSParameterValidator.ValidateEmail(upn, nameof(upn)));
+                }
+                catch (ArgumentException ex)
+                {
+                    _logger.LogWarning("Nieprawidłowy UPN: {Upn}, błąd: {Error}", upn, ex.Message);
+                }
+            }
+
+            if (!validatedUpns.Any())
+            {
+                _logger.LogError("Brak prawidłowych UPN po walidacji");
+                return new Dictionary<string, BulkOperationResult>();
+            }
+
+            _logger.LogInformation("[ETAP2] Masowe usuwanie {Count} użytkowników z zespołu {TeamId}",
+                validatedUpns.Count, teamId);
+
+            // KROK 2: Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkUserRemoveFromTeam,
+                "Team",
+                targetEntityId: teamId,
+                targetEntityName: $"[V2] Bulk remove {validatedUpns.Count} users from team"
+            );
+
+            var results = new Dictionary<string, BulkOperationResult>();
+            var processedCount = 0;
+            var failedCount = 0;
+            var batchIndex = 0;
+
+            try
+            {
+                // KROK 3: Przetwarzaj partie
+                var batches = validatedUpns
+                    .Select((upn, index) => new { upn, index })
+                    .GroupBy(x => x.index / BatchSize)
+                    .Select(g => g.Select(x => x.upn).ToList())
+                    .ToList();
+
+                foreach (var batch in batches)
+                {
+                    await _semaphore.WaitAsync();
+                    try
+                    {
+                        var stopwatch = Stopwatch.StartNew();
+                        var batchResults = await ProcessUserRemovalBatchV2Async(teamId, batch);
+                        stopwatch.Stop();
+
+                        foreach (var result in batchResults)
+                        {
+                            results[result.Key] = result.Value;
+                            if (result.Value.Success) processedCount++;
+                            else failedCount++;
+                        }
+
+                        // Aktualizuj postęp
+                        await _operationHistoryService.UpdateOperationProgressAsync(
+                            operation.Id,
+                            processedItems: processedCount,
+                            failedItems: failedCount,
+                            totalItems: validatedUpns.Count
+                        );
+
+                        // Wyślij powiadomienie o postępie
+                        await SendProgressNotificationAsync(
+                            operation.Id.ToString(),
+                            processedCount + failedCount,
+                            validatedUpns.Count,
+                            $"Przetwarzanie partii {batchIndex + 1}/{batches.Count} ({stopwatch.ElapsedMilliseconds}ms)"
+                        );
+
+                        _logger.LogDebug("[ETAP2] Partia {BatchIndex}/{TotalBatches} zakończona w {ElapsedMs}ms",
+                            batchIndex + 1, batches.Count, stopwatch.ElapsedMilliseconds);
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+
+                    batchIndex++;
+
+                    // Przerwa między partiami
+                    if (batch != batches.Last())
+                    {
+                        await Task.Delay(1000);
+                    }
+                }
+
+                // KROK 4: Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed
+                    : failedCount == validatedUpns.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"[V2] Processed: {processedCount}, Failed: {failedCount}"
+                );
+
+                // Końcowe powiadomienie
+                await SendProgressNotificationAsync(
+                    operation.Id.ToString(),
+                    processedCount + failedCount,
+                    validatedUpns.Count,
+                    $"Operacja zakończona. Sukcesy: {processedCount}, Błędy: {failedCount}"
+                );
+
+                _logger.LogInformation("[ETAP2] Zakończono masowe usuwanie. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // KROK 5: Cache invalidation
+                if (results.Any(r => r.Value.Success))
+                {
+                    _cacheService.InvalidateTeamCache(teamId);
+                    _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                    
+                    foreach (var upn in results.Where(r => r.Value.Success).Select(r => r.Key))
+                    {
+                        _cacheService.Remove($"PowerShell_UserTeams_{upn}");
+                    }
+                    
+                    _logger.LogInformation("Cache unieważniony dla {Count} użytkowników usuniętych z zespołu {TeamId}", 
+                        results.Count(r => r.Value.Success), teamId);
+                }
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"[V2] Critical error: {ex.Message}", ex.StackTrace
+                );
+
+                await SendProgressNotificationAsync(
+                    operation.Id.ToString(),
+                    0,
+                    validatedUpns.Count,
+                    $"Błąd krytyczny: {ex.Message}"
+                );
+
+                throw;
+            }
         }
 
         /// <summary>
-        /// [ETAP6] Ulepszona wersja BulkArchiveTeamsAsync z zaawansowanym raportowaniem
+        /// [ETAP2] Ulepszona wersja BulkArchiveTeamsAsync z zaawansowanym raportowaniem
         /// </summary>
         public async Task<Dictionary<string, BulkOperationResult>> BulkArchiveTeamsV2Async(List<string> teamIds)
         {
-            // TODO: Implementacja analogiczna do BulkAddUsersToTeamV2Async
-            var results = new Dictionary<string, BulkOperationResult>();
-            var legacyResults = await BulkArchiveTeamsAsync(teamIds);
-
-            foreach (var kvp in legacyResults)
+            if (!_connectionService.ValidateRunspaceState())
             {
-                results[kvp.Key] = kvp.Value
-                    ? BulkOperationResult.CreateSuccess("BulkArchiveTeams")
-                    : BulkOperationResult.CreateError("Legacy method failed", "BulkArchiveTeams");
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return new Dictionary<string, BulkOperationResult>();
             }
 
-            return results;
+            if (!teamIds?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista zespołów jest pusta.");
+                return new Dictionary<string, BulkOperationResult>();
+            }
+
+            // Walidacja wszystkich team IDs
+            var validatedTeamIds = new List<string>();
+            foreach (var teamId in teamIds)
+            {
+                try
+                {
+                    validatedTeamIds.Add(PSParameterValidator.ValidateGuid(teamId, nameof(teamId)));
+                }
+                catch (ArgumentException ex)
+                {
+                    _logger.LogWarning("Nieprawidłowy TeamId: {TeamId}, błąd: {Error}", teamId, ex.Message);
+                }
+            }
+
+            if (!validatedTeamIds.Any())
+            {
+                _logger.LogError("Brak prawidłowych TeamId po walidacji");
+                return new Dictionary<string, BulkOperationResult>();
+            }
+
+            _logger.LogInformation("[ETAP2] Masowa archiwizacja {Count} zespołów", validatedTeamIds.Count);
+
+            // Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkTeamArchive,
+                "Team",
+                targetEntityName: $"[V2] Bulk archive {validatedTeamIds.Count} teams"
+            );
+
+            var results = new Dictionary<string, BulkOperationResult>();
+            var processedCount = 0;
+            var failedCount = 0;
+            var batchIndex = 0;
+
+            try
+            {
+                // Przetwarzaj partie
+                var batches = validatedTeamIds
+                    .Select((id, index) => new { id, index })
+                    .GroupBy(x => x.index / BatchSize)
+                    .Select(g => g.Select(x => x.id).ToList())
+                    .ToList();
+
+                foreach (var batch in batches)
+                {
+                    await _semaphore.WaitAsync();
+                    try
+                    {
+                        var stopwatch = Stopwatch.StartNew();
+                        var batchResults = await ProcessTeamArchiveBatchV2Async(batch);
+                        stopwatch.Stop();
+
+                        foreach (var result in batchResults)
+                        {
+                            results[result.Key] = result.Value;
+                            if (result.Value.Success) processedCount++;
+                            else failedCount++;
+                        }
+
+                        // Aktualizuj postęp
+                        await _operationHistoryService.UpdateOperationProgressAsync(
+                            operation.Id,
+                            processedItems: processedCount,
+                            failedItems: failedCount,
+                            totalItems: validatedTeamIds.Count
+                        );
+
+                        // Wyślij powiadomienie o postępie
+                        await SendProgressNotificationAsync(
+                            operation.Id.ToString(),
+                            processedCount + failedCount,
+                            validatedTeamIds.Count,
+                            $"Przetwarzanie partii {batchIndex + 1}/{batches.Count} ({stopwatch.ElapsedMilliseconds}ms)"
+                        );
+
+                        _logger.LogDebug("[ETAP2] Partia {BatchIndex}/{TotalBatches} zakończona w {ElapsedMs}ms",
+                            batchIndex + 1, batches.Count, stopwatch.ElapsedMilliseconds);
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+
+                    batchIndex++;
+
+                    // Przerwa między partiami
+                    if (batch != batches.Last())
+                    {
+                        await Task.Delay(1000);
+                    }
+                }
+
+                // Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed
+                    : failedCount == validatedTeamIds.Count ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"[V2] Archived: {processedCount}, Failed: {failedCount}"
+                );
+
+                // Końcowe powiadomienie
+                await SendProgressNotificationAsync(
+                    operation.Id.ToString(),
+                    processedCount + failedCount,
+                    validatedTeamIds.Count,
+                    $"Operacja zakończona. Zarchiwizowano: {processedCount}, Błędy: {failedCount}"
+                );
+
+                _logger.LogInformation("[ETAP2] Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                // Cache invalidation
+                if (results.Any(r => r.Value.Success))
+                {
+                    // Dla każdego zarchiwizowanego zespołu
+                    foreach (var teamId in results.Where(r => r.Value.Success).Select(r => r.Key))
+                    {
+                        _cacheService.InvalidateTeamCache(teamId);
+                        _cacheService.Remove($"PowerShell_TeamMembers_{teamId}");
+                        _cacheService.Remove($"PowerShell_TeamChannels_{teamId}");
+                    }
+                    
+                    // Invalidate ogólnego cache zespołów
+                    _cacheService.Remove("PowerShell_AllTeams");
+                    _cacheService.Remove("PowerShell_ActiveTeams");
+                    
+                    _logger.LogInformation("Cache unieważniony dla {Count} zarchiwizowanych zespołów", 
+                        results.Count(r => r.Value.Success));
+                }
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"[V2] Critical error: {ex.Message}", ex.StackTrace
+                );
+
+                await SendProgressNotificationAsync(
+                    operation.Id.ToString(),
+                    0,
+                    validatedTeamIds.Count,
+                    $"Błąd krytyczny: {ex.Message}"
+                );
+
+                throw;
+            }
         }
 
         #endregion
@@ -1245,6 +1539,399 @@ $results
                 }
                 return errorResults;
             }
+        }
+
+        /// <summary>
+        /// [ETAP2] Ulepszona wersja ProcessUserRemovalBatchAsync z PowerShell pipeline i PSParameterValidator
+        /// </summary>
+        private async Task<Dictionary<string, BulkOperationResult>> ProcessUserRemovalBatchV2Async(
+            string teamId,
+            List<string> userUpns)
+        {
+            var stopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                // Przygotuj bezpieczne parametry
+                var userIds = new List<string>();
+                var upnToIdMap = new Dictionary<string, string>();
+
+                // Pre-load user IDs z cache
+                foreach (var upn in userUpns)
+                {
+                    var sanitizedUpn = PSParameterValidator.ValidateAndSanitizeString(upn, "userUpn");
+                    var cachedUserId = await _userResolver.GetUserIdAsync(sanitizedUpn);
+
+                    if (!string.IsNullOrEmpty(cachedUserId))
+                    {
+                        userIds.Add(cachedUserId);
+                        upnToIdMap[sanitizedUpn] = cachedUserId;
+                    }
+                }
+
+                // Utworz bezpieczne parametry
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamId", PSParameterValidator.ValidateGuid(teamId, "teamId")),
+                    ("UserIds", userIds.ToArray()),
+                    ("ThrottleLimit", ThrottleLimit)
+                );
+
+                // PowerShell script dla Microsoft.Graph z obsługą PS7+ i PS5.1
+                var script = @"
+param($TeamId, $UserIds, $ThrottleLimit)
+
+# Pobierz aktualnych członków zespołu (właścicieli i zwykłych członków)
+$teamOwners = Get-MgTeamOwner -TeamId $TeamId -All | Select-Object -ExpandProperty Id
+$teamMembers = Get-MgTeamMember -TeamId $TeamId -All | Select-Object -ExpandProperty Id
+
+# PowerShell 7+ - użyj ForEach-Object -Parallel
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    Write-Host ""[ETAP2] Używam PowerShell 7+ z ForEach-Object -Parallel""
+    $results = $UserIds | ForEach-Object -Parallel {
+        $userId = $_
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            # Określ czy użytkownik jest właścicielem czy członkiem
+            if ($userId -in $using:teamOwners) {
+                Remove-MgTeamOwner -TeamId $using:TeamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                $removed = 'Owner'
+            } 
+            elseif ($userId -in $using:teamMembers) {
+                Remove-MgTeamMember -TeamId $using:TeamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                $removed = 'Member'
+            }
+            else {
+                # Użytkownik już nie jest członkiem zespołu
+                $removed = 'NotFound'
+            }
+            
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                UserId = $userId
+                Success = $true
+                Error = $null
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                RemovedAs = $removed
+            }
+        }
+        catch {
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                UserId = $userId
+                Success = $false
+                Error = $_.Exception.Message
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                RemovedAs = $null
+            }
+        }
+    } -ThrottleLimit $ThrottleLimit
+}
+# PowerShell 5.1 - użyj standardowego pipeline
+else {
+    Write-Host ""[ETAP2] Używam PowerShell 5.1 z standardowym ForEach-Object""
+    $results = $UserIds | ForEach-Object {
+        $userId = $_
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            # Określ czy użytkownik jest właścicielem czy członkiem
+            if ($userId -in $teamOwners) {
+                Remove-MgTeamOwner -TeamId $TeamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                $removed = 'Owner'
+            } 
+            elseif ($userId -in $teamMembers) {
+                Remove-MgTeamMember -TeamId $TeamId -UserId $userId -Confirm:$false -ErrorAction Stop
+                $removed = 'Member'
+            }
+            else {
+                # Użytkownik już nie jest członkiem zespołu
+                $removed = 'NotFound'
+            }
+            
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                UserId = $userId
+                Success = $true
+                Error = $null
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                RemovedAs = $removed
+            }
+        }
+        catch {
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                UserId = $userId
+                Success = $false
+                Error = $_.Exception.Message
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                RemovedAs = $null
+            }
+        }
+    }
+}
+
+# Zwróć wyniki
+$results
+";
+
+                _logger.LogDebug("[ETAP2] Wykonywanie skryptu PowerShell usuwania {UserCount} użytkowników",
+                    userIds.Count);
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script, parameters);
+                var processedResults = ProcessBulkResults(scriptResults, "BulkRemoveUsersFromTeam");
+
+                // Mapuj wyniki z powrotem do UPN
+                var finalResults = new Dictionary<string, BulkOperationResult>();
+                foreach (var kvp in upnToIdMap)
+                {
+                    var upn = kvp.Key;
+                    var userId = kvp.Value;
+
+                    if (processedResults.ContainsKey(userId))
+                    {
+                        finalResults[upn] = processedResults[userId];
+                        
+                        // Dodaj informację o typie usunięcia
+                        if (finalResults[upn].AdditionalData == null)
+                            finalResults[upn].AdditionalData = new Dictionary<string, object>();
+                        
+                        // Pobierz RemovedAs z PSObject
+                        var psObject = scriptResults?.FirstOrDefault(r => 
+                            PSObjectMapper.GetString(r, "UserId") == userId);
+                        if (psObject != null)
+                        {
+                            var removedAs = PSObjectMapper.GetString(psObject, "RemovedAs");
+                            if (!string.IsNullOrEmpty(removedAs))
+                                finalResults[upn].AdditionalData["RemovedAs"] = removedAs;
+                        }
+                    }
+                    else
+                    {
+                        finalResults[upn] = BulkOperationResult.CreateError(
+                            "Nie znaleziono wyniku dla użytkownika",
+                            "ProcessUserRemovalBatchV2",
+                            stopwatch.ElapsedMilliseconds
+                        );
+                    }
+                }
+
+                stopwatch.Stop();
+                _logger.LogInformation("[ETAP2] ProcessUserRemovalBatchV2 zakończone w {ElapsedMs}ms dla {Count} użytkowników",
+                    stopwatch.ElapsedMilliseconds, userUpns.Count);
+
+                return finalResults;
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "[ETAP2] Błąd w ProcessUserRemovalBatchV2 po {ElapsedMs}ms",
+                    stopwatch.ElapsedMilliseconds);
+
+                // Zwróć błędy dla wszystkich użytkowników
+                var errorResults = new Dictionary<string, BulkOperationResult>();
+                foreach (var upn in userUpns)
+                {
+                    errorResults[upn] = BulkOperationResult.CreateError(
+                        $"Batch processing failed: {ex.Message}",
+                        "ProcessUserRemovalBatchV2",
+                        stopwatch.ElapsedMilliseconds
+                    );
+                }
+                return errorResults;
+            }
+        }
+
+        /// <summary>
+        /// [ETAP2] Ulepszona wersja ProcessTeamArchiveBatchAsync z dodatkowymi informacjami o zespołach
+        /// </summary>
+        private async Task<Dictionary<string, BulkOperationResult>> ProcessTeamArchiveBatchV2Async(
+            List<string> teamIds)
+        {
+            var stopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                // Utworz bezpieczne parametry
+                var parameters = PSParameterValidator.CreateSafeParameters(
+                    ("TeamIds", teamIds.ToArray()),
+                    ("ThrottleLimit", ThrottleLimit)
+                );
+
+                // PowerShell script dla Microsoft.Graph z obsługą PS7+ i PS5.1
+                var script = @"
+param($TeamIds, $ThrottleLimit)
+
+# PowerShell 7+ - użyj ForEach-Object -Parallel
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    Write-Host ""[ETAP2] Używam PowerShell 7+ z ForEach-Object -Parallel dla archiwizacji""
+    $results = $TeamIds | ForEach-Object -Parallel {
+        $teamId = $_
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            # Pobierz informacje o zespole przed archiwizacją
+            $team = Get-MgTeam -TeamId $teamId -ErrorAction Stop
+            $previousArchiveStatus = $team.IsArchived
+            
+            # Archiwizuj zespół
+            Update-MgTeam -GroupId $teamId -IsArchived $true -ErrorAction Stop
+            
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                TeamId = $teamId
+                Success = $true
+                Error = $null
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                PreviouslyArchived = $previousArchiveStatus
+                TeamDisplayName = $team.DisplayName
+                TeamDescription = $team.Description
+            }
+        }
+        catch {
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                TeamId = $teamId
+                Success = $false
+                Error = $_.Exception.Message
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                PreviouslyArchived = $null
+                TeamDisplayName = $null
+                TeamDescription = $null
+            }
+        }
+    } -ThrottleLimit $ThrottleLimit
+}
+# PowerShell 5.1 - użyj standardowego pipeline
+else {
+    Write-Host ""[ETAP2] Używam PowerShell 5.1 z standardowym ForEach-Object dla archiwizacji""
+    $results = $TeamIds | ForEach-Object {
+        $teamId = $_
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            # Pobierz informacje o zespole przed archiwizacją
+            $team = Get-MgTeam -TeamId $teamId -ErrorAction Stop
+            $previousArchiveStatus = $team.IsArchived
+            
+            # Archiwizuj zespół
+            Update-MgTeam -GroupId $teamId -IsArchived $true -ErrorAction Stop
+            
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                TeamId = $teamId
+                Success = $true
+                Error = $null
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                PreviouslyArchived = $previousArchiveStatus
+                TeamDisplayName = $team.DisplayName
+                TeamDescription = $team.Description
+            }
+        }
+        catch {
+            $stopwatch.Stop()
+            [PSCustomObject]@{
+                TeamId = $teamId
+                Success = $false
+                Error = $_.Exception.Message
+                ExecutionTimeMs = $stopwatch.ElapsedMilliseconds
+                PreviouslyArchived = $null
+                TeamDisplayName = $null
+                TeamDescription = $null
+            }
+        }
+    }
+}
+
+# Zwróć wyniki
+$results
+";
+
+                _logger.LogDebug("[ETAP2] Wykonywanie skryptu PowerShell archiwizacji {TeamCount} zespołów",
+                    teamIds.Count);
+
+                var scriptResults = await _connectionService.ExecuteScriptAsync(script, parameters);
+                var processedResults = ProcessBulkArchiveResults(scriptResults);
+
+                stopwatch.Stop();
+                _logger.LogInformation("[ETAP2] ProcessTeamArchiveBatchV2 zakończone w {ElapsedMs}ms dla {Count} zespołów",
+                    stopwatch.ElapsedMilliseconds, teamIds.Count);
+
+                return processedResults;
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "[ETAP2] Błąd w ProcessTeamArchiveBatchV2 po {ElapsedMs}ms",
+                    stopwatch.ElapsedMilliseconds);
+
+                // Zwróć błędy dla wszystkich zespołów
+                var errorResults = new Dictionary<string, BulkOperationResult>();
+                foreach (var teamId in teamIds)
+                {
+                    errorResults[teamId] = BulkOperationResult.CreateError(
+                        $"Batch processing failed: {ex.Message}",
+                        "ProcessTeamArchiveBatchV2",
+                        stopwatch.ElapsedMilliseconds
+                    );
+                }
+                return errorResults;
+            }
+        }
+
+        /// <summary>
+        /// [ETAP2] Przetwarza wyniki archiwizacji zespołów z dodatkowymi informacjami
+        /// </summary>
+        private Dictionary<string, BulkOperationResult> ProcessBulkArchiveResults(
+            IEnumerable<PSObject>? scriptResults)
+        {
+            var results = new Dictionary<string, BulkOperationResult>();
+
+            if (scriptResults == null)
+            {
+                _logger.LogWarning("[ETAP2] Brak wyników skryptu PowerShell");
+                return results;
+            }
+
+            foreach (var psObject in scriptResults)
+            {
+                try
+                {
+                    // Użyj PSObjectMapper z Etapu 3
+                    var teamId = PSObjectMapper.GetString(psObject, "TeamId");
+                    var success = PSObjectMapper.GetBoolean(psObject, "Success");
+                    var error = PSObjectMapper.GetString(psObject, "Error");
+                    var executionTimeMs = PSObjectMapper.GetNullableInt64(psObject, "ExecutionTimeMs");
+                    var previouslyArchived = PSObjectMapper.GetNullableBoolean(psObject, "PreviouslyArchived");
+                    var teamDisplayName = PSObjectMapper.GetString(psObject, "TeamDisplayName");
+                    var teamDescription = PSObjectMapper.GetString(psObject, "TeamDescription");
+
+                    if (!string.IsNullOrEmpty(teamId))
+                    {
+                        var result = success
+                            ? BulkOperationResult.CreateSuccess("BulkArchiveTeam", executionTimeMs)
+                            : BulkOperationResult.CreateError(error ?? "Nieznany błąd", "BulkArchiveTeam", executionTimeMs);
+
+                        // Dodaj dodatkowe dane
+                        if (result.AdditionalData == null)
+                            result.AdditionalData = new Dictionary<string, object>();
+
+                        if (previouslyArchived.HasValue)
+                            result.AdditionalData["PreviouslyArchived"] = previouslyArchived.Value;
+                        if (!string.IsNullOrEmpty(teamDisplayName))
+                            result.AdditionalData["TeamDisplayName"] = teamDisplayName;
+                        if (!string.IsNullOrEmpty(teamDescription))
+                            result.AdditionalData["TeamDescription"] = teamDescription;
+
+                        results[teamId] = result;
+
+                        _logger.LogDebug("[ETAP2] PSObjectMapper przetworzone: Team {TeamId} = {Success}, Previously archived: {PreviouslyArchived}",
+                            teamId, success, previouslyArchived);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[ETAP2] Błąd przetwarzania wyniku PSObject dla archiwizacji");
+                }
+            }
+
+            return results;
         }
 
         #endregion
