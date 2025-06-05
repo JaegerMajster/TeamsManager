@@ -138,11 +138,14 @@ namespace TeamsManager.Core.Models
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 
         /// <summary>
-        /// Wskazuje, czy kanał jest aktywny.
-        /// Ta właściwość jest teraz obliczana na podstawie Statusu kanału.
-        /// Ukrywa właściwość IsActive z BaseEntity.
+        /// Wskazuje, czy kanał jest aktywny biznesowo (Status == Active).
+        /// UWAGA: Ta właściwość nadpisuje BaseEntity.IsActive używając słowa kluczowego 'new'.
+        /// - channel.IsActive zwraca Status == ChannelStatus.Active (logika biznesowa)
+        /// - ((BaseEntity)channel).IsActive zwraca wartość z BaseEntity (soft-delete)
+        /// W większości przypadków używaj tej właściwości. Dla dostępu do BaseEntity.IsActive
+        /// użyj jawnego rzutowania na BaseEntity.
         /// </summary>
-        public new bool IsActive // Słowo kluczowe 'new' do ukrycia IsActive z BaseEntity
+        public new bool IsActive
         {
             get { return Status == ChannelStatus.Active; }
             // Brak settera - stan aktywności jest determinowany przez Status.
@@ -218,16 +221,11 @@ namespace TeamsManager.Core.Models
         {
             get
             {
-                // Używamy this.IsActive (obliczeniowego) zamiast base.IsActive
-                if (!this.IsActive && Status != ChannelStatus.Archived) return "Nieaktywny (rekord)"; // Jeśli Status nie jest Archived, a this.IsActive jest false, to coś jest nietypowe.
-                                                                                                      // Ale bazując na nowej logice this.IsActive, ten warunek praktycznie nie zajdzie,
-                                                                                                      // chyba że Status miałby więcej wartości niż Active/Archived.
-                                                                                                      // Poprawiona logika:
                 return Status switch
                 {
                     ChannelStatus.Active => IsPrivate ? "Prywatny" : (IsReadOnly ? "Tylko do odczytu" : "Aktywny"),
                     ChannelStatus.Archived => "Zarchiwizowany",
-                    _ => "Nieznany status" // Powinno obsłużyć inne potencjalne stany
+                    _ => "Nieznany status"
                 };
             }
         }

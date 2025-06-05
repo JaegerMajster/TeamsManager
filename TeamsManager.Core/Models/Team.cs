@@ -179,9 +179,12 @@ namespace TeamsManager.Core.Models
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 
         /// <summary>
-        /// Wskazuje, czy zespół jest aktywny.
-        /// Ta właściwość jest teraz obliczana na podstawie Statusu zespołu.
-        /// Ukrywa właściwość IsActive z BaseEntity.
+        /// Wskazuje, czy zespół jest aktywny biznesowo (Status == Active).
+        /// UWAGA: Ta właściwość nadpisuje BaseEntity.IsActive używając słowa kluczowego 'new'.
+        /// - team.IsActive zwraca Status == TeamStatus.Active (logika biznesowa)
+        /// - ((BaseEntity)team).IsActive zwraca wartość z BaseEntity (soft-delete)
+        /// W większości przypadków używaj tej właściwości. Dla dostępu do BaseEntity.IsActive
+        /// użyj jawnego rzutowania na BaseEntity.
         /// </summary>
         public new bool IsActive
         {
@@ -266,9 +269,9 @@ namespace TeamsManager.Core.Models
         }
 
         /// <summary>
-        /// Liczba aktywnych kanałów (Channel.IsActive i Channel.Status == Active) w zespole.
+        /// Liczba aktywnych kanałów (Channel.IsActive) w zespole.
         /// </summary>
-        public int ChannelCount => Channels?.Count(c => c.IsActive && c.Status == ChannelStatus.Active) ?? 0;
+        public int ChannelCount => Channels?.Count(c => c.IsActive) ?? 0;
 
         /// <summary>
         /// Liczba dni pozostałych do planowanej daty zakończenia funkcjonowania zespołu.
