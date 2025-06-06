@@ -151,6 +151,14 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<Dictionary<string, bool>> RemoveUsersFromTeamAsync(string teamId, List<string> userUpns, string reason, string accessToken);
 
         /// <summary>
+        /// Synchronizuje wszystkie zespoły z Microsoft Graph.
+        /// </summary>
+        /// <param name="apiAccessToken">Token dostępu do API</param>
+        /// <param name="progress">Opcjonalny reporter postępu (0-100)</param>
+        /// <returns>Słownik z wynikami synchronizacji dla każdego zespołu</returns>
+        Task<Dictionary<string, string>> SynchronizeAllTeamsAsync(string apiAccessToken, IProgress<int>? progress = null);
+
+        /// <summary>
         /// Odświeża cache zespołów (jeśli jest używany).
         /// </summary>
         Task RefreshCacheAsync();

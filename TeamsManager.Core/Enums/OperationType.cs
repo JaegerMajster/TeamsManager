@@ -74,22 +74,26 @@
         TeacherAssignedToSubject = 93,  // Przypisanie nauczyciela do przedmiotu
         TeacherRemovedFromSubject = 94, // Usunięcie przypisania nauczyciela z przedmiotu
 
+        // Operacje synchronizacji
+        TeamSynchronized = 100,         // Synchronizacja danych zespołu z Graph
+        BulkTeamsSynchronization = 101, // Masowa synchronizacja zespołów
+
         // Operacje na szablonach zespołów
-        TeamTemplateCreated = 100,      // Utworzenie szablonu zespołu
-        TeamTemplateUpdated = 101,      // Aktualizacja szablonu zespołu
-        TeamTemplateDeleted = 102,      // Usunięcie szablonu zespołu
-        TeamTemplateCloned = 103,       // Sklonowanie szablonu zespołu
+        TeamTemplateCreated = 110,      // Utworzenie szablonu zespołu
+        TeamTemplateUpdated = 111,      // Aktualizacja szablonu zespołu
+        TeamTemplateDeleted = 112,      // Usunięcie szablonu zespołu
+        TeamTemplateCloned = 113,       // Sklonowanie szablonu zespołu
 
         // Operacje na ustawieniach aplikacji
-        ApplicationSettingUpdated = 110,  // Aktualizacja ustawienia aplikacji
-        ApplicationSettingCreated = 111,  // Utworzenie ustawienia aplikacji
-        ApplicationSettingDeleted = 112,  // Usunięcie ustawienia aplikacji
+        ApplicationSettingUpdated = 120,  // Aktualizacja ustawienia aplikacji
+        ApplicationSettingCreated = 121,  // Utworzenie ustawienia aplikacji
+        ApplicationSettingDeleted = 122,  // Usunięcie ustawienia aplikacji
 
         // Dodatkowe operacje na użytkownikach i przypisaniach
-        UserSchoolTypeAssigned = 120,   // Przypisanie użytkownika do typu szkoły (alternatywna nazwa)
-        UserSchoolTypeRemoved = 121,    // Usunięcie przypisania użytkownika z typu szkoły (alternatywna nazwa)
-        UserSubjectAssigned = 122,      // Przypisanie użytkownika do przedmiotu (alternatywna nazwa)
-        UserSubjectRemoved = 123,       // Usunięcie przypisania użytkownika z przedmiotu (alternatywna nazwa)
+        UserSchoolTypeAssigned = 130,   // Przypisanie użytkownika do typu szkoły (alternatywna nazwa)
+        UserSchoolTypeRemoved = 131,    // Usunięcie przypisania użytkownika z typu szkoły (alternatywna nazwa)
+        UserSubjectAssigned = 132,      // Przypisanie użytkownika do przedmiotu (alternatywna nazwa)
+        UserSubjectRemoved = 133,       // Usunięcie przypisania użytkownika z przedmiotu (alternatywna nazwa)
 
         // Generyczne/Inne
         GenericCreated = 200,           // Generyczne utworzenie (jeśli brak specyficznego typu)

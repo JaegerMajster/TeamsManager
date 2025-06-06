@@ -113,7 +113,7 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache. Zwraca zespół tylko jeśli jego Status to Active.</remarks>
         public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false, string? apiAccessToken = null) // ZMIANA: accessToken -> apiAccessToken
         {
-            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}. Dołączanie członków: {IncludeMembers}, Dołączanie kanałów: {IncludeChannels}, Wymuszenie odświeżenia: {ForceRefresh}", teamId, includeMembers, includeChannels, forceRefresh);
+            _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}. Synchronizacja: {HasToken}. Dołączanie członków: {IncludeMembers}, Dołączanie kanałów: {IncludeChannels}, Wymuszenie odświeżenia: {ForceRefresh}", teamId, !string.IsNullOrEmpty(apiAccessToken), includeMembers, includeChannels, forceRefresh);
 
             if (string.IsNullOrWhiteSpace(teamId))
             {
@@ -140,92 +140,34 @@ namespace TeamsManager.Core.Services
                 // Najpierw pobierz z lokalnej bazy
                 team = await _teamRepository.GetByIdAsync(teamId);
 
-                // Synchronizacja z Graph jeśli podano token
+                // NOWA SEKCJA: Synchronizacja z Graph jeśli podano token
                 if (!string.IsNullOrEmpty(apiAccessToken))
                 {
                     try
                     {
-                        var psTeam = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        // Pobierz dane z Graph
+                        var graphTeam = await _powerShellService.ExecuteWithAutoConnectAsync(
                             apiAccessToken,
                             async () => await _powerShellTeamService.GetTeamAsync(teamId),
-                            $"GetTeamAsync dla ID: {teamId}"
+                            $"GetTeamAsync dla synchronizacji ID: {teamId}"
                         );
                         
-                        if (psTeam != null)
+                        if (graphTeam != null)
                         {
-                            _logger.LogDebug("Zespół ID: {TeamId} znaleziony w Graph API. Rozpoczynam synchronizację.", teamId);
-                            
-                            // NOWA LOGIKA SYNCHRONIZACJI - użycie synchronizatora
-                            var currentUserUpn = _currentUserService.GetCurrentUserUpn();
-                            
-                            // Sprawdź czy wymaga synchronizacji
-                            bool requiresSync = team == null || 
-                                await _teamSynchronizer.RequiresSynchronizationAsync(psTeam, team);
-                            
-                            if (requiresSync)
-                            {
-                                _logger.LogInformation("Wykryto zmiany w zespole {TeamId}, wykonuję synchronizację", teamId);
-                                
-                                // Synchronizuj dane
-                                team = await _teamSynchronizer.SynchronizeAsync(
-                                    psTeam, 
-                                    team, 
-                                    currentUserUpn
-                                );
-                                
-                                // Zapisz zmiany używając Unit of Work jeśli dostępny
-                                if (_unitOfWork != null)
-                                {
-                                    if (team.Id == teamId) // Aktualizacja
-                                    {
-                                        _unitOfWork.Teams.Update(team);
-                                    }
-                                    else // Nowy zespół
-                                    {
-                                        await _unitOfWork.Teams.AddAsync(team);
-                                    }
-                                    
-                                    await _unitOfWork.CommitAsync();
-                                    _logger.LogInformation("Zsynchronizowano zespół {TeamId} z Microsoft Graph", teamId);
-                                }
-                                else
-                                {
-                                    // Fallback do starego podejścia
-                                    if (await _teamRepository.GetByIdAsync(teamId) != null)
-                                    {
-                                        _teamRepository.Update(team);
-                                    }
-                                    else
-                                    {
-                                        await _teamRepository.AddAsync(team);
-                                    }
-                                    // SaveChangesAsync musi być wywołane wyżej (kontroler)
-                                }
-                                
-                                // Invalidacja cache po synchronizacji
-                                _powerShellCacheService.Remove(cacheKey);
-                            }
-                            else
-                            {
-                                _logger.LogDebug("Zespół {TeamId} jest aktualny, pomijam synchronizację", teamId);
-                            }
+                            // Synchronizuj dane
+                            team = await SynchronizeTeamWithGraphAsync(team, graphTeam, teamId);
                         }
-                        else
+                        else if (team != null)
                         {
-                            _logger.LogWarning("Zespół ID: {TeamId} nie znaleziony w Graph API.", teamId);
-                            // Jeśli zespół nie istnieje w Graph ale istnieje lokalnie, 
-                            // może to oznaczać że został usunięty
-                            if (team != null)
-                            {
-                                _logger.LogWarning("Zespół {TeamId} istnieje lokalnie ale nie w Graph - może został usunięty?", teamId);
-                                // TODO: Rozważyć oznaczenie jako Archived lub soft-delete
-                            }
+                            // Zespół nie istnieje w Graph ale istnieje lokalnie
+                            _logger.LogWarning("Zespół {TeamId} nie istnieje w Graph. Oznaczanie jako usunięty.", teamId);
+                            await HandleDeletedTeamAsync(team);
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Błąd podczas synchronizacji zespołu {TeamId} z Graph", teamId);
-                        // W przypadku błędu synchronizacji, zwróć dane lokalne jeśli istnieją
+                        // W przypadku błędu, zwróć dane lokalne jeśli istnieją
                     }
                 }
 
@@ -1270,6 +1212,306 @@ namespace TeamsManager.Core.Services
                     ex.StackTrace
                 );
                 return false; 
+            }
+        }
+
+        /// <summary>
+        /// Synchronizuje pojedynczy zespół z danymi z Microsoft Graph.
+        /// </summary>
+        private async Task<Team?> SynchronizeTeamWithGraphAsync(Team? localTeam, dynamic graphTeam, string teamId)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_sync";
+            bool requiresSync = false;
+            string syncDetails = "";
+            
+            // Mapowanie danych z Graph
+            var graphData = new {
+                DisplayName = GetPropertyValue<string>(graphTeam, "displayName"),
+                Description = GetPropertyValue<string>(graphTeam, "description"),
+                IsArchived = GetPropertyValue<bool>(graphTeam, "isArchived"),
+                Visibility = GetPropertyValue<string>(graphTeam, "visibility")
+            };
+            
+            if (localTeam == null)
+            {
+                // Nowy zespół znaleziony w Graph
+                _logger.LogInformation("Znaleziono nowy zespół {TeamId} w Graph. Tworzenie lokalnie.", teamId);
+                
+                localTeam = new Team
+                {
+                    Id = teamId,
+                    ExternalId = teamId,
+                    DisplayName = graphData.DisplayName ?? "Nieznany zespół",
+                    Description = graphData.Description ?? "",
+                    Status = graphData.IsArchived ? TeamStatus.Archived : TeamStatus.Active,
+                    Visibility = MapVisibility(graphData.Visibility),
+                    CreatedBy = currentUserUpn,
+                    CreatedDate = DateTime.UtcNow
+                };
+                
+                // Zastosuj prefiks jeśli archived
+                if (graphData.IsArchived)
+                {
+                    localTeam.Archive("Zarchiwizowany w Microsoft Teams", currentUserUpn);
+                }
+                
+                await _teamRepository.AddAsync(localTeam);
+                requiresSync = true;
+                syncDetails = "Nowy zespół dodany z Graph";
+            }
+            else
+            {
+                // Sprawdź rozbieżności
+                var changes = new List<string>();
+                
+                // Status
+                bool graphArchived = graphData.IsArchived;
+                bool localArchived = localTeam.Status == TeamStatus.Archived;
+                
+                if (graphArchived != localArchived)
+                {
+                    if (graphArchived)
+                    {
+                        localTeam.Archive("Synchronizacja z Microsoft Teams", currentUserUpn);
+                        changes.Add("Status: Active -> Archived");
+                    }
+                    else
+                    {
+                        localTeam.Restore(currentUserUpn);
+                        changes.Add("Status: Archived -> Active");
+                    }
+                    requiresSync = true;
+                }
+                
+                // Nazwa (bez prefiksu)
+                var baseDisplayName = localTeam.GetBaseDisplayName();
+                if (graphData.DisplayName != baseDisplayName)
+                {
+                    changes.Add($"Nazwa: '{baseDisplayName}' -> '{graphData.DisplayName}'");
+                    localTeam.DisplayName = localTeam.Status == TeamStatus.Archived 
+                        ? $"ARCHIWALNY - {graphData.DisplayName}" 
+                        : graphData.DisplayName;
+                    requiresSync = true;
+                }
+                
+                // Opis
+                var baseDescription = localTeam.GetBaseDescription();
+                if (graphData.Description != baseDescription)
+                {
+                    changes.Add("Opis zaktualizowany");
+                    localTeam.Description = localTeam.Status == TeamStatus.Archived && !string.IsNullOrEmpty(graphData.Description)
+                        ? $"ARCHIWALNY - {graphData.Description}" 
+                        : graphData.Description ?? "";
+                    requiresSync = true;
+                }
+                
+                // Widoczność
+                var mappedVisibility = MapVisibility(graphData.Visibility);
+                if (mappedVisibility != localTeam.Visibility)
+                {
+                    changes.Add($"Widoczność: {localTeam.Visibility} -> {mappedVisibility}");
+                    localTeam.Visibility = mappedVisibility;
+                    requiresSync = true;
+                }
+                
+                if (requiresSync)
+                {
+                    localTeam.MarkAsModified(currentUserUpn);
+                    _teamRepository.Update(localTeam);
+                    syncDetails = $"Zsynchronizowano: {string.Join(", ", changes)}";
+                }
+            }
+            
+            // Loguj synchronizację jeśli były zmiany
+            if (requiresSync)
+            {
+                var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                    OperationType.TeamSynchronized,
+                    nameof(Team),
+                    targetEntityId: teamId,
+                    targetEntityName: localTeam.DisplayName,
+                    details: syncDetails
+                );
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed
+                );
+                
+                // Invaliduj cache
+                _powerShellCacheService.Remove($"{TeamByIdCacheKeyPrefix}{teamId}");
+                _logger.LogInformation("Zespół {TeamId} zsynchronizowany z Graph. Zmiany: {Changes}", teamId, syncDetails);
+            }
+            
+            return localTeam;
+        }
+
+        /// <summary>
+        /// Mapuje widoczność zespołu z Graph na enum.
+        /// </summary>
+        private TeamVisibility MapVisibility(string? graphVisibility)
+        {
+            return graphVisibility?.ToLower() switch
+            {
+                "public" => TeamVisibility.Public,
+                "private" => TeamVisibility.Private,
+                _ => TeamVisibility.Private
+            };
+        }
+
+        /// <summary>
+        /// Obsługuje zespół, który został usunięty z Microsoft Graph.
+        /// </summary>
+        private async Task HandleDeletedTeamAsync(Team team)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_sync";
+            
+            // Soft-delete w lokalnej bazie
+            ((BaseEntity)team).IsActive = false;
+            team.Archive("Zespół usunięty z Microsoft Teams", currentUserUpn);
+            team.MarkAsModified(currentUserUpn);
+            
+            _teamRepository.Update(team);
+            
+            // Loguj operację
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.TeamDeleted,
+                nameof(Team),
+                targetEntityId: team.Id,
+                targetEntityName: team.DisplayName,
+                details: "Zespół oznaczony jako usunięty podczas synchronizacji z Graph"
+            );
+            
+            await _operationHistoryService.UpdateOperationStatusAsync(
+                operation.Id,
+                OperationStatus.Completed
+            );
+            
+            // Invaliduj cache
+            _powerShellCacheService.Remove($"{TeamByIdCacheKeyPrefix}{team.Id}");
+        }
+
+        /// <summary>
+        /// Pomocnicza metoda do pobierania właściwości z obiektów PowerShell.
+        /// </summary>
+        private TValue? GetPropertyValue<TValue>(dynamic graphObject, string propertyName)
+        {
+            try
+            {
+                if (graphObject == null) return default(TValue);
+                
+                var psObject = graphObject as System.Management.Automation.PSObject;
+                if (psObject?.Properties[propertyName]?.Value is TValue value)
+                {
+                    return value;
+                }
+                
+                return default(TValue);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Nie udało się pobrać właściwości {PropertyName} z obiektu Graph", propertyName);
+                return default(TValue);
+            }
+        }
+
+        /// <summary>
+        /// Synchronizuje wszystkie zespoły z Microsoft Graph.
+        /// </summary>
+        public async Task<Dictionary<string, string>> SynchronizeAllTeamsAsync(string apiAccessToken, IProgress<int>? progress = null)
+        {
+            _logger.LogInformation("Rozpoczynanie masowej synchronizacji zespołów z Microsoft Graph");
+            
+            var results = new Dictionary<string, string>();
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkTeamsSynchronization,
+                nameof(Team),
+                details: "Masowa synchronizacja wszystkich zespołów"
+            );
+            
+            try
+            {
+                // Pobierz wszystkie zespoły z Graph
+                var graphTeams = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _powerShellTeamService.GetAllTeamsAsync(),
+                    "GetAllTeamsAsync dla masowej synchronizacji"
+                );
+                
+                if (graphTeams == null || !graphTeams.Any())
+                {
+                    _logger.LogWarning("Brak zespołów w Microsoft Graph");
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        "Brak zespołów do synchronizacji"
+                    );
+                    return results;
+                }
+                
+                // Pobierz wszystkie lokalne zespoły
+                var localTeams = await _teamRepository.GetAllAsync();
+                var localTeamDict = localTeams.ToDictionary(t => t.ExternalId ?? t.Id);
+                
+                int processed = 0;
+                int total = graphTeams.Count();
+                
+                // Synchronizuj każdy zespół
+                foreach (var graphTeam in graphTeams)
+                {
+                    var teamId = "";
+                    try
+                    {
+                        teamId = GetPropertyValue<string>(graphTeam, "id");
+                        if (string.IsNullOrEmpty(teamId)) continue;
+                        
+                        var localTeam = localTeamDict.GetValueOrDefault(teamId);
+                        var syncedTeam = await SynchronizeTeamWithGraphAsync(localTeam, graphTeam, teamId);
+                        
+                        results[teamId] = "Zsynchronizowany";
+                        localTeamDict.Remove(teamId); // Usuń z listy lokalnych
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd synchronizacji zespołu {TeamId}", teamId);
+                        if (!string.IsNullOrEmpty(teamId))
+                        {
+                            results[teamId] = $"Błąd: {ex.Message}";
+                        }
+                    }
+                    
+                    processed++;
+                    progress?.Report((processed * 100) / total);
+                }
+                
+                // Oznacz pozostałe lokalne zespoły jako usunięte
+                foreach (var orphanedTeam in localTeamDict.Values.Where(t => t.IsActive))
+                {
+                    await HandleDeletedTeamAsync(orphanedTeam);
+                    results[orphanedTeam.Id] = "Oznaczony jako usunięty";
+                }
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    $"Zsynchronizowano {results.Count} zespołów"
+                );
+                
+                // Invaliduj cały cache zespołów
+                await RefreshCacheAsync();
+                
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Krytyczny błąd podczas masowej synchronizacji");
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    ex.Message,
+                    ex.StackTrace
+                );
+                throw;
             }
         }
 
