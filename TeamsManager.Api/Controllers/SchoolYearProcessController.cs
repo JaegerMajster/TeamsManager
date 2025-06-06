@@ -134,7 +134,6 @@ namespace TeamsManager.API.Controllers
                 }
 
                 // Pobierz token Graph przez OBO flow
-
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -194,7 +193,6 @@ namespace TeamsManager.API.Controllers
                 }
 
                 // Pobierz token Graph przez OBO flow
-
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
