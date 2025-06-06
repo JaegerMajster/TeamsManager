@@ -12,7 +12,7 @@ using TeamsManager.Core.Enums;
 using TeamsManager.Core.Services.Cache;
 using TeamsManager.Core.Models;
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego cache'owaniem danych PowerShell/Graph

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     public class PowerShellUserResolverService : IPowerShellUserResolverService
     {

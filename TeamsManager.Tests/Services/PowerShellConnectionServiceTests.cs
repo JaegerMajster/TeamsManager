@@ -11,7 +11,7 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Common;
-using TeamsManager.Core.Services.PowerShellServices;
+using TeamsManager.Core.Services.PowerShell;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Exceptions.PowerShell;

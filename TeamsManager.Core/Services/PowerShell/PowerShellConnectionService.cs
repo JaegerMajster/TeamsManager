@@ -18,7 +18,7 @@ using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Exceptions.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego połączeniem PowerShell i Microsoft Graph

@@ -35,7 +35,7 @@ using TeamsManager.Core.Helpers.PowerShell;
 // - Dodatkowe sekcje z PowerShellServices.md (ETAP4-MISSING)
 //
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego zespołami i kanałami w Microsoft Teams przez PowerShell

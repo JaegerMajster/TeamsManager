@@ -9,7 +9,7 @@ using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Exceptions.PowerShell;
 using TeamsManager.Core.Helpers.PowerShell;
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Główny serwis fasadowy dla operacji PowerShell/Microsoft Graph

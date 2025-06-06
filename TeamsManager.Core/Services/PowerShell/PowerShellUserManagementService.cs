@@ -109,7 +109,7 @@ using TeamsManager.Core.Helpers.PowerShell;
 //    - Problemów z error handling: 14 (wszystkie metody)
 // ============================================================================
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego użytkownikami, członkostwem w zespołach i licencjami w Microsoft 365 przez PowerShell

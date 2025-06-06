@@ -16,7 +16,7 @@ using TeamsManager.Core.Enums;
 using TeamsManager.Core.Helpers.PowerShell;
 using TeamsManager.Core.Models;
 
-namespace TeamsManager.Core.Services.PowerShellServices
+namespace TeamsManager.Core.Services.PowerShell
 {
     /// <summary>
     /// Implementacja serwisu zarządzającego operacjami masowymi w Microsoft 365 przez PowerShell
