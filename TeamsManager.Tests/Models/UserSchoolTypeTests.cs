@@ -76,7 +76,183 @@ namespace TeamsManager.Tests.Models
             ust.AssignmentDescription.Should().Be($"{user.FullName} -> {schoolType.DisplayName}");
         }
 
-        // TODO: Dodać testy dla właściwości obliczanych IsActiveOnDate, IsActiveToday, DaysAssigned
-        // z różnymi kombinacjami dat AssignedDate, EndDate i IsCurrentlyActive.
+        [Theory]
+        [InlineData(-10, null, true, true, true)]  // Aktywne przypisanie bez daty końcowej
+        [InlineData(-10, 10, true, true, true)]    // Aktywne przypisanie z przyszłą datą końcową
+        [InlineData(-10, -5, true, true, false)]   // Przypisanie zakończone w przeszłości
+        [InlineData(5, null, true, true, false)]   // Przypisanie rozpocznie się w przyszłości
+        [InlineData(-10, null, false, true, false)] // IsCurrentlyActive = false
+        [InlineData(-10, null, true, false, false)] // IsActive = false (z BaseEntity)
+        public void UserSchoolType_IsActiveOnDate_ShouldReturnCorrectValue(
+            int assignedDaysOffset, 
+            int? endDaysOffset, 
+            bool isCurrentlyActive, 
+            bool isActive,
+            bool expectedResult)
+        {
+            // Przygotowanie
+            var today = DateTime.Today;
+            var ust = new UserSchoolType
+            {
+                AssignedDate = today.AddDays(assignedDaysOffset),
+                EndDate = endDaysOffset.HasValue ? today.AddDays(endDaysOffset.Value) : (DateTime?)null,
+                IsCurrentlyActive = isCurrentlyActive,
+                IsActive = isActive
+            };
+
+            // Wykonanie
+            var result = ust.IsActiveOnDate(today);
+
+            // Sprawdzenie
+            result.Should().Be(expectedResult);
+        }
+
+        [Fact]
+        public void UserSchoolType_IsActiveOnDate_EdgeCases_ShouldHandleCorrectly()
+        {
+            // Przygotowanie
+            var ust = new UserSchoolType
+            {
+                AssignedDate = new DateTime(2025, 1, 1),
+                EndDate = new DateTime(2025, 12, 31),
+                IsCurrentlyActive = true,
+                IsActive = true
+            };
+
+            // Sprawdzenie - dokładnie na datach granicznych
+            ust.IsActiveOnDate(new DateTime(2025, 1, 1)).Should().BeTrue(); // Pierwszy dzień
+            ust.IsActiveOnDate(new DateTime(2025, 12, 31)).Should().BeTrue(); // Ostatni dzień
+            ust.IsActiveOnDate(new DateTime(2024, 12, 31)).Should().BeFalse(); // Dzień przed
+            ust.IsActiveOnDate(new DateTime(2026, 1, 1)).Should().BeFalse(); // Dzień po
+        }
+
+        [Fact]
+        public void UserSchoolType_IsActiveToday_WhenActiveAssignment_ShouldReturnTrue()
+        {
+            // Przygotowanie
+            var ust = new UserSchoolType
+            {
+                AssignedDate = DateTime.Today.AddDays(-30),
+                EndDate = DateTime.Today.AddDays(30),
+                IsCurrentlyActive = true,
+                IsActive = true
+            };
+
+            // Sprawdzenie
+            ust.IsActiveToday.Should().BeTrue();
+        }
+
+        [Fact]
+        public void UserSchoolType_IsActiveToday_WhenInactiveAssignment_ShouldReturnFalse()
+        {
+            // Przygotowanie - różne scenariusze nieaktywności
+            var scenarios = new[]
+            {
+                new UserSchoolType // Zakończone w przeszłości
+                {
+                    AssignedDate = DateTime.Today.AddDays(-60),
+                    EndDate = DateTime.Today.AddDays(-30),
+                    IsCurrentlyActive = true,
+                    IsActive = true
+                },
+                new UserSchoolType // Rozpocznie się w przyszłości
+                {
+                    AssignedDate = DateTime.Today.AddDays(10),
+                    EndDate = null,
+                    IsCurrentlyActive = true,
+                    IsActive = true
+                },
+                new UserSchoolType // IsCurrentlyActive = false
+                {
+                    AssignedDate = DateTime.Today.AddDays(-10),
+                    EndDate = null,
+                    IsCurrentlyActive = false,
+                    IsActive = true
+                },
+                new UserSchoolType // IsActive = false (soft delete)
+                {
+                    AssignedDate = DateTime.Today.AddDays(-10),
+                    EndDate = null,
+                    IsCurrentlyActive = true,
+                    IsActive = false
+                }
+            };
+
+            // Sprawdzenie
+            foreach (var ust in scenarios)
+            {
+                ust.IsActiveToday.Should().BeFalse();
+            }
+        }
+
+        [Theory]
+        [InlineData(-30, null, 30)]      // 30 dni temu, bez końca = 30 dni
+        [InlineData(-30, -10, 30)]       // Od 30 dni temu (EndDate nie wpływa na DaysAssigned)
+        [InlineData(-30, 10, 30)]        // Od 30 dni temu (EndDate nie wpływa na DaysAssigned)
+        [InlineData(0, null, 0)]         // Dzisiaj rozpoczęte = 0 dni
+        [InlineData(0, 10, 0)]          // Dzisiaj rozpoczęte = 0 dni
+        [InlineData(-1, -1, 1)]         // Wczoraj rozpoczęte = 1 dzień
+        public void UserSchoolType_DaysAssigned_ShouldCalculateCorrectly(
+            int assignedDaysOffset,
+            int? endDaysOffset,
+            int expectedDays)
+        {
+            // Przygotowanie
+            var today = DateTime.Today;
+            var ust = new UserSchoolType
+            {
+                AssignedDate = today.AddDays(assignedDaysOffset),
+                EndDate = endDaysOffset.HasValue ? today.AddDays(endDaysOffset.Value) : (DateTime?)null
+            };
+
+            // Sprawdzenie
+            ust.DaysAssigned.Should().Be(expectedDays);
+        }
+
+        [Fact]
+        public void UserSchoolType_DaysAssigned_WithFutureAssignment_ShouldReturnNegative()
+        {
+            // Przygotowanie
+            var ust = new UserSchoolType
+            {
+                AssignedDate = DateTime.Today.AddDays(10), // Rozpocznie się za 10 dni
+                EndDate = null
+            };
+
+            // Sprawdzenie - dla przyszłych przypisań powinno zwrócić wartość ujemną
+            ust.DaysAssigned.Should().Be(-10);
+        }
+
+        [Fact]
+        public void UserSchoolType_AllCalculatedProperties_ShouldWorkTogether()
+        {
+            // Przygotowanie
+            var user = CreateTestUser();
+            var schoolType = CreateTestSchoolType();
+            var assignedDate = DateTime.Today.AddDays(-365); // Rok temu
+            var endDate = DateTime.Today.AddDays(30); // Kończy się za miesiąc
+            
+            var ust = new UserSchoolType
+            {
+                Id = "ust-integration",
+                User = user,
+                UserId = user.Id,
+                SchoolType = schoolType,
+                SchoolTypeId = schoolType.Id,
+                AssignedDate = assignedDate,
+                EndDate = endDate,
+                IsCurrentlyActive = true,
+                IsActive = true,
+                Notes = "Roczne przypisanie",
+                WorkloadPercentage = 100m
+            };
+
+            // Sprawdzenie
+            ust.IsActiveToday.Should().BeTrue();
+            ust.IsActiveOnDate(DateTime.Today.AddDays(-180)).Should().BeTrue(); // Pół roku temu
+            ust.IsActiveOnDate(DateTime.Today.AddDays(60)).Should().BeFalse(); // Za 2 miesiące
+            ust.DaysAssigned.Should().Be(365); // 365 dni od przypisania
+            ust.AssignmentDescription.Should().Be($"{user.FullName} -> {schoolType.DisplayName}");
+        }
     }
 }
