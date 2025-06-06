@@ -5,6 +5,7 @@ using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Api.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -79,27 +80,16 @@ namespace TeamsManager.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        private string? GetAccessTokenFromHeader()
-        {
-            if (Request.Headers.ContainsKey("Authorization"))
-            {
-                var authHeader = Request.Headers["Authorization"].ToString();
-                if (authHeader != null && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    return authHeader.Substring("Bearer ".Length).Trim();
-                }
-            }
-            _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
-            return null;
-        }
+
 
         [HttpPost]
         public async Task<IActionResult> CreateTeam([FromBody] CreateTeamRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie utworzenia zespołu: {DisplayName}, Właściciel: {OwnerUpn}", requestDto.DisplayName, requestDto.OwnerUpn);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -128,7 +118,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetTeamById(string teamId, [FromQuery] bool includeMembers = false, [FromQuery] bool includeChannels = false)
         {
             _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader(); // Token może być potrzebny dla forceRefresh z Graph
+            var accessToken = await HttpContext.GetBearerTokenAsync(); // Token może być potrzebny dla forceRefresh z Graph
 
             var team = await _teamService.GetTeamByIdAsync(teamId, includeMembers, includeChannels, accessToken: accessToken);
             if (team == null)
@@ -143,7 +133,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetAllTeams()
         {
             _logger.LogInformation("Pobieranie wszystkich zespołów (tylko z Team.Status = Active).");
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var teams = await _teamService.GetAllTeamsAsync(accessToken: accessToken);
             return Ok(teams);
         }
@@ -152,7 +142,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetActiveTeams()
         {
             _logger.LogInformation("Pobieranie zespołów o statusie Active.");
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var teams = await _teamService.GetActiveTeamsAsync(accessToken: accessToken);
             return Ok(teams);
         }
@@ -161,7 +151,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetArchivedTeams()
         {
             _logger.LogInformation("Pobieranie zespołów o statusie Archived.");
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var teams = await _teamService.GetArchivedTeamsAsync(accessToken: accessToken);
             return Ok(teams);
         }
@@ -170,7 +160,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetTeamsByOwner(string ownerUpn)
         {
             _logger.LogInformation("Pobieranie zespołów dla właściciela: {OwnerUpn}", ownerUpn);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var teams = await _teamService.GetTeamsByOwnerAsync(ownerUpn, accessToken: accessToken);
             return Ok(teams);
         }
@@ -179,9 +169,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> UpdateTeam(string teamId, [FromBody] UpdateTeamRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie aktualizacji zespołu ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -307,9 +298,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> ArchiveTeam(string teamId, [FromBody] ArchiveTeamRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie archiwizacji zespołu ID: {TeamId}, Powód: {Reason}", teamId, requestDto.Reason);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
             if (string.IsNullOrWhiteSpace(requestDto.Reason))
@@ -331,9 +323,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> RestoreTeam(string teamId)
         {
             _logger.LogInformation("Żądanie przywrócenia zespołu ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -351,9 +344,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> DeleteTeam(string teamId)
         {
             _logger.LogInformation("Żądanie usunięcia zespołu ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -371,9 +365,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> AddMember(string teamId, [FromBody] AddMemberRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie dodania członka {UserUpn} do zespołu ID: {TeamId} z rolą {Role}", requestDto.UserUpn, teamId, requestDto.Role);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -392,9 +387,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> RemoveMember(string teamId, string userId)
         {
             _logger.LogInformation("Żądanie usunięcia członka ID/UPN: {UserId} z zespołu ID: {TeamId}", userId, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 

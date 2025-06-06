@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Api.Extensions;
 
 namespace TeamsManager.Api.Controllers
 {
@@ -43,8 +44,8 @@ namespace TeamsManager.Api.Controllers
                 _logger.LogInformation("Test PowerShell dla użytkownika: {UserUpn} (ID: {UserId})", userUpn, userId);
 
                 // Pobierz token lokalnego API z nagłówka Authorization
-                var authorizationHeader = Request.Headers["Authorization"].FirstOrDefault();
-                if (string.IsNullOrEmpty(authorizationHeader) || !authorizationHeader.StartsWith("Bearer "))
+                var apiAccessToken = await HttpContext.GetBearerTokenAsync();
+                if (string.IsNullOrEmpty(apiAccessToken))
                 {
                     _logger.LogWarning("Brak tokenu Authorization w nagłówku żądania");
                     return BadRequest(new { 
@@ -53,8 +54,6 @@ namespace TeamsManager.Api.Controllers
                         ConnectionAttempted = false
                     });
                 }
-
-                var apiAccessToken = authorizationHeader.Substring("Bearer ".Length).Trim();
                 
                 // Użyj ExecuteWithAutoConnectAsync do testowego połączenia
                 var connectionResult = await _powerShellService.ExecuteWithAutoConnectAsync(

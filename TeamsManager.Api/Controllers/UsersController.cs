@@ -5,6 +5,7 @@ using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Api.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -98,25 +99,13 @@ namespace TeamsManager.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        private string? GetAccessTokenFromHeader()
-        {
-            if (Request.Headers.ContainsKey("Authorization"))
-            {
-                var authHeader = Request.Headers["Authorization"].ToString();
-                if (authHeader != null && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    return authHeader.Substring("Bearer ".Length).Trim();
-                }
-            }
-            _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
-            return null;
-        }
+
 
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetUserById(string userId, [FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkownika o ID: {UserId}, forceRefresh: {ForceRefresh}", userId, forceRefresh);
-            var accessToken = GetAccessTokenFromHeader(); // Potrzebny tylko jeśli forceRefresh = true i serwis odpytuje Graph
+            var accessToken = await HttpContext.GetBearerTokenAsync(); // Potrzebny tylko jeśli forceRefresh = true i serwis odpytuje Graph
 
             var user = await _userService.GetUserByIdAsync(userId, forceRefresh, accessToken);
             if (user == null)
@@ -133,7 +122,7 @@ namespace TeamsManager.Api.Controllers
             // Poprawka: dekodowanie UPN z URL
             var decodedUpn = System.Net.WebUtility.UrlDecode(upn);
             _logger.LogInformation("Pobieranie użytkownika o UPN: {UserUpn}, forceRefresh: {ForceRefresh}", decodedUpn, forceRefresh);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
 
             var user = await _userService.GetUserByUpnAsync(decodedUpn, forceRefresh, accessToken);
             if (user == null)
@@ -148,7 +137,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetAllActiveUsers([FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych użytkowników, forceRefresh: {ForceRefresh}", forceRefresh);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var users = await _userService.GetAllActiveUsersAsync(forceRefresh, accessToken);
             return Ok(users);
         }
@@ -157,7 +146,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetUsersByRole(UserRole role, [FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkowników o roli: {UserRole}, forceRefresh: {ForceRefresh}", role, forceRefresh);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             var users = await _userService.GetUsersByRoleAsync(role, forceRefresh, accessToken);
             return Ok(users);
         }
@@ -166,9 +155,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie utworzenia użytkownika: {UserUpn}", requestDto.Upn);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -225,9 +215,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie aktualizacji użytkownika ID: {UserId}", userId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
@@ -270,9 +261,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> DeactivateUser(string userId, [FromBody] UserActionM365Dto? dto)
         {
             _logger.LogInformation("Żądanie dezaktywacji użytkownika ID: {UserId}", userId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
             bool deactivateM365 = dto?.PerformM365Action ?? true;
@@ -292,9 +284,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> ActivateUser(string userId, [FromBody] UserActionM365Dto? dto)
         {
             _logger.LogInformation("Żądanie aktywacji użytkownika ID: {UserId}", userId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
             bool activateM365 = dto?.PerformM365Action ?? true;

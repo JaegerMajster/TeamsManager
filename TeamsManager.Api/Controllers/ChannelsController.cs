@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Api.Extensions;
 using System;
 using System.Threading.Tasks;
 using System.Collections.Generic; // Dodane dla List w DTO
@@ -47,27 +48,16 @@ namespace TeamsManager.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        private string? GetAccessTokenFromHeader()
-        {
-            if (Request.Headers.TryGetValue("Authorization", out var authHeaderValues))
-            {
-                var authHeader = authHeaderValues.ToString();
-                if (authHeader != null && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    return authHeader.Substring("Bearer ".Length).Trim();
-                }
-            }
-            _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
-            return null;
-        }
+
 
         [HttpGet]
         public async Task<IActionResult> GetTeamChannels(string teamId, [FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("API: Pobieranie kanałów dla lokalnego zespołu ID: {TeamId}", teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
@@ -83,9 +73,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetTeamChannelById(string teamId, string channelGraphId, [FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("API: Pobieranie kanału GraphID: {ChannelGraphId} dla lokalnego zespołu ID: {TeamId}", channelGraphId, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
@@ -103,9 +94,10 @@ namespace TeamsManager.Api.Controllers
         {
             var decodedChannelDisplayName = System.Net.WebUtility.UrlDecode(channelDisplayName);
             _logger.LogInformation("API: Pobieranie kanału '{ChannelDisplayName}' dla zespołu ID: {TeamId} (metoda po nazwie)", decodedChannelDisplayName, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
@@ -122,9 +114,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> CreateTeamChannel(string teamId, [FromBody] CreateChannelRequestDto requestDto)
         {
             _logger.LogInformation("API: Żądanie utworzenia kanału '{DisplayName}' w zespole ID: {TeamId}", requestDto.DisplayName, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
@@ -144,9 +137,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> UpdateTeamChannel(string teamId, string channelId, [FromBody] UpdateChannelRequestDto requestDto)
         {
             _logger.LogInformation("API: Żądanie aktualizacji kanału GraphID: {ChannelId} w zespole ID: {TeamId}", channelId, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
@@ -172,9 +166,10 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> RemoveTeamChannel(string teamId, string channelId)
         {
             _logger.LogInformation("API: Żądanie usunięcia kanału GraphID: {ChannelId} z zespołu ID: {TeamId}", channelId, teamId);
-            var accessToken = GetAccessTokenFromHeader();
+            var accessToken = await HttpContext.GetBearerTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
             {
+                _logger.LogWarning("Nie znaleziono tokenu dostępu w nagłówku Authorization.");
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
