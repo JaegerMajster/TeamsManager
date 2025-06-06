@@ -334,8 +334,8 @@ namespace TeamsManager.Core.Services
                     );
                     return null;
                 }
-                var ownerUser = await _userRepository.GetUserByUpnAsync(ownerUpn);
-                if (ownerUser == null || !ownerUser.IsActive)
+                var ownerUser = await _userRepository.GetActiveUserByUpnAsync(ownerUpn);
+                if (ownerUser == null)
                 {
                     _logger.LogError("Nie można utworzyć zespołu: Właściciel '{OwnerUPN}' nie istnieje lub jest nieaktywny.", ownerUpn);
                     
@@ -580,8 +580,8 @@ namespace TeamsManager.Core.Services
 
                 if (existingTeam.Owner != teamToUpdate.Owner)
                 {
-                    var newOwnerUser = await _userRepository.GetUserByUpnAsync(teamToUpdate.Owner);
-                    if (newOwnerUser == null || !newOwnerUser.IsActive)
+                    var newOwnerUser = await _userRepository.GetActiveUserByUpnAsync(teamToUpdate.Owner);
+                    if (newOwnerUser == null)
                     {
                         _logger.LogError("Nie można zaktualizować zespołu: Nowy właściciel '{NewOwnerUPN}' nie istnieje lub jest nieaktywny.", teamToUpdate.Owner);
                         
@@ -634,15 +634,15 @@ namespace TeamsManager.Core.Services
                     // Przypisz oczyszczone wartości
                     existingTeam.DisplayName = cleanDisplayName;
                     existingTeam.Description = cleanDescription;
-                    existingTeam.Owner = teamToUpdate.Owner;
+                    existingTeam.Owner = teamToUpdate.Owner ?? existingTeam.Owner;
                     existingTeam.Visibility = teamToUpdate.Visibility;
                     existingTeam.RequiresApproval = teamToUpdate.RequiresApproval;
                     existingTeam.MaxMembers = teamToUpdate.MaxMembers;
                     existingTeam.SchoolTypeId = teamToUpdate.SchoolTypeId;
                     existingTeam.SchoolYearId = teamToUpdate.SchoolYearId;
                     existingTeam.TemplateId = teamToUpdate.TemplateId;
-                    existingTeam.AcademicYear = teamToUpdate.AcademicYear;
-                    existingTeam.Semester = teamToUpdate.Semester;
+                    existingTeam.AcademicYear = teamToUpdate.AcademicYear ?? existingTeam.AcademicYear;
+                    existingTeam.Semester = teamToUpdate.Semester ?? existingTeam.Semester;
 
                     existingTeam.MarkAsModified(currentUserUpn);
                     _teamRepository.Update(existingTeam);
@@ -1026,8 +1026,8 @@ namespace TeamsManager.Core.Services
                     return null; 
                 }
                 
-                user = await _userRepository.GetUserByUpnAsync(userUpn);
-                if (user == null || !user.IsActive) 
+                user = await _userRepository.GetActiveUserByUpnAsync(userUpn);
+                if (user == null) 
                 { 
                     _logger.LogWarning("Nie można dodać członka: Użytkownik o UPN {UserUPN} nie istnieje lub jest nieaktywny.", userUpn); 
                     
@@ -1623,7 +1623,7 @@ namespace TeamsManager.Core.Services
                 {
                     try
                     {
-                        var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
+                        var user = await _userRepository.GetActiveUserByUpnAsync(kvp.Key);
                         if (user != null)
                         {
                             // Sprawdź czy użytkownik nie jest już członkiem
@@ -1718,7 +1718,7 @@ namespace TeamsManager.Core.Services
                 var addedUserIds = new List<string>();
                 foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
-                    var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
+                    var user = await _userRepository.GetActiveUserByUpnAsync(kvp.Key);
                     if (user != null)
                     {
                         addedUserIds.Add(user.Id);

@@ -147,6 +147,117 @@ namespace TeamsManager.Tests.Repositories
             result.IsActive.Should().BeFalse();
         }
 
+        [Fact]
+        public async Task GetActiveTeamByNameAsync_ShouldReturnNull_WhenTeamIsArchived()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var teamName = "Test Archived Team For Active Method";
+            var team = CreateTeam(teamName, TeamStatus.Archived, TeamVisibility.Private);
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveTeamByNameAsync(teamName);
+
+            // Weryfikacja
+            result.Should().BeNull("metoda powinna zwrócić null dla zespołu archiwalnego");
+        }
+
+        [Fact]
+        public async Task GetActiveTeamByNameAsync_ShouldReturnTeam_WhenTeamIsActive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var teamName = "Test Active Team For Active Method";
+            var team = CreateTeam(teamName, TeamStatus.Active, TeamVisibility.Private);
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveTeamByNameAsync(teamName);
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.DisplayName.Should().Be(teamName);
+            result.Status.Should().Be(TeamStatus.Active);
+            result.IsActive.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task GetActiveTeamByNameAsync_ShouldIncludeAllRelations()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var schoolType = new SchoolType { Id = Guid.NewGuid().ToString(), ShortName = "LO", FullName = "Liceum Ogólnokształcące", IsActive = true };
+            var schoolYear = new SchoolYear { Id = Guid.NewGuid().ToString(), Name = "2024/2025", StartDate = new DateTime(2024, 9, 1), EndDate = new DateTime(2025, 6, 30), IsCurrent = true, IsActive = true };
+            var template = new TeamTemplate { Id = Guid.NewGuid().ToString(), Name = "Test Template", Template = "{SchoolType} {Class}", SchoolTypeId = schoolType.Id, IsActive = true };
+            
+            await Context.SchoolTypes.AddAsync(schoolType);
+            await Context.SchoolYears.AddAsync(schoolYear);
+            await Context.TeamTemplates.AddAsync(template);
+            await SaveChangesAsync();
+
+            var teamName = "Active Team With Relations";
+            var team = new Team
+            {
+                Id = Guid.NewGuid().ToString(),
+                DisplayName = teamName,
+                Owner = "teacher@test.com",
+                Status = TeamStatus.Active,
+                SchoolTypeId = schoolType.Id,
+                SchoolYearId = schoolYear.Id,
+                TemplateId = template.Id
+            };
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveTeamByNameAsync(teamName);
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.SchoolType.Should().NotBeNull();
+            result.SchoolType!.ShortName.Should().Be("LO");
+            result.SchoolYear.Should().NotBeNull();
+            result.Template.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task GetActiveByIdAsync_ShouldReturnNull_WhenTeamIsArchived()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var team = CreateTeam("Archived Team By Id", TeamStatus.Archived, TeamVisibility.Private);
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveByIdAsync(team.Id);
+
+            // Weryfikacja
+            result.Should().BeNull("metoda powinna zwrócić null dla zespołu archiwalnego");
+        }
+
+        [Fact]
+        public async Task GetActiveByIdAsync_ShouldReturnTeam_WhenTeamIsActive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var team = CreateTeam("Active Team By Id", TeamStatus.Active, TeamVisibility.Private);
+            await Context.Teams.AddAsync(team);
+            await SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveByIdAsync(team.Id);
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.DisplayName.Should().Be("Active Team By Id");
+            result.Status.Should().Be(TeamStatus.Active);
+            result.IsActive.Should().BeTrue();
+        }
+
 
         [Fact]
         public async Task GetTeamsByOwnerAsync_ShouldReturnOnlyActiveStatusTeams()

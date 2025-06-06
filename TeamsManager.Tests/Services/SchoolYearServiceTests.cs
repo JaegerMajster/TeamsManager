@@ -452,7 +452,13 @@ namespace TeamsManager.Tests.Services
             _mockMemoryCache.Setup(m => m.TryGetValue(It.IsAny<object>(), out It.Ref<object>.IsAny))
                 .Returns((object key, out object? value) =>
                 {
-                    return cacheDict.TryGetValue(key, out value!);
+                    if (cacheDict.TryGetValue(key, out var tempValue))
+                    {
+                        value = tempValue;
+                        return true;
+                    }
+                    value = null;
+                    return false;
                 });
             
             // Setup cache.CreateEntry - symuluje dodanie do cache po pobraniu z bazy

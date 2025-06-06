@@ -12,10 +12,30 @@ namespace TeamsManager.Core.Abstractions.Data
     {
         /// <summary>
         /// Asynchronicznie pobiera użytkownika na podstawie jego User Principal Name (UPN).
+        /// UWAGA: Ta metoda NIE filtruje po IsActive - może zwrócić nieaktywnych użytkowników.
+        /// Rozważ użycie GetActiveUserByUpnAsync() jeśli potrzebujesz tylko aktywnych użytkowników.
         /// </summary>
         /// <param name="upn">UPN użytkownika.</param>
         /// <returns>Obiekt User lub null, jeśli nie znaleziono.</returns>
         Task<User?> GetUserByUpnAsync(string upn);
+
+        /// <summary>
+        /// Asynchronicznie pobiera aktywnego użytkownika na podstawie jego User Principal Name (UPN).
+        /// Zwraca tylko użytkowników z IsActive = true.
+        /// Zawiera pełne dołączenie relacji (Department, TeamMemberships, SchoolTypes).
+        /// </summary>
+        /// <param name="upn">UPN użytkownika.</param>
+        /// <returns>Aktywny obiekt User z pełnymi relacjami lub null, jeśli nie znaleziono aktywnego użytkownika.</returns>
+        Task<User?> GetActiveUserByUpnAsync(string upn);
+
+        /// <summary>
+        /// Asynchronicznie pobiera aktywnego użytkownika na podstawie ID.
+        /// Zwraca tylko użytkowników z IsActive = true.
+        /// Zawiera pełne dołączenie relacji (Department, TeamMemberships, SchoolTypes).
+        /// </summary>
+        /// <param name="id">ID użytkownika.</param>
+        /// <returns>Aktywny obiekt User z pełnymi relacjami lub null, jeśli nie znaleziono aktywnego użytkownika.</returns>
+        Task<User?> GetActiveByIdAsync(string id);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich użytkowników z określoną rolą systemową.

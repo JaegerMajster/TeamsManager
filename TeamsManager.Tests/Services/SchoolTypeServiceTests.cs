@@ -29,7 +29,7 @@ namespace TeamsManager.Tests.Services
 
         private readonly ISchoolTypeService _schoolTypeService;
         private readonly string _currentLoggedInUserUpn = "test.schooltype.admin@example.com";
-        private OperationHistory? _capturedOperationHistory;
+        private OperationHistory? _capturedOperationHistory; // TODO: Remove if not needed
 
         private const string AllSchoolTypesCacheKey = "SchoolTypes_AllActive";
         private const string SchoolTypeByIdCacheKeyPrefix = "SchoolType_Id_";

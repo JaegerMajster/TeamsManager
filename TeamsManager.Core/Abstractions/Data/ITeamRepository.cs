@@ -18,6 +18,22 @@ namespace TeamsManager.Core.Abstractions.Data
         Task<Team?> GetTeamByNameAsync(string displayName); // Lub Task<IEnumerable<Team>>
 
         /// <summary>
+        /// Asynchronicznie pobiera aktywny zespół na podstawie jego nazwy wyświetlanej.
+        /// Zwraca tylko zespoły ze statusem TeamStatus.Active.
+        /// </summary>
+        /// <param name="displayName">Nazwa wyświetlana zespołu.</param>
+        /// <returns>Aktywny zespół lub null, jeśli nie znaleziono.</returns>
+        Task<Team?> GetActiveTeamByNameAsync(string displayName);
+
+        /// <summary>
+        /// Asynchronicznie pobiera aktywny zespół po ID z pełnymi Include.
+        /// Zwraca tylko zespoły ze statusem TeamStatus.Active.
+        /// </summary>
+        /// <param name="id">ID zespołu.</param>
+        /// <returns>Aktywny zespół z pełnymi relacjami lub null.</returns>
+        Task<Team?> GetActiveByIdAsync(object id);
+
+        /// <summary>
         /// Asynchronicznie pobiera wszystkie zespoły, których właścicielem jest użytkownik o podanym UPN.
         /// </summary>
         /// <param name="ownerUpn">UPN właściciela.</param>

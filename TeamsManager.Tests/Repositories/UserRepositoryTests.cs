@@ -351,6 +351,237 @@ namespace TeamsManager.Tests.Repositories
             ResetTestUser();
         }
 
+        [Fact]
+        public async Task GetActiveUserByUpnAsync_ShouldReturnNull_WhenUserIsInactive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var department = await GetOrCreateTestDepartmentAsync();
+            var inactiveUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Inactive",
+                LastName = "User",
+                UPN = "inactive.user@test.com",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = department.Id,
+                IsActive = false // Nieaktywny użytkownik
+            };
+            await Context.Users.AddAsync(inactiveUser);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveUserByUpnAsync("inactive.user@test.com");
+
+            // Weryfikacja
+            result.Should().BeNull("ponieważ użytkownik jest nieaktywny");
+        }
+
+        [Fact]
+        public async Task GetActiveUserByUpnAsync_ShouldReturnUser_WhenUserIsActive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var department = await GetOrCreateTestDepartmentAsync();
+            var activeUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Active",
+                LastName = "User",
+                UPN = "active.user@test.com",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = department.Id,
+                IsActive = true
+            };
+            await Context.Users.AddAsync(activeUser);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveUserByUpnAsync("active.user@test.com");
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.UPN.Should().Be("active.user@test.com");
+            result.IsActive.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task GetActiveUserByUpnAsync_ShouldIncludeAllRelations()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            
+            var department = await GetOrCreateTestDepartmentAsync();
+            var schoolType = new SchoolType
+            {
+                Id = Guid.NewGuid().ToString(),
+                ShortName = "LO",
+                FullName = "Liceum Ogólnokształcące",
+                IsActive = true
+            };
+            var team = new Team
+            {
+                Id = Guid.NewGuid().ToString(),
+                DisplayName = "Test Team",
+                Description = "Test",
+                Owner = "owner@test.com",
+                Status = TeamStatus.Active
+            };
+            var subject = new Subject
+            {
+                Id = Guid.NewGuid().ToString(),
+                Code = "MAT",
+                Name = "Matematyka",
+                IsActive = true
+            };
+
+            await Context.SchoolTypes.AddAsync(schoolType);
+            await Context.Teams.AddAsync(team);
+            await Context.Subjects.AddAsync(subject);
+            await Context.SaveChangesAsync();
+
+            var user = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Test",
+                LastName = "User",
+                UPN = "test.relations@test.com",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = department.Id,
+                IsActive = true
+            };
+            await Context.Users.AddAsync(user);
+            await Context.SaveChangesAsync();
+
+            // Dodaj relacje
+            var teamMembership = new TeamMember
+            {
+                Id = Guid.NewGuid().ToString(),
+                TeamId = team.Id,
+                UserId = user.Id,
+                Role = TeamMemberRole.Owner,
+                IsActive = true
+            };
+            var schoolTypeAssignment = new UserSchoolType
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                SchoolTypeId = schoolType.Id,
+                IsCurrentlyActive = true,
+                IsActive = true
+            };
+            var subjectAssignment = new UserSubject
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = user.Id,
+                SubjectId = subject.Id,
+                IsActive = true
+            };
+
+            await Context.TeamMembers.AddAsync(teamMembership);
+            await Context.UserSchoolTypes.AddAsync(schoolTypeAssignment);
+            await Context.UserSubjects.AddAsync(subjectAssignment);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveUserByUpnAsync("test.relations@test.com");
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.Department.Should().NotBeNull();
+            result.Department!.Name.Should().Be("Dział Testowy Użytkowników");
+            result.TeamMemberships.Should().HaveCount(1);
+            result.TeamMemberships.First().Team.Should().NotBeNull();
+            result.TeamMemberships.First().Team!.DisplayName.Should().Be("Test Team");
+            result.SchoolTypeAssignments.Should().HaveCount(1);
+            result.SchoolTypeAssignments.First().SchoolType.Should().NotBeNull();
+            result.SchoolTypeAssignments.First().SchoolType!.ShortName.Should().Be("LO");
+            result.TaughtSubjects.Should().HaveCount(1);
+            result.TaughtSubjects.First().Subject.Should().NotBeNull();
+            result.TaughtSubjects.First().Subject!.Code.Should().Be("MAT");
+        }
+
+        [Fact]
+        public async Task GetActiveByIdAsync_ShouldReturnNull_WhenUserIsInactive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var department = await GetOrCreateTestDepartmentAsync();
+            var inactiveUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Inactive",
+                LastName = "ById",
+                UPN = "inactive.byid@test.com",
+                Role = UserRole.Uczen,
+                DepartmentId = department.Id,
+                IsActive = false
+            };
+            await Context.Users.AddAsync(inactiveUser);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveByIdAsync(inactiveUser.Id);
+
+            // Weryfikacja
+            result.Should().BeNull("ponieważ użytkownik jest nieaktywny");
+        }
+
+        [Fact]
+        public async Task GetActiveByIdAsync_ShouldReturnUser_WhenUserIsActive()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var department = await GetOrCreateTestDepartmentAsync();
+            var activeUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Active",
+                LastName = "ById",
+                UPN = "active.byid@test.com",
+                Role = UserRole.Dyrektor,
+                DepartmentId = department.Id,
+                IsActive = true
+            };
+            await Context.Users.AddAsync(activeUser);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetActiveByIdAsync(activeUser.Id);
+
+            // Weryfikacja
+            result.Should().NotBeNull();
+            result!.Id.Should().Be(activeUser.Id);
+            result.IsActive.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task GetUserByUpnAsync_ShouldReturnInactiveUser_ForBackwardCompatibility()
+        {
+            // Przygotowanie
+            await CleanDatabaseAsync();
+            var department = await GetOrCreateTestDepartmentAsync();
+            var inactiveUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Legacy",
+                LastName = "Inactive",
+                UPN = "legacy.inactive@test.com",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = department.Id,
+                IsActive = false
+            };
+            await Context.Users.AddAsync(inactiveUser);
+            await Context.SaveChangesAsync();
+
+            // Działanie
+            var result = await _repository.GetUserByUpnAsync("legacy.inactive@test.com");
+
+            // Weryfikacja - metoda legacy POWINNA zwrócić nieaktywnego użytkownika
+            result.Should().NotBeNull("ponieważ stara metoda nie filtruje po IsActive");
+            result!.IsActive.Should().BeFalse();
+        }
+
         #region Helper Methods
 
         private async Task<Department> GetOrCreateTestDepartmentAsync(string departmentName = "Dział Testowy Użytkowników")

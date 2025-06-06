@@ -369,6 +369,7 @@ namespace TeamsManager.Tests.Services
             var simulatedExternalId = $"sim_ext_{System.Guid.NewGuid()}";
 
             _mockUserRepository.Setup(r => r.GetUserByUpnAsync(ownerUpn)).ReturnsAsync(_testOwnerUser);
+            _mockUserRepository.Setup(r => r.GetActiveUserByUpnAsync(ownerUpn)).ReturnsAsync(_testOwnerUser);
             
             // Mock PowerShellService aby symulować niepowodzenie połączenia (co jest realistyczne w testach)
             _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()))
@@ -390,6 +391,7 @@ namespace TeamsManager.Tests.Services
             var ownerUpn = _testOwnerUser.UPN;
 
             _mockUserRepository.Setup(r => r.GetUserByUpnAsync(ownerUpn)).ReturnsAsync(_testOwnerUser);
+            _mockUserRepository.Setup(r => r.GetActiveUserByUpnAsync(ownerUpn)).ReturnsAsync(_testOwnerUser);
             
             // Mock PowerShellService aby symulować niepowodzenie połączenia
             _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()))
@@ -400,6 +402,31 @@ namespace TeamsManager.Tests.Services
 
             // Assert - bez połączenia powinna zwrócić null
             resultTeam.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task CreateTeamAsync_WithInactiveOwner_ShouldReturnNull()
+        {
+            // Arrange
+            var displayName = "Test Team";
+            var description = "Test Description";
+            var ownerUpn = "inactive@example.com";
+            
+            _mockUserRepository.Setup(r => r.GetActiveUserByUpnAsync(ownerUpn))
+                .ReturnsAsync((User?)null);
+            
+            // Act
+            var result = await _teamService.CreateTeamAsync(
+                displayName, description, ownerUpn, TeamVisibility.Private, 
+                "token", null, null, null, null);
+            
+            // Assert
+            result.Should().BeNull();
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Failed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.AtLeastOnce);
         }
 
         [Fact]
@@ -436,6 +463,7 @@ namespace TeamsManager.Tests.Services
 
             _mockTeamRepository.Setup(r => r.GetByIdAsync(teamId)).ReturnsAsync(existingTeam);
             _mockUserRepository.Setup(r => r.GetUserByUpnAsync(newOwnerUpn)).ReturnsAsync(newOwnerUser);
+            _mockUserRepository.Setup(r => r.GetActiveUserByUpnAsync(newOwnerUpn)).ReturnsAsync(newOwnerUser);
             
             // Mock PowerShellService aby symulować niepowodzenie połączenia
             _mockPowerShellService.Setup(s => s.ConnectWithAccessTokenAsync(It.IsAny<string>(), It.IsAny<string[]>()))
@@ -483,6 +511,7 @@ namespace TeamsManager.Tests.Services
             var team = new Team { Id = teamId, DisplayName = "Team For Member", Owner = _testOwnerUser.UPN, ExternalId = "ext-member", Status = TeamStatus.Active, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
 
             _mockUserRepository.Setup(r => r.GetUserByUpnAsync(userUpn)).ReturnsAsync(user);
+            _mockUserRepository.Setup(r => r.GetActiveUserByUpnAsync(userUpn)).ReturnsAsync(user);
             _mockTeamRepository.Setup(r => r.GetByIdAsync(teamId)).ReturnsAsync(team);
             
             // Mock PowerShellService aby symulować niepowodzenie połączenia

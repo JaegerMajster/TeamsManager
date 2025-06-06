@@ -15,9 +15,50 @@ namespace TeamsManager.Data.Repositories
         {
         }
 
+        /// <summary>
+        /// Pobiera użytkownika po UPN.
+        /// UWAGA: Ta metoda NIE filtruje po IsActive - może zwrócić nieaktywnych użytkowników.
+        /// Rozważ użycie GetActiveUserByUpnAsync() jeśli potrzebujesz tylko aktywnych użytkowników.
+        /// </summary>
         public async Task<User?> GetUserByUpnAsync(string upn)
         {
             return await _dbSet.FirstOrDefaultAsync(u => u.UPN == upn);
+        }
+
+        /// <summary>
+        /// Pobiera aktywnego użytkownika po UPN z pełnym dołączeniem relacji.
+        /// Zwraca tylko użytkowników z IsActive = true.
+        /// </summary>
+        public async Task<User?> GetActiveUserByUpnAsync(string upn)
+        {
+            return await _dbSet
+                .Include(u => u.Department)
+                .Include(u => u.TeamMemberships)
+                    .ThenInclude(tm => tm.Team)
+                .Include(u => u.SchoolTypeAssignments)
+                    .ThenInclude(sta => sta.SchoolType)
+                .Include(u => u.SupervisedSchoolTypes)
+                .Include(u => u.TaughtSubjects)
+                    .ThenInclude(us => us.Subject)
+                .FirstOrDefaultAsync(u => u.UPN == upn && u.IsActive);
+        }
+
+        /// <summary>
+        /// Pobiera aktywnego użytkownika po ID z pełnym dołączeniem relacji.
+        /// Zwraca tylko użytkowników z IsActive = true.
+        /// </summary>
+        public async Task<User?> GetActiveByIdAsync(string id)
+        {
+            return await _dbSet
+                .Include(u => u.Department)
+                .Include(u => u.TeamMemberships)
+                    .ThenInclude(tm => tm.Team)
+                .Include(u => u.SchoolTypeAssignments)
+                    .ThenInclude(sta => sta.SchoolType)
+                .Include(u => u.SupervisedSchoolTypes)
+                .Include(u => u.TaughtSubjects)
+                    .ThenInclude(us => us.Subject)
+                .FirstOrDefaultAsync(u => u.Id == id && u.IsActive);
         }
 
         public async Task<IEnumerable<User>> GetUsersByRoleAsync(UserRole role)
