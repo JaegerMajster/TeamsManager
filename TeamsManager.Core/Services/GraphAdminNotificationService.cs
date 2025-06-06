@@ -68,7 +68,7 @@ namespace TeamsManager.Core.Services
             string teamId, 
             string createdBy, 
             int membersCount,
-            Dictionary<string, object> additionalInfo = null)
+            Dictionary<string, object>? additionalInfo = null)
         {
             if (!ShouldSendNotification())
                 return;
@@ -92,7 +92,7 @@ namespace TeamsManager.Core.Services
             int successCount,
             int failureCount,
             string performedBy,
-            Dictionary<string, object> details = null)
+            Dictionary<string, object>? details = null)
         {
             if (!ShouldSendNotification())
                 return;
@@ -166,7 +166,7 @@ namespace TeamsManager.Core.Services
             string errorMessage,
             string stackTrace,
             string occurredDuring,
-            string userId = null)
+            string? userId = null)
         {
             if (!ShouldSendNotification())
                 return;
@@ -195,7 +195,7 @@ namespace TeamsManager.Core.Services
         public async Task SendCustomAdminNotificationAsync(
             string subject,
             string message,
-            Dictionary<string, object> data = null)
+            Dictionary<string, object>? data = null)
         {
             if (!ShouldSendNotification())
                 return;

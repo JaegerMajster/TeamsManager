@@ -409,7 +409,7 @@ namespace TeamsManager.Core.Services.PowerShell
 
                     await SendProgressAsync(20, "Importowanie modułów PowerShell...");
 
-                    using (var ps = PowerShell.Create())
+                    using (var ps = System.Management.Automation.PowerShell.Create())
                     {
                         ps.Runspace = _sharedRunspace;
 
@@ -571,7 +571,7 @@ namespace TeamsManager.Core.Services.PowerShell
 
             try
             {
-                using var ps = PowerShell.Create();
+                using var ps = System.Management.Automation.PowerShell.Create();
                 ps.Runspace = _sharedRunspace;
                 ps.AddScript("Disconnect-MgGraph -ErrorAction SilentlyContinue");
                 ps.Invoke();
@@ -648,7 +648,7 @@ namespace TeamsManager.Core.Services.PowerShell
                 {
                     try
                     {
-                        using (var ps = PowerShell.Create())
+                        using (var ps = System.Management.Automation.PowerShell.Create())
                         {
                             ps.Runspace = _sharedRunspace;
                             ps.AddScript(script);
@@ -752,7 +752,7 @@ namespace TeamsManager.Core.Services.PowerShell
                     _logger.LogDebug("Executing PowerShell command: {CommandName}, attempt {Attempt}/{MaxRetries}",
                         commandName, attempt, maxRetries);
 
-                    using (var ps = PowerShell.Create())
+                    using (var ps = System.Management.Automation.PowerShell.Create())
                     {
                         ps.Runspace = _sharedRunspace;
                         var command = ps.AddCommand(commandName)
@@ -886,7 +886,7 @@ namespace TeamsManager.Core.Services.PowerShell
                    ex.Message.Contains("retry", StringComparison.OrdinalIgnoreCase);
         }
 
-        private void LogPowerShellStreams(PowerShell ps)
+        private void LogPowerShellStreams(System.Management.Automation.PowerShell ps)
         {
             foreach (var error in ps.Streams.Error)
             {

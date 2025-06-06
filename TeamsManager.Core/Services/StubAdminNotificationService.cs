@@ -18,14 +18,14 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public Task SendTeamCreatedNotificationAsync(string teamName, string teamId, string createdBy, int membersCount, Dictionary<string, object> additionalInfo = null)
+        public Task SendTeamCreatedNotificationAsync(string teamName, string teamId, string createdBy, int membersCount, Dictionary<string, object>? additionalInfo = null)
         {
             _logger.LogInformation("[STUB ADMIN NOTIFICATION] Team Created: {TeamName} (ID: {TeamId}) by {CreatedBy} with {MembersCount} members", 
                 teamName, teamId, createdBy, membersCount);
             return Task.CompletedTask;
         }
 
-        public Task SendBulkTeamsOperationNotificationAsync(string operationType, int totalTeams, int successCount, int failureCount, string performedBy, Dictionary<string, object> details = null)
+        public Task SendBulkTeamsOperationNotificationAsync(string operationType, int totalTeams, int successCount, int failureCount, string performedBy, Dictionary<string, object>? details = null)
         {
             _logger.LogInformation("[STUB ADMIN NOTIFICATION] Bulk Teams Operation: {OperationType} - {Success}/{Total} succeeded, performed by {PerformedBy}", 
                 operationType, successCount, totalTeams, performedBy);
@@ -46,14 +46,14 @@ namespace TeamsManager.Core.Services
             return Task.CompletedTask;
         }
 
-        public Task SendCriticalErrorNotificationAsync(string operationType, string errorMessage, string stackTrace, string occurredDuring, string userId = null)
+        public Task SendCriticalErrorNotificationAsync(string operationType, string errorMessage, string stackTrace, string occurredDuring, string? userId = null)
         {
             _logger.LogError("[STUB ADMIN NOTIFICATION] CRITICAL ERROR in {OperationType}: {ErrorMessage} occurred during {OccurredDuring} for user {UserId}", 
                 operationType, errorMessage, occurredDuring, userId ?? "N/A");
             return Task.CompletedTask;
         }
 
-        public Task SendCustomAdminNotificationAsync(string subject, string message, Dictionary<string, object> data = null)
+        public Task SendCustomAdminNotificationAsync(string subject, string message, Dictionary<string, object>? data = null)
         {
             _logger.LogInformation("[STUB ADMIN NOTIFICATION] Custom: {Subject} - {Message}", subject, message);
             return Task.CompletedTask;

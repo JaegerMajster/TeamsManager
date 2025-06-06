@@ -17,7 +17,7 @@ namespace TeamsManager.Core.Abstractions.Services
             string teamId, 
             string createdBy, 
             int membersCount,
-            Dictionary<string, object> additionalInfo = null);
+            Dictionary<string, object>? additionalInfo = null);
         
         /// <summary>
         /// Wysyła powiadomienie o masowej operacji na zespołach.
@@ -28,7 +28,7 @@ namespace TeamsManager.Core.Abstractions.Services
             int successCount,
             int failureCount,
             string performedBy,
-            Dictionary<string, object> details = null);
+            Dictionary<string, object>? details = null);
         
         /// <summary>
         /// Wysyła powiadomienie o utworzeniu nowego użytkownika.
@@ -58,7 +58,7 @@ namespace TeamsManager.Core.Abstractions.Services
             string errorMessage,
             string stackTrace,
             string occurredDuring,
-            string userId = null);
+            string? userId = null);
         
         /// <summary>
         /// Wysyła niestandardowe powiadomienie administracyjne.
@@ -66,6 +66,6 @@ namespace TeamsManager.Core.Abstractions.Services
         Task SendCustomAdminNotificationAsync(
             string subject,
             string message,
-            Dictionary<string, object> data = null);
+            Dictionary<string, object>? data = null);
     }
 } 
