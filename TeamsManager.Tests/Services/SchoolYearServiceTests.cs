@@ -212,7 +212,7 @@ namespace TeamsManager.Tests.Services
                 .Returns(Task.CompletedTask);
             
             // Działanie
-            var result = await _schoolYearService.CreateSchoolYearAsync(name, startDate, endDate);
+            var result = await _schoolYearService.CreateSchoolYearAsync(name, startDate, endDate, null);
             
             // Asercja - weryfikacja granularnej inwalidacji
             _mockPowerShellCacheService.Verify(s => s.InvalidateAllActiveSchoolYearsList(), Times.Once);
@@ -359,7 +359,7 @@ namespace TeamsManager.Tests.Services
             var name = ""; // Pusta nazwa spowoduje błąd
             
             // Działanie
-            var result = await _schoolYearService.CreateSchoolYearAsync(name, DateTime.Now, DateTime.Now.AddYears(1));
+            var result = await _schoolYearService.CreateSchoolYearAsync(name, DateTime.Now, DateTime.Now.AddYears(1), null);
             
             // Asercja
             result.Should().BeNull();

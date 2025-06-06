@@ -3,22 +3,23 @@
 > **🎓 Projekt Dyplomowy - System zarządzania zespołami Microsoft Teams**  
 > **👨‍💻 Autor:** Mariusz Jaguścik  
 > **🏫 Uczelnia:** Akademia Ekonomiczno-Humanistyczna w Łodzi  
-> **📅 Okres realizacji:** 28 maja - 6 czerwca 2025  
-> **📊 Status:** ✅ **PROJEKT UKOŃCZONY**  
-> **🧪 Testy:** 961/961 przechodzą (100% sukces) ✅  
-> **⚡ Wydajność:** ~50,000 linii kodu, 250+ plików źródłowych  
+> **📅 Okres realizacji:** 28 maja 2024 - 10 grudnia 2024  
+> **📊 Status:** ⚠️ **PROJEKT W TRAKCIE** (30 błędów testów do naprawy)  
+> **🧪 Testy:** 930+/961 przechodzą (~97% sukces, 30 błędów kompilacji)  
+> **⚡ Wydajność:** ~79,500 linii kodu, 872 pliki źródłowe  
 
 ## 🌟 Podsumowanie Wykonawcze
 
 **TeamsManager** to zaawansowany system zarządzania zespołami Microsoft Teams dedykowany środowiskom edukacyjnym. Projekt realizuje kompleksowe rozwiązanie enterprise-grade umożliwiające automatyzację procesów tworzenia, zarządzania i synchronizacji zespołów oraz kanałów w ramach organizacji edukacyjnej.
 
 ### 🎯 Kluczowe Osiągnięcia
-- ✅ **Pełna implementacja** Clean Architecture z DDD
-- ✅ **100% pokrycie testami** (961 testów przechodzi)
+- ✅ **Pełna implementacja** Clean Architecture z DDD + Application Layer
+- ⚠️ **~97% pokrycie testami** (930+ testów przechodzi, 30 błędów kompilacji do naprawy)
 - ✅ **Integracja Microsoft Graph** z przepływem OBO
 - ✅ **Zaawansowana synchronizacja** Graph-DB
 - ✅ **Produkcyjny interfejs** WPF z MaterialDesign
 - ✅ **REST API** z JWT authentication i SignalR
+- ✅ **Orkiestrator procesów szkolnych** - automatyzacja masowych operacji
 
 ---
 
@@ -74,14 +75,18 @@ Rozwiązanie TeamsManager zostało zaprojektowane zgodnie z zasadami Clean Archi
 graph TD;
     UI[TeamsManager.UI<br/>(Aplikacja WPF<br/>Interfejs Użytkownika<br/>Wzorzec MVVM, MaterialDesign)] --> API[TeamsManager.Api<br/>(Lokalne REST API<br/>ASP.NET Core, WebSockets - SignalR<br/>Autentykacja JWT, MSAL OBO Flow)];
     API --> Core[TeamsManager.Core<br/>(Logika Biznesowa<br/>Modele Domenowe, Serwisy Aplikacyjne<br/>Integracja z PowerShell poprzez Graph API)];
+    API --> App[TeamsManager.Application<br/>(Warstwa Aplikacyjna<br/>Orkiestrator Procesów<br/>Złożone operacje biznesowe)];
+    App --> Core;
     API --> Data[TeamsManager.Data<br/>(Dostęp do Danych<br/>Entity Framework Core, SQLite<br/>Repozytoria)];
     Core --> Data;
     Tests[TeamsManager.Tests<br/>(Testy Jednostkowe i Integracyjne<br/>xUnit, FluentAssertions, Moq)] -.-> Core;
     Tests -.-> Data;
     Tests -.-> API;
+    Tests -.-> App;
 
     style UI fill:#cce5ff,stroke:#333,stroke-width:2px;
     style API fill:#e6ccff,stroke:#333,stroke-width:2px;
+    style App fill:#ffffcc,stroke:#333,stroke-width:2px;
     style Core fill:#ccffcc,stroke:#333,stroke-width:2px;
     style Data fill:#ffe0cc,stroke:#333,stroke-width:2px;
     style Tests fill:#ffcccc,stroke:#333,stroke-width:2px;
@@ -115,6 +120,12 @@ graph TD;
 - Komunikacja z API
 - Logowanie użytkownika przez MSAL
 
+#### TeamsManager.Application 🟡
+- Warstwa aplikacyjna między API a Core
+- Orkiestrator procesów szkolnych (SchoolYearProcessOrchestrator)
+- Złożone operacje biznesowe i workflow
+- Batch processing i masowe operacje
+
 #### TeamsManager.Tests 🔴
 - Testy jednostkowe i integracyjne
 - xUnit, FluentAssertions, Moq
@@ -141,6 +152,24 @@ Większość planowanych endpointów została zaimplementowana. API jest zabezpi
 - `/api/v1.0/TestAuth/whoami` (GET - zabezpieczony)
 - `/api/v1.0/TestAuth/publicinfo` (GET - publiczny)
 - `/api/v1.0/Users` (GET, POST, PUT, /activate, /deactivate, /schooltypes, /subjects)
+
+**Endpointy orkiestratora procesów szkolnych (🆕 NOWA FUNKCJONALNOŚĆ):**
+- `/api/SchoolYearProcess/create` (POST) - Tworzenie zespołów dla nowego roku szkolnego
+- `/api/SchoolYearProcess/archive` (POST) - Archiwizacja zespołów z poprzedniego roku
+- `/api/SchoolYearProcess/transition` (POST) - Kompleksowe przejście między latami szkolnymi
+- `/api/SchoolYearProcess/status` (GET) - Status aktywnych procesów
+- `/api/SchoolYearProcess/cancel/{processId}` (POST) - Anulowanie procesu
+
+**Orkiestrator procesów szkolnych - architektura Enterprise:**
+- 🏗️ **Application Layer pattern** - dedykowana warstwa aplikacyjna (TeamsManager.Application)
+- 🔄 **Complex Workflow Management** - koordynacja 9-etapowych procesów biznesowych
+- 🛡️ **Thread-Safe Operations** - SemaphoreSlim, ConcurrentDictionary dla bezpiecznych operacji równoległych
+- 📊 **Real-time Process Monitoring** - tracking statusu, progress, błędów i metryki procesów
+- ⚡ **Batch Processing** - optymalizowane masowe operacje na zespołach Teams
+- 🎯 **Granular Error Handling** - szczegółowe raportowanie błędów z kontekstem operacji
+- 🔧 **Dry Run Mode** - symulacja operacji przed wykonaniem
+- 🚫 **Graceful Cancellation** - możliwość anulowania długotrwałych procesów
+- 📝 **Operation History** - pełny audit trail wszystkich wykonanych operacji
 
 **Planowane endpointy** (do weryfikacji lub rozszerzenia):
 - `/api/users/importcsv` (POST)
@@ -1009,11 +1038,14 @@ gantt
 ### 📦 Moduły PowerShell
 
 ```powershell
-# Instalacja wymaganych modułów (jeśli PowerShellService będzie bezpośrednio używał cmdletów, 
-# a nie tylko Microsoft Graph SDK)
-Install-Module -Name MicrosoftTeams -Force -AllowClobber
-Install-Module -Name ExchangeOnlineManagement -Force -AllowClobber
-Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force # Dla Graph SDK
+# Instalacja wymaganych modułów Microsoft Graph SDK
+Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force
+Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser -Force  
+Install-Module -Name Microsoft.Graph.Users -Scope CurrentUser -Force
+Install-Module -Name Microsoft.Graph.Teams -Scope CurrentUser -Force
+
+# Opcjonalnie: Instaluj wszystkie podmoduły Graph (większy download)
+# Install-Module -Name Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
 ```
 
 ### 🔐 Konfiguracja Azure AD
@@ -1285,7 +1317,276 @@ graph LR
     Tests -- testuje --> Data;
 ```
 
-## 11. Licencja i Autorzy
+## 11. Instrukcje Instalacji i Konfiguracji
+
+### 🔧 Wymagania Systemowe
+
+#### Minimalne Wymagania:
+- **OS**: Windows 10/11, Windows Server 2019+
+- **.NET**: .NET 9.0 SDK
+- **IDE**: Visual Studio 2022 (17.8+) lub VS Code
+- **PowerShell**: PowerShell 7.0+ (dla Graph SDK)
+- **RAM**: 4GB (8GB zalecane)
+- **Dysk**: 2GB wolnego miejsca
+
+#### Wymagania Azure/Microsoft 365:
+- **Azure AD Tenant** z uprawnieniami administratora
+- **Microsoft 365 Business/Enterprise** licencja
+- **Azure App Registration** z odpowiednimi uprawnieniami
+- **Microsoft Teams** aktywny w organizacji
+
+### 📦 Instalacja Krok po Kroku
+
+#### 1. Przygotowanie Środowiska
+
+```bash
+# Sprawdź wersję .NET
+dotnet --version  # Powinno być >= 9.0
+
+# Zainstaluj PowerShell 7+ (jeśli nie masz)
+winget install Microsoft.PowerShell
+
+# Sprawdź PowerShell
+pwsh --version
+```
+
+#### 2. Klonowanie Repozytorium
+
+```bash
+git clone https://github.com/your-org/TeamsManager.git
+cd TeamsManager
+
+# Przywróć pakiety NuGet
+dotnet restore
+```
+
+#### 3. Konfiguracja Azure AD
+
+**Krok 3.1: Utwórz App Registration**
+1. Przejdź do [Azure Portal](https://portal.azure.com)
+2. Azure Active Directory → App registrations → New registration
+3. Nazwa: `TeamsManager-API`
+4. Supported account types: `Single tenant`
+5. Redirect URI: `https://localhost:7001/signin-oidc`
+
+**Krok 3.2: Skonfiguruj API Permissions**
+```
+Microsoft Graph (Application permissions):
+- User.Read.All
+- Group.ReadWrite.All  
+- Directory.ReadWrite.All
+- TeamMember.ReadWrite.All
+- Team.ReadBasic.All
+
+Microsoft Graph (Delegated permissions):
+- User.Read
+- Group.ReadWrite.All
+- Directory.ReadWrite.All
+```
+
+**Krok 3.3: Utwórz Client Secret**
+1. Certificates & secrets → New client secret
+2. Skopiuj wartość (będzie potrzebna w konfiguracji)
+
+#### 4. Konfiguracja Aplikacji
+
+**Krok 4.1: Konfiguracja API (`TeamsManager.Api/appsettings.json`)**
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=teamsmanager.db"
+  },
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "TenantId": "YOUR_TENANT_ID",
+    "ClientId": "YOUR_CLIENT_ID", 
+    "ClientSecret": "YOUR_CLIENT_SECRET",
+    "Audience": "YOUR_CLIENT_ID"
+  }
+}
+```
+
+**Krok 4.2: Konfiguracja UI (`TeamsManager.UI/appsettings.json`)**
+```json
+{
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "TenantId": "YOUR_TENANT_ID",
+    "ClientId": "YOUR_UI_CLIENT_ID"
+  },
+  "ApiConfiguration": {
+    "BaseUrl": "https://localhost:7001",
+    "Timeout": 30
+  }
+}
+```
+
+#### 5. Inicjalizacja Bazy Danych
+
+```bash
+# Przejdź do projektu API
+cd TeamsManager.Api
+
+# Utwórz bazę danych
+dotnet ef database update
+
+# Opcjonalnie: Załaduj dane testowe
+dotnet run --seed-data
+```
+
+#### 6. Instalacja Modułów PowerShell
+
+```powershell
+# Uruchom PowerShell jako Administrator
+Install-Module Microsoft.Graph.Authentication -Force
+Install-Module Microsoft.Graph.Users -Force  
+Install-Module Microsoft.Graph.Teams -Force
+
+# Sprawdź instalację
+Get-Module Microsoft.Graph.* -ListAvailable
+```
+
+### 🚀 Uruchomienie Aplikacji
+
+#### Opcja 1: Visual Studio
+1. Otwórz `TeamsManager.sln`
+2. Ustaw Multiple Startup Projects:
+   - `TeamsManager.Api` (Start)
+   - `TeamsManager.UI` (Start)
+3. Naciśnij F5
+
+#### Opcja 2: Linia Komend
+```bash
+# Terminal 1 - API
+cd TeamsManager.Api
+dotnet run
+
+# Terminal 2 - UI  
+cd TeamsManager.UI
+dotnet run
+```
+
+#### Opcja 3: Docker (Planowane)
+```bash
+docker-compose up -d
+```
+
+### ⚙️ Konfiguracja Zaawansowana
+
+#### Konfiguracja Cache
+```json
+{
+  "CacheSettings": {
+    "DefaultExpirationMinutes": 15,
+    "MaxCacheSize": "100MB",
+    "EnableDistributedCache": false
+  }
+}
+```
+
+#### Konfiguracja Logowania
+```json
+{
+  "Serilog": {
+    "MinimumLevel": "Information",
+    "WriteTo": [
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/teamsmanager-.log",
+          "rollingInterval": "Day"
+        }
+      }
+    ]
+  }
+}
+```
+
+#### Konfiguracja Health Checks
+```json
+{
+  "HealthChecks": {
+    "PowerShellConnection": {
+      "Enabled": true,
+      "TimeoutSeconds": 30,
+      "TestConnectionOnHealthCheck": true
+    }
+  }
+}
+```
+
+### 🔒 Bezpieczeństwo
+
+#### Ochrona Secrets
+```bash
+# Użyj User Secrets dla development
+dotnet user-secrets init
+dotnet user-secrets set "AzureAd:ClientSecret" "YOUR_SECRET"
+dotnet user-secrets set "AzureAd:TenantId" "YOUR_TENANT_ID"
+```
+
+#### Konfiguracja HTTPS
+```bash
+# Wygeneruj certyfikat development
+dotnet dev-certs https --trust
+```
+
+### 🧪 Weryfikacja Instalacji
+
+#### Test API
+```bash
+# Sprawdź health check
+curl https://localhost:7001/health
+
+# Test autentykacji
+curl -H "Authorization: Bearer YOUR_TOKEN" https://localhost:7001/api/v1.0/TestAuth/whoami
+```
+
+#### Test UI
+1. Uruchom aplikację UI
+2. Sprawdź logowanie MSAL
+3. Przetestuj połączenie z API
+
+#### Test PowerShell
+```powershell
+# W aplikacji przejdź do Manual Testing
+# Kliknij "Test PowerShell Connection"
+# Sprawdź logi w Output
+```
+
+### 🐛 Rozwiązywanie Problemów
+
+#### Problem: "Unable to connect to Graph"
+**Rozwiązanie:**
+1. Sprawdź uprawnienia App Registration
+2. Zweryfikuj Client Secret
+3. Sprawdź czy admin consent został udzielony
+
+#### Problem: "Database connection failed"
+**Rozwiązanie:**
+```bash
+# Usuń bazę i utwórz ponownie
+rm teamsmanager.db
+dotnet ef database update
+```
+
+#### Problem: "PowerShell module not found"
+**Rozwiązanie:**
+```powershell
+# Reinstaluj moduły
+Uninstall-Module Microsoft.Graph.* -Force
+Install-Module Microsoft.Graph.Authentication -Force
+Install-Module Microsoft.Graph.Users -Force
+Install-Module Microsoft.Graph.Teams -Force
+```
+
+### 📚 Dodatkowe Zasoby
+
+- **Dokumentacja Microsoft Graph**: https://docs.microsoft.com/graph/
+- **Azure AD App Registration**: https://docs.microsoft.com/azure/active-directory/
+- **PowerShell Graph SDK**: https://docs.microsoft.com/powershell/microsoftgraph/
+
+## 12. Licencja i Autorzy
 
 ### 👨‍💻 Informacje o projekcie
 

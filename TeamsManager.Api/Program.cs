@@ -269,6 +269,10 @@ builder.Services.AddScoped<IChannelService, ChannelService>();
 builder.Services.AddScoped<ISchoolYearProcessOrchestrator, SchoolYearProcessOrchestrator>();
 // ========================================================================
 
+// ========== NOWA REJESTRACJA - Orkiestrator Importu Danych ==========
+builder.Services.AddScoped<IDataImportOrchestrator, DataImportOrchestrator>();
+// ======================================================================
+
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
 // Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience
 builder.Services.AddHttpClient("MicrosoftGraph", client =>

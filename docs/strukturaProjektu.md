@@ -1,7 +1,7 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 06 czerwca 2025, 23:31  
-**🔢 Statystyki:** 250+ plików źródłowych (CS/XAML), ~62,500 linii kodu  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 01:25  
+**🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
 > **Status:** Projekt gotowy do produkcji - wszystkie 961 testów przechodzą
@@ -15,6 +15,7 @@
 .gitignore
 README.md
 TeamsManager.sln
+DataImportOrchestrator_README.md     ← NOWY: Dokumentacja orkiestratora importu
 ```
 
 ### 📚 **Dokumentacja (`docs/`)**
@@ -49,9 +50,10 @@ TeamsManager.Api/
 ├── teamsmanager.db
 ├── Configuration/
 │   └── ApiAuthConfig.cs
-├── Controllers/ (14 kontrolerów)
+├── Controllers/ (15 kontrolerów)
 │   ├── ApplicationSettingsController.cs
 │   ├── ChannelsController.cs
+│   ├── DataImportController.cs           ← NOWY: Orkiestrator importu danych CSV/Excel
 │   ├── DepartmentsController.cs
 │   ├── DiagnosticsController.cs
 │   ├── OperationHistoriesController.cs
@@ -111,6 +113,7 @@ TeamsManager.Core/
 │       ├── ISchoolTypeService.cs
 │       ├── ISchoolYearService.cs
 │       ├── ISchoolYearProcessOrchestrator.cs  ← NOWY: Orkiestrator procesów szkolnych
+│       ├── IDataImportOrchestrator.cs         ← NOWY: Orkiestrator importu danych CSV/Excel
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
@@ -193,10 +196,13 @@ TeamsManager.Application/
 ├── TeamsManager.Application.csproj
 └── Services/
     ├── SchoolYearProcessOrchestrator.cs     ← NOWY: Implementacja orkiestratora procesów
+    ├── DataImportOrchestrator.cs            ← NOWY: Implementacja orkiestratora importu danych
     └── Models/
         ├── SchoolYearProcessOptions.cs      ← NOWY: Opcje konfiguracji procesów
         ├── SchoolYearProcessStatus.cs       ← NOWY: Status i postęp procesów
-        └── TeamCreationPlan.cs              ← NOWY: Plan tworzenia zespołów
+        ├── TeamCreationPlan.cs              ← NOWY: Plan tworzenia zespołów
+        ├── ImportOptions.cs                 ← NOWY: Opcje konfiguracji importu
+        └── ImportProcessStatus.cs           ← NOWY: Status procesów importu
 ```
 
 ### 🗃️ **Data (`TeamsManager.Data/`) - Warstwa Danych**
@@ -402,14 +408,14 @@ TeamsApiApp/
 
 ## 📊 Metryki Projektu
 
-- **👨‍💻 Linie kodu:** ~62,000 (C# + XAML)
-- **📁 Pliki źródłowe:** 250
+- **👨‍�� Linie kodu:** ~63,200 (C# + XAML)
+- **📁 Pliki źródłowe:** 255
 - **🧪 Testy:** 961 (100% pass rate)
-- **📚 Dokumentacja:** 12 plików aktualnych
+- **📚 Dokumentacja:** 13 plików aktualnych
 - **🏗️ Architektura:** Clean Architecture + DDD
 - **⚡ Technologia:** .NET 9.0, Material Design 3.0
 - **📅 Status:** Gotowy do produkcji
 
 ---
 
-> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **10 grudnia 2024, 12:30**
+> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **07 czerwca 2025, 01:25**

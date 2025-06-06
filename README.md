@@ -37,6 +37,20 @@
 - ✅ **System audytu** i logowania operacji
 - ✅ **REST API** z JWT authentication
 - ✅ **SignalR Hub** dla powiadomień real-time
+- ✅ **Orkiestrator procesów szkolnych** - automatyzacja kompleksowych workflow
+  - 🔄 Tworzenie zespołów dla nowego roku szkolnego (batch processing)
+  - 📦 Archiwizacja zespołów z poprzedniego roku 
+  - 🔀 Płynne przejście między latami szkolnymi (transition workflow)
+  - 📊 Monitoring i anulowanie długotrwałych procesów
+  - 🛡️ Thread-safe operations z semaphore limiting
+- ✅ **Orkiestrator importu danych** - zorganizowany workflow importu CSV/Excel **(NOWY - 2025-06-07)**
+  - 📂 Import użytkowników z plików CSV z walidacją biznesową
+  - 📊 Import zespołów z plików Excel z mapowaniem kolumn
+  - 🏫 Import struktury szkoły (działy, przedmioty, szablony)
+  - ✔️ 7-etapowy workflow: walidacja → parsing → dry-run → batch processing → rollback → reporting
+  - 📋 Generowanie szablonów importu (CSV, Excel, JSON)
+  - 🎯 Monitoring i anulowanie procesów importu w czasie rzeczywistym
+  - 🛡️ Error handling z AcceptableErrorPercentage i ContinueOnError
 
 ## 📄 Licencja
 
