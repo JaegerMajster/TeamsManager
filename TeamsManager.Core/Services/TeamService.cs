@@ -36,6 +36,7 @@ namespace TeamsManager.Core.Services
         private readonly IPowerShellBulkOperationsService _powerShellBulkOps;
         private readonly IPowerShellService _powerShellService;
         private readonly INotificationService _notificationService;
+        private readonly IAdminNotificationService _adminNotificationService;
         private readonly ILogger<TeamService> _logger;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly ISchoolYearRepository _schoolYearRepository;
@@ -72,6 +73,7 @@ namespace TeamsManager.Core.Services
             IPowerShellBulkOperationsService powerShellBulkOps,
             IPowerShellService powerShellService,
             INotificationService notificationService,
+            IAdminNotificationService adminNotificationService,
             ILogger<TeamService> logger,
             IGenericRepository<SchoolType> schoolTypeRepository,
             ISchoolYearRepository schoolYearRepository,
@@ -93,6 +95,7 @@ namespace TeamsManager.Core.Services
             _powerShellBulkOps = powerShellBulkOps ?? throw new ArgumentNullException(nameof(powerShellBulkOps));
             _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
@@ -484,6 +487,33 @@ namespace TeamsManager.Core.Services
                             "info"
                         );
                     }
+                    
+                    // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _adminNotificationService.SendTeamCreatedNotificationAsync(
+                                newTeam.DisplayName,
+                                newTeam.Id,
+                                currentUserUpn,
+                                newTeam.Members?.Count ?? 0,
+                                new Dictionary<string, object>
+                                {
+                                    ["Opis"] = newTeam.Description ?? "Brak",
+                                    ["Widoczność"] = newTeam.Visibility.ToString(),
+                                    ["Właściciele"] = newTeam.Members?.Count(m => m.Role == TeamMemberRole.Owner) ?? 0,
+                                    ["Szablon"] = template?.Name ?? "Brak",
+                                    ["Typ szkoły"] = schoolType?.FullName ?? "Brak",
+                                    ["Rok szkolny"] = schoolYear?.Name ?? "Brak"
+                                }
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o utworzeniu zespołu");
+                        }
+                    });
                     
                     // 5. Invalidacja cache i finalizacja audytu
                     await _cacheInvalidationService.InvalidateForTeamCreatedAsync(newTeam);
@@ -1454,6 +1484,26 @@ namespace TeamsManager.Core.Services
                 }
                 await _cacheInvalidationService.InvalidateForTeamMembersBulkOperationAsync(teamId, addedUserIds);
 
+                // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendBulkUsersOperationNotificationAsync(
+                            "Dodawanie użytkowników",
+                            team.DisplayName,
+                            userUpns.Count,
+                            psSuccessCount,
+                            psFailureCount,
+                            currentUserUpn
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o masowym dodawaniu użytkowników");
+                    }
+                });
+
                 return psResults;
             }
             catch (PowerShellConnectionException ex)
@@ -1624,6 +1674,26 @@ namespace TeamsManager.Core.Services
                     }
                 }
                 await _cacheInvalidationService.InvalidateForTeamMembersBulkOperationAsync(teamId, removedUserIds);
+
+                // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendBulkUsersOperationNotificationAsync(
+                            "Usuwanie użytkowników",
+                            team.DisplayName,
+                            userUpns.Count,
+                            psSuccessCount,
+                            psFailureCount,
+                            currentUserUpn
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o masowym usuwaniu użytkowników");
+                    }
+                });
 
                 return psResults;
             }

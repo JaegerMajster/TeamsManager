@@ -222,6 +222,18 @@ builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<Us
 builder.Services.AddScoped<INotificationService, StubNotificationService>();
 // ==========================================================================
 
+// ========== REJESTRACJA ADMIN NOTIFICATION SERVICE (ETAP 5/7) ==========
+// Rejestracja Admin Notification Service
+if (builder.Environment.IsDevelopment() || !builder.Configuration.GetValue<bool>("AdminNotifications:Enabled", false))
+{
+    builder.Services.AddScoped<IAdminNotificationService, StubAdminNotificationService>();
+}
+else
+{
+    builder.Services.AddScoped<IAdminNotificationService, GraphAdminNotificationService>();
+}
+// ====================================================================
+
 // ========== NOWA REJESTRACJA - Synchronizatory Graph-DB (Etap 4/8) ==========
 builder.Services.AddScoped<IGraphSynchronizer<Team>, TeamSynchronizer>();
 builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();

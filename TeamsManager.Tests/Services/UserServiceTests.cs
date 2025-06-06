@@ -38,6 +38,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IConfidentialClientApplication> _mockConfidentialClientApplication;
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<INotificationService> _mockNotificationService;
+        private readonly Mock<IAdminNotificationService> _mockAdminNotificationService;
         private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
         private readonly Mock<IGraphSynchronizer<User>> _mockUserSynchronizer;
         private readonly Mock<IUnitOfWork> _mockUnitOfWork;
@@ -68,6 +69,7 @@ namespace TeamsManager.Tests.Services
             _mockConfidentialClientApplication = new Mock<IConfidentialClientApplication>();
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockNotificationService = new Mock<INotificationService>();
+            _mockAdminNotificationService = new Mock<IAdminNotificationService>();
             _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
             _mockUserSynchronizer = new Mock<IGraphSynchronizer<User>>();
             _mockUnitOfWork = new Mock<IUnitOfWork>();
@@ -101,6 +103,11 @@ namespace TeamsManager.Tests.Services
             _mockNotificationService.Setup(n => n.SendNotificationToUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
                                   .Returns(Task.CompletedTask);
 
+            _mockAdminNotificationService.Setup(a => a.SendUserCreatedNotificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                                        .Returns(Task.CompletedTask);
+            _mockAdminNotificationService.Setup(a => a.SendCriticalErrorNotificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                                        .Returns(Task.CompletedTask);
+
 
 
             _userService = new UserService(
@@ -118,6 +125,7 @@ namespace TeamsManager.Tests.Services
                 _mockOperationHistoryService.Object,
                 _mockPowerShellCacheService.Object,
                 _mockNotificationService.Object,
+                _mockAdminNotificationService.Object,
                 _mockUserSynchronizer.Object,
                 _mockUnitOfWork.Object
             );
@@ -1123,6 +1131,7 @@ namespace TeamsManager.Tests.Services
                 _mockOperationHistoryService.Object,
                 _mockPowerShellCacheService.Object,
                 _mockNotificationService.Object,
+                _mockAdminNotificationService.Object,
                 _mockUserSynchronizer.Object,
                 _mockUnitOfWork.Object
             );

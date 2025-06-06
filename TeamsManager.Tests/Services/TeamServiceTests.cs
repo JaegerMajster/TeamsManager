@@ -37,6 +37,7 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<IPowerShellBulkOperationsService> _mockPowerShellBulkOps;
         private readonly Mock<IPowerShellService> _mockPowerShellService;
         private readonly Mock<INotificationService> _mockNotificationService;
+        private readonly Mock<IAdminNotificationService> _mockAdminNotificationService;
         private readonly Mock<ILogger<TeamService>> _mockLogger;
         private readonly Mock<IGenericRepository<SchoolType>> _mockSchoolTypeRepository;
         private readonly Mock<ISchoolYearRepository> _mockSchoolYearRepository;
@@ -72,6 +73,7 @@ namespace TeamsManager.Tests.Services
             _mockPowerShellBulkOps = new Mock<IPowerShellBulkOperationsService>();
             _mockPowerShellService = new Mock<IPowerShellService>();
             _mockNotificationService = new Mock<INotificationService>();
+            _mockAdminNotificationService = new Mock<IAdminNotificationService>();
             _mockLogger = new Mock<ILogger<TeamService>>();
             _mockSchoolTypeRepository = new Mock<IGenericRepository<SchoolType>>();
             _mockSchoolYearRepository = new Mock<ISchoolYearRepository>();
@@ -97,6 +99,11 @@ namespace TeamsManager.Tests.Services
                     It.IsAny<string>()))
                 .ReturnsAsync(mockOperationHistory);
 
+            _mockAdminNotificationService.Setup(a => a.SendTeamCreatedNotificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<Dictionary<string, object>>()))
+                                        .Returns(Task.CompletedTask);
+            _mockAdminNotificationService.Setup(a => a.SendBulkUsersOperationNotificationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>()))
+                                        .Returns(Task.CompletedTask);
+
 
 
 
@@ -112,6 +119,7 @@ namespace TeamsManager.Tests.Services
                 _mockPowerShellBulkOps.Object,
                 _mockPowerShellService.Object,
                 _mockNotificationService.Object,
+                _mockAdminNotificationService.Object,
                 _mockLogger.Object,
                 _mockSchoolTypeRepository.Object,
                 _mockSchoolYearRepository.Object,

@@ -34,6 +34,7 @@ namespace TeamsManager.Core.Services
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly IPowerShellCacheService _powerShellCacheService;
         private readonly INotificationService _notificationService;
+        private readonly IAdminNotificationService _adminNotificationService;
         private readonly IGraphSynchronizer<User> _userSynchronizer;
         private readonly IUnitOfWork _unitOfWork;
 
@@ -61,6 +62,7 @@ namespace TeamsManager.Core.Services
             IOperationHistoryService operationHistoryService,
             IPowerShellCacheService powerShellCacheService,
             INotificationService notificationService,
+            IAdminNotificationService adminNotificationService,
             IGraphSynchronizer<User> userSynchronizer,
             IUnitOfWork unitOfWork)
         {
@@ -78,6 +80,7 @@ namespace TeamsManager.Core.Services
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+            _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _userSynchronizer = userSynchronizer ?? throw new ArgumentNullException(nameof(userSynchronizer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
@@ -379,6 +382,24 @@ namespace TeamsManager.Core.Services
                     "success"
                 );
                 
+                // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendUserCreatedNotificationAsync(
+                            newUser.FullName,
+                            newUser.UPN,
+                            newUser.Role.ToString(),
+                            currentUserUpn
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o utworzeniu użytkownika");
+                    }
+                });
+                
                 return newUser;
             }
             catch (Exception ex)
@@ -398,6 +419,25 @@ namespace TeamsManager.Core.Services
                     $"Wystąpił błąd podczas tworzenia użytkownika: {ex.Message}",
                     "error"
                 );
+                
+                // Powiadomienie o błędzie krytycznym do administratorów (asynchroniczne)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendCriticalErrorNotificationAsync(
+                            "Tworzenie użytkownika",
+                            ex.Message,
+                            ex.StackTrace,
+                            $"Tworzenie użytkownika {firstName} {lastName} ({upn})",
+                            currentUserUpn
+                        );
+                    }
+                    catch (Exception notifEx)
+                    {
+                        _logger.LogError(notifEx, "Błąd podczas wysyłania powiadomienia o błędzie krytycznym");
+                    }
+                });
                 
                 return null;
             }
