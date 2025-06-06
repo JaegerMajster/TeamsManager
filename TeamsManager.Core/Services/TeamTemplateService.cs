@@ -923,5 +923,11 @@ namespace TeamsManager.Core.Services
                 _powerShellCacheService.InvalidateTeamTemplatesBySchoolType(oldSchoolTypeId);
             }
         }
+
+        /// <inheritdoc />
+        public async Task<TeamTemplate?> GetByIdAsync(string templateId)
+        {
+            return await GetTemplateByIdAsync(templateId, forceRefresh: false);
+        }
     }
 }

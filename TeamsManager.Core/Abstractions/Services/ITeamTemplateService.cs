@@ -18,6 +18,13 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<TeamTemplate?> GetTemplateByIdAsync(string templateId, bool forceRefresh = false);
 
         /// <summary>
+        /// Asynchronicznie pobiera szablon na podstawie jego ID (alias dla GetTemplateByIdAsync dla kompatybilności).
+        /// </summary>
+        /// <param name="templateId">Identyfikator szablonu.</param>
+        /// <returns>Obiekt TeamTemplate lub null, jeśli nie znaleziono.</returns>
+        Task<TeamTemplate?> GetByIdAsync(string templateId);
+
+        /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne szablony.
         /// </summary>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>

@@ -1927,5 +1927,49 @@ namespace TeamsManager.Core.Services
                 return new Dictionary<string, bool>();
             }
         }
+
+        /// <inheritdoc />
+        public async Task<Team?> GetByIdAsync(string teamId)
+        {
+            return await GetTeamByIdAsync(teamId, includeMembers: false, includeChannels: false, forceRefresh: false, apiAccessToken: null);
+        }
+
+        /// <inheritdoc />
+        public async Task<IEnumerable<Team>> GetTeamsBySchoolYearAsync(string schoolYearId, bool forceRefresh = false, string? apiAccessToken = null)
+        {
+            _logger.LogInformation("Pobieranie zespołów dla roku szkolnego {SchoolYearId}. Wymuszenie odświeżenia: {ForceRefresh}", schoolYearId, forceRefresh);
+
+            if (string.IsNullOrWhiteSpace(schoolYearId))
+            {
+                _logger.LogWarning("Próba pobrania zespołów z pustym ID roku szkolnego.");
+                return Enumerable.Empty<Team>();
+            }
+
+            string cacheKey = $"Teams_BySchoolYear_{schoolYearId}";
+
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Zespoły dla roku szkolnego {SchoolYearId} znalezione w cache. Liczba zespołów: {Count}", schoolYearId, cachedTeams.Count());
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Zespoły dla roku szkolnego {SchoolYearId} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", schoolYearId);
+
+            // Pobierz z lokalnej bazy danych
+            var teamsFromDb = await _teamRepository.FindAsync(t => t.SchoolYearId == schoolYearId && t.Status == TeamStatus.Active);
+            var teamsList = teamsFromDb.ToList();
+
+            // Opcjonalnie: synchronizacja z Graph API jeśli podano token
+            if (!string.IsNullOrEmpty(apiAccessToken))
+            {
+                _logger.LogDebug("Token API podany - można rozważyć synchronizację z Graph API w przyszłości");
+                // Tutaj można dodać logikę synchronizacji z Graph API w przyszłości
+            }
+
+            _powerShellCacheService.Set(cacheKey, teamsList);
+            _logger.LogDebug("Zespoły dla roku szkolnego {SchoolYearId} dodane do cache. Liczba zespołów: {Count}", schoolYearId, teamsList.Count);
+
+            return teamsList;
+        }
     }
 }

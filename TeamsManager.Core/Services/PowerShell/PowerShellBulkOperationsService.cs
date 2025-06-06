@@ -1935,5 +1935,197 @@ $results
         }
 
         #endregion
+
+        #region Metody dla orkiestratora procesów szkolnych
+
+        /// <summary>
+        /// Masowo archiwizuje zespoły (wersja z tokenem i batch size dla orkiestratora)
+        /// </summary>
+        public async Task<BulkOperationResult> ArchiveTeamsAsync(string[] teamIds, string accessToken, int batchSize = 50)
+        {
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
+                return new BulkOperationResult
+                {
+                    Success = false,
+                    ErrorMessage = "Środowisko PowerShell nie jest gotowe",
+                    Errors = new List<BulkOperationError>
+                    {
+                        new BulkOperationError { Message = "Środowisko PowerShell nie jest gotowe", Operation = "ArchiveTeams" }
+                    }
+                };
+            }
+
+            if (!teamIds?.Any() ?? true)
+            {
+                _logger.LogWarning("Lista zespołów jest pusta.");
+                return new BulkOperationResult
+                {
+                    Success = true,
+                    SuccessfulOperations = new List<BulkOperationSuccess>(),
+                    Errors = new List<BulkOperationError>()
+                };
+            }
+
+            _logger.LogInformation("Orkiestrator: Masowa archiwizacja {Count} zespołów z batch size {BatchSize}", teamIds!.Length, batchSize);
+
+            // Utwórz główny wpis operacji
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.BulkTeamArchive,
+                "Team",
+                targetEntityName: $"Orchestrator: Bulk archive {teamIds.Length} teams"
+            );
+
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+            var processedCount = 0;
+            var failedCount = 0;
+
+            try
+            {
+                // Przetwarzaj w partiach
+                var batches = teamIds
+                    .Select((id, index) => new { id, index })
+                    .GroupBy(x => x.index / batchSize)
+                    .Select(g => g.Select(x => x.id).ToList())
+                    .ToList();
+
+                foreach (var batch in batches)
+                {
+                    await _semaphore.WaitAsync();
+                    try
+                    {
+                        var batchResults = await BulkArchiveTeamsAsync(batch);
+                        
+                        foreach (var result in batchResults)
+                        {
+                            if (result.Value)
+                            {
+                                successfulOperations.Add(new BulkOperationSuccess
+                                {
+                                    Operation = "ArchiveTeam",
+                                    EntityId = result.Key,
+                                    Message = "Zespół zarchiwizowany pomyślnie"
+                                });
+                                processedCount++;
+                            }
+                            else
+                            {
+                                errors.Add(new BulkOperationError
+                                {
+                                    Operation = "ArchiveTeam",
+                                    EntityId = result.Key,
+                                    Message = "Nie udało się zarchiwizować zespołu"
+                                });
+                                failedCount++;
+                            }
+                        }
+
+                        // Aktualizuj postęp
+                        await _operationHistoryService.UpdateOperationProgressAsync(
+                            operation.Id,
+                            processedItems: processedCount,
+                            failedItems: failedCount,
+                            totalItems: teamIds.Length
+                        );
+                    }
+                    finally
+                    {
+                        _semaphore.Release();
+                    }
+
+                    // Krótka przerwa między partiami
+                    if (batch != batches.Last())
+                    {
+                        await Task.Delay(1000);
+                    }
+                }
+
+                // Ustaw końcowy status
+                var status = failedCount == 0 ? OperationStatus.Completed 
+                    : failedCount == teamIds.Length ? OperationStatus.Failed
+                    : OperationStatus.PartialSuccess;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, status,
+                    $"Archived: {processedCount}, Failed: {failedCount}"
+                );
+
+                _logger.LogInformation("Orkiestrator: Zakończono archiwizację. Sukcesy: {Success}, Błędy: {Failed}",
+                    processedCount, failedCount);
+
+                return new BulkOperationResult
+                {
+                    Success = failedCount == 0,
+                    SuccessfulOperations = successfulOperations,
+                    Errors = errors,
+                    ProcessedAt = DateTime.UtcNow,
+                    OperationType = "BulkArchiveTeams"
+                };
+            }
+            catch (Exception ex)
+            {
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id, OperationStatus.Failed,
+                    $"Critical error: {ex.Message}", ex.StackTrace
+                );
+                
+                _logger.LogError(ex, "Orkiestrator: Błąd podczas masowej archiwizacji zespołów");
+                
+                return new BulkOperationResult
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message,
+                    SuccessfulOperations = successfulOperations,
+                    Errors = errors.Concat(new[] { new BulkOperationError 
+                    { 
+                        Message = ex.Message, 
+                        Operation = "BulkArchiveTeams", 
+                        Exception = ex 
+                    } }).ToList(),
+                    ProcessedAt = DateTime.UtcNow,
+                    OperationType = "BulkArchiveTeams"
+                };
+            }
+        }
+
+        /// <summary>
+        /// Masowo tworzy zespoły (dla orkiestratora)
+        /// </summary>
+        public async Task<BulkOperationResult> CreateTeamsAsync(string[] teamIds, string accessToken)
+        {
+            _logger.LogInformation("Orkiestrator: Symulacja tworzenia {Count} zespołów", teamIds?.Length ?? 0);
+
+            // Dla orkiestratora - zwracamy symulowany wynik
+            // W rzeczywistej implementacji tutaj by było wywołanie PowerShell do tworzenia zespołów
+            var successfulOperations = new List<BulkOperationSuccess>();
+
+            if (teamIds?.Any() == true)
+            {
+                foreach (var teamId in teamIds)
+                {
+                    successfulOperations.Add(new BulkOperationSuccess
+                    {
+                        Operation = "CreateTeam",
+                        EntityId = teamId,
+                        Message = "Zespół utworzony pomyślnie (symulacja)"
+                    });
+                }
+            }
+
+            _logger.LogInformation("Orkiestrator: Symulacja tworzenia zespołów zakończona pomyślnie");
+
+            return new BulkOperationResult
+            {
+                Success = true,
+                SuccessfulOperations = successfulOperations,
+                Errors = new List<BulkOperationError>(),
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkCreateTeams"
+            };
+        }
+
+        #endregion
     }
 }

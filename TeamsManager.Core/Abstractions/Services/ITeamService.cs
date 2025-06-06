@@ -80,6 +80,22 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false, bool forceRefresh = false, string? accessToken = null);
 
         /// <summary>
+        /// Asynchronicznie pobiera zespół na podstawie jego ID (alias dla GetTeamByIdAsync dla kompatybilności).
+        /// </summary>
+        /// <param name="teamId">Identyfikator zespołu.</param>
+        /// <returns>Obiekt Team lub null, jeśli nie znaleziono.</returns>
+        Task<Team?> GetByIdAsync(string teamId);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie zespoły przypisane do określonego roku szkolnego.
+        /// </summary>
+        /// <param name="schoolYearId">Identyfikator roku szkolnego.</param>
+        /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <returns>Kolekcja zespołów przypisanych do danego roku szkolnego.</returns>
+        Task<IEnumerable<Team>> GetTeamsBySchoolYearAsync(string schoolYearId, bool forceRefresh = false, string? accessToken = null);
+
+        /// <summary>
         /// Asynchronicznie aktualizuje dane zespołu.
         /// </summary>
         /// <param name="team">Obiekt Team z zaktualizowanymi danymi.</param>

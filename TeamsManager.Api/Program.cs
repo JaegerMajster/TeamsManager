@@ -40,7 +40,7 @@ using TeamsManager.Core.Services.Cache; // <-- Dodane dla implementacji Cache (E
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using TeamsManager.Core.Common;
-using TeamsManager.Core.Services;
+using TeamsManager.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -264,6 +264,10 @@ builder.Services.AddScoped<ITeamTemplateService, TeamTemplateService>();
 builder.Services.AddScoped<IOperationHistoryService, OperationHistoryService>();
 builder.Services.AddScoped<IApplicationSettingService, ApplicationSettingService>();
 builder.Services.AddScoped<IChannelService, ChannelService>();
+
+// ========== NOWA REJESTRACJA - Orkiestrator Procesów Szkolnych ==========
+builder.Services.AddScoped<ISchoolYearProcessOrchestrator, SchoolYearProcessOrchestrator>();
+// ========================================================================
 
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
 // Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience

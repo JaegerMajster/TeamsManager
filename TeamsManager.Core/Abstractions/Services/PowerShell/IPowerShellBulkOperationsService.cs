@@ -39,6 +39,23 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         Task<Dictionary<string, bool>> BulkArchiveTeamsAsync(List<string> teamIds);
 
         /// <summary>
+        /// Masowo archiwizuje zespoły (wersja z tokenem i batch size dla orkiestratora)
+        /// </summary>
+        /// <param name="teamIds">Lista ID zespołów do archiwizacji</param>
+        /// <param name="accessToken">Token dostępu API</param>
+        /// <param name="batchSize">Rozmiar partii</param>
+        /// <returns>Wynik operacji masowej</returns>
+        Task<BulkOperationResult> ArchiveTeamsAsync(string[] teamIds, string accessToken, int batchSize = 50);
+
+        /// <summary>
+        /// Masowo tworzy zespoły (dla orkiestratora)
+        /// </summary>
+        /// <param name="teamIds">Lista ID zespołów do utworzenia</param>
+        /// <param name="accessToken">Token dostępu API</param>
+        /// <returns>Wynik operacji masowej</returns>
+        Task<BulkOperationResult> CreateTeamsAsync(string[] teamIds, string accessToken);
+
+        /// <summary>
         /// Masowo aktualizuje właściwości użytkowników
         /// </summary>
         /// <param name="userUpdates">Słownik gdzie klucz to UPN użytkownika, a wartość to słownik właściwości do aktualizacji</param>

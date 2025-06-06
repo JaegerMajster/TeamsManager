@@ -744,6 +744,51 @@ namespace TeamsManager.Core.Services
             }
         }
 
+        /// <inheritdoc />
+        public async Task<SchoolYear?> GetByIdAsync(string schoolYearId)
+        {
+            return await GetSchoolYearByIdAsync(schoolYearId, forceRefresh: false);
+        }
+
+        /// <inheritdoc />
+        public async Task<IEnumerable<SchoolYear>> GetSchoolYearsActiveOnDateAsync(DateTime date)
+        {
+            _logger.LogInformation("Pobieranie lat szkolnych aktywnych w dniu {Date}", date.ToString("yyyy-MM-dd"));
+
+            var dateOnly = date.Date;
+            string cacheKey = $"SchoolYears_ActiveOnDate_{dateOnly:yyyy-MM-dd}";
+
+            if (_powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<SchoolYear>? cachedYears) && cachedYears != null)
+            {
+                _logger.LogDebug("Lata szkolne aktywne w dniu {Date} znalezione w cache", dateOnly);
+                return cachedYears;
+            }
+
+            _logger.LogDebug("Lata szkolne aktywne w dniu {Date} nie znalezione w cache. Pobieranie z repozytorium", dateOnly);
+            var activeYears = await _schoolYearRepository.GetSchoolYearsActiveOnDateAsync(date);
+            var yearsList = activeYears.ToList();
+
+            _powerShellCacheService.Set(cacheKey, yearsList);
+            _logger.LogDebug("Lata szkolne aktywne w dniu {Date} dodane do cache. Liczba: {Count}", dateOnly, yearsList.Count);
+
+            return yearsList;
+        }
+
+        /// <inheritdoc />
+        public async Task<SchoolYear?> CreateSchoolYearAsync(string name, DateTime startDate, DateTime endDate, string? description = null)
+        {
+            return await CreateSchoolYearAsync(
+                name: name,
+                startDate: startDate,
+                endDate: endDate,
+                description: description,
+                firstSemesterStart: null,
+                firstSemesterEnd: null,
+                secondSemesterStart: null,
+                secondSemesterEnd: null
+            );
+        }
+
         #region IDisposable Implementation
 
         private bool _disposed = false;

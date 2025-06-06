@@ -1,8 +1,8 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 06 czerwca 2025, 21:37  
-**🔢 Statystyki:** 247 plików źródłowych (CS/XAML), ~61,258 linii kodu  
-**⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API  
+**📅 Ostatnia aktualizacja:** 06 czerwca 2025, 23:31  
+**🔢 Statystyki:** 250+ plików źródłowych (CS/XAML), ~62,500 linii kodu  
+**⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
 > **Status:** Projekt gotowy do produkcji - wszystkie 961 testów przechodzą
 
@@ -21,13 +21,13 @@ TeamsManager.sln
 ```
 docs/
 ├── 📊 schematy/
-│   ├── architektura-systemu.mmd
-│   └── model-danych.mmd
-├── 📄 Pliki aktualne (14 plików):
+│   ├── architektura.md
+│   └── modelDanych.md
+├── 📄 Pliki aktualne (12 plików):
 │   ├── analizaStabilnosciNet9.md    - Analiza migracji na .NET 9.0
 │   ├── analizaTokenuBearer.md       - Dokumentacja Bearer Token
 │   ├── audytArchitektruySync.md     - Audyt synchronizacji architektury
-│   ├── powerShell.md                - Zarządzanie PowerShell Services
+│   ├── powerShellService.md         - Zarządzanie PowerShell Services
 │   ├── strategiaCache.md            - Strategia cache'owania
 │   ├── strukturaProjektu.md         - Ten plik
 │   ├── styleUI.md                   - Przewodnik stylów UI
@@ -49,7 +49,7 @@ TeamsManager.Api/
 ├── teamsmanager.db
 ├── Configuration/
 │   └── ApiAuthConfig.cs
-├── Controllers/ (13 kontrolerów)
+├── Controllers/ (14 kontrolerów)
 │   ├── ApplicationSettingsController.cs
 │   ├── ChannelsController.cs
 │   ├── DepartmentsController.cs
@@ -58,6 +58,7 @@ TeamsManager.Api/
 │   ├── PowerShellController.cs
 │   ├── SchoolTypesController.cs
 │   ├── SchoolYearsController.cs
+│   ├── SchoolYearProcessController.cs    ← NOWY: Orkiestrator procesów szkolnych
 │   ├── SubjectsController.cs
 │   ├── TeamsController.cs
 │   ├── TeamTemplatesController.cs
@@ -109,6 +110,7 @@ TeamsManager.Core/
 │       ├── IPowerShellService.cs
 │       ├── ISchoolTypeService.cs
 │       ├── ISchoolYearService.cs
+│       ├── ISchoolYearProcessOrchestrator.cs  ← NOWY: Orkiestrator procesów szkolnych
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
@@ -139,9 +141,10 @@ TeamsManager.Core/
 │   └── PowerShell/
 │       ├── PSObjectMapper.cs
 │       └── PSParameterValidator.cs
-├── Models/ (13 encji domenowych)
+├── Models/ (13+ encji domenowych)
 │   ├── ApplicationSetting.cs
 │   ├── BaseEntity.cs
+│   ├── BulkOperationResult.cs               ← ROZSZERZONY: Nowe właściwości dla orkiestracji
 │   ├── Channel.cs
 │   ├── Department.cs
 │   ├── OperationHistory.cs
@@ -182,6 +185,18 @@ TeamsManager.Core/
     ├── TeamTemplateService.cs
     ├── UserService.cs
     └── ModernHttpService.cs
+```
+
+### 📋 **Application (`TeamsManager.Application/`) - Warstwa Aplikacyjna**
+```
+TeamsManager.Application/
+├── TeamsManager.Application.csproj
+└── Services/
+    ├── SchoolYearProcessOrchestrator.cs     ← NOWY: Implementacja orkiestratora procesów
+    └── Models/
+        ├── SchoolYearProcessOptions.cs      ← NOWY: Opcje konfiguracji procesów
+        ├── SchoolYearProcessStatus.cs       ← NOWY: Status i postęp procesów
+        └── TeamCreationPlan.cs              ← NOWY: Plan tworzenia zespołów
 ```
 
 ### 🗃️ **Data (`TeamsManager.Data/`) - Warstwa Danych**
@@ -287,6 +302,7 @@ TeamsManager.Tests/
     ├── OperationHistoryServiceTests.cs
     ├── SchoolTypeServiceTests.cs
     ├── SchoolYearServiceTests.cs
+    ├── SchoolYearProcessOrchestratorTests.cs  ← NOWY: Testy orkiestratora procesów
     ├── SubjectServiceTests.cs
     ├── TeamServiceTests.cs
     ├── TeamTemplateServiceTests.cs
@@ -386,14 +402,14 @@ TeamsApiApp/
 
 ## 📊 Metryki Projektu
 
-- **👨‍💻 Linie kodu:** ~61,258 (C# + XAML)
-- **📁 Pliki źródłowe:** 247
+- **👨‍💻 Linie kodu:** ~62,000 (C# + XAML)
+- **📁 Pliki źródłowe:** 250
 - **🧪 Testy:** 961 (100% pass rate)
-- **📚 Dokumentacja:** 14 plików aktualnych
+- **📚 Dokumentacja:** 12 plików aktualnych
 - **🏗️ Architektura:** Clean Architecture + DDD
 - **⚡ Technologia:** .NET 9.0, Material Design 3.0
 - **📅 Status:** Gotowy do produkcji
 
 ---
 
-> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **06 czerwca 2025, 21:37**
+> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **10 grudnia 2024, 12:30**

@@ -14,6 +14,7 @@ graph TD
         D["CQRS Handlers<br/>MediatR Pipeline<br/>Command/Query Separation"]
         E["Application Services<br/>Business Logic<br/>Validation & Mapping"]
         F["PowerShell Service<br/>Bulk Operations<br/>Script Execution"]
+        G1["School Year Orchestrator<br/>Process Management<br/>Bulk Team Operations"]
     end
     
     subgraph "🏗️ Domain Layer"
@@ -33,6 +34,8 @@ graph TD
     B --> D
     D --> E
     E --> F
+    E --> G1
+    G1 --> F
     D --> G
     G --> H
     H --> I
@@ -66,6 +69,7 @@ graph TD
 - **CQRS Handlers:** Rozdzielenie komend i zapytań z MediatR
 - **Application Services:** Logika aplikacyjna i walidacja
 - **PowerShell Service:** Operacje masowe i skrypty
+- **School Year Orchestrator:** Orkiestracja procesów szkolnych i masowe operacje na zespołach
 
 ### 🏗️ Domain Layer
 - **Domain Entities:** Agregaty DDD z regułami biznesowymi

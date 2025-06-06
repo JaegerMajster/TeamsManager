@@ -39,7 +39,8 @@ namespace TeamsManager.Api.HealthChecks
                 typeof(IApplicationSettingService),
                 typeof(ISchoolTypeService),
                 typeof(ISchoolYearService),
-                typeof(ITeamTemplateService)
+                typeof(ITeamTemplateService),
+                typeof(ISchoolYearProcessOrchestrator)
             };
 
             var errors = new List<string>();

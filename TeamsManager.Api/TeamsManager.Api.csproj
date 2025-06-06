@@ -37,6 +37,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TeamsManager.Core\TeamsManager.Core.csproj" />
     <ProjectReference Include="..\TeamsManager.Data\TeamsManager.Data.csproj" />
+    <ProjectReference Include="..\TeamsManager.Application\TeamsManager.Application.csproj" />
   </ItemGroup>
 
 </Project>

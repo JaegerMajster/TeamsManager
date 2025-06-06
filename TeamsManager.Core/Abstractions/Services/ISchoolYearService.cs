@@ -19,6 +19,13 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<SchoolYear?> GetSchoolYearByIdAsync(string schoolYearId, bool forceRefresh = false);
 
         /// <summary>
+        /// Asynchronicznie pobiera rok szkolny na podstawie jego ID (alias dla GetSchoolYearByIdAsync dla kompatybilności).
+        /// </summary>
+        /// <param name="schoolYearId">Identyfikator roku szkolnego.</param>
+        /// <returns>Obiekt SchoolYear lub null, jeśli nie znaleziono.</returns>
+        Task<SchoolYear?> GetByIdAsync(string schoolYearId);
+
+        /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne lata szkolne.
         /// </summary>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
@@ -33,8 +40,7 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<SchoolYear?> GetCurrentSchoolYearAsync(bool forceRefresh = false);
 
         /// <summary>
-        /// Asynchronicznie ustawia dany rok szkolny jako bieżący.
-        /// Zapewnia, że tylko jeden rok szkolny może być oznaczony jako bieżący.
+        /// Asynchronicznie ustawia rok szkolny jako bieżący.
         /// </summary>
         /// <param name="schoolYearId">Identyfikator roku szkolnego do ustawienia jako bieżący.</param>
         /// <returns>True, jeśli operacja się powiodła.</returns>
@@ -43,19 +49,29 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <summary>
         /// Asynchronicznie tworzy nowy rok szkolny.
         /// </summary>
-        /// <param name="name">Nazwa roku szkolnego (np. "2024/2025"). Musi być unikalna.</param>
+        /// <param name="name">Nazwa roku szkolnego (np. "2024/2025").</param>
         /// <param name="startDate">Data rozpoczęcia roku szkolnego.</param>
         /// <param name="endDate">Data zakończenia roku szkolnego.</param>
-        /// <param name="description">Opcjonalny opis.</param>
-        /// <param name="firstSemesterStart">Opcjonalna data rozpoczęcia pierwszego semestru.</param>
-        /// <param name="firstSemesterEnd">Opcjonalna data zakończenia pierwszego semestru.</param>
-        /// <param name="secondSemesterStart">Opcjonalna data rozpoczęcia drugiego semestru.</param>
-        /// <param name="secondSemesterEnd">Opcjonalna data zakończenia drugiego semestru.</param>
-        /// <returns>Utworzony obiekt SchoolYear lub null, jeśli operacja się nie powiodła (np. z powodu duplikatu nazwy).</returns>
+        /// <param name="description">Opcjonalny opis roku szkolnego.</param>
+        /// <returns>Utworzony obiekt SchoolYear lub null, jeśli operacja się nie powiodła.</returns>
+        Task<SchoolYear?> CreateSchoolYearAsync(string name, DateTime startDate, DateTime endDate, string? description = null);
+
+        /// <summary>
+        /// Asynchronicznie tworzy nowy rok szkolny z pełnymi danymi semestrów.
+        /// </summary>
+        /// <param name="name">Nazwa roku szkolnego (np. "2024/2025").</param>
+        /// <param name="startDate">Data rozpoczęcia roku szkolnego.</param>
+        /// <param name="endDate">Data zakończenia roku szkolnego.</param>
+        /// <param name="description">Opcjonalny opis roku szkolnego.</param>
+        /// <param name="firstSemesterStart">Data rozpoczęcia pierwszego semestru.</param>
+        /// <param name="firstSemesterEnd">Data zakończenia pierwszego semestru.</param>
+        /// <param name="secondSemesterStart">Data rozpoczęcia drugiego semestru.</param>
+        /// <param name="secondSemesterEnd">Data zakończenia drugiego semestru.</param>
+        /// <returns>Utworzony obiekt SchoolYear lub null, jeśli operacja się nie powiodła.</returns>
         Task<SchoolYear?> CreateSchoolYearAsync(
-            string name,
-            DateTime startDate,
-            DateTime endDate,
+            string name, 
+            DateTime startDate, 
+            DateTime endDate, 
             string? description = null,
             DateTime? firstSemesterStart = null,
             DateTime? firstSemesterEnd = null,
@@ -63,7 +79,7 @@ namespace TeamsManager.Core.Abstractions.Services
             DateTime? secondSemesterEnd = null);
 
         /// <summary>
-        /// Asynchronicznie aktualizuje dane istniejącego roku szkolnego.
+        /// Asynchronicznie aktualizuje dane roku szkolnego.
         /// </summary>
         /// <param name="schoolYearToUpdate">Obiekt SchoolYear z zaktualizowanymi danymi.</param>
         /// <returns>True, jeśli aktualizacja się powiodła.</returns>
@@ -73,8 +89,15 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Asynchronicznie usuwa (logicznie) rok szkolny.
         /// </summary>
         /// <param name="schoolYearId">Identyfikator roku szkolnego do usunięcia.</param>
-        /// <returns>True, jeśli usunięcie (dezaktywacja) się powiodło.</returns>
+        /// <returns>True, jeśli usunięcie się powiodło.</returns>
         Task<bool> DeleteSchoolYearAsync(string schoolYearId);
+
+        /// <summary>
+        /// Asynchronicznie pobiera lata szkolne aktywne w określonym dniu.
+        /// </summary>
+        /// <param name="date">Data do sprawdzenia.</param>
+        /// <returns>Kolekcja lat szkolnych aktywnych w podanej dacie.</returns>
+        Task<IEnumerable<SchoolYear>> GetSchoolYearsActiveOnDateAsync(DateTime date);
 
         /// <summary>
         /// Odświeża cache lat szkolnych (jeśli jest używany).
