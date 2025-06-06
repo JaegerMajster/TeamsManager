@@ -124,7 +124,7 @@ namespace TeamsManager.Core.Services
                     if (psUser != null)
                     {
                         // Synchronizuj z lokalną bazą
-                        if (await _userSynchronizer.RequiresSynchronizationAsync(psUser, userFromDb))
+                        if (await _userSynchronizer.RequiresSynchronizationAsync(psUser, userFromDb!))
                         {
                             _logger.LogInformation("Synchronizacja użytkownika {UserId} z Microsoft Graph", userId);
                             
@@ -428,7 +428,7 @@ namespace TeamsManager.Core.Services
                         await _adminNotificationService.SendCriticalErrorNotificationAsync(
                             "Tworzenie użytkownika",
                             ex.Message,
-                            ex.StackTrace,
+                            ex.StackTrace ?? "Brak informacji o stack trace",
                             $"Tworzenie użytkownika {firstName} {lastName} ({upn})",
                             currentUserUpn
                         );

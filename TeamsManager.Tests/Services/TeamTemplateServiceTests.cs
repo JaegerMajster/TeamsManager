@@ -74,8 +74,8 @@ namespace TeamsManager.Tests.Services
                             Type = type, 
                             Status = OperationStatus.Completed,
                             TargetEntityType = entityType,
-                            TargetEntityId = entityId,
-                            TargetEntityName = entityName,
+                            TargetEntityId = entityId ?? string.Empty,
+                            TargetEntityName = entityName ?? string.Empty,
                             OperationDetails = details ?? string.Empty,
                             ParentOperationId = parentId
                         };
@@ -131,7 +131,7 @@ namespace TeamsManager.Tests.Services
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            object? outItem = item;
+            object? outItem = (object?)item;
             _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
                            .Returns(foundInCache);
         }

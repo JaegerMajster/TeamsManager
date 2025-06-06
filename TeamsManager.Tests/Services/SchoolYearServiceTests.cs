@@ -450,9 +450,9 @@ namespace TeamsManager.Tests.Services
             // Setup cache - thread-safe behavior, pierwsze wywołanie nie znajdzie w cache
             var cacheDict = new System.Collections.Concurrent.ConcurrentDictionary<object, object>();
             _mockMemoryCache.Setup(m => m.TryGetValue(It.IsAny<object>(), out It.Ref<object>.IsAny))
-                .Returns((object key, out object value) =>
+                .Returns((object key, out object? value) =>
                 {
-                    return cacheDict.TryGetValue(key, out value);
+                    return cacheDict.TryGetValue(key, out value!);
                 });
             
             // Setup cache.CreateEntry - symuluje dodanie do cache po pobraniu z bazy

@@ -260,7 +260,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Ustawienie '{Key}' pomyślnie przygotowane do zapisu.", key);
 
-                InvalidateSettingCache(key, category ?? existingSetting?.Category, oldCategory);
+                InvalidateSettingCache(key, category ?? existingSetting?.Category ?? "General", oldCategory);
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 var statusMessage = isUpdate ? $"Ustawienie '{key}' zaktualizowane." : $"Ustawienie '{key}' utworzone.";

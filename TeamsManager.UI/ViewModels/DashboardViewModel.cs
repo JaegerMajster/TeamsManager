@@ -20,8 +20,8 @@ namespace TeamsManager.UI.ViewModels
         private int _todayOperationsCount;
         private double _activityPercentage;
         private bool _isLoading;
-        private string _errorMessage;
-        private List<OperationHistoryItem> _recentOperations;
+        private string _errorMessage = string.Empty;
+        private List<OperationHistoryItem> _recentOperations = new List<OperationHistoryItem>();
 
         #endregion
 
@@ -278,14 +278,14 @@ namespace TeamsManager.UI.ViewModels
 
         #region INotifyPropertyChanged Implementation
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
+        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
         {
             if (Equals(field, value)) return false;
             field = value;
@@ -301,13 +301,13 @@ namespace TeamsManager.UI.ViewModels
     /// </summary>
     public class OperationHistoryItem
     {
-        public string Id { get; set; }
-        public string OperationType { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string OperationType { get; set; } = string.Empty;
         public DateTime ExecutedAt { get; set; }
-        public string ExecutedBy { get; set; }
+        public string ExecutedBy { get; set; } = string.Empty;
         public bool IsSuccess { get; set; }
-        public string Status { get; set; }
-        public string Details { get; set; }
-        public string ErrorMessage { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string Details { get; set; } = string.Empty;
+        public string ErrorMessage { get; set; } = string.Empty;
     }
 } 

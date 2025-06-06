@@ -227,6 +227,11 @@ namespace TeamsManager.Core.Services.PowerShell
                     // Pobierz świeży token
                     var token = await _tokenManager.GetValidAccessTokenAsync(_lastConnectedUserUpn, _lastApiAccessToken);
                     
+                    if (token == null)
+                    {
+                        throw new InvalidOperationException("Unable to obtain valid access token for reconnection");
+                    }
+                    
                     // Użyj istniejącej metody ConnectWithAccessTokenAsync
                     var result = await ConnectWithAccessTokenAsync(token, 
                         _configuration.GetSection("PowerShellServiceConfig:DefaultScopesForGraph").GetChildren().Select(x => x.Value).Where(v => v != null).ToArray()!);

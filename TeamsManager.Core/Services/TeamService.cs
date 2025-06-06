@@ -1619,7 +1619,7 @@ namespace TeamsManager.Core.Services
                 var syncFailures = 0;
                 var addedUsers = new List<string>();
 
-                foreach (var kvp in psResults.Where(r => r.Value))
+                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     try
                     {
@@ -1675,8 +1675,8 @@ namespace TeamsManager.Core.Services
                 }
 
                 // 4. Powiadomienia
-                var psSuccessCount = psResults.Count(r => r.Value);
-                var psFailureCount = psResults.Count(r => !r.Value);
+                var psSuccessCount = psResults?.Count(r => r.Value) ?? 0;
+                var psFailureCount = psResults?.Count(r => !r.Value) ?? 0;
                 
                 var message = $"Operacja dodawania użytkowników do zespołu '{team.DisplayName}' zakończona. " +
                              $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
@@ -1716,7 +1716,7 @@ namespace TeamsManager.Core.Services
 
                 // Invalidacja cache - przekaż listę ID dodanych użytkowników
                 var addedUserIds = new List<string>();
-                foreach (var kvp in psResults.Where(r => r.Value))
+                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
                     if (user != null)
@@ -1746,7 +1746,7 @@ namespace TeamsManager.Core.Services
                     }
                 });
 
-                return psResults;
+                return psResults ?? new Dictionary<string, bool>();
             }
             catch (PowerShellConnectionException ex)
             {
@@ -1830,7 +1830,7 @@ namespace TeamsManager.Core.Services
                 var syncFailures = 0;
                 var removedUsers = new List<string>();
 
-                foreach (var kvp in psResults.Where(r => r.Value))
+                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     try
                     {
@@ -1869,8 +1869,8 @@ namespace TeamsManager.Core.Services
                 }
 
                 // 4. Powiadomienia
-                var psSuccessCount = psResults.Count(r => r.Value);
-                var psFailureCount = psResults.Count(r => !r.Value);
+                var psSuccessCount = psResults?.Count(r => r.Value) ?? 0;
+                var psFailureCount = psResults?.Count(r => !r.Value) ?? 0;
                 
                 var message = $"Operacja usuwania użytkowników z zespołu '{team.DisplayName}' zakończona. " +
                              $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
@@ -1907,7 +1907,7 @@ namespace TeamsManager.Core.Services
 
                 // Invalidacja cache - przekaż listę ID usuniętych użytkowników
                 var removedUserIds = new List<string>();
-                foreach (var kvp in psResults.Where(r => r.Value))
+                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
                     if (user != null)
@@ -1937,7 +1937,7 @@ namespace TeamsManager.Core.Services
                     }
                 });
 
-                return psResults;
+                return psResults ?? new Dictionary<string, bool>();
             }
             catch (PowerShellConnectionException ex)
             {

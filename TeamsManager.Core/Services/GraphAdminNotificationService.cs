@@ -187,7 +187,7 @@ namespace TeamsManager.Core.Services
             if (!string.IsNullOrEmpty(stackTrace))
                 details["Stack trace"] = $"<pre style='font-size: 12px; background: #f5f5f5; padding: 10px;'>{System.Security.SecurityElement.Escape(stackTrace)}</pre>";
 
-            var message = BuildHtmlMessage("⚠️ Błąd krytyczny", details, null, true);
+            var message = BuildHtmlMessage("⚠️ Błąd krytyczny", details, additionalData: null, isError: true);
 
             await SendToAllAdminsAsync(subject, message);
         }
@@ -230,7 +230,7 @@ namespace TeamsManager.Core.Services
         private string BuildHtmlMessage(
             string title, 
             Dictionary<string, object> mainData, 
-            Dictionary<string, object> additionalData = null,
+            Dictionary<string, object>? additionalData = null,
             bool isError = false)
         {
             var sb = new StringBuilder();
