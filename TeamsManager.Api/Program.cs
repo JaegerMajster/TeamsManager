@@ -37,11 +37,17 @@ using TeamsManager.Core.Abstractions.Services.Synchronization; // <-- Dodane dla
 using TeamsManager.Core.Abstractions.Services.Cache; // <-- Dodane dla CacheInvalidationService (Etap 7/8)
 using TeamsManager.Core.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
 using TeamsManager.Core.Services.Cache; // <-- Dodane dla implementacji Cache (Etap 7/8)
+using Microsoft.Extensions.Http.Resilience;
+using Polly;
+using TeamsManager.Core.Common;
+using TeamsManager.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Wczytaj konfigurację OAuth na samym początku
-var oauthApiConfig = ApiAuthConfig.LoadApiOAuthConfig(builder.Configuration);
+// W środowisku Test pomijamy walidację konfiguracji OAuth
+var skipValidation = builder.Environment.EnvironmentName == "Test";
+var oauthApiConfig = ApiAuthConfig.LoadApiOAuthConfig(builder.Configuration, skipValidation);
 
 if (string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.TenantId) ||
     string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientId) ||
@@ -258,6 +264,78 @@ builder.Services.AddScoped<ITeamTemplateService, TeamTemplateService>();
 builder.Services.AddScoped<IOperationHistoryService, OperationHistoryService>();
 builder.Services.AddScoped<IApplicationSettingService, ApplicationSettingService>();
 builder.Services.AddScoped<IChannelService, ChannelService>();
+
+// ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
+// Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience
+builder.Services.AddHttpClient("MicrosoftGraph", client =>
+{
+    client.BaseAddress = new Uri("https://graph.microsoft.com/");
+    client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager/1.0");
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddStandardResilienceHandler(options =>
+{
+    // Retry Policy
+    options.Retry.ShouldHandle = args => args.Outcome switch
+    {
+        { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.TooManyRequests => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.RequestTimeout => PredicateResult.True(),
+        _ => PredicateResult.False()
+    };
+    options.Retry.MaxRetryAttempts = 3;
+    options.Retry.UseJitter = true;
+    options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+    options.Retry.Delay = TimeSpan.FromSeconds(1);
+    
+    // Circuit Breaker  
+    options.CircuitBreaker.ShouldHandle = args => args.Outcome switch
+    {
+        { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.InternalServerError => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.BadGateway => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable => PredicateResult.True(),
+        { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.GatewayTimeout => PredicateResult.True(),
+        _ => PredicateResult.False()
+    };
+    options.CircuitBreaker.FailureRatio = 0.5;
+    options.CircuitBreaker.MinimumThroughput = 10;
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(60);
+
+    // Timeout
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
+    
+    // Rate Limiter dla Graph API - pozostawiono bez dodatkowego rate limitera
+    // RateLimiter w Polly może być skonfigurowany jeśli potrzebny
+});
+
+// Dodatkowy HttpClient dla zewnętrznych API
+builder.Services.AddHttpClient("ExternalApis")
+.AddStandardResilienceHandler(options =>
+{
+    options.Retry.MaxRetryAttempts = 2;
+    options.Retry.Delay = TimeSpan.FromSeconds(2);
+    options.CircuitBreaker.FailureRatio = 0.7;
+    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
+});
+// =========================================================
+
+// ========== REJESTRACJA NOWOCZESNYCH SERWISÓW ==========
+// Modern HTTP Service zastępujący stare wzorce resilience
+builder.Services.AddScoped<IModernHttpService, ModernHttpService>();
+
+// Modern Circuit Breaker kompatybilny z HTTP Resilience
+builder.Services.AddSingleton<ModernCircuitBreaker>(provider =>
+{
+    var logger = provider.GetRequiredService<ILogger<ModernCircuitBreaker>>();
+    return new ModernCircuitBreaker(
+        failureThreshold: 5,
+        openDuration: TimeSpan.FromMinutes(1),
+        logger: logger
+    );
+});
 
 // Rejestracja TokenManager
 builder.Services.AddScoped<ITokenManager, TokenManager>();

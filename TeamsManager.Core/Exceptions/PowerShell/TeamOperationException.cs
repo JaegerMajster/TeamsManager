@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
-using System.Runtime.Serialization;
+using System.Text.Json;
 
 namespace TeamsManager.Core.Exceptions.PowerShell
 {
@@ -65,21 +66,61 @@ namespace TeamsManager.Core.Exceptions.PowerShell
             OperationType = operationType;
         }
 
-        protected TeamOperationException(SerializationInfo info, StreamingContext context)
-            : base(info, context)
+        /// <summary>
+        /// Serializes exception data to JSON string for modern .NET 9 compatibility
+        /// Replaces obsolete binary serialization with JSON approach
+        /// </summary>
+        public string SerializeToJson()
         {
-            TeamId = info.GetString(nameof(TeamId));
-            TeamDisplayName = info.GetString(nameof(TeamDisplayName));
-            OperationType = info.GetString(nameof(OperationType));
+            var data = new
+            {
+                Message,
+                TeamId,
+                TeamDisplayName,
+                OperationType,
+                InnerExceptionMessage = InnerException?.Message,
+                StackTrace,
+                ErrorRecords = ErrorRecords?.Take(5).Select(er => new 
+                {
+                    ErrorMessage = er.Exception?.Message,
+                    CategoryInfo = er.CategoryInfo?.ToString()
+                }).ToArray()
+            };
+
+            return JsonSerializer.Serialize(data, new JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
         }
 
-        [Obsolete("This API supports obsolete formatter-based serialization. It should not be called or extended by application code.")]
-        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        /// <summary>
+        /// Creates exception from JSON data for modern deserialization
+        /// </summary>
+        public static TeamOperationException? FromJson(string json)
         {
-            base.GetObjectData(info, context);
-            info.AddValue(nameof(TeamId), TeamId);
-            info.AddValue(nameof(TeamDisplayName), TeamDisplayName);
-            info.AddValue(nameof(OperationType), OperationType);
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+
+                var message = root.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : "Deserialized Team exception";
+                var teamId = root.TryGetProperty("teamId", out var teamIdProp) ? teamIdProp.GetString() : null;
+                var teamDisplayName = root.TryGetProperty("teamDisplayName", out var teamNameProp) ? teamNameProp.GetString() : null;
+                var operationType = root.TryGetProperty("operationType", out var opTypeProp) ? opTypeProp.GetString() : null;
+
+                return new TeamOperationException(
+                    message ?? "Deserialized Team exception",
+                    teamId,
+                    teamDisplayName,
+                    operationType,
+                    null, // ErrorRecords nie są deserializowane dla uproszczenia
+                    null);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         /// <summary>

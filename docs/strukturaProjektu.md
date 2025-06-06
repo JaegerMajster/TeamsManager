@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 05 czerwca 2025, 10:41
+**📅 Ostatnia aktualizacja:** 06 czerwca 2025, 18:39
 
 > **Uwaga:** Ten plik jest automatycznie aktualizowany na końcu każdego etapu refaktoryzacji PowerShell Services, gdy zostają dodane nowe pliki lub trwale usunięte istniejące.
 
@@ -39,6 +39,7 @@ docs/
 ├── Refaktoryzacja006.md
 ├── Refaktoryzacja007.md
 ├── Refaktoryzacja008_RaportKoncowy.md
+├── Refaktoryzacja013.md
 └── strukturaProjektu.md
 ```
 
@@ -116,9 +117,11 @@ TeamsManager.Core/
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
-│       └── IUserService.cs
+│       ├── IUserService.cs
+│       └── IModernHttpService.cs
 ├── Common/
-│   └── CircuitBreaker.cs
+│   ├── CircuitBreaker.cs
+│   └── ModernCircuitBreaker.cs
 ├── Enums/
 │   ├── ChannelStatus.cs
 │   ├── OperationStatus.cs
@@ -182,7 +185,8 @@ TeamsManager.Core/
     ├── SubjectService.cs
     ├── TeamService.cs
     ├── TeamTemplateService.cs
-    └── UserService.cs
+    ├── UserService.cs
+    └── ModernHttpService.cs
 ```
 
 ### 🗃️ **Data (`TeamsManager.Data/`)**
@@ -267,12 +271,15 @@ TeamsManager.Tests/
 │   ├── TeamRepositoryTests.cs
 │   ├── TeamTemplateRepositoryTests.cs
 │   └── UserRepositoryTests.cs
+├── Performance/
+│   └── RepositoryPerformanceTests.cs
 └── Services/
     ├── ApplicationSettingServiceTests.cs
     ├── CircuitBreakerTests.cs
     ├── CurrentUserServiceTests.cs
     ├── DepartmentServiceTests.cs
     ├── MsalAuthServiceTests.cs
+    ├── ModernHttpServiceTests.cs
     ├── OperationHistoryServiceTests.cs
     ├── PowerShellConnectionServiceTests.cs
     ├── SchoolTypeServiceTests.cs
@@ -375,13 +382,30 @@ TeamsApiApp/
 - ⏳ **Etap 7/7** - Monitoring i diagnostyka (planowany)
 
 ### **Statystyki:**
-- **Łączna liczba plików kodu źródłowego:** ~147 plików .cs
-- **Główne komponenty:** API (30 plików), Core (87 plików), Data (15 plików), Tests (60 plików), UI (35 plików)
-- **Nowe komponenty (po refaktoryzacji):** Hierarchia wyjątków PowerShell (4 pliki), Pomocnicy mapowania PSObject (2 pliki), Rozwiązanie Captive Dependency
+- **Łączna liczba plików kodu źródłowego:** ~152 plików .cs
+- **Główne komponenty:** API (30 plików), Core (90 plików), Data (15 plików), Tests (65 plików), UI (35 plików)
+- **Nowe komponenty (po refaktoryzacji):** 
+  - **PowerShell Services:** Hierarchia wyjątków PowerShell (4 pliki), Pomocnicy mapowania PSObject (2 pliki), Rozwiązanie Captive Dependency
+  - **HTTP Resilience:** ModernHttpService, ModernCircuitBreaker, IModernHttpService (3 pliki)
+  - **Performance:** RepositoryPerformanceTests (1 plik)
 
 ---
 
 ## 🔄 **Historia zmian**
+
+### 06 czerwca 2025, 18:39
+- **Refaktoryzacja #013** - Modernizacja HTTP Resilience i Finalizacja Weryfikacji
+- **Dodane komponenty:**
+  - `TeamsManager.Core/Services/ModernHttpService.cs` - Nowoczesny HTTP service z Microsoft.Extensions.Http.Resilience
+  - `TeamsManager.Core/Abstractions/Services/IModernHttpService.cs` - Interfejs dla ModernHttpService
+  - `TeamsManager.Core/Common/ModernCircuitBreaker.cs` - Circuit breaker kompatybilny z HTTP Resilience
+  - `TeamsManager.Tests/Services/ModernHttpServiceTests.cs` - Testy dla ModernHttpService (6 testów)
+  - `TeamsManager.Tests/Performance/RepositoryPerformanceTests.cs` - Testy wydajności Include patterns (3 testy)
+- **Zmodyfikowane komponenty:**
+  - `TeamsManager.Api/Program.cs` - Konfiguracja HTTP Resilience dla MicrosoftGraph i ExternalApis
+  - `TeamsManager.Api/appsettings.json` - Rozszerzono konfigurację HTTP Resilience
+- **Wyniki:** 916/916 testów przechodzi (100% sukces), SignalR weryfikacja kompletna
+- **Gotowy do:** Kolejnych modernizacji i optymalizacji
 
 ### 28 stycznia 2025, 01:30
 - **Ukończenie Etapu 3/7** - Poprawa mapowania PSObject

@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Runtime.Serialization;
-using System.Text;
+using System.Text.Json;
 
 namespace TeamsManager.Core.Exceptions.PowerShell
 {
@@ -76,21 +75,79 @@ namespace TeamsManager.Core.Exceptions.PowerShell
             ExitCode = exitCode;
         }
 
-        protected PowerShellCommandExecutionException(SerializationInfo info, StreamingContext context)
-            : base(info, context)
+        /// <summary>
+        /// Serializes exception data to JSON string for modern .NET 9 compatibility
+        /// Replaces obsolete binary serialization with JSON approach
+        /// </summary>
+        public string SerializeToJson()
         {
-            Command = info.GetString(nameof(Command));
-            ExecutionTime = (TimeSpan?)info.GetValue(nameof(ExecutionTime), typeof(TimeSpan?));
-            ExitCode = (int?)info.GetValue(nameof(ExitCode), typeof(int?));
+            var data = new
+            {
+                Message,
+                Command,
+                Parameters = Parameters?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString()),
+                ExecutionTime = ExecutionTime?.TotalMilliseconds,
+                ExitCode,
+                InnerExceptionMessage = InnerException?.Message,
+                StackTrace,
+                ErrorRecords = ErrorRecords?.Take(5).Select(er => new 
+                {
+                    ErrorMessage = er.Exception?.Message,
+                    CategoryInfo = er.CategoryInfo?.ToString()
+                }).ToArray()
+            };
+
+            return JsonSerializer.Serialize(data, new JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
         }
 
-        [Obsolete("This API supports obsolete formatter-based serialization. It should not be called or extended by application code.")]
-        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        /// <summary>
+        /// Creates exception from JSON data for modern deserialization
+        /// </summary>
+        public static PowerShellCommandExecutionException? FromJson(string json)
         {
-            base.GetObjectData(info, context);
-            info.AddValue(nameof(Command), Command);
-            info.AddValue(nameof(ExecutionTime), ExecutionTime);
-            info.AddValue(nameof(ExitCode), ExitCode);
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+
+                var message = root.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : "Deserialized PowerShell exception";
+                var command = root.TryGetProperty("command", out var cmdProp) ? cmdProp.GetString() : null;
+                var exitCode = root.TryGetProperty("exitCode", out var exitProp) && exitProp.ValueKind == JsonValueKind.Number 
+                    ? exitProp.GetInt32() : (int?)null;
+
+                TimeSpan? executionTime = null;
+                if (root.TryGetProperty("executionTime", out var timeProp) && timeProp.ValueKind == JsonValueKind.Number)
+                {
+                    executionTime = TimeSpan.FromMilliseconds(timeProp.GetDouble());
+                }
+
+                Dictionary<string, object?>? parameters = null;
+                if (root.TryGetProperty("parameters", out var paramsProp) && paramsProp.ValueKind == JsonValueKind.Object)
+                {
+                    parameters = new Dictionary<string, object?>();
+                    foreach (var param in paramsProp.EnumerateObject())
+                    {
+                        parameters[param.Name] = param.Value.GetString();
+                    }
+                }
+
+                return new PowerShellCommandExecutionException(
+                    message ?? "Deserialized PowerShell exception",
+                    command,
+                    parameters,
+                    executionTime,
+                    exitCode,
+                    null, // ErrorRecords nie są deserializowane dla uproszczenia
+                    null);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         /// <summary>

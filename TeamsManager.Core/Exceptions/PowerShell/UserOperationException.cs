@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
-using System.Runtime.Serialization;
+using System.Text.Json;
 
 namespace TeamsManager.Core.Exceptions.PowerShell
 {
@@ -74,23 +75,64 @@ namespace TeamsManager.Core.Exceptions.PowerShell
             OperationType = operationType;
         }
 
-        protected UserOperationException(SerializationInfo info, StreamingContext context)
-            : base(info, context)
+        /// <summary>
+        /// Serializes exception data to JSON string for modern .NET 9 compatibility
+        /// Replaces obsolete binary serialization with JSON approach
+        /// </summary>
+        public string SerializeToJson()
         {
-            UserUpn = info.GetString(nameof(UserUpn));
-            UserId = info.GetString(nameof(UserId));
-            UserDisplayName = info.GetString(nameof(UserDisplayName));
-            OperationType = info.GetString(nameof(OperationType));
+            var data = new
+            {
+                Message,
+                UserUpn,
+                UserId,
+                UserDisplayName,
+                OperationType,
+                InnerExceptionMessage = InnerException?.Message,
+                StackTrace,
+                ErrorRecords = ErrorRecords?.Take(5).Select(er => new 
+                {
+                    ErrorMessage = er.Exception?.Message,
+                    CategoryInfo = er.CategoryInfo?.ToString()
+                }).ToArray()
+            };
+
+            return JsonSerializer.Serialize(data, new JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
         }
 
-        [Obsolete("This API supports obsolete formatter-based serialization. It should not be called or extended by application code.")]
-        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        /// <summary>
+        /// Creates exception from JSON data for modern deserialization
+        /// </summary>
+        public static UserOperationException? FromJson(string json)
         {
-            base.GetObjectData(info, context);
-            info.AddValue(nameof(UserUpn), UserUpn);
-            info.AddValue(nameof(UserId), UserId);
-            info.AddValue(nameof(UserDisplayName), UserDisplayName);
-            info.AddValue(nameof(OperationType), OperationType);
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+
+                var message = root.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : "Deserialized User exception";
+                var userUpn = root.TryGetProperty("userUpn", out var upnProp) ? upnProp.GetString() : null;
+                var userId = root.TryGetProperty("userId", out var userIdProp) ? userIdProp.GetString() : null;
+                var userDisplayName = root.TryGetProperty("userDisplayName", out var userNameProp) ? userNameProp.GetString() : null;
+                var operationType = root.TryGetProperty("operationType", out var opTypeProp) ? opTypeProp.GetString() : null;
+
+                return new UserOperationException(
+                    message ?? "Deserialized User exception",
+                    userUpn,
+                    userId,
+                    userDisplayName,
+                    operationType,
+                    null, // ErrorRecords nie są deserializowane dla uproszczenia
+                    null);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         /// <summary>

@@ -1527,56 +1527,6 @@ namespace TeamsManager.Core.Services
         }
 
         /// <summary>
-        /// PRZESTARZAŁA METODA - zastąpiona przez CacheInvalidationService (Etap 7/8)
-        /// </summary>
-        [Obsolete("Użyj CacheInvalidationService zamiast tej metody")]
-        private void InvalidateCache(string? teamId = null, string? ownerUpn = null, TeamStatus? oldStatus = null, TeamStatus? newStatus = null, string? oldOwnerUpnIfChanged = null, bool invalidateAll = false)
-        {
-            _logger.LogWarning("Użycie przestarzałej metody InvalidateCache. Należy zastąpić wywołaniami CacheInvalidationService.");
-
-            if (invalidateAll)
-            {
-                // TYLKO dla RefreshCacheAsync() - globalne resetowanie
-                _powerShellCacheService.InvalidateAllCache();
-                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
-                return;
-            }
-
-            // GRANULARNA inwalidacja przez PowerShellCacheService (stara implementacja)
-            _powerShellCacheService.InvalidateAllActiveTeamsList();
-            _powerShellCacheService.InvalidateArchivedTeamsList();
-            _powerShellCacheService.InvalidateTeamSpecificByStatus();
-
-            if (!string.IsNullOrWhiteSpace(teamId))
-            {
-                _powerShellCacheService.InvalidateTeamById(teamId);
-            }
-
-            if (!string.IsNullOrWhiteSpace(ownerUpn))
-            {
-                _powerShellCacheService.InvalidateTeamsByOwner(ownerUpn);
-            }
-
-            if (!string.IsNullOrWhiteSpace(oldOwnerUpnIfChanged) && oldOwnerUpnIfChanged != ownerUpn)
-            {
-                _powerShellCacheService.InvalidateTeamsByOwner(oldOwnerUpnIfChanged);
-            }
-
-            // Inwalidacja według statusu zespołu
-            if (oldStatus.HasValue)
-            {
-                _powerShellCacheService.InvalidateTeamsByStatus(oldStatus.Value);
-            }
-
-            if (newStatus.HasValue && newStatus != oldStatus)
-            {
-                _powerShellCacheService.InvalidateTeamsByStatus(newStatus.Value);
-            }
-
-            _logger.LogDebug("Wykonano granularną inwalidację cache zespołów przez PowerShellCacheService (stara implementacja).");
-        }
-
-        /// <summary>
         /// Asynchronicznie dodaje wielu użytkowników do zespołu (operacja masowa).
         /// </summary>
         public async Task<Dictionary<string, bool>> AddUsersToTeamAsync(string teamId, List<string> userUpns, string apiAccessToken)
