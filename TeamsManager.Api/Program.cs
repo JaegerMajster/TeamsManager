@@ -240,7 +240,7 @@ builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
 builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
 
 // ETAP 7/8: Centralizacja inwalidacji cache
-builder.Services.AddSingleton<ICacheInvalidationService, CacheInvalidationService>();
+builder.Services.AddScoped<ICacheInvalidationService, CacheInvalidationService>();
 // W przyszłości dodaj więcej synchronizatorów:
 // builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
 // builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
@@ -495,3 +495,6 @@ app.MapHub<NotificationHub>("/notificationHub");
 // ----- KONIEC SEKCJI KONFIGURACJI HTTP PIPELINE -----
 
 app.Run();
+
+// Dodane dla testów integracyjnych
+public partial class Program { }

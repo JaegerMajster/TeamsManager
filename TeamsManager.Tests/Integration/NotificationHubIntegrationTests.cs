@@ -1,5 +1,11 @@
 using Xunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace TeamsManager.Tests.Integration
 {
@@ -7,8 +13,27 @@ namespace TeamsManager.Tests.Integration
     /// Podstawowe testy weryfikujące konfigurację SignalR
     /// Pełne testy integracyjne wymagają dostępu do Program class
     /// </summary>
-    public class NotificationHubIntegrationTests
+    public class NotificationHubIntegrationTests : IAsyncDisposable
     {
+        private readonly WebApplicationFactory<Program> _factory;
+        private readonly HttpClient _httpClient;
+        private readonly HubConnection _hubConnection;
+        private readonly string _testToken;
+
+        public NotificationHubIntegrationTests()
+        {
+            _factory = new WebApplicationFactory<Program>();
+            _httpClient = _factory.CreateClient();
+            _testToken = GenerateTestJwtToken();
+            
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl($"{_httpClient.BaseAddress}notificationHub", options =>
+                {
+                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
+                    options.Headers.Add("Authorization", $"Bearer {_testToken}");
+                })
+                .Build();
+        }
 
         [Fact]
         public async Task SignalRHub_ShouldAcceptConnectionWithValidJwtToken()
@@ -41,9 +66,9 @@ namespace TeamsManager.Tests.Integration
         {
             // Arrange
             var unauthorizedConnection = new HubConnectionBuilder()
-                .WithUrl($"{_server.BaseAddress}notificationHub", options =>
+                .WithUrl($"{_httpClient.BaseAddress}notificationHub", options =>
                 {
-                    options.HttpMessageHandlerFactory = _ => _server.CreateHandler();
+                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
                     // Brak tokenu!
                 })
                 .Build();
@@ -60,9 +85,9 @@ namespace TeamsManager.Tests.Integration
         {
             // Arrange
             var queryStringConnection = new HubConnectionBuilder()
-                .WithUrl($"{_server.BaseAddress}notificationHub?access_token={_testToken}", options =>
+                .WithUrl($"{_httpClient.BaseAddress}notificationHub?access_token={_testToken}", options =>
                 {
-                    options.HttpMessageHandlerFactory = _ => _server.CreateHandler();
+                    options.HttpMessageHandlerFactory = _ => _factory.Server.CreateHandler();
                     // Token w query string zamiast w nagłówku
                 })
                 .Build();
@@ -99,14 +124,14 @@ namespace TeamsManager.Tests.Integration
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        public async Task DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
             if (_hubConnection != null)
             {
                 await _hubConnection.DisposeAsync();
             }
             _httpClient?.Dispose();
-            _server?.Dispose();
+            _factory?.Dispose();
         }
     }
 } 

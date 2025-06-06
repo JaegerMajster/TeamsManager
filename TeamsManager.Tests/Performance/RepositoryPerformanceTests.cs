@@ -8,6 +8,7 @@ using TeamsManager.Tests.Repositories;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using System.Collections.Generic;
 
 namespace TeamsManager.Tests.Performance
 {
@@ -124,7 +125,8 @@ namespace TeamsManager.Tests.Performance
             var schoolType = new SchoolType 
             { 
                 Id = "st-1", 
-                Name = "Test School Type",
+                ShortName = "TST",
+                FullName = "Test School Type",
                 IsActive = true 
             };
             Context.SchoolTypes.Add(schoolType);
@@ -147,23 +149,10 @@ namespace TeamsManager.Tests.Performance
 
             await SaveChangesAsync();
 
-            // Utwórz 100 zespołów z członkami
+            // Najpierw dodaj wszystkich użytkowników
+            var users = new List<User>();
             for (int i = 0; i < 100; i++)
             {
-                var team = new Team
-                {
-                    Id = $"team-{i}",
-                    DisplayName = $"Test Team {i}",
-                    Description = $"Description for team {i}",
-                    Status = i % 10 == 0 ? TeamStatus.Archived : TeamStatus.Active,
-                    Visibility = TeamVisibility.Private,
-                    Owner = $"owner{i}@example.com",
-                    SchoolTypeId = schoolType.Id,
-                    SchoolYearId = schoolYear.Id,
-                    TemplateId = template.Id,
-                    IsActive = true
-                };
-
                 for (int j = 0; j < 20; j++)
                 {
                     var user = new User
@@ -176,29 +165,9 @@ namespace TeamsManager.Tests.Performance
                         Role = UserRole.Nauczyciel,
                         DepartmentId = department.Id
                     };
+                    users.Add(user);
                     Context.Users.Add(user);
-
-                    team.Members.Add(new TeamMember
-                    {
-                        TeamId = team.Id,
-                        UserId = user.Id,
-                        Role = TeamMemberRole.Member
-                    });
                 }
-
-                // Dodaj kilka kanałów
-                for (int k = 0; k < 3; k++)
-                {
-                    team.Channels.Add(new Channel
-                    {
-                        Id = $"channel-{i}-{k}",
-                        Name = $"Channel {k}",
-                        TeamId = team.Id,
-                        IsActive = true
-                    });
-                }
-
-                Context.Teams.Add(team);
             }
 
             // Dodaj dodatkowych użytkowników (do 10 iteracji w teście)
@@ -206,7 +175,7 @@ namespace TeamsManager.Tests.Performance
             {
                 var user = new User
                 {
-                    Id = $"user-{i}",
+                    Id = $"perf-user-{i}",
                     UPN = $"user{i}@example.com",
                     FirstName = $"Performance",
                     LastName = $"User{i}",
@@ -214,7 +183,65 @@ namespace TeamsManager.Tests.Performance
                     Role = UserRole.Nauczyciel,
                     DepartmentId = department.Id
                 };
+                users.Add(user);
                 Context.Users.Add(user);
+            }
+
+            await SaveChangesAsync();
+
+            // Teraz dodaj zespoły
+            var teams = new List<Team>();
+            for (int i = 0; i < 100; i++)
+            {
+                var team = new Team
+                {
+                    Id = $"team-{i}",
+                    DisplayName = $"Test Team {i}",
+                    Description = $"Description for team {i}",
+                    Status = i % 10 == 0 ? TeamStatus.Archived : TeamStatus.Active,
+                    Visibility = TeamVisibility.Private,
+                    Owner = $"owner{i}@example.com",
+                    SchoolTypeId = schoolType.Id,
+                    SchoolYearId = schoolYear.Id,
+                    TemplateId = template.Id
+                };
+                teams.Add(team);
+                Context.Teams.Add(team);
+            }
+
+            await SaveChangesAsync();
+
+            // Dodaj członków zespołów
+            for (int i = 0; i < 100; i++)
+            {
+                for (int j = 0; j < 20; j++)
+                {
+                    var teamMember = new TeamMember
+                    {
+                        Id = $"tm-{i}-{j}",
+                        TeamId = $"team-{i}",
+                        UserId = $"user-{i}-{j}",
+                        Role = TeamMemberRole.Member
+                    };
+                    Context.TeamMembers.Add(teamMember);
+                }
+            }
+
+            await SaveChangesAsync();
+
+            // Dodaj kanały
+            for (int i = 0; i < 100; i++)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    var channel = new Channel
+                    {
+                        Id = $"channel-{i}-{k}",
+                        DisplayName = $"Channel {k}",
+                        TeamId = $"team-{i}"
+                    };
+                    Context.Channels.Add(channel);
+                }
             }
 
             await SaveChangesAsync();
