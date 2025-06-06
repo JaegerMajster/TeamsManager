@@ -17,9 +17,9 @@ namespace TeamsManager.Core.Services
 {
     /// <summary>
     /// Serwis odpowiedzialny za logikę biznesową lat szkolnych.
-    /// Implementuje cache'owanie dla często odpytywanych danych.
+    /// Implementuje cache'owanie dla często odpytywanych danych i mechanizm zapobiegający thundering herd.
     /// </summary>
-    public class SchoolYearService : ISchoolYearService
+    public class SchoolYearService : ISchoolYearService, IDisposable
     {
         private readonly ISchoolYearRepository _schoolYearRepository;
         private readonly IOperationHistoryService _operationHistoryService;
@@ -35,6 +35,9 @@ namespace TeamsManager.Core.Services
         private const string CurrentSchoolYearCacheKey = "SchoolYear_Current";
         private const string SchoolYearByIdCacheKeyPrefix = "SchoolYear_Id_";
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromHours(1);
+
+        // Semaphore dla zapobiegania thundering herd przy dostępie do cache
+        private readonly SemaphoreSlim _cacheSemaphore = new SemaphoreSlim(1, 1);
 
         /// <summary>
         /// Konstruktor serwisu lat szkolnych.
@@ -78,30 +81,47 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SchoolYearByIdCacheKeyPrefix + schoolYearId;
 
+            // Pierwsza szybka próba sprawdzenia cache bez lock'a
             if (!forceRefresh && _cache.TryGetValue(cacheKey, out SchoolYear? cachedSchoolYear))
             {
                 _logger.LogDebug("Rok szkolny ID: {SchoolYearId} znaleziony w cache.", schoolYearId);
                 return cachedSchoolYear;
             }
 
-            _logger.LogDebug("Rok szkolny ID: {SchoolYearId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", schoolYearId);
-            var schoolYearFromDb = await _schoolYearRepository.GetByIdAsync(schoolYearId);
-
-            if (schoolYearFromDb != null && schoolYearFromDb.IsActive)
+            // Zapobieganie thundering herd - tylko jeden thread pobiera z bazy danych
+            await _cacheSemaphore.WaitAsync();
+            try
             {
-                _cache.Set(cacheKey, schoolYearFromDb, GetDefaultCacheEntryOptions());
-                _logger.LogDebug("Rok szkolny ID: {SchoolYearId} dodany do cache.", schoolYearId);
-            }
-            else
-            {
-                _cache.Remove(cacheKey);
-                if (schoolYearFromDb != null && !schoolYearFromDb.IsActive)
+                // Double-check pattern - sprawdź cache ponownie po uzyskaniu lock'a
+                if (!forceRefresh && _cache.TryGetValue(cacheKey, out cachedSchoolYear))
                 {
-                    _logger.LogDebug("Rok szkolny ID: {SchoolYearId} jest nieaktywny, nie zostanie zcache'owany po ID i nie zostanie zwrócony.", schoolYearId);
-                    return null; // Zwracamy null dla nieaktywnych
+                    _logger.LogDebug("Rok szkolny ID: {SchoolYearId} znaleziony w cache (double-check).", schoolYearId);
+                    return cachedSchoolYear;
                 }
+
+                _logger.LogDebug("Rok szkolny ID: {SchoolYearId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", schoolYearId);
+                var schoolYearFromDb = await _schoolYearRepository.GetByIdAsync(schoolYearId);
+
+                if (schoolYearFromDb != null && schoolYearFromDb.IsActive)
+                {
+                    _cache.Set(cacheKey, schoolYearFromDb, GetDefaultCacheEntryOptions());
+                    _logger.LogDebug("Rok szkolny ID: {SchoolYearId} dodany do cache.", schoolYearId);
+                }
+                else
+                {
+                    _cache.Remove(cacheKey);
+                    if (schoolYearFromDb != null && !schoolYearFromDb.IsActive)
+                    {
+                        _logger.LogDebug("Rok szkolny ID: {SchoolYearId} jest nieaktywny, nie zostanie zcache'owany po ID i nie zostanie zwrócony.", schoolYearId);
+                        return null; // Zwracamy null dla nieaktywnych
+                    }
+                }
+                return schoolYearFromDb;
             }
-            return schoolYearFromDb;
+            finally
+            {
+                _cacheSemaphore.Release();
+            }
         }
 
         /// <inheritdoc />
@@ -723,5 +743,29 @@ namespace TeamsManager.Core.Services
                 _powerShellCacheService.InvalidateSchoolYearById(schoolYearId);
             }
         }
+
+        #region IDisposable Implementation
+
+        private bool _disposed = false;
+
+        /// <summary>
+        /// Zwolnienie zasobów SemaphoreSlim
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                _cacheSemaphore?.Dispose();
+            }
+            _disposed = true;
+        }
+
+        #endregion
     }
 }

@@ -256,7 +256,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     ex.ToString()
                 );
                 
-                _logger.LogWarning(ex, "Circuit breaker is open. Connection attempts are temporarily suspended.");
+                                    _logger.LogWarning(ex, "Circuit breaker jest otwarty. Próby połączenia są tymczasowo wstrzymane.");
                 await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
                 {
                     await notificationService.SendNotificationToUserAsync(
@@ -276,7 +276,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                     ex.ToString()
                 );
                 
-                _logger.LogError(ex, "Failed to connect to Microsoft Graph");
+                _logger.LogError(ex, "Nie udało się połączyć z Microsoft Graph");
                 return false;
             }
         }
@@ -701,6 +701,13 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Dictionary<string, object>? parameters = null,
             int? maxRetries = null)
         {
+            // Walidacja nazwy komendy
+            if (string.IsNullOrWhiteSpace(commandName))
+            {
+                _logger.LogWarning("Próba wykonania komendy z pustą lub null nazwą");
+                return null;
+            }
+            
             maxRetries ??= _maxRetryAttempts; // Użyj konfiguracji zamiast stałej
             
             // Audyt rozpoczęcia komendy z retry
@@ -728,10 +735,8 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         "PowerShell is not connected and reconnection failed"
                     );
                     
-                    _logger.LogError("Cannot execute command: PowerShell is not connected and reconnection failed.");
-                    throw PowerShellConnectionException.ForConnectionFailed(
-                        $"Nie można wykonać komendy '{commandName}': środowisko PowerShell nie jest połączone"
-                    );
+                    _logger.LogWarning("Nie można wykonać komendy: PowerShell nie jest połączony i ponowne łączenie nie powiodło się.");
+                    return null;
                 }
             }
 
@@ -739,7 +744,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
             Exception? lastException = null;
             var errorRecordsList = new List<ErrorRecord>();
 
-            while (attempt < maxRetries)
+            while (attempt <= maxRetries)
             {
                 try
                 {
@@ -787,7 +792,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                         return results;
                     }
                 }
-                catch (PowerShellCommandExecutionException ex) when (IsTransientError(ex) && attempt < maxRetries)
+                catch (PowerShellCommandExecutionException ex) when (IsTransientError(ex) && attempt <= maxRetries)
                 {
                     lastException = ex;
                     var delay = CalculateRetryDelay(attempt);
@@ -801,12 +806,12 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 catch (Exception ex) when (IsConnectionError(ex))
                 {
                     lastException = ex;
-                    _logger.LogWarning("Connection error detected. Attempting to reconnect...");
+                    _logger.LogWarning("Wykryto błąd połączenia. Próba ponownego połączenia...");
                     _sharedIsConnected = false;
                     
                     if (!await ConnectIfNotConnectedAsync())
                     {
-                        _logger.LogError("Failed to reconnect after connection error.");
+                        _logger.LogError("Nie udało się ponownie połączyć po błędzie połączenia.");
                         
                         throw PowerShellConnectionException.ForConnectionFailed(
                             $"Utracono połączenie podczas wykonywania komendy '{commandName}'",
@@ -830,7 +835,7 @@ namespace TeamsManager.Core.Services.PowerShellServices
                 lastException?.ToString()
             );
             
-            _logger.LogError(lastException, "Failed to execute command '{CommandName}' after {MaxRetries} attempts.",
+            _logger.LogError(lastException, "Nie udało się wykonać komendy '{CommandName}' po {MaxRetries} próbach.",
                 commandName, maxRetries);
             
             // Rzuć odpowiedni wyjątek w zależności od typu błędu

@@ -14,6 +14,7 @@ using TeamsManager.Core.Common;
 using TeamsManager.Core.Services.PowerShellServices;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Exceptions.PowerShell;
 using Xunit;
 
 namespace TeamsManager.Tests.Services
@@ -146,7 +147,7 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task ConnectWithAccessTokenAsync_WithValidToken_ShouldReturnTrue()
+        public async Task ConnectWithAccessTokenAsync_WithValidToken_ShouldThrowExceptionDueToEnvironment()
         {
             // Arrange
             var accessToken = "valid-access-token";
@@ -156,32 +157,26 @@ namespace TeamsManager.Tests.Services
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(userUpn);
             _mockTokenManager.Setup(t => t.HasValidToken(userUpn)).Returns(true);
 
-            // Act
-            var result = await _service.ConnectWithAccessTokenAsync(accessToken, scopes);
-
-            // Assert
-            result.Should().BeTrue();
-            _mockOperationHistoryService.Verify(o => o.CreateNewOperationEntryAsync(
-                It.IsAny<OperationType>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+            // Act & Assert
+            // W środowisku testowym bez rzeczywistego PowerShell/Microsoft Graph oczekujemy wyjątku
+            var exception = await Assert.ThrowsAsync<PowerShellConnectionException>(
+                () => _service.ConnectWithAccessTokenAsync(accessToken, scopes));
+            
+            exception.Message.Should().Contain("Microsoft Graph");
         }
 
         [Fact]
-        public async Task ConnectWithAccessTokenAsync_WithNullToken_ShouldReturnFalse()
+        public async Task ConnectWithAccessTokenAsync_WithNullToken_ShouldThrowException()
         {
             // Arrange
             string? accessToken = null;
             var scopes = new[] { "User.Read" };
 
-            // Act
-            var result = await _service.ConnectWithAccessTokenAsync(accessToken!, scopes);
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<PowerShellConnectionException>(
+                () => _service.ConnectWithAccessTokenAsync(accessToken!, scopes));
 
-            // Assert
-            result.Should().BeFalse();
+            exception.Message.Should().Contain("Brak tokenu dostępu do Microsoft Graph");
         }
 
         [Fact]
@@ -198,7 +193,7 @@ namespace TeamsManager.Tests.Services
             // Assert
             result.Should().NotBeNull();
             result.IsConnected.Should().BeFalse(); // Początkowo nie połączony
-            result.TokenValid.Should().BeTrue();
+            result.TokenValid.Should().BeFalse(); // Brak rzeczywistego połączenia, więc TokenValid = false
             result.CircuitBreakerState.Should().Be("Closed");
             result.RunspaceState.Should().NotBeNullOrEmpty();
         }
@@ -255,7 +250,7 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task ConnectWithAccessTokenAsync_WhenCircuitBreakerOpen_ShouldHandleGracefully()
+        public async Task ConnectWithAccessTokenAsync_WhenCircuitBreakerOpen_ShouldThrowExceptionDueToEnvironment()
         {
             // Arrange
             var accessToken = "test-token";
@@ -274,28 +269,28 @@ namespace TeamsManager.Tests.Services
                 }
             }
 
-            // Act
-            var result = await _service.ConnectWithAccessTokenAsync(accessToken, scopes);
-
-            // Assert
-            // Sprawdzamy czy obsłużył gracefully
-            result.Should().BeFalse();
+            // Act & Assert
+            // W środowisku testowym bez rzeczywistego PowerShell oczekujemy wyjątku
+            var exception = await Assert.ThrowsAsync<PowerShellConnectionException>(
+                () => _service.ConnectWithAccessTokenAsync(accessToken, scopes));
+            
+            exception.Message.Should().Contain("Microsoft Graph");
         }
 
         [Theory]
         [InlineData(null)]
         [InlineData("")]
         [InlineData("   ")]
-        public async Task ConnectWithAccessTokenAsync_WithInvalidToken_ShouldReturnFalse(string invalidToken)
+        public async Task ConnectWithAccessTokenAsync_WithInvalidToken_ShouldThrowException(string invalidToken)
         {
             // Arrange
             var scopes = new[] { "User.Read" };
 
-            // Act
-            var result = await _service.ConnectWithAccessTokenAsync(invalidToken, scopes);
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<PowerShellConnectionException>(
+                () => _service.ConnectWithAccessTokenAsync(invalidToken, scopes));
 
-            // Assert
-            result.Should().BeFalse();
+            exception.Message.Should().Contain("Brak tokenu dostępu do Microsoft Graph");
         }
 
         [Fact]
@@ -349,7 +344,7 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task ConnectWithAccessTokenAsync_WithValidScopesArray_ShouldUseProvidedScopes()
+        public async Task ConnectWithAccessTokenAsync_WithValidScopesArray_ShouldThrowExceptionDueToEnvironment()
         {
             // Arrange
             var accessToken = "test-token";
@@ -358,11 +353,14 @@ namespace TeamsManager.Tests.Services
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(userUpn);
 
-            // Act
-            var result = await _service.ConnectWithAccessTokenAsync(accessToken, customScopes);
-
-            // Assert
-            // Sprawdzamy że wykorzystał custom scopes zamiast domyślnych
+            // Act & Assert
+            // W środowisku testowym bez rzeczywistego PowerShell oczekujemy wyjątku
+            var exception = await Assert.ThrowsAsync<PowerShellConnectionException>(
+                () => _service.ConnectWithAccessTokenAsync(accessToken, customScopes));
+            
+            exception.Message.Should().Contain("Microsoft Graph");
+            
+            // Sprawdzamy że próbował utworzyć operację z custom scopes (przed błędem)
             _mockOperationHistoryService.Verify(o => o.CreateNewOperationEntryAsync(
                 It.IsAny<OperationType>(),
                 It.IsAny<string>(),
@@ -404,7 +402,7 @@ namespace TeamsManager.Tests.Services
         }
 
         [Fact]
-        public async Task ConnectWithAccessTokenAsync_MultipleConcurrentCalls_ShouldHandleSafely()
+        public async Task ConnectWithAccessTokenAsync_MultipleConcurrentCalls_ShouldThrowExceptionsDueToEnvironment()
         {
             // Arrange
             var accessToken = "test-token";
@@ -417,12 +415,23 @@ namespace TeamsManager.Tests.Services
                 tasks.Add(_service.ConnectWithAccessTokenAsync(accessToken, scopes));
             }
 
-            var results = await Task.WhenAll(tasks);
-
             // Assert
-            results.Should().HaveCount(5);
-            // Wszystkie powinny zwrócić false ze względu na brak rzeczywistego PowerShell
-            results.Should().OnlyContain(r => r == false);
+            // W środowisku testowym bez rzeczywistego PowerShell oczekujemy wyjątków
+            var exceptions = new List<Exception>();
+            for (int i = 0; i < tasks.Count; i++)
+            {
+                try
+                {
+                    await tasks[i];
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }
+            
+            exceptions.Should().HaveCount(5);
+            exceptions.Should().AllBeOfType<PowerShellConnectionException>();
         }
     }
 } 

@@ -226,9 +226,19 @@ namespace TeamsManager.Tests.Services
             var result = await _applicationSettingService.SaveSettingAsync(key, value, type, "New Description", category);
             result.Should().BeTrue();
 
-            // Weryfikacja, że AddAsync na OperationHistoryRepository zostało wywołane raz
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityName == key && op.Type == OperationType.ApplicationSettingCreated)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never); // Upewniamy się, że Update nie jest wołane
+            // Weryfikacja, że operacja historii została utworzona i zaktualizowana
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingCreated,
+                nameof(ApplicationSetting),
+                It.IsAny<string?>(),
+                key,
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(key), Times.AtLeastOnce);
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(category), Times.AtLeastOnce);
@@ -237,9 +247,7 @@ namespace TeamsManager.Tests.Services
             var expectedSettingsAfterCreate = new List<ApplicationSetting> { newSetting };
             AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterCreate);
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
-            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingCreated);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
         [Fact]
@@ -262,8 +270,18 @@ namespace TeamsManager.Tests.Services
             var result = await _applicationSettingService.UpdateSettingAsync(updatedDataForService);
             result.Should().BeTrue();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingId && op.Type == OperationType.ApplicationSettingUpdated)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingUpdated,
+                nameof(ApplicationSetting),
+                settingId,
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(newKey), Times.AtLeastOnce);
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(oldKey), Times.AtLeastOnce);
@@ -281,9 +299,7 @@ namespace TeamsManager.Tests.Services
             };
             AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterUpdate);
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
-            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingUpdated);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
         [Fact]
@@ -300,8 +316,18 @@ namespace TeamsManager.Tests.Services
             var result = await _applicationSettingService.DeleteSettingAsync(key);
             result.Should().BeTrue();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.TargetEntityId == settingToDelete.Id && op.Type == OperationType.ApplicationSettingDeleted)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.ApplicationSettingDeleted,
+                nameof(ApplicationSetting),
+                key, // Używa klucza, nie ID
+                key,
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingByKey(key), Times.AtLeastOnce);
             _mockPowerShellCacheService.Verify(m => m.InvalidateSettingsByCategory(category), Times.AtLeastOnce);
@@ -310,9 +336,7 @@ namespace TeamsManager.Tests.Services
             var expectedSettingsAfterDelete = new List<ApplicationSetting>();
             AssertCacheInvalidationByReFetchingAll(expectedSettingsAfterDelete);
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
-            _capturedOperationHistory.Type.Should().Be(OperationType.ApplicationSettingDeleted);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
         [Fact]

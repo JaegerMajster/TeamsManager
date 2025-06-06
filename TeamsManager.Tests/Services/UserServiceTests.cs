@@ -286,9 +286,19 @@ namespace TeamsManager.Tests.Services
             var result = await _userService.CreateUserAsync(newUser.FirstName, newUser.LastName, newUser.UPN, newUser.Role, "dept1", "password123", "mock-access-token");
             result.Should().BeNull();
 
-            // Verify że operacja została oznaczona jako failed
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Status == OperationStatus.Failed && op.Type == OperationType.UserCreated)), Times.AtLeastOnce);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            // Verify że operacja została zainicjowana
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.UserCreated,
+                nameof(User),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.AtLeastOnce);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Failed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.AtLeastOnce);
         }
 
         [Fact]
@@ -380,8 +390,18 @@ namespace TeamsManager.Tests.Services
             var assignResult = await _userService.AssignUserToSchoolTypeAsync(userId, schoolType.Id, DateTime.UtcNow);
             assignResult.Should().NotBeNull();
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSchoolTypeAssigned)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.UserSchoolTypeAssigned,
+                nameof(UserSchoolType),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateUserAndRelatedData(userId, user.UPN, null, null, null), Times.AtLeastOnce);
 
@@ -390,9 +410,7 @@ namespace TeamsManager.Tests.Services
             await _userService.GetUserByIdAsync(userId);
             _mockUserRepository.Verify();
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Status.Should().Be(OperationStatus.Completed);
-            _capturedOperationHistory.Type.Should().Be(OperationType.UserSchoolTypeAssigned);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
         [Fact]
@@ -422,16 +440,24 @@ namespace TeamsManager.Tests.Services
             _mockSubjectRepository.Verify(r => r.GetByIdAsync(subjectId), Times.Once);
             _mockUserSubjectRepository.Verify(r => r.AddAsync(It.Is<UserSubject>(us => us.UserId == teacherId && us.SubjectId == subjectId)), Times.Once);
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSubjectAssigned)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.UserSubjectAssigned,
+                nameof(UserSubject),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateUserAndRelatedData(teacherId, teacher.UPN, null, null, null), Times.AtLeastOnce);
 
             _mockSubjectService.Verify(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId), Times.Once);
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Type.Should().Be(OperationType.UserSubjectAssigned);
-            _capturedOperationHistory.Status.Should().Be(OperationStatus.Completed);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
         [Fact]
@@ -458,16 +484,24 @@ namespace TeamsManager.Tests.Services
             _mockUserSubjectRepository.Verify(r => r.GetByIdAsync(userSubjectId), Times.Once);
             _mockUserSubjectRepository.Verify(r => r.Update(It.Is<UserSubject>(us => us.Id == userSubjectId && !us.IsActive)), Times.Once);
 
-            _mockOperationHistoryRepository.Verify(r => r.AddAsync(It.Is<OperationHistory>(op => op.Type == OperationType.UserSubjectRemoved)), Times.Once);
-            _mockOperationHistoryRepository.Verify(r => r.Update(It.IsAny<OperationHistory>()), Times.Never);
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                OperationType.UserSubjectRemoved,
+                nameof(UserSubject),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                It.IsAny<string>(),
+                OperationStatus.Completed,
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
             _mockPowerShellCacheService.Verify(m => m.InvalidateUserAndRelatedData(teacherId, user.UPN, null, null, null), Times.AtLeastOnce);
 
             _mockSubjectService.Verify(s => s.InvalidateTeachersCacheForSubjectAsync(subjectId), Times.Once);
 
-            _capturedOperationHistory.Should().NotBeNull();
-            _capturedOperationHistory!.Type.Should().Be(OperationType.UserSubjectRemoved);
-            _capturedOperationHistory.Status.Should().Be(OperationStatus.Completed);
+            // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
 
 

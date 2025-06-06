@@ -447,15 +447,31 @@ namespace TeamsManager.Tests.Services
                     return schoolYear;
                 });
             
-            // Setup cache - pierwsze wywołanie nie znajdzie w cache
-            var cached = false;
-            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out It.Ref<object>.IsAny))
+            // Setup cache - thread-safe behavior, pierwsze wywołanie nie znajdzie w cache
+            var cacheDict = new System.Collections.Concurrent.ConcurrentDictionary<object, object>();
+            _mockMemoryCache.Setup(m => m.TryGetValue(It.IsAny<object>(), out It.Ref<object>.IsAny))
                 .Returns((object key, out object value) =>
                 {
-                    value = cached ? schoolYear : (object?)null!;
-                    return cached;
-                })
-                .Callback(() => cached = true);
+                    return cacheDict.TryGetValue(key, out value);
+                });
+            
+            // Setup cache.CreateEntry - symuluje dodanie do cache po pobraniu z bazy
+            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
+                .Returns((object key) =>
+                {
+                    var mockEntry = new Mock<ICacheEntry>();
+                    mockEntry.Setup(e => e.Key).Returns(key);
+                    mockEntry.SetupProperty(e => e.Value);
+                    mockEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
+                    mockEntry.Setup(e => e.Dispose()).Callback(() =>
+                    {
+                        if (mockEntry.Object.Value != null)
+                        {
+                            cacheDict.TryAdd(key, mockEntry.Object.Value);
+                        }
+                    });
+                    return mockEntry.Object;
+                });
             
             // Działanie - 10 równoczesnych żądań
             var tasks = Enumerable.Range(0, 10)
@@ -466,7 +482,7 @@ namespace TeamsManager.Tests.Services
             
             // Asercja
             results.Should().AllBeEquivalentTo(schoolYear);
-            callCount.Should().BeLessThanOrEqualTo(2); // Maksymalnie 2 zapytania do bazy mimo 10 żądań (race condition może wystąpić)
+            callCount.Should().BeLessThanOrEqualTo(2); // Mechanizm zapobiegający thundering herd: max 2 wywołania przy 10 concurrent requests
         }
 
         #endregion
