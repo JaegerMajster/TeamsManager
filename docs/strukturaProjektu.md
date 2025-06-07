@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 03:31  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 04:02  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -57,6 +57,7 @@ TeamsManager.Api/
 │   ├── DepartmentsController.cs
 │   ├── DiagnosticsController.cs
 │   ├── HealthMonitoringController.cs     ← NOWY: Orkiestrator monitorowania zdrowia systemu
+│   ├── ReportingController.cs            ← NOWY: Orkiestrator raportowania i eksportu danych
 │   ├── OperationHistoriesController.cs
 │   ├── PowerShellController.cs
 │   ├── SchoolTypesController.cs
@@ -119,6 +120,8 @@ TeamsManager.Core/
 │       ├── IDataImportOrchestrator.cs         ← NOWY: Orkiestrator importu danych CSV/Excel
 │       ├── ITeamLifecycleOrchestrator.cs      ← NOWY: Orkiestrator cyklu życia zespołów
 │       ├── IBulkUserManagementOrchestrator.cs  ← NOWY: Orkiestrator zarządzania użytkownikami
+│       ├── IHealthMonitoringOrchestrator.cs   ← NOWY: Orkiestrator monitorowania zdrowia
+│       ├── IReportingOrchestrator.cs          ← NOWY: Orkiestrator raportowania
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
@@ -204,6 +207,8 @@ TeamsManager.Application/
     ├── DataImportOrchestrator.cs            ← NOWY: Implementacja orkiestratora importu danych
     ├── TeamLifecycleOrchestrator.cs         ← NOWY: Implementacja orkiestratora cyklu życia zespołów
     ├── BulkUserManagementOrchestrator.cs    ← NOWY: Implementacja orkiestratora zarządzania użytkownikami
+    ├── HealthMonitoringOrchestrator.cs      ← NOWY: Implementacja orkiestratora monitorowania zdrowia
+    ├── ReportingOrchestrator.cs             ← NOWY: Implementacja orkiestratora raportowania
     └── Models/
         ├── SchoolYearProcessOptions.cs      ← NOWY: Opcje konfiguracji procesów
         ├── SchoolYearProcessStatus.cs       ← NOWY: Status i postęp procesów

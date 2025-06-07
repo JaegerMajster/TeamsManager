@@ -7,7 +7,7 @@
 > **📊 Status:** ✅ **PROJEKT UKOŃCZONY** (wszystkie funkcjonalności zaimplementowane)  
 > **🧪 Testy:** 961/961 przechodzi (100% sukces)  
 > **⚡ Wydajność:** ~63,200+ linii kodu, 255+ plików źródłowych  
-> **📅 Ostatnia aktualizacja:** 07 czerwca 2025, 03:31  
+> **📅 Ostatnia aktualizacja:** 07 czerwca 2025, 04:02  
 
 ## 🌟 Podsumowanie Wykonawcze
 
@@ -20,12 +20,13 @@
 - ✅ **Zaawansowana synchronizacja** Graph-DB
 - ✅ **Produkcyjny interfejs** WPF z MaterialDesign
 - ✅ **REST API** z JWT authentication i SignalR
-- ✅ **Pięć zaawansowanych orkiestratorów** - automatyzacja masowych operacji enterprise-grade:
+- ✅ **Sześć zaawansowanych orkiestratorów** - automatyzacja masowych operacji enterprise-grade:
   - 🏫 **Orkiestrator procesów szkolnych** - zarządzanie latami szkolnymi
   - 📂 **Orkiestrator importu danych** - masowy import CSV/Excel z walidacją
   - 🔄 **Orkiestrator cyklu życia zespołów** - archiwizacja i przywracanie Teams
   - 👥 **Orkiestrator zarządzania użytkownikami** - masowy onboarding/offboarding HR
   - 🏥 **Orkiestrator monitorowania zdrowia** - kompleksowa diagnostyka i auto-naprawa systemu
+  - 📊 **Orkiestrator raportowania** - generowanie raportów i eksport danych systemowych
 
 ---
 
@@ -128,12 +129,13 @@ graph TD;
 
 #### TeamsManager.Application 🟡
 - Warstwa aplikacyjna między API a Core
-- **Pięć zaawansowanych orkiestratorów enterprise-grade:**
+- **Sześć zaawansowanych orkiestratorów enterprise-grade:**
   - SchoolYearProcessOrchestrator - procesów szkolnych
   - DataImportOrchestrator - importu danych CSV/Excel
   - TeamLifecycleOrchestrator - cyklu życia zespołów Teams
   - BulkUserManagementOrchestrator - zarządzania użytkownikami HR
   - HealthMonitoringOrchestrator - monitorowania zdrowia systemu
+  - ReportingOrchestrator - raportowania i eksportu danych
 - Złożone operacje biznesowe i workflow
 - Batch processing i masowe operacje thread-safe
 
@@ -205,6 +207,15 @@ Większość planowanych endpointów została zaimplementowana. API jest zabezpi
 - `/api/HealthMonitoring/cache-optimization` (POST) - Optymalizacja wydajności cache
 - `/api/HealthMonitoring/status` (GET) - Status procesów monitorowania
 - `/api/HealthMonitoring/{processId}` (DELETE) - Anulowanie procesu monitorowania
+
+**📊 Orkiestrator raportowania:**
+- `/api/Reporting/school-year/{schoolYearId}` (POST) - Generowanie raportów dla roku szkolnego
+- `/api/Reporting/user-activity` (POST) - Raporty aktywności użytkowników w okresie
+- `/api/Reporting/compliance/{type}` (POST) - Raporty zgodności (GDPR, bezpieczeństwo, audyt)
+- `/api/Reporting/export/{dataType}` (POST) - Eksport danych systemowych (JSON, CSV, Excel)
+- `/api/Reporting/download/{processId}` (GET) - Pobieranie wygenerowanych raportów
+- `/api/Reporting/status` (GET) - Status procesów raportowania
+- `/api/Reporting/cancel/{processId}` (DELETE) - Anulowanie procesu raportowania
 
 **Orkiestrator procesów szkolnych - architektura Enterprise:**
 - 🏗️ **Application Layer pattern** - dedykowana warstwa aplikacyjna (TeamsManager.Application)

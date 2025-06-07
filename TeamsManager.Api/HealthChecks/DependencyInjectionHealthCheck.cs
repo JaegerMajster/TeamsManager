@@ -40,7 +40,12 @@ namespace TeamsManager.Api.HealthChecks
                 typeof(ISchoolTypeService),
                 typeof(ISchoolYearService),
                 typeof(ITeamTemplateService),
-                typeof(ISchoolYearProcessOrchestrator)
+                typeof(ISchoolYearProcessOrchestrator),
+                typeof(IDataImportOrchestrator),
+                typeof(ITeamLifecycleOrchestrator),
+                typeof(IBulkUserManagementOrchestrator),
+                typeof(IHealthMonitoringOrchestrator),
+                typeof(IReportingOrchestrator)
             };
 
             var errors = new List<string>();

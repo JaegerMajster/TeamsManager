@@ -283,6 +283,10 @@ builder.Services.AddScoped<IBulkUserManagementOrchestrator, BulkUserManagementOr
 builder.Services.AddScoped<IHealthMonitoringOrchestrator, HealthMonitoringOrchestrator>();
 // ============================================================================
 
+// ========== NOWA REJESTRACJA - Orkiestrator Raportowania ==========
+builder.Services.AddScoped<IReportingOrchestrator, ReportingOrchestrator>();
+// ===================================================================
+
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
 // Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience
 builder.Services.AddHttpClient("MicrosoftGraph", client =>

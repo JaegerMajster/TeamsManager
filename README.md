@@ -12,7 +12,7 @@
 
 🏗️ **Clean Architecture** - DDD + Application Layer wzorce projektowe  
 🔗 **Microsoft Graph** - integracja z pełnym przepływem OAuth2 OBO  
-📊 **Masowe operacje** - 5 zaawansowanych orkiestratorów enterprise-grade  
+📊 **Masowe operacje** - 6 zaawansowanych orkiestratorów enterprise-grade  
 🗄️ **Lokalna baza** - SQLite z Entity Framework Core  
 🖥️ **Nowoczesny UI** - WPF + MaterialDesign 3.0  
 🌐 **REST API** - ASP.NET Core z JWT authentication  
@@ -99,6 +99,7 @@ dotnet run
 🔄 **Cykl życia zespołów** - archiwizacja i migracja  
 👥 **Zarządzanie użytkownikami** - masowy HR workflow  
 🏥 **Monitorowanie zdrowia** - diagnostyka i auto-naprawa systemu  
+📊 **Raportowanie** - generowanie raportów i eksport danych systemowych  
 
 *Wszystkie orkiestratory oferują thread-safe processing, real-time monitoring i graceful cancellation.*
 
