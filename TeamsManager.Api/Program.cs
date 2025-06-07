@@ -274,7 +274,10 @@ builder.Services.AddScoped<IDataImportOrchestrator, DataImportOrchestrator>();
 
 // Rejestracja TeamLifecycleOrchestrator (orkiestrator cyklu życia zespołów)
 builder.Services.AddScoped<ITeamLifecycleOrchestrator, TeamLifecycleOrchestrator>();
-// ======================================================================
+
+// ========== NOWA REJESTRACJA - Orkiestrator Zarządzania Użytkownikami ==========
+builder.Services.AddScoped<IBulkUserManagementOrchestrator, BulkUserManagementOrchestrator>();
+// ================================================================================
 
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
 // Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience
@@ -468,7 +471,8 @@ using (var scope = app.Services.CreateScope())
         ("ISchoolTypeService", typeof(ISchoolTypeService)),
         ("ISchoolYearService", typeof(ISchoolYearService)),
         ("ITeamTemplateService", typeof(ITeamTemplateService)),
-        ("ITokenManager", typeof(ITokenManager))
+        ("ITokenManager", typeof(ITokenManager)),
+        ("IBulkUserManagementOrchestrator", typeof(IBulkUserManagementOrchestrator))
     };
 
     var allServicesOk = true;

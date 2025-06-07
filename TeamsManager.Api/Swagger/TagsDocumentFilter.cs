@@ -79,15 +79,25 @@ namespace TeamsManager.Api.Swagger
             // Dodaj dodatkowe informacje do metadanych dokumentu
             if (swaggerDoc.Info != null)
             {
-                swaggerDoc.Info.Extensions.Add("x-logo", new Microsoft.OpenApi.Any.OpenApiObject
+                // Sprawdź czy klucz już istnieje przed dodaniem
+                if (!swaggerDoc.Info.Extensions.ContainsKey("x-logo"))
                 {
-                    ["url"] = new Microsoft.OpenApi.Any.OpenApiString("/swagger-ui/favicon-32x32.png"),
-                    ["altText"] = new Microsoft.OpenApi.Any.OpenApiString("TeamsManager API")
-                });
+                    swaggerDoc.Info.Extensions.Add("x-logo", new Microsoft.OpenApi.Any.OpenApiObject
+                    {
+                        ["url"] = new Microsoft.OpenApi.Any.OpenApiString("/swagger-ui/favicon-32x32.png"),
+                        ["altText"] = new Microsoft.OpenApi.Any.OpenApiString("TeamsManager API")
+                    });
+                }
 
-                // Dodaj informacje o autorach i wersji
-                swaggerDoc.Info.Extensions.Add("x-api-id", new Microsoft.OpenApi.Any.OpenApiString("teamsmanager-api"));
-                swaggerDoc.Info.Extensions.Add("x-audience", new Microsoft.OpenApi.Any.OpenApiString("Educational institutions using Microsoft 365"));
+                // Dodaj informacje o autorach i wersji (z sprawdzeniem)
+                if (!swaggerDoc.Info.Extensions.ContainsKey("x-api-id"))
+                {
+                    swaggerDoc.Info.Extensions.Add("x-api-id", new Microsoft.OpenApi.Any.OpenApiString("teamsmanager-api"));
+                }
+                if (!swaggerDoc.Info.Extensions.ContainsKey("x-audience"))
+                {
+                    swaggerDoc.Info.Extensions.Add("x-audience", new Microsoft.OpenApi.Any.OpenApiString("Educational institutions using Microsoft 365"));
+                }
             }
 
             // Ustaw zewnętrzną dokumentację

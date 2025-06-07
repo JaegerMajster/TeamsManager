@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 01:59  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 02:33  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -64,6 +64,7 @@ TeamsManager.Api/
 │   ├── SubjectsController.cs
 │   ├── TeamsController.cs
 │   ├── TeamLifecycleController.cs        ← NOWY: Orkiestrator cyklu życia zespołów
+│   ├── BulkUserManagementController.cs    ← NOWY: Orkiestrator zarządzania użytkownikami
 │   ├── TeamTemplatesController.cs
 │   ├── TestAuthController.cs
 │   └── UsersController.cs
@@ -116,6 +117,7 @@ TeamsManager.Core/
 │       ├── ISchoolYearProcessOrchestrator.cs  ← NOWY: Orkiestrator procesów szkolnych
 │       ├── IDataImportOrchestrator.cs         ← NOWY: Orkiestrator importu danych CSV/Excel
 │       ├── ITeamLifecycleOrchestrator.cs      ← NOWY: Orkiestrator cyklu życia zespołów
+│       ├── IBulkUserManagementOrchestrator.cs  ← NOWY: Orkiestrator zarządzania użytkownikami
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
@@ -200,6 +202,7 @@ TeamsManager.Application/
     ├── SchoolYearProcessOrchestrator.cs     ← NOWY: Implementacja orkiestratora procesów
     ├── DataImportOrchestrator.cs            ← NOWY: Implementacja orkiestratora importu danych
     ├── TeamLifecycleOrchestrator.cs         ← NOWY: Implementacja orkiestratora cyklu życia zespołów
+    ├── BulkUserManagementOrchestrator.cs    ← NOWY: Implementacja orkiestratora zarządzania użytkownikami
     └── Models/
         ├── SchoolYearProcessOptions.cs      ← NOWY: Opcje konfiguracji procesów
         ├── SchoolYearProcessStatus.cs       ← NOWY: Status i postęp procesów

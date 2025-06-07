@@ -69,23 +69,6 @@
   - 🎯 Real-time monitoring i anulowanie procesów zarządzania użytkownikami
   - 🛡️ Helper methods: ValidateOnboardingPlan, ProcessOnboardingBatch, TransferTeamOwnership
   - 💾 Proper resource cleanup z finally blocks i cancellation tokens
-  - 🗃️ Masowa archiwizacja zespołów z opcjonalnym cleanup (członkowie, kanały, pliki)
-  - 🔄 Masowe przywracanie zespołów z walidacją właścicieli
-  - 📦 Migracja zespołów między latami szkolnymi z kopiowaniem struktur
-  - 🧹 Konsolidacja nieaktywnych zespołów (automatyczna archiwizacja)
-  - 📊 Thread-safe batch processing z SemaphoreSlim(3,3) dla równoległych operacji
-  - 💬 Powiadomienia właścicieli przed archiwizacją
-  - 🎯 Real-time monitoring procesów z możliwością anulowania
-  - 🛡️ Resilient error handling z progami błędów i rollback
-- ✅ **Orkiestrator zarządzania użytkownikami** - kompleksowe operacje HR i masowe działania **(NOWY - 2025-06-07)**
-  - 👤 Masowy onboarding użytkowników z 7-etapowym workflow (walidacja → tworzenie → zespoły → typy szkół → przedmioty → powiadomienia → finalizacja)
-  - 👋 Masowy offboarding użytkowników z transferem własności zespołów i backup danych
-  - 🔄 Masowe zmiany ról użytkowników w systemie z walidacją uprawnień
-  - 👥 Masowe operacje członkostwa w zespołach Teams (dodawanie/usuwanie z wielu zespołów)
-  - 📊 Thread-safe processing z SemaphoreSlim(3,3) dla 3 równoległych procesów
-  - 🎯 Real-time monitoring i anulowanie procesów zarządzania użytkownikami
-  - 🛡️ Helper methods: ValidateOnboardingPlan, ProcessOnboardingBatch, TransferTeamOwnership
-  - 💾 Proper resource cleanup z finally blocks i cancellation tokens
 
 ## 📄 Licencja
 

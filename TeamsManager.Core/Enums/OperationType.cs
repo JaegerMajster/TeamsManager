@@ -41,11 +41,15 @@
         BulkTeamArchive = 45,   // Masowa archiwizacja zespołów
         BulkUserUpdate = 46,    // Masowa aktualizacja właściwości użytkowników
         TeamArchiveWithUserDeactivation = 47, // Archiwizacja zespołu z dezaktywacją ekskluzywnych użytkowników
+        BulkUserOnboarding = 48, // Masowy onboarding użytkowników
+        BulkUserOffboarding = 49, // Masowy offboarding użytkowników
+        BulkRoleChange = 50,    // Masowa zmiana ról użytkowników
+        BulkTeamMembershipOperation = 51, // Masowe operacje członkostwa w zespołach
 
         // Operacje systemowe
-        SystemBackup = 50,      // Kopia zapasowa systemu
-        SystemRestore = 51,     // Przywracanie z kopii zapasowej
-        ConfigurationChanged = 52, // Zmiana konfiguracji systemu
+        SystemBackup = 55,      // Kopia zapasowa systemu
+        SystemRestore = 56,     // Przywracanie z kopii zapasowej
+        ConfigurationChanged = 57, // Zmiana konfiguracji systemu
 
         // Operacje na działach
         DepartmentCreated = 60, // Utworzenie działu
