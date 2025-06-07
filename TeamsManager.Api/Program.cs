@@ -271,6 +271,9 @@ builder.Services.AddScoped<ISchoolYearProcessOrchestrator, SchoolYearProcessOrch
 
 // ========== NOWA REJESTRACJA - Orkiestrator Importu Danych ==========
 builder.Services.AddScoped<IDataImportOrchestrator, DataImportOrchestrator>();
+
+// Rejestracja TeamLifecycleOrchestrator (orkiestrator cyklu życia zespołów)
+builder.Services.AddScoped<ITeamLifecycleOrchestrator, TeamLifecycleOrchestrator>();
 // ======================================================================
 
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========

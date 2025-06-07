@@ -51,6 +51,15 @@
   - 📋 Generowanie szablonów importu (CSV, Excel, JSON)
   - 🎯 Monitoring i anulowanie procesów importu w czasie rzeczywistym
   - 🛡️ Error handling z AcceptableErrorPercentage i ContinueOnError
+- ✅ **Orkiestrator cyklu życia zespołów** - kompleksowe zarządzanie lifecycle Teams **(NOWY - 2025-06-07)**
+  - 🗃️ Masowa archiwizacja zespołów z opcjonalnym cleanup (członkowie, kanały, pliki)
+  - 🔄 Masowe przywracanie zespołów z walidacją właścicieli
+  - 📦 Migracja zespołów między latami szkolnymi z kopiowaniem struktur
+  - 🧹 Konsolidacja nieaktywnych zespołów (automatyczna archiwizacja)
+  - 📊 Thread-safe batch processing z SemaphoreSlim(3,3) dla równoległych operacji
+  - 💬 Powiadomienia właścicieli przed archiwizacją
+  - 🎯 Real-time monitoring procesów z możliwością anulowania
+  - 🛡️ Resilient error handling z progami błędów i rollback
 
 ## 📄 Licencja
 

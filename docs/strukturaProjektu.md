@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 01:25  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 01:59  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -50,7 +50,7 @@ TeamsManager.Api/
 ├── teamsmanager.db
 ├── Configuration/
 │   └── ApiAuthConfig.cs
-├── Controllers/ (15 kontrolerów)
+├── Controllers/ (16 kontrolerów)
 │   ├── ApplicationSettingsController.cs
 │   ├── ChannelsController.cs
 │   ├── DataImportController.cs           ← NOWY: Orkiestrator importu danych CSV/Excel
@@ -63,6 +63,7 @@ TeamsManager.Api/
 │   ├── SchoolYearProcessController.cs    ← NOWY: Orkiestrator procesów szkolnych
 │   ├── SubjectsController.cs
 │   ├── TeamsController.cs
+│   ├── TeamLifecycleController.cs        ← NOWY: Orkiestrator cyklu życia zespołów
 │   ├── TeamTemplatesController.cs
 │   ├── TestAuthController.cs
 │   └── UsersController.cs
@@ -114,6 +115,7 @@ TeamsManager.Core/
 │       ├── ISchoolYearService.cs
 │       ├── ISchoolYearProcessOrchestrator.cs  ← NOWY: Orkiestrator procesów szkolnych
 │       ├── IDataImportOrchestrator.cs         ← NOWY: Orkiestrator importu danych CSV/Excel
+│       ├── ITeamLifecycleOrchestrator.cs      ← NOWY: Orkiestrator cyklu życia zespołów
 │       ├── ISubjectService.cs
 │       ├── ITeamService.cs
 │       ├── ITeamTemplateService.cs
@@ -197,12 +199,18 @@ TeamsManager.Application/
 └── Services/
     ├── SchoolYearProcessOrchestrator.cs     ← NOWY: Implementacja orkiestratora procesów
     ├── DataImportOrchestrator.cs            ← NOWY: Implementacja orkiestratora importu danych
+    ├── TeamLifecycleOrchestrator.cs         ← NOWY: Implementacja orkiestratora cyklu życia zespołów
     └── Models/
         ├── SchoolYearProcessOptions.cs      ← NOWY: Opcje konfiguracji procesów
         ├── SchoolYearProcessStatus.cs       ← NOWY: Status i postęp procesów
         ├── TeamCreationPlan.cs              ← NOWY: Plan tworzenia zespołów
         ├── ImportOptions.cs                 ← NOWY: Opcje konfiguracji importu
-        └── ImportProcessStatus.cs           ← NOWY: Status procesów importu
+        ├── ImportProcessStatus.cs           ← NOWY: Status procesów importu
+        ├── ArchiveOptions.cs                ← NOWY: Opcje archiwizacji zespołów
+        ├── RestoreOptions.cs                ← NOWY: Opcje przywracania zespołów
+        ├── TeamMigrationPlan.cs             ← NOWY: Plan migracji zespołów
+        ├── ConsolidationOptions.cs          ← NOWY: Opcje konsolidacji zespołów
+        └── TeamLifecycleProcessStatus.cs    ← NOWY: Status procesów cyklu życia zespołów
 ```
 
 ### 🗃️ **Data (`TeamsManager.Data/`) - Warstwa Danych**
