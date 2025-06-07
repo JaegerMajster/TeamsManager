@@ -9,42 +9,41 @@ using System.Windows.Media.Imaging;
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using TeamsManager.UI.Services.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace TeamsManager.UI.Services
 {
-    public class GraphUserProfileService : IDisposable
+    public class GraphUserProfileService : IGraphUserProfileService, IDisposable
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<GraphUserProfileService> _logger;
         private const string GraphBaseUrl = "https://graph.microsoft.com/v1.0";
         private bool _disposed = false;
 
-        public GraphUserProfileService()
+        public GraphUserProfileService(IHttpClientFactory httpClientFactory, ILogger<GraphUserProfileService> logger)
         {
-            _httpClient = new HttpClient();
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<UserProfile?> GetUserProfileAsync(string accessToken)
         {
+            var httpClient = _httpClientFactory.CreateClient("MicrosoftGraph");
+            
             try
             {
-                Debug.WriteLine($"[GraphProfile] Rozpoczynanie pobierania profilu użytkownika...");
-                Debug.WriteLine($"[GraphProfile] Token length: {accessToken?.Length ?? 0}");
-                Debug.WriteLine($"[GraphProfile] Token fragment: {accessToken?.Substring(0, Math.Min(accessToken?.Length ?? 0, 20))}...");
-
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Authorization = 
-                    new AuthenticationHeaderValue("Bearer", accessToken);
-
-                var requestUrl = $"{GraphBaseUrl}/me";
-                Debug.WriteLine($"[GraphProfile] Request URL: {requestUrl}");
-
-                var response = await _httpClient.GetAsync(requestUrl);
+                _logger.LogDebug("[GraphProfile] Rozpoczynanie pobierania profilu użytkownika...");
                 
-                Debug.WriteLine($"[GraphProfile] Response Status: {response.StatusCode}");
-                Debug.WriteLine($"[GraphProfile] Response Headers: {response.Headers}");
+                var requestUrl = "/v1.0/me";
+                _logger.LogDebug("[GraphProfile] Request URL: {RequestUrl}", requestUrl);
+
+                var response = await httpClient.GetAsync(requestUrl);
+                
+                _logger.LogDebug("[GraphProfile] Response Status: {StatusCode}", response.StatusCode);
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                Debug.WriteLine($"[GraphProfile] Response Content: {responseContent}");
+                _logger.LogDebug("[GraphProfile] Response Content: {ResponseContent}", responseContent);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -53,18 +52,17 @@ namespace TeamsManager.UI.Services
                         PropertyNameCaseInsensitive = true
                     });
                     
-                    Debug.WriteLine($"[GraphProfile] Successfully parsed profile: {userProfile?.DisplayName}");
+                    _logger.LogDebug("[GraphProfile] Successfully parsed profile: {DisplayName}", userProfile?.DisplayName);
                     return userProfile;
                 }
                 else
                 {
-                    Debug.WriteLine($"[GraphProfile] Error response: {response.StatusCode} - {responseContent}");
+                    _logger.LogWarning("[GraphProfile] Error response: {StatusCode} - {ResponseContent}", response.StatusCode, responseContent);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[GraphProfile] Exception: {ex.Message}");
-                Debug.WriteLine($"[GraphProfile] Stack trace: {ex.StackTrace}");
+                _logger.LogError(ex, "[GraphProfile] Exception during GetUserProfileAsync");
             }
 
             return null;
@@ -72,25 +70,23 @@ namespace TeamsManager.UI.Services
 
         public async Task<BitmapImage?> GetUserPhotoAsync(string accessToken)
         {
+            var httpClient = _httpClientFactory.CreateClient("MicrosoftGraph");
+            
             try
             {
-                Debug.WriteLine($"[GraphPhoto] Rozpoczynanie pobierania zdjęcia użytkownika...");
+                _logger.LogDebug("[GraphPhoto] Rozpoczynanie pobierania zdjęcia użytkownika...");
 
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Authorization = 
-                    new AuthenticationHeaderValue("Bearer", accessToken);
+                var requestUrl = "/v1.0/me/photo/$value";
+                _logger.LogDebug("[GraphPhoto] Request URL: {RequestUrl}", requestUrl);
 
-                var requestUrl = $"{GraphBaseUrl}/me/photo/$value";
-                Debug.WriteLine($"[GraphPhoto] Request URL: {requestUrl}");
-
-                var response = await _httpClient.GetAsync(requestUrl);
+                var response = await httpClient.GetAsync(requestUrl);
                 
-                Debug.WriteLine($"[GraphPhoto] Response Status: {response.StatusCode}");
+                _logger.LogDebug("[GraphPhoto] Response Status: {StatusCode}", response.StatusCode);
 
                 if (response.IsSuccessStatusCode)
                 {
                     var photoBytes = await response.Content.ReadAsByteArrayAsync();
-                    Debug.WriteLine($"[GraphPhoto] Photo size: {photoBytes.Length} bytes");
+                    _logger.LogDebug("[GraphPhoto] Photo size: {PhotoSize} bytes", photoBytes.Length);
                     
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
@@ -99,19 +95,18 @@ namespace TeamsManager.UI.Services
                     bitmap.EndInit();
                     bitmap.Freeze(); // Dla thread safety
                     
-                    Debug.WriteLine($"[GraphPhoto] Successfully created bitmap image");
+                    _logger.LogDebug("[GraphPhoto] Successfully created bitmap image");
                     return bitmap;
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    Debug.WriteLine($"[GraphPhoto] Error response: {response.StatusCode} - {errorContent}");
+                    _logger.LogDebug("[GraphPhoto] Error response: {StatusCode} - {ErrorContent}", response.StatusCode, errorContent);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[GraphPhoto] Exception: {ex.Message}");
-                // Brak zdjęcia to normalny przypadek
+                _logger.LogDebug(ex, "[GraphPhoto] Exception during GetUserPhotoAsync - brak zdjęcia to normalny przypadek");
             }
 
             return null;
@@ -120,12 +115,12 @@ namespace TeamsManager.UI.Services
         // Metoda testowa do sprawdzenia czy token ma odpowiednie uprawnienia
         public async Task<GraphTestResult> TestGraphAccessAsync(string accessToken)
         {
+            var httpClient = _httpClientFactory.CreateClient("MicrosoftGraph");
             var result = new GraphTestResult();
             
             try
             {
-                Debug.WriteLine($"[GraphProfile] Sprawdzanie tokenów dla Graph API");
-                Debug.WriteLine($"[GraphProfile] Token (pierwsze 50 znaków): {accessToken?.Substring(0, Math.Min(accessToken?.Length ?? 0, 50))}...");
+                _logger.LogDebug("[GraphProfile] Sprawdzanie tokenów dla Graph API");
                 
                 // Dekoduj token żeby sprawdzić scopes
                 try
@@ -135,37 +130,32 @@ namespace TeamsManager.UI.Services
                     var scopes = token.Claims.FirstOrDefault(c => c.Type == "scp")?.Value;
                     var audience = token.Claims.FirstOrDefault(c => c.Type == "aud")?.Value;
                     
-                    Debug.WriteLine($"[GraphProfile] Token Audience: {audience}");
-                    Debug.WriteLine($"[GraphProfile] Token Scopes: {scopes}");
+                    _logger.LogDebug("[GraphProfile] Token Audience: {Audience}, Scopes: {Scopes}", audience, scopes);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[GraphProfile] Nie można zdekodować tokenu: {ex.Message}");
+                    _logger.LogDebug(ex, "[GraphProfile] Nie można zdekodować tokenu");
                 }
-
-                _httpClient.DefaultRequestHeaders.Authorization = 
-                    new AuthenticationHeaderValue("Bearer", accessToken);
 
                 // Test endpoint /me
                 try
                 {
-                    Debug.WriteLine($"[GraphProfile] Wykonywanie zapytania GET {GraphBaseUrl}/me");
-                    var meResponse = await _httpClient.GetAsync($"{GraphBaseUrl}/me");
+                    var meResponse = await httpClient.GetAsync("/v1.0/me");
                     result.MeEndpointStatus = meResponse.StatusCode.ToString();
                     result.CanAccessProfile = meResponse.IsSuccessStatusCode;
                     
-                    Debug.WriteLine($"[GraphProfile] /me Response Status: {meResponse.StatusCode}");
+                    _logger.LogDebug("[GraphProfile] /me Response Status: {StatusCode}", meResponse.StatusCode);
                     
                     if (!meResponse.IsSuccessStatusCode)
                     {
                         var errorContent = await meResponse.Content.ReadAsStringAsync();
-                        Debug.WriteLine($"[GraphProfile] /me Error Content: {errorContent}");
+                        _logger.LogDebug("[GraphProfile] /me Error Content: {ErrorContent}", errorContent);
                         result.ErrorMessage = $"Me endpoint error: {errorContent}";
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[GraphProfile] Błąd podczas wywołania /me: {ex.Message}");
+                    _logger.LogDebug(ex, "[GraphProfile] Błąd podczas wywołania /me");
                     result.MeEndpointStatus = "Exception";
                     result.ErrorMessage = $"Me endpoint exception: {ex.Message}";
                     result.CanAccessProfile = false;
@@ -174,17 +164,16 @@ namespace TeamsManager.UI.Services
                 // Test endpoint /me/photo/$value
                 try
                 {
-                    Debug.WriteLine($"[GraphProfile] Wykonywanie zapytania GET {GraphBaseUrl}/me/photo/$value");
-                    var photoResponse = await _httpClient.GetAsync($"{GraphBaseUrl}/me/photo/$value");
+                    var photoResponse = await httpClient.GetAsync("/v1.0/me/photo/$value");
                     result.PhotoEndpointStatus = photoResponse.StatusCode.ToString();
                     result.CanAccessPhoto = photoResponse.IsSuccessStatusCode;
                     
-                    Debug.WriteLine($"[GraphProfile] /me/photo/$value Response Status: {photoResponse.StatusCode}");
+                    _logger.LogDebug("[GraphProfile] /me/photo/$value Response Status: {StatusCode}", photoResponse.StatusCode);
                     
                     if (!photoResponse.IsSuccessStatusCode)
                     {
                         var errorContent = await photoResponse.Content.ReadAsStringAsync();
-                        Debug.WriteLine($"[GraphProfile] /me/photo Error Content: {errorContent}");
+                        _logger.LogDebug("[GraphProfile] /me/photo Error Content: {ErrorContent}", errorContent);
                         if (string.IsNullOrEmpty(result.ErrorMessage))
                         {
                             result.ErrorMessage = $"Photo endpoint error: {errorContent}";
@@ -193,7 +182,7 @@ namespace TeamsManager.UI.Services
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[GraphProfile] Błąd podczas wywołania /me/photo: {ex.Message}");
+                    _logger.LogDebug(ex, "[GraphProfile] Błąd podczas wywołania /me/photo");
                     result.PhotoEndpointStatus = "Exception";
                     if (string.IsNullOrEmpty(result.ErrorMessage))
                     {
@@ -202,12 +191,12 @@ namespace TeamsManager.UI.Services
                     result.CanAccessPhoto = false;
                 }
 
-                Debug.WriteLine($"[GraphProfile] Test zakończony. Profile: {result.CanAccessProfile}, Photo: {result.CanAccessPhoto}");
+                _logger.LogDebug("[GraphProfile] Test zakończony. Profile: {CanAccessProfile}, Photo: {CanAccessPhoto}", result.CanAccessProfile, result.CanAccessPhoto);
                 return result;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[GraphProfile] Ogólny błąd podczas testowania Graph API: {ex.Message}");
+                _logger.LogError(ex, "[GraphProfile] Ogólny błąd podczas testowania Graph API");
                 result.ErrorMessage = $"General error: {ex.Message}";
                 result.MeEndpointStatus = "Error";
                 result.PhotoEndpointStatus = "Error";
@@ -219,7 +208,7 @@ namespace TeamsManager.UI.Services
         {
             if (!_disposed)
             {
-                _httpClient?.Dispose();
+                // HttpClient jest zarządzany przez IHttpClientFactory - nie usuwamy go ręcznie
                 _disposed = true;
             }
         }

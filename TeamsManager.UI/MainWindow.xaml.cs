@@ -12,6 +12,8 @@ using TeamsManager.UI.Views;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Views.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using TeamsManager.UI.Services.Abstractions;
 
 namespace TeamsManager.UI
 {
@@ -22,38 +24,28 @@ namespace TeamsManager.UI
 
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
-        private readonly MsalAuthService? _msalAuthService;
+        private readonly IMsalAuthService? _msalAuthService;
         private AuthenticationResult? _authResult;
         private readonly HttpClient _httpClient = new HttpClient();
         private ManualTestingWindow? _manualTestingWindow;
         private DashboardWindow? _dashboardWindow;
-        private readonly GraphUserProfileService _graphUserProfileService;
+        private readonly IGraphUserProfileService _graphUserProfileService;
 
-        public MainWindow()
+        /// <summary>
+        /// Konstruktor MainWindow z Dependency Injection
+        /// </summary>
+        /// <param name="msalAuthService">Serwis autentykacji MSAL</param>
+        /// <param name="graphUserProfileService">Serwis profilu użytkownika Graph</param>
+        public MainWindow(IMsalAuthService msalAuthService, IGraphUserProfileService graphUserProfileService)
         {
             InitializeComponent();
 
-            // Inicjalizacja serwisu Graph
-            _graphUserProfileService = new GraphUserProfileService();
+            // Walidacja argumentów
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
+            _graphUserProfileService = graphUserProfileService ?? throw new ArgumentNullException(nameof(graphUserProfileService));
 
-            // Inicjalizacja serwisu MSAL z obsługą błędów
-            try
-            {
-                _msalAuthService = new MsalAuthService();
-            }
-            catch (InvalidOperationException ex)
-            {
-                // Obsługa krytycznego błędu konfiguracji MSAL
-                ShowErrorDialog(ex.Message + "\nAplikacja nie może kontynuować bez poprawnej konfiguracji logowania.",
-                                "Krytyczny Błąd Konfiguracji");
-
-                // Zablokowanie funkcjonalności logowania
-                LoginButton.IsEnabled = false;
-                LogoutButton.IsEnabled = false;
-                ManualTestsButton.IsEnabled = false;
-                UserDisplayNameTextBlock.Text = "Błąd konfiguracji";
-                UserInfoTextBlock.Text = "MSAL nie został poprawnie skonfigurowany";
-            }
+            // Inicjalizacja UI na podstawie dostępności serwisów
+            InitializeAuthenticationUI();
 
             // Ustaw ciemny motyw dla tego okna
             this.SourceInitialized += (s, e) =>
@@ -61,6 +53,45 @@ namespace TeamsManager.UI
                 var helper = new WindowInteropHelper(this);
                 SetWindowToDarkMode(helper.Handle);
             };
+        }
+
+        /// <summary>
+        /// Inicjalizuje UI uwierzytelniania i sprawdza dostępność serwisów
+        /// </summary>
+        private void InitializeAuthenticationUI()
+        {
+            try
+            {
+                // Sprawdź czy serwisy są poprawnie skonfigurowane
+                if (_msalAuthService == null)
+                {
+                    ShowErrorDialog("Serwis autentykacji MSAL nie został poprawnie zainicjowany.",
+                                    "Krytyczny Błąd Konfiguracji");
+                    DisableAuthenticationFeatures();
+                    return;
+                }
+
+                // Serwisy są dostępne - normalna inicjalizacja
+                System.Diagnostics.Debug.WriteLine("[MainWindow] Serwisy MSAL i Graph zainicjowane pomyślnie przez DI");
+            }
+            catch (Exception ex)
+            {
+                ShowErrorDialog($"Błąd podczas inicjalizacji: {ex.Message}",
+                                "Błąd Konfiguracji");
+                DisableAuthenticationFeatures();
+            }
+        }
+
+        /// <summary>
+        /// Wyłącza funkcje uwierzytelniania w przypadku błędów konfiguracji
+        /// </summary>
+        private void DisableAuthenticationFeatures()
+        {
+            LoginButton.IsEnabled = false;
+            LogoutButton.IsEnabled = false;
+            ManualTestsButton.IsEnabled = false;
+            UserDisplayNameTextBlock.Text = "Błąd konfiguracji";
+            UserInfoTextBlock.Text = "Serwisy nie zostały poprawnie skonfigurowane";
         }
 
         private static void SetWindowToDarkMode(IntPtr handle)
@@ -339,8 +370,23 @@ namespace TeamsManager.UI
                 if (_manualTestingWindow == null || _manualTestingWindow.IsClosed)
                 {
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Tworzenie nowego okna testów");
-                    // Przekaż kontekst użytkownika i serwis MSAL do okna testów
-                    _manualTestingWindow = new ManualTestingWindow(_authResult, _msalAuthService);
+                    
+                    try
+                    {
+                        // Próba utworzenia przez DI
+                        _manualTestingWindow = App.ServiceProvider.GetRequiredService<ManualTestingWindow>();
+                        System.Diagnostics.Debug.WriteLine("[MainWindow] ManualTestingWindow created via DI");
+                    }
+                    catch (Exception diEx)
+                    {
+                        // Fallback - jeśli DI nie zadziała
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] DI failed for ManualTestingWindow: {diEx.Message}");
+                        ShowErrorDialog("Nie można otworzyć okna testów.\nSprawdź konfigurację aplikacji.", "Błąd");
+                        return;
+                    }
+                    
+                    // Ustaw kontekst użytkownika po utworzeniu
+                    _manualTestingWindow.SetAuthenticationContext(_authResult);
 
                     // Obsługa zamknięcia okna
                     _manualTestingWindow.Closed += (s, args) =>
@@ -354,7 +400,9 @@ namespace TeamsManager.UI
                 else
                 {
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Aktywowanie istniejącego okna testów");
-                    // Przenieś okno na pierwszy plan
+                    
+                    // Aktualizuj kontekst jeśli okno już istnieje
+                    _manualTestingWindow.SetAuthenticationContext(_authResult);
                     _manualTestingWindow.WindowState = WindowState.Normal;
                     _manualTestingWindow.Activate();
                     _manualTestingWindow.Focus();
@@ -375,16 +423,28 @@ namespace TeamsManager.UI
                 if (_dashboardWindow == null || !_dashboardWindow.IsVisible)
                 {
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Tworzenie nowego okna Dashboard");
-                    _dashboardWindow = new DashboardWindow();
-
-                    // Obsługa zamknięcia okna
-                    _dashboardWindow.Closed += (s, args) =>
+                    
+                    try
                     {
-                        System.Diagnostics.Debug.WriteLine("[MainWindow] Okno Dashboard zostało zamknięte");
-                        _dashboardWindow = null;
-                    };
+                        // Tworzenie przez DI
+                        _dashboardWindow = App.ServiceProvider.GetRequiredService<DashboardWindow>();
 
-                    _dashboardWindow.Show();
+                        // Obsługa zamknięcia okna
+                        _dashboardWindow.Closed += (s, args) =>
+                        {
+                            System.Diagnostics.Debug.WriteLine("[MainWindow] Okno Dashboard zostało zamknięte");
+                            _dashboardWindow = null;
+                        };
+
+                        _dashboardWindow.Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MainWindow] Błąd tworzenia Dashboard przez DI: {ex.Message}");
+                        // Fallback - tworzenie bezpośrednie
+                        _dashboardWindow = new DashboardWindow();
+                        _dashboardWindow.Show();
+                    }
                 }
                 else
                 {

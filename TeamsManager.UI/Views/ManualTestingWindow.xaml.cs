@@ -16,7 +16,10 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using TeamsManager.UI.Models;
 using TeamsManager.UI.Services;
+using TeamsManager.UI.Services.Abstractions;
 using MaterialDesignThemes.Wpf;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace TeamsManager.UI.Views
 {
@@ -27,23 +30,39 @@ namespace TeamsManager.UI.Views
 
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
-        private readonly ManualTestingService _testingService;
+        private readonly IManualTestingService _testingService;
+        private readonly IMsalAuthService _msalAuthService;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<ManualTestingWindow> _logger;
         private TestSuite _currentTestSuite = null!;
         private TestCase? _selectedTestCase;
-        private readonly AuthenticationResult? _authResult;
-        private readonly MsalAuthService? _msalAuthService;
-        private readonly HttpClient _httpClient = new HttpClient();
+        private AuthenticationResult? _authResult;
+        private HttpClient? _httpClient;
         private readonly DateTime _sessionStartTime;
 
         // Właściwość do sprawdzania czy okno jest zamknięte
         public bool IsClosed { get; private set; } = false;
 
-        public ManualTestingWindow(AuthenticationResult? authResult = null, MsalAuthService? msalAuthService = null)
+        /// <summary>
+        /// Konstruktor okna testów manualnych z dependency injection
+        /// </summary>
+        /// <param name="msalAuthService">Serwis autentykacji MSAL</param>
+        /// <param name="manualTestingService">Serwis zarządzania testami</param>
+        /// <param name="httpClientFactory">Fabryka klientów HTTP</param>
+        /// <param name="logger">Logger dla diagnostyki</param>
+        public ManualTestingWindow(
+            IMsalAuthService msalAuthService,
+            IManualTestingService manualTestingService,
+            IHttpClientFactory httpClientFactory,
+            ILogger<ManualTestingWindow> logger)
         {
             InitializeComponent();
-            _authResult = authResult;
-            _msalAuthService = msalAuthService;
-            _testingService = new ManualTestingService();
+            
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
+            _testingService = manualTestingService ?? throw new ArgumentNullException(nameof(manualTestingService));
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            
             _sessionStartTime = DateTime.Now;
 
             // Ustaw ciemny motyw dla tego okna
@@ -60,7 +79,47 @@ namespace TeamsManager.UI.Views
                 IsClosed = true;
             };
 
-            // Ustaw informacje o użytkowniku
+            // Informacje o użytkowniku będą ustawione przez SetAuthenticationContext
+            UserInfoText.Text = "Użytkownik: Inicjalizacja...";
+            SessionInfoText.Text = $"Sesja rozpoczęta: {_sessionStartTime:yyyy-MM-dd HH:mm:ss}";
+
+            // Inicjalizacja serwisów i testów
+            InitializeTestingServices();
+            LoadDefaultTests();
+        }
+
+        /// <summary>
+        /// Inicjalizuje serwisy testowe i sprawdza ich dostępność
+        /// </summary>
+        private void InitializeTestingServices()
+        {
+            try
+            {
+                // Utworzenie HttpClient - używamy default client bez specjalnej konfiguracji
+                // aby móc przełączać tokeny podczas testów
+                _httpClient = _httpClientFactory.CreateClient();
+                _logger.LogDebug("ManualTestingWindow: HttpClient utworzony przez factory");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas inicjalizacji serwisów testowych");
+                MessageBox.Show(
+                    "Nie udało się zainicjalizować serwisów testowych.\nNiektóre funkcje mogą być niedostępne.",
+                    "Ostrzeżenie",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Ustawia kontekst uwierzytelniania po utworzeniu okna
+        /// </summary>
+        /// <param name="authResult">Wynik uwierzytelniania</param>
+        public void SetAuthenticationContext(AuthenticationResult? authResult)
+        {
+            _authResult = authResult;
+            
+            // Aktualizuj informacje o użytkowniku
             if (_authResult?.Account?.Username != null)
             {
                 UserInfoText.Text = $"Użytkownik: {_authResult.Account.Username}";
@@ -71,8 +130,6 @@ namespace TeamsManager.UI.Views
                 UserInfoText.Text = "Użytkownik: Niezalogowany";
                 SessionInfoText.Text = $"Sesja rozpoczęta: {_sessionStartTime:yyyy-MM-dd HH:mm:ss}";
             }
-
-            LoadDefaultTests();
         }
 
         private static void SetWindowToDarkMode(IntPtr handle)
@@ -88,9 +145,9 @@ namespace TeamsManager.UI.Views
             }
         }
 
-        private async void LoadDefaultTests()
+        private void LoadDefaultTests()
         {
-            System.Diagnostics.Debug.WriteLine("[ManualTestingWindow] Ładowanie domyślnych testów...");
+            _logger.LogDebug("Ładowanie domyślnych testów...");
             try
             {
                 _currentTestSuite = new TestSuite
@@ -111,14 +168,11 @@ namespace TeamsManager.UI.Views
                 LoadTestsToCategories();
                 UpdateStatistics();
                 
-                System.Diagnostics.Debug.WriteLine($"[ManualTestingWindow] Załadowano {_currentTestSuite.TestCases.Count} testów");
-                
-                // Dodanie await aby uczynić metodę prawdziwie asynchroniczną
-                await Task.CompletedTask;
+                _logger.LogInformation("Załadowano {Count} testów", _currentTestSuite.TestCases.Count);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ManualTestingWindow] Błąd podczas ładowania testów: {ex.Message}");
+                _logger.LogError(ex, "Błąd podczas ładowania testów");
             }
         }
 
@@ -712,8 +766,8 @@ namespace TeamsManager.UI.Views
                 TestResultTextBox.Text += "✅ Token Graph API pobrany pomyślnie\n";
                 ExecutionStatus.Text = "🔄 Testowanie endpointów Graph...";
 
-                // Utwórz serwis Graph do testowania
-                var graphService = new TeamsManager.UI.Services.GraphUserProfileService();
+                // Pobierz serwis Graph z DI
+                var graphService = App.ServiceProvider.GetRequiredService<TeamsManager.UI.Services.Abstractions.IGraphUserProfileService>();
                 var testResult = await graphService.TestGraphAccessAsync(graphToken);
 
                 // Wyświetl szczegółowe wyniki
@@ -762,11 +816,16 @@ namespace TeamsManager.UI.Views
                 return (false, "Brak tokenu dostępu");
             }
 
+            if (_httpClient == null)
+            {
+                return (false, "HttpClient nie został zainicjalizowany");
+            }
+
             string apiUrl = "https://localhost:7037/api/TestAuth/whoami";
 
             try
             {
-                // Ustawienie nagłówka autoryzacji
+                // Ustawienie nagłówka autoryzacji - pozwalamy na przełączanie tokenów
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", _authResult.AccessToken);
 
@@ -775,19 +834,23 @@ namespace TeamsManager.UI.Views
 
                 if (response.IsSuccessStatusCode)
                 {
+                    _logger.LogInformation("WhoAmI test succeeded with status {StatusCode}", response.StatusCode);
                     return (true, $"Sukces - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
                 else
                 {
+                    _logger.LogWarning("WhoAmI test failed with status {StatusCode}", response.StatusCode);
                     return (false, $"Błąd API - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
             }
             catch (HttpRequestException httpEx)
             {
+                _logger.LogError(httpEx, "HTTP request error in WhoAmI test");
                 return (false, $"Błąd połączenia: {httpEx.Message}");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Unexpected error in WhoAmI test");
                 return (false, $"Wyjątek: {ex.Message}");
             }
         }
@@ -797,6 +860,11 @@ namespace TeamsManager.UI.Views
             if (_authResult == null || string.IsNullOrEmpty(_authResult.AccessToken))
             {
                 return (false, "Brak tokenu dostępu");
+            }
+
+            if (_httpClient == null)
+            {
+                return (false, "HttpClient nie został zainicjalizowany");
             }
 
             string apiUrl = "https://localhost:7037/api/PowerShell/test-connection";
@@ -812,19 +880,23 @@ namespace TeamsManager.UI.Views
 
                 if (response.IsSuccessStatusCode)
                 {
+                    _logger.LogInformation("PowerShell test succeeded with status {StatusCode}", response.StatusCode);
                     return (true, $"Sukces - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
                 else
                 {
+                    _logger.LogWarning("PowerShell test failed with status {StatusCode}", response.StatusCode);
                     return (false, $"Błąd API - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
             }
             catch (HttpRequestException httpEx)
             {
+                _logger.LogError(httpEx, "HTTP request error in PowerShell test");
                 return (false, $"Błąd połączenia: {httpEx.Message}");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Unexpected error in PowerShell test");
                 return (false, $"Wyjątek: {ex.Message}");
             }
         }

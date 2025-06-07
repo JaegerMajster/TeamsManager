@@ -9,6 +9,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Views.Configuration;
+using TeamsManager.UI.Views;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
+using System.Net.Http;
+using TeamsManager.UI.Services.Http;
+using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.UI.Services;
+using Polly;
 
 namespace TeamsManager.UI
 {
@@ -29,6 +38,14 @@ namespace TeamsManager.UI
             services.AddMemoryCache();
             // --- KONIEC: REJESTRACJA IMemoryCache ---
 
+            // --- POCZĄTEK: KONFIGURACJA LOGGERA ---
+            services.AddLogging(configure =>
+            {
+                configure.AddDebug();
+                configure.SetMinimumLevel(LogLevel.Debug);
+            });
+            // --- KONIEC: KONFIGURACJA LOGGERA ---
+
             // --- Konfiguracja ICurrentUserService ---
             // Rejestrujemy jako Singleton, aby ta sama instancja była dostępna 
             // w całej aplikacji UI. Pozwoli to na ustawienie użytkownika 
@@ -39,6 +56,65 @@ namespace TeamsManager.UI
             services.AddSingleton<ConfigurationManager>();
             services.AddSingleton<ConfigurationValidator>();
             services.AddSingleton<EncryptionService>();
+
+            // --- POCZĄTEK: MIGRACJA SERWISÓW DO DI (ETAP 3) ---
+            
+            // Rejestracja ConfigurationProvider
+            services.AddSingleton<IMsalConfigurationProvider, MsalConfigurationProvider>();
+            
+            // Aktualizacja rejestracji MsalAuthService - teraz z dependencies
+            services.AddSingleton<IMsalAuthService, MsalAuthService>();
+            
+            // GraphUserProfileService jest już zarejestrowany jako Scoped z Etapu 2
+            services.AddScoped<IGraphUserProfileService, GraphUserProfileService>();
+            
+            // --- POCZĄTEK: REJESTRACJA SERWISÓW TESTOWYCH (ETAP 5) ---
+            // ManualTestingService jako Singleton - zachowuje stan między oknami
+            services.AddSingleton<IManualTestingService, ManualTestingService>();
+            // --- KONIEC: REJESTRACJA SERWISÓW TESTOWYCH (ETAP 5) ---
+            
+            // --- KONIEC: MIGRACJA SERWISÓW DO DI (ETAP 3) ---
+
+            // --- POCZĄTEK: KONFIGURACJA HTTPCLIENT ---
+            // Rejestracja TokenAuthorizationHandler
+            services.AddTransient<TokenAuthorizationHandler>();
+
+            // Konfiguracja HttpClient dla Microsoft Graph - wzorowane na API
+            services.AddHttpClient("MicrosoftGraph", client =>
+            {
+                client.BaseAddress = new Uri("https://graph.microsoft.com/");
+                client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager-UI/1.0");
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .AddHttpMessageHandler<TokenAuthorizationHandler>()
+            .AddStandardResilienceHandler(options =>
+            {
+                // Retry Policy - skopiowane z API
+                options.Retry.ShouldHandle = args => args.Outcome switch
+                {
+                    { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
+                    { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.TooManyRequests => PredicateResult.True(),
+                    { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.RequestTimeout => PredicateResult.True(),
+                    _ => PredicateResult.False()
+                };
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.UseJitter = true;
+                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                options.Retry.Delay = TimeSpan.FromSeconds(1);
+                
+                // Circuit Breaker - uproszczone dla UI
+                options.CircuitBreaker.FailureRatio = 0.5;
+                options.CircuitBreaker.MinimumThroughput = 10;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(60);
+
+                // Timeout
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
+            });
+
+            // Default HttpClient bez specjalnej konfiguracji
+            services.AddHttpClient();
+            // --- KONIEC: KONFIGURACJA HTTPCLIENT ---
 
             // --- (Opcjonalnie) Konfiguracja TeamsManagerDbContext ---
             // W docelowej architekturze z API, klient WPF raczej nie powinien mieć
@@ -58,9 +134,16 @@ namespace TeamsManager.UI
             // np. services.AddTransient<MainViewModel>();
             //      services.AddTransient<LoginViewModel>();
 
-            // --- Rejestracja Głównego Okna (Przykład) ---
-            // Jeśli używasz DI do tworzenia głównego okna.
-            // services.AddTransient<MainWindow>();
+            // --- POCZĄTEK: REJESTRACJA OKIEN (ETAP 4) ---
+            // Rejestracja głównego okna
+            services.AddTransient<MainWindow>();
+            
+            // Opcjonalnie: rejestracja innych okien
+            services.AddTransient<DashboardWindow>();
+            
+            // ManualTestingWindow jako Transient - nowa instancja przy każdym otwarciu
+            services.AddTransient<ManualTestingWindow>();
+            // --- KONIEC: REJESTRACJA OKIEN (ETAP 4) ---
         }
 
         protected override async void OnStartup(StartupEventArgs e)
@@ -140,12 +223,53 @@ namespace TeamsManager.UI
                     // Konfiguracja jest poprawna - przywróć normalny ShutdownMode i uruchom główne okno
                     Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
                     
-                    var mainWindow = new MainWindow();
-                    mainWindow.Show();
+                    try
+                    {
+                        // ZMIANA: Tworzenie MainWindow przez DI
+                        var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
+                        mainWindow.Show();
+                        
+                        // Weryfikacja DI (debug)
+                        System.Diagnostics.Debug.WriteLine($"[DI Test] MainWindow created via DI: {mainWindow != null}");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(
+                            $"Błąd podczas tworzenia głównego okna:\n\n{ex.Message}\n\nSprawdź konfigurację serwisów.",
+                            "Błąd krytyczny",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                        Application.Current.Shutdown();
+                        return;
+                    }
 
                     // Sprawdzenie serwisów dla debugowania
                     var currentUserService = ServiceProvider.GetRequiredService<ICurrentUserService>();
                     System.Diagnostics.Debug.WriteLine($"[UI DI Test] Current User UPN: {currentUserService.GetCurrentUserUpn()}");
+
+                    // Weryfikacja serwisów z Etapów 2-3
+                    var httpClientFactory = ServiceProvider.GetService<IHttpClientFactory>();
+                    System.Diagnostics.Debug.WriteLine($"[DI Test] IHttpClientFactory: {httpClientFactory != null}");
+
+                    var configProvider = ServiceProvider.GetService<TeamsManager.UI.Services.Configuration.IMsalConfigurationProvider>();
+                    System.Diagnostics.Debug.WriteLine($"[DI Test] IMsalConfigurationProvider: {configProvider != null}");
+
+                    var msalService = ServiceProvider.GetService<IMsalAuthService>();
+                    System.Diagnostics.Debug.WriteLine($"[DI Test] IMsalAuthService: {msalService != null}");
+
+                    var graphService = ServiceProvider.GetService<IGraphUserProfileService>();
+                    System.Diagnostics.Debug.WriteLine($"[DI Test] IGraphUserProfileService: {graphService != null}");
+
+                    // Test konfiguracji MSAL
+                    if (configProvider != null && configProvider.TryLoadConfiguration(out var msalConfig))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Config Test] MSAL configuration loaded successfully");
+                        System.Diagnostics.Debug.WriteLine($"[Config Test] ClientId: {msalConfig?.AzureAd.ClientId}, Scopes: {string.Join(", ", msalConfig?.Scopes ?? new string[0])}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Config Test] Failed to load MSAL configuration");
+                    }
 
                     // Sprawdzenie DbContext
                     try

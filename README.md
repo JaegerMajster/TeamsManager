@@ -14,7 +14,7 @@
 🔗 **Microsoft Graph** - integracja z pełnym przepływem OAuth2 OBO  
 📊 **Masowe operacje** - 6 zaawansowanych orkiestratorów enterprise-grade  
 🗄️ **Lokalna baza** - SQLite z Entity Framework Core  
-🖥️ **Nowoczesny UI** - WPF + MaterialDesign 3.0  
+🖥️ **Nowoczesny UI** - WPF + MaterialDesign 3.0 + **Dependency Injection**  
 🌐 **REST API** - ASP.NET Core z JWT authentication  
 🧪 **100% testów** - 1113 testów jednostkowych i integracyjnych  
 
@@ -48,6 +48,7 @@ dotnet run
 | Dokument | Opis |
 |----------|------|
 | **[📚 Dokumentacja Techniczna](docs/dokTech.md)** | Pełna dokumentacja architektury, implementacji i wzorców |
+| **[🏗️ Architektura DI](docs/DI-Architecture.md)** | **🆕 Dependency Injection - kompletny przewodnik architektoniczny** |
 | **[🏗️ Struktura Projektu](docs/strukturaProjektu.md)** | Szczegółowa struktura plików i komponentów |
 | **[🎨 Przewodnik Stylów UI](docs/styleUI.md)** | Standardy MaterialDesign i guidelines UX |
 | **[🔄 System Synchronizacji](docs/synchronizacja.md)** | Mechanizmy Graph-DB sync i cache |
@@ -100,6 +101,7 @@ dotnet run
 👥 **Zarządzanie użytkownikami** - masowy HR workflow  
 🏥 **Monitorowanie zdrowia** - diagnostyka i auto-naprawa systemu  
 📊 **Raportowanie** - generowanie raportów i eksport danych systemowych  
+🔌 **Dependency Injection** - 🆕 **NOWY 2025-06-07** - nowoczesna architektura DI z HttpClientFactory
 
 *Wszystkie orkiestratory oferują thread-safe processing, real-time monitoring i graceful cancellation.*
 

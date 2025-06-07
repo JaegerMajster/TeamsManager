@@ -6,10 +6,11 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using TeamsManager.UI.Models;
+using TeamsManager.UI.Services.Abstractions;
 
 namespace TeamsManager.UI.Services
 {
-    public class ManualTestingService
+    public class ManualTestingService : IManualTestingService
     {
         private readonly string _resultsFilePath;
         private readonly string _configFilePath;

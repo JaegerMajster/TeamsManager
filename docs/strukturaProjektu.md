@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 08:46  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 10:52  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -24,10 +24,13 @@ docs/
 ├── 📊 schematy/
 │   ├── architektura.md
 │   └── modelDanych.md
-├── 📄 Pliki aktualne (12 plików):
+├── 📄 Pliki aktualne (15 plików):
 │   ├── analizaStabilnosciNet9.md    - Analiza migracji na .NET 9.0
 │   ├── analizaTokenuBearer.md       - Dokumentacja Bearer Token
 │   ├── audytArchitektruySync.md     - Audyt synchronizacji architektury
+│   ├── DI-Architecture.md           - 🆕 NOWY: Kompletny przewodnik architektury DI
+│   ├── Migration-Guide.md           - 🆕 NOWY: Przewodnik migracji do DI (6 etapów)
+│   ├── Release-Notes-DI.md          - 🆕 NOWY: Release notes refaktoryzacji DI
 │   ├── powerShellService.md         - Zarządzanie PowerShell Services
 │   ├── strategiaCache.md            - Strategia cache'owania
 │   ├── strukturaProjektu.md         - Ten plik
@@ -350,11 +353,20 @@ TeamsManager.UI/
 │       ├── UiConfiguration.cs
 │       └── ProviderType.cs
 ├── Services/
-│   └── Configuration/
-│       ├── ApiConfigurationService.cs
-│       ├── ConfigurationDetectionService.cs
-│       ├── UiConfigurationService.cs
-│       └── JsonConfigurationProviderService.cs
+│   ├── Abstractions/                           ← 🆕 NOWY: Interfejsy DI
+│   │   ├── IMsalAuthService.cs                 ← 🆕 NOWY: Interfejs autentykacji MSAL
+│   │   ├── IGraphUserProfileService.cs         ← 🆕 NOWY: Interfejs Microsoft Graph
+│   │   └── IManualTestingService.cs            ← 🆕 NOWY: Interfejs testów manualnych
+│   ├── Configuration/
+│   │   ├── ApiConfigurationService.cs
+│   │   ├── ConfigurationDetectionService.cs
+│   │   ├── UiConfigurationService.cs
+│   │   └── JsonConfigurationProviderService.cs
+│   ├── GraphUserProfileService.cs              ← 🆕 NOWY: Microsoft Graph implementation
+│   ├── ManualTestingService.cs                 ← 🆕 NOWY: Testy manualne implementation
+│   ├── MsalAuthService.cs                      ← 🆕 NOWY: MSAL authentication service
+│   ├── MsalConfigurationProvider.cs            ← 🆕 NOWY: Provider konfiguracji MSAL
+│   └── TokenAuthorizationHandler.cs            ← 🆕 NOWY: HTTP handler dla tokenów
 ├── Styles/ (Material Design 3.0 + Custom)
 │   └── CommonStyles.xaml (26KB, 591 linii - kompletny system stylów)
 ├── ViewModels/ (MVVM Pattern)
@@ -366,14 +378,14 @@ TeamsManager.UI/
 │   │   └── UiConfigurationViewModel.cs
 │   ├── DashboardViewModel.cs (Główny dashboard)
 │   └── RelayCommand.cs (Command Pattern)
-└── Views/ (6 okien aplikacji)
+└── Views/ (6 okien aplikacji - wszystkie z Dependency Injection)
     ├── Configuration/ (4 okna konfiguracyjne)
     │   ├── ApiConfigurationWindow.xaml (.cs)
     │   ├── ConfigurationDetectionWindow.xaml (.cs)
     │   ├── TestConnectionWindow.xaml (.cs)
     │   └── UiConfigurationWindow.xaml (.cs)
-    ├── DashboardWindow.xaml (.cs) (Główne okno)
-    └── ManualTestingWindow.xaml (.cs) (Okno testów)
+    ├── DashboardWindow.xaml (.cs) (Główne okno - ✅ pełne DI)
+    └── ManualTestingWindow.xaml (.cs) (Okno testów - ✅ pełne DI)
 ```
 
 ### 🕷️ **Legacy API (`TeamsApiApp/`) - Wycofywany**
@@ -397,9 +409,12 @@ TeamsApiApp/
 - **Domain Driven Design** (DDD)
 - **CQRS Pattern** (Command Query Responsibility Segregation)
 - **Repository Pattern** z Generic Repository
-- **Dependency Injection** (Microsoft.Extensions.DependencyInjection)
+- **Dependency Injection** (Microsoft.Extensions.DependencyInjection) - ✅ **100% DI w UI**
+- **HttpClientFactory Pattern** - connection pooling, token management
 - **Circuit Breaker Pattern** (Odporność na awarie)
 - **MVVM Pattern** (UI Layer)
+- **Factory Pattern** - service creation, graceful degradation
+- **Handler Pattern** - TokenAuthorizationHandler dla Microsoft Graph
 
 ### **Technologie:**
 - **.NET 9.0** - Najnowsza wersja platformy

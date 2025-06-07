@@ -13,6 +13,10 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.5" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.72.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.12.0" />
     <PackageReference Include="System.Net.Http.Json" Version="9.0.5" />
