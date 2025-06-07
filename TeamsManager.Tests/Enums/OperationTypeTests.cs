@@ -37,10 +37,14 @@ namespace TeamsManager.Tests.Models // lub TeamsManager.Tests.Core.Enums
             ((int)OperationType.BulkUserImport).Should().Be(41);
             ((int)OperationType.BulkArchiving).Should().Be(42);
 
+            // Operacje wsadowe dodatkowe
+            ((int)OperationType.BulkRoleChange).Should().Be(50);
+            ((int)OperationType.BulkTeamMembershipOperation).Should().Be(51);
+
             // Operacje systemowe
-            ((int)OperationType.SystemBackup).Should().Be(50);
-            ((int)OperationType.SystemRestore).Should().Be(51);
-            ((int)OperationType.ConfigurationChanged).Should().Be(52);
+            ((int)OperationType.SystemBackup).Should().Be(55);
+            ((int)OperationType.SystemRestore).Should().Be(56);
+            ((int)OperationType.ConfigurationChanged).Should().Be(57);
         }
 
         [Fact]
@@ -75,6 +79,8 @@ namespace TeamsManager.Tests.Models // lub TeamsManager.Tests.Core.Enums
         [InlineData(OperationType.BulkTeamCreation)]
         [InlineData(OperationType.BulkUserImport)]
         [InlineData(OperationType.BulkArchiving)]
+        [InlineData(OperationType.BulkRoleChange)]
+        [InlineData(OperationType.BulkTeamMembershipOperation)]
         [InlineData(OperationType.SystemBackup)]
         [InlineData(OperationType.SystemRestore)]
         [InlineData(OperationType.ConfigurationChanged)]
@@ -91,7 +97,8 @@ namespace TeamsManager.Tests.Models // lub TeamsManager.Tests.Core.Enums
             ((OperationType)25).Should().Be(OperationType.ChannelCreated);
             ((OperationType)30).Should().Be(OperationType.UserCreated);
             ((OperationType)40).Should().Be(OperationType.BulkTeamCreation);
-            ((OperationType)50).Should().Be(OperationType.SystemBackup);
+            ((OperationType)50).Should().Be(OperationType.BulkRoleChange);
+            ((OperationType)55).Should().Be(OperationType.SystemBackup);
             // Podobnie, można dodać więcej asercji dla pozostałych wartości.
         }
     }

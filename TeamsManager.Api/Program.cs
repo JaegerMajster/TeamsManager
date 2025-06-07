@@ -30,6 +30,7 @@ using Microsoft.OpenApi.Models;
 using TeamsManager.Api.Swagger;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
+using TeamsManager.Api.Services; // <-- Dodane dla SignalRNotificationService
 using TeamsManager.Core.Services.PowerShell; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
 using TeamsManager.Api.HealthChecks; // <-- Dodane dla DependencyInjectionHealthCheck
 using TeamsManager.Core.Abstractions.Services.PowerShell; // <-- Dodane dla interfejsów PowerShell
@@ -224,9 +225,17 @@ builder.Services.AddScoped<IGenericRepository<Department>, GenericRepository<Dep
 builder.Services.AddScoped<IGenericRepository<UserSchoolType>, GenericRepository<UserSchoolType>>();
 builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<UserSubject>>();
 
-// ========== WCZEŚNIEJ DODANA REJESTRACJA - StubNotificationService ==========
-builder.Services.AddScoped<INotificationService, StubNotificationService>();
-// ==========================================================================
+// ========== FINALIZACJA SIGNALR - Zmiana na SignalRNotificationService ==========
+// Wzorzec: Conditional Registration - sprawdź IsProd dla finalnej rejestracji
+if (builder.Environment.IsProduction() || builder.Configuration.GetValue<bool>("SignalR:Enabled", true))
+{
+    builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
+}
+else
+{
+    builder.Services.AddScoped<INotificationService, StubNotificationService>();
+}
+// ================================================================================
 
 // ========== REJESTRACJA ADMIN NOTIFICATION SERVICE (ETAP 5/7) ==========
 // Rejestracja Admin Notification Service

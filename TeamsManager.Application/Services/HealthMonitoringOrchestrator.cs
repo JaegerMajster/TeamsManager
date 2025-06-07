@@ -351,6 +351,12 @@ namespace TeamsManager.Application.Services
 
         public async Task<bool> CancelProcessAsync(string processId)
         {
+            if (string.IsNullOrEmpty(processId))
+            {
+                _logger.LogWarning("HealthOrchestrator: Próba anulowania procesu z pustym ID");
+                return await Task.FromResult(false);
+            }
+
             _logger.LogInformation("HealthOrchestrator: Próba anulowania procesu {ProcessId}", processId);
 
             if (_cancellationTokens.TryGetValue(processId, out var cts))

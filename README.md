@@ -3,7 +3,7 @@
 > **System zarządzania zespołami Microsoft Teams dla środowisk edukacyjnych**
 
 [![.NET 9.0](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
-[![Tests](https://img.shields.io/badge/Tests-961%2F961%20%E2%9C%85-brightgreen.svg)](TeamsManager.Tests)
+[![Tests](https://img.shields.io/badge/Tests-1113%2F1113%20%E2%9C%85-brightgreen.svg)](TeamsManager.Tests)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **TeamsManager** to zaawansowany system do automatyzacji zarządzania zespołami Microsoft Teams, stworzony specjalnie dla szkół i uczelni. Łączy w sobie lokalną aplikację desktopową WPF z potężnym REST API, zapewniając pełną kontrolę nad organizacją cyfrowej przestrzeni edukacyjnej.
@@ -16,7 +16,7 @@
 🗄️ **Lokalna baza** - SQLite z Entity Framework Core  
 🖥️ **Nowoczesny UI** - WPF + MaterialDesign 3.0  
 🌐 **REST API** - ASP.NET Core z JWT authentication  
-🧪 **100% testów** - 961 testów jednostkowych i integracyjnych  
+🧪 **100% testów** - 1113 testów jednostkowych i integracyjnych  
 
 ## 🚀 Szybki start
 
@@ -90,7 +90,7 @@ dotnet run
 | Data Layer | ✅ 100% | ✅ Pełne | 
 | REST API | ✅ 95% | ✅ Wysokie |
 | Desktop UI | 🔄 80% | ⚠️ Częściowe |
-| **Łącznie** | **✅ 961/961** | **✅ 100%** |
+| **Łącznie** | **✅ 1113/1113** | **✅ 100%** |
 
 ## 🏆 Zaawansowane orkiestratory
 

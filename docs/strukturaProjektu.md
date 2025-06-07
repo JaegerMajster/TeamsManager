@@ -1,10 +1,10 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 04:02  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 08:46  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
-> **Status:** Projekt gotowy do produkcji - wszystkie 961 testów przechodzą
+> **Status:** Projekt gotowy do produkcji - wszystkie 1113 testów przechodzą
 
 ---
 
@@ -326,6 +326,11 @@ TeamsManager.Tests/
     ├── SchoolTypeServiceTests.cs
     ├── SchoolYearServiceTests.cs
     ├── SchoolYearProcessOrchestratorTests.cs  ← NOWY: Testy orkiestratora procesów
+    ├── DataImportOrchestratorTests.cs         ← NOWY: Testy orkiestratora importu danych (37 testów)
+    ├── TeamLifecycleOrchestratorTests.cs      ← NOWY: Testy orkiestratora cyklu życia zespołów (17 testów)
+    ├── BulkUserManagementOrchestratorTests.cs ← NOWY: Testy orkiestratora zarządzania użytkownikami (26 testów)
+    ├── HealthMonitoringOrchestratorTests.cs   ← NOWY: Testy orkiestratora monitorowania zdrowia (35 testów)
+    ├── ReportingOrchestratorTests.cs          ← NOWY: Testy orkiestratora raportowania (44 testy)
     ├── SubjectServiceTests.cs
     ├── TeamServiceTests.cs
     ├── TeamTemplateServiceTests.cs
@@ -427,7 +432,7 @@ TeamsApiApp/
 
 - **👨‍�� Linie kodu:** ~63,200 (C# + XAML)
 - **📁 Pliki źródłowe:** 255
-- **🧪 Testy:** 961 (100% pass rate)
+- **🧪 Testy:** 1113 (100% pass rate)
 - **📚 Dokumentacja:** 13 plików aktualnych
 - **🏗️ Architektura:** Clean Architecture + DDD
 - **⚡ Technologia:** .NET 9.0, Material Design 3.0
@@ -435,4 +440,4 @@ TeamsApiApp/
 
 ---
 
-> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **07 czerwca 2025, 01:25**
+> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **07 czerwca 2025, 08:46**
