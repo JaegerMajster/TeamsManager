@@ -102,5 +102,11 @@ namespace TeamsManager.Core.Abstractions.Services
             string? createdBy = null,
             int page = 1,
             int pageSize = 20);
+
+        /// <summary>
+        /// Asynchronicznie pobiera aktywne operacje (w toku).
+        /// </summary>
+        /// <returns>Kolekcja aktywnych operacji.</returns>
+        Task<IEnumerable<OperationHistory>> GetActiveOperationsAsync();
     }
 }

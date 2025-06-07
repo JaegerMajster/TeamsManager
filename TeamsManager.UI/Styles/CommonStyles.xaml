@@ -65,7 +65,7 @@
 		<Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
 		<Setter Property="TextWrapping" Value="Wrap"/>
 		<Setter Property="Margin" Value="0,0,0,12"/>
-		<Setter Property="LineHeight" Value="22"/>
+		<Setter Property="LineHeight" Value="16"/>
 	</Style>
 
 	<Style x:Key="ErrorTextStyle" TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody2TextBlock}">
@@ -196,6 +196,53 @@
 				<Setter Property="Background" Value="{StaticResource AccentBlueLight}"/>
 			</Trigger>
 		</Style.Triggers>
+	</Style>
+
+	<!-- Color Palette Button Style -->
+	<Style x:Key="ColorPaletteButton" TargetType="Button">
+		<Setter Property="Width" Value="40"/>
+		<Setter Property="Height" Value="40"/>
+		<Setter Property="Margin" Value="4"/>
+		<Setter Property="Padding" Value="0"/>
+		<Setter Property="BorderThickness" Value="2"/>
+		<Setter Property="BorderBrush" Value="Transparent"/>
+		<Setter Property="Cursor" Value="Hand"/>
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="Button">
+					<Border x:Name="border"
+					        Background="{TemplateBinding Background}"
+					        BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}"
+					        CornerRadius="20">
+						<ContentPresenter HorizontalAlignment="Center" 
+						                  VerticalAlignment="Center"/>
+					</Border>
+					<ControlTemplate.Triggers>
+						<Trigger Property="IsMouseOver" Value="True">
+							<Setter TargetName="border" Property="BorderBrush" Value="White"/>
+							<Setter Property="Effect">
+								<Setter.Value>
+									<DropShadowEffect ShadowDepth="2" 
+									                  BlurRadius="8" 
+									                  Color="Black" 
+									                  Opacity="0.3"/>
+								</Setter.Value>
+							</Setter>
+						</Trigger>
+						<Trigger Property="IsPressed" Value="True">
+							<Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBlue}"/>
+							<Setter Property="RenderTransform">
+								<Setter.Value>
+									<ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+								</Setter.Value>
+							</Setter>
+							<Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+						</Trigger>
+					</ControlTemplate.Triggers>
+				</ControlTemplate>
+			</Setter.Value>
+		</Setter>
 	</Style>
 
 	<Style x:Key="SecondaryActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
@@ -510,6 +557,31 @@
 				</Trigger.ExitActions>
 			</Trigger>
 		</Style.Triggers>
+	</Style>
+
+	<Style x:Key="SuccessCardStyle" TargetType="Border" BasedOn="{StaticResource InfoCardStyle}">
+		<Setter Property="BorderBrush" Value="{StaticResource SuccessGreen}"/>
+		<Setter Property="Background">
+			<Setter.Value>
+				<LinearGradientBrush StartPoint="0,0" EndPoint="1,1" Opacity="0.1">
+					<GradientStop Color="#FF4CAF50" Offset="0"/>
+					<GradientStop Color="Transparent" Offset="1"/>
+				</LinearGradientBrush>
+			</Setter.Value>
+		</Setter>
+		<Style.Triggers>
+			<Trigger Property="IsMouseOver" Value="True">
+				<Setter Property="BorderBrush" Value="{StaticResource SuccessGreen}"/>
+			</Trigger>
+		</Style.Triggers>
+	</Style>
+
+	<Style x:Key="PageFooterStyle" TargetType="Border">
+		<Setter Property="Background" Value="{DynamicResource BackgroundMedium}"/>
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderDark}"/>
+		<Setter Property="BorderThickness" Value="0,1,0,0"/>
+		<Setter Property="Padding" Value="20,16"/>
+		<Setter Property="CornerRadius" Value="0,0,12,12"/>
 	</Style>
 
 	<!-- Chip/Tag Style -->

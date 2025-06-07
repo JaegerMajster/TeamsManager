@@ -149,6 +149,12 @@ namespace TeamsManager.Core.Models
         /// </summary>
         public DateTime? LastActivityDate { get; set; }
 
+        /// <summary>
+        /// Właściwość pomocnicza dla UI - określa czy zespół jest zaznaczony do operacji grupowych.
+        /// Nie jest mapowana do bazy danych.
+        /// </summary>
+        public bool IsSelected { get; set; } = false;
+
         // ===== WŁAŚCIWOŚCI NAWIGACYJNE =====
 
         /// <summary>

@@ -5,8 +5,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using TeamsManager.UI.ViewModels;
+using TeamsManager.UI.ViewModels.Dashboard;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TeamsManager.UI.Views
 {
@@ -26,7 +27,9 @@ namespace TeamsManager.UI.Views
             InitializeComponent();
             
             _applicationStartTime = DateTime.Now;
-            _viewModel = new DashboardViewModel();
+            
+            // Pobierz DashboardViewModel z DI
+            _viewModel = App.ServiceProvider.GetRequiredService<DashboardViewModel>();
             DataContext = _viewModel;
 
             // Timer do automatycznego odświeżania danych co 5 minut
@@ -162,8 +165,9 @@ namespace TeamsManager.UI.Views
         {
             try
             {
-                var operations = await _viewModel.GetRecentOperationsAsync();
-                RecentOperationsDataGrid.ItemsSource = operations;
+                // Wykorzystaj już istniejącą właściwość RecentOperations z ViewModel
+                await _viewModel.LoadStatisticsAsync();
+                RecentOperationsDataGrid.ItemsSource = _viewModel.RecentOperations;
             }
             catch (Exception ex)
             {

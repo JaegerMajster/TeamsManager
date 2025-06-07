@@ -1,0 +1,117 @@
+<UserControl x:Class="TeamsManager.UI.UserControls.BulkOperationsToolbar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             mc:Ignorable="d" 
+             d:DesignHeight="60" d:DesignWidth="800">
+    
+    <Border Background="{DynamicResource BackgroundMedium}" 
+            CornerRadius="8" 
+            Margin="0,0,0,10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.3" Color="Black"/>
+        </Border.Effect>
+        
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Selection info -->
+            <StackPanel Grid.Column="0" 
+                        Orientation="Horizontal" 
+                        VerticalAlignment="Center" 
+                        Margin="15,0">
+                <materialDesign:PackIcon Kind="SelectionMultiple" 
+                                         VerticalAlignment="Center" 
+                                         Margin="0,0,10,0"
+                                         Foreground="{DynamicResource AccentBlue}"/>
+                <TextBlock Text="{Binding SelectionText}" 
+                           VerticalAlignment="Center"
+                           FontWeight="Medium"/>
+            </StackPanel>
+            
+            <!-- Separator -->
+            <Border Grid.Column="1" 
+                    Width="1" 
+                    Background="{DynamicResource BorderDark}" 
+                    Margin="0,10"/>
+            
+            <!-- Bulk actions -->
+            <StackPanel Grid.Column="2" 
+                        Orientation="Horizontal" 
+                        Margin="15,0">
+                
+                <!-- Select All/None -->
+                <Button Style="{StaticResource IconButton}"
+                        Command="{Binding SelectAllCommand}"
+                        ToolTip="Zaznacz wszystkie"
+                        Margin="0,0,5,0">
+                    <materialDesign:PackIcon Kind="SelectAll" />
+                </Button>
+                
+                <Button Style="{StaticResource IconButton}"
+                        Command="{Binding DeselectAllCommand}"
+                        ToolTip="Odznacz wszystkie"
+                        Margin="0,0,20,0">
+                    <materialDesign:PackIcon Kind="SelectionRemove" />
+                </Button>
+                
+                <!-- Actions -->
+                <Button Style="{StaticResource SuccessButton}"
+                        Command="{Binding ActivateSelectedCommand}"
+                        Margin="0,0,10,0"
+                        Height="36">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="CheckCircle" 
+                                                 VerticalAlignment="Center" 
+                                                 Margin="0,0,8,0"/>
+                        <TextBlock Text="Aktywuj zaznaczone" 
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                
+                <Button Style="{StaticResource DangerButton}"
+                        Command="{Binding DeactivateSelectedCommand}"
+                        Height="36">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Cancel" 
+                                                 VerticalAlignment="Center" 
+                                                 Margin="0,0,8,0"/>
+                        <TextBlock Text="Dezaktywuj zaznaczone" 
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            
+            <!-- Additional actions -->
+            <StackPanel Grid.Column="3" 
+                        Orientation="Horizontal" 
+                        Margin="0,0,15,0">
+                
+                <Button Style="{StaticResource IconButton}"
+                        ToolTip="Eksportuj do Excel"
+                        Margin="0,0,5,0">
+                    <materialDesign:PackIcon Kind="MicrosoftExcel" 
+                                             Foreground="#4CAF50"/>
+                </Button>
+                
+                <Button Style="{StaticResource IconButton}"
+                        ToolTip="Drukuj"
+                        Margin="0,0,5,0">
+                    <materialDesign:PackIcon Kind="Printer" />
+                </Button>
+                
+                <Button Style="{StaticResource IconButton}"
+                        ToolTip="Więcej opcji">
+                    <materialDesign:PackIcon Kind="DotsVertical" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl> 

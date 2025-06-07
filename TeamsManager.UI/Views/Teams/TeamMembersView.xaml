@@ -1,0 +1,261 @@
+<UserControl x:Class="TeamsManager.UI.Views.Teams.TeamMembersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="1200"
+             Background="{DynamicResource BackgroundDark}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Toolbar -->
+            <RowDefinition Height="*"/>     <!-- Main content -->
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <ToolBar Grid.Row="0" 
+                 Background="{DynamicResource BackgroundMedium}"
+                 Padding="16,8">
+            <Button Command="{Binding BulkImportCommand}"
+                    Style="{StaticResource IconButton}"
+                    ToolTip="Import z CSV">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="FileImport" />
+                    <TextBlock Text="Import z CSV" Margin="5,0,0,0"/>
+                </StackPanel>
+            </Button>
+            <Separator/>
+            <TextBlock Text="{Binding MembersCount}" 
+                       VerticalAlignment="Center"
+                       Style="{StaticResource MaterialDesignBody2TextBlock}"
+                       Foreground="{DynamicResource TextPrimary}"/>
+        </ToolBar>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>      <!-- Available Users -->
+                <ColumnDefinition Width="100"/>    <!-- Transfer buttons -->
+                <ColumnDefinition Width="*"/>      <!-- Team Members -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Available Users Panel -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" 
+                           Text="Dostępni użytkownicy"
+                           Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                           Foreground="{DynamicResource TextPrimary}"
+                           Margin="0,0,0,16"/>
+                
+                <!-- Search Box -->
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
+                    <TextBox x:Name="SearchBox"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="Szukaj użytkownika..."
+                             materialDesign:TextFieldAssist.HasClearButton="True"
+                             Style="{StaticResource MaterialDesignFloatingHintTextBox}"/>
+                </Grid>
+
+                <!-- Available Users List -->
+                <ListBox ItemsSource="{Binding FilteredAvailableUsers}"
+                         SelectedItem="{Binding SelectedAvailableUser}"
+                         SelectionMode="Extended"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Style="{StaticResource MaterialDesignListBox}"
+                         Background="{DynamicResource BackgroundMedium}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <materialDesign:Card Margin="4"
+                                                 Padding="12"
+                                                 UniformCornerRadius="8"
+                                                 Background="{DynamicResource BackgroundLight}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Avatar -->
+                                    <Ellipse Grid.Column="0" 
+                                             Width="32" Height="32"
+                                             Fill="{StaticResource AccentBlue}"
+                                             VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Initials}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="White"
+                                               FontWeight="Medium"/>
+
+                                    <!-- User Info -->
+                                    <StackPanel Grid.Column="1" 
+                                                Margin="12,0">
+                                        <TextBlock Text="{Binding FullName}"
+                                                   FontWeight="DemiBold"
+                                                   Foreground="{DynamicResource TextPrimary}"/>
+                                        <TextBlock Text="{Binding Email}"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   FontSize="12"/>
+                                    </StackPanel>
+
+                                    <!-- Role Badge -->
+                                    <materialDesign:Chip Grid.Column="2"
+                                                         Content="{Binding RoleDisplayName}"
+                                                         FontSize="10"
+                                                         Height="24"
+                                                         Background="{StaticResource AccentBlue}"/>
+                                </Grid>
+                            </materialDesign:Card>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- Transfer Buttons -->
+            <StackPanel Grid.Column="1" 
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center">
+                
+                <!-- Add with Member role -->
+                <Button Command="{Binding AddAsMemberCommand}"
+                        Style="{StaticResource IconButton}"
+                        ToolTip="Dodaj jako członka"
+                        Margin="0,8"
+                        Width="48" Height="48">
+                    <materialDesign:PackIcon Kind="ChevronRight" Width="24" Height="24"/>
+                </Button>
+
+                <!-- Add with Owner role -->
+                <Button Command="{Binding AddAsOwnerCommand}"
+                        Style="{StaticResource PrimaryActionButton}"
+                        ToolTip="Dodaj jako właściciela"
+                        Margin="0,8"
+                        Width="48" Height="48">
+                    <materialDesign:PackIcon Kind="ChevronDoubleRight" Width="24" Height="24"/>
+                </Button>
+
+                <Separator Height="20"/>
+
+                <!-- Remove -->
+                <Button Command="{Binding RemoveMemberCommand}"
+                        Style="{StaticResource DangerButton}"
+                        ToolTip="Usuń z zespołu"
+                        Margin="0,8"
+                        Width="48" Height="48">
+                    <materialDesign:PackIcon Kind="ChevronLeft" Width="24" Height="24"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Team Members Panel -->
+            <DockPanel Grid.Column="2">
+                <TextBlock DockPanel.Dock="Top" 
+                           Text="Członkowie zespołu"
+                           Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                           Foreground="{DynamicResource TextPrimary}"
+                           Margin="0,0,0,16"/>
+
+                <!-- Members DataGrid -->
+                <Border Style="{StaticResource RoundedDataGrid}">
+                    <DataGrid ItemsSource="{Binding TeamMembers}"
+                              SelectedItem="{Binding SelectedTeamMember}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              Style="{StaticResource MaterialDesignDataGrid}">
+                        <DataGrid.Columns>
+                            <!-- Member Info -->
+                            <DataGridTemplateColumn Header="Członek" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="24" Height="24"
+                                                     Fill="{StaticResource AccentBlue}"
+                                                     Margin="0,0,8,0"/>
+                                            <TextBlock Text="{Binding User.Initials}"
+                                                       Foreground="White"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Margin="-32,0,16,0"
+                                                       FontWeight="Medium"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding User.FullName}"
+                                                           FontWeight="DemiBold"
+                                                           Foreground="{DynamicResource TextPrimary}"/>
+                                                <TextBlock Text="{Binding User.Email}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondary}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Role -->
+                            <DataGridTemplateColumn Header="Rola" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
+                                                  ItemsSource="{Binding DataContext.AvailableRoles, 
+                                                                RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  Width="100">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Converter={StaticResource TeamMemberRoleToStringConverter}}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Added Date -->
+                            <DataGridTextColumn Header="Dodany"
+                                                Binding="{Binding AddedDate, StringFormat='{}{0:dd.MM.yyyy}'}"
+                                                Width="100"
+                                                IsReadOnly="True"/>
+
+                            <!-- Added By -->
+                            <DataGridTextColumn Header="Przez"
+                                                Binding="{Binding AddedBy}"
+                                                Width="120"
+                                                IsReadOnly="True"/>
+
+                            <!-- Actions -->
+                            <DataGridTemplateColumn Header="" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding DataContext.RemoveSpecificMemberCommand, 
+                                                          RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource IconButton}"
+                                                ToolTip="Usuń z zespołu">
+                                            <materialDesign:PackIcon Kind="Delete" 
+                                                                     Foreground="{StaticResource AccentRed}"/>
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+            </DockPanel>
+        </Grid>
+
+        <!-- Loading Overlay -->
+        <Grid Grid.RowSpan="2" 
+              Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+              Background="#80000000">
+            <StackPanel HorizontalAlignment="Center" 
+                        VerticalAlignment="Center">
+                <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                             IsIndeterminate="True"
+                             Width="50" Height="50"/>
+                <TextBlock Text="Ładowanie..."
+                           Foreground="White"
+                           Margin="0,16,0,0"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl> 

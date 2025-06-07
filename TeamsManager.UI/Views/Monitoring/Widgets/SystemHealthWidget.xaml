@@ -1,0 +1,36 @@
+<UserControl x:Class="TeamsManager.UI.Views.Monitoring.Widgets.SystemHealthWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
+    
+    <materialDesign:Card>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Header -->
+            <Border Grid.Row="0" Background="{DynamicResource PrimaryHueMidBrush}" Padding="16,12">
+                <TextBlock Text="System Health" 
+                           Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                           Foreground="White"/>
+            </Border>
+            
+            <!-- Content -->
+            <StackPanel Grid.Row="1" Margin="16">
+                <TextBlock Text="Health Status: " FontWeight="Medium"/>
+                <TextBlock Text="{Binding OverallStatus}" Margin="0,8"/>
+                
+                <TextBlock Text="Components:" FontWeight="Medium" Margin="0,16,0,8"/>
+                <ItemsControl ItemsSource="{Binding HealthComponents}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" Margin="0,2"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+    </materialDesign:Card>
+</UserControl> 

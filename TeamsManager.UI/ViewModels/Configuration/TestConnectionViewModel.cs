@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -15,7 +15,7 @@ using TeamsManager.UI.Services.Configuration;
 namespace TeamsManager.UI.ViewModels.Configuration
 {
     /// <summary>
-    /// ViewModel dla okna testowania poÅ‚Ä…czenia
+    /// ViewModel dla okna testowania po³¹czenia
     /// </summary>
     public class TestConnectionViewModel : INotifyPropertyChanged
     {
@@ -44,11 +44,11 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
             _testSteps = new ObservableCollection<TestStep>
             {
-                new TestStep { Name = "Åadowanie konfiguracji", Status = TestStepStatus.Pending },
-                new TestStep { Name = "Weryfikacja parametrÃ³w", Status = TestStepStatus.Pending },
+                new TestStep { Name = "£adowanie konfiguracji", Status = TestStepStatus.Pending },
+                new TestStep { Name = "Weryfikacja parametrów", Status = TestStepStatus.Pending },
                 new TestStep { Name = "Logowanie do Azure AD", Status = TestStepStatus.Pending },
-                new TestStep { Name = "Sprawdzanie uprawnieÅ„ Microsoft Graph", Status = TestStepStatus.Pending },
-                new TestStep { Name = "Testowanie poÅ‚Ä…czenia z API", Status = TestStepStatus.Pending },
+                new TestStep { Name = "Sprawdzanie uprawnieñ Microsoft Graph", Status = TestStepStatus.Pending },
+                new TestStep { Name = "Testowanie po³¹czenia z API", Status = TestStepStatus.Pending },
                 new TestStep { Name = "Weryfikacja On-Behalf-Of flow", Status = TestStepStatus.Pending }
             };
 
@@ -143,7 +143,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
             try
             {
                 // Step 1: Load configuration
-                await UpdateTestStep(0, TestStepStatus.InProgress, "Åadowanie konfiguracji...");
+                await UpdateTestStep(0, TestStepStatus.InProgress, "£adowanie konfiguracji...");
                 await Task.Delay(500); // Simulate work
 
                 _oauthConfig = await _configManager.LoadOAuthConfigAsync();
@@ -151,19 +151,19 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
                 if (_oauthConfig == null || _apiConfig == null)
                 {
-                    throw new Exception("Nie znaleziono plikÃ³w konfiguracyjnych");
+                    throw new Exception("Nie znaleziono plików konfiguracyjnych");
                 }
 
                 await UpdateTestStep(0, TestStepStatus.Success);
 
                 // Step 2: Validate configuration
-                await UpdateTestStep(1, TestStepStatus.InProgress, "Weryfikacja parametrÃ³w konfiguracji...");
+                await UpdateTestStep(1, TestStepStatus.InProgress, "Weryfikacja parametrów konfiguracji...");
                 await Task.Delay(500);
 
                 var validationResult = await _validator.ValidateFullConfigurationAsync();
                 if (!validationResult.IsValid)
                 {
-                    throw new Exception($"BÅ‚Ä™dy walidacji: {string.Join(", ", validationResult.Errors)}");
+                    throw new Exception($"B³êdy walidacji: {string.Join(", ", validationResult.Errors)}");
                 }
 
                 await UpdateTestStep(1, TestStepStatus.Success);
@@ -174,20 +174,20 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 var authResult = await TestAzureADLogin();
                 if (authResult == null)
                 {
-                    throw new Exception("Nie udaÅ‚o siÄ™ zalogowaÄ‡ do Azure AD");
+                    throw new Exception("Nie uda³o siê zalogowaæ do Azure AD");
                 }
 
                 await UpdateTestStep(2, TestStepStatus.Success);
 
                 // Step 4: Test Microsoft Graph permissions
-                await UpdateTestStep(3, TestStepStatus.InProgress, "Sprawdzanie uprawnieÅ„ Microsoft Graph...");
+                await UpdateTestStep(3, TestStepStatus.InProgress, "Sprawdzanie uprawnieñ Microsoft Graph...");
 
                 await TestGraphPermissions(authResult.AccessToken);
 
                 await UpdateTestStep(3, TestStepStatus.Success);
 
                 // Step 5: Test API connection
-                await UpdateTestStep(4, TestStepStatus.InProgress, "Testowanie poÅ‚Ä…czenia z TeamsManager API...");
+                await UpdateTestStep(4, TestStepStatus.InProgress, "Testowanie po³¹czenia z TeamsManager API...");
 
                 await TestApiConnection(authResult.AccessToken);
 
@@ -201,7 +201,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 await UpdateTestStep(5, TestStepStatus.Success);
 
                 // Success!
-                CurrentTestStep = "Test zakoÅ„czony pomyÅ›lnie!";
+                CurrentTestStep = "Test zakoñczony pomyœlnie!";
                 GenerateConfigSummary();
                 IsSuccess = true;
             }
@@ -214,14 +214,14 @@ namespace TeamsManager.UI.ViewModels.Configuration
                     currentStep.Status = TestStepStatus.Failed;
                 }
 
-                ErrorMessages.Add($"âŒ {ex.Message}");
+                ErrorMessages.Add($"? {ex.Message}");
 
                 if (ex.InnerException != null)
                 {
-                    ErrorMessages.Add($"   SzczegÃ³Å‚y: {ex.InnerException.Message}");
+                    ErrorMessages.Add($"   Szczegó³y: {ex.InnerException.Message}");
                 }
 
-                CurrentTestStep = "Test zakoÅ„czony niepowodzeniem";
+                CurrentTestStep = "Test zakoñczony niepowodzeniem";
                 IsError = true;
             }
             finally
@@ -232,7 +232,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
         private async Task UpdateTestStep(int index, TestStepStatus status, string? message = null)
         {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 if (index < TestSteps.Count)
                 {
@@ -272,7 +272,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
             }
             catch (MsalException msalEx)
             {
-                throw new Exception($"BÅ‚Ä…d MSAL: {msalEx.ErrorCode} - {msalEx.Message}", msalEx);
+                throw new Exception($"B³¹d MSAL: {msalEx.ErrorCode} - {msalEx.Message}", msalEx);
             }
         }
 
@@ -287,7 +287,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Brak dostÄ™pu do Microsoft Graph: {response.StatusCode}");
+                throw new Exception($"Brak dostêpu do Microsoft Graph: {response.StatusCode}");
             }
 
             await Task.Delay(500); // Simulate additional checks
@@ -306,12 +306,12 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 if (!response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    throw new Exception($"API zwrÃ³ciÅ‚o bÅ‚Ä…d {response.StatusCode}: {content}");
+                    throw new Exception($"API zwróci³o b³¹d {response.StatusCode}: {content}");
                 }
             }
             catch (HttpRequestException ex)
             {
-                throw new Exception($"Nie moÅ¼na poÅ‚Ä…czyÄ‡ siÄ™ z API pod adresem {_oauthConfig!.AzureAd.ApiBaseUrl}. Upewnij siÄ™, Å¼e API jest uruchomione.", ex);
+                throw new Exception($"Nie mo¿na po³¹czyæ siê z API pod adresem {_oauthConfig!.AzureAd.ApiBaseUrl}. Upewnij siê, ¿e API jest uruchomione.", ex);
             }
         }
 
@@ -325,7 +325,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception("On-Behalf-Of flow nie dziaÅ‚a poprawnie. SprawdÅº konfiguracjÄ™ API.");
+                throw new Exception("On-Behalf-Of flow nie dzia³a poprawnie. SprawdŸ konfiguracjê API.");
             }
 
             await Task.Delay(500);
@@ -356,7 +356,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
         private void Finish()
         {
             var result = MessageBox.Show(
-                "Konfiguracja zostaÅ‚a zakoÅ„czona pomyÅ›lnie!\n\nAplikacja zostanie teraz zrestartowana.",
+                "Konfiguracja zosta³a zakoñczona pomyœlnie!\n\nAplikacja zostanie teraz zrestartowana.",
                 "Sukces",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -372,7 +372,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
         private void Cancel()
         {
             var result = MessageBox.Show(
-                "Czy na pewno chcesz anulowaÄ‡ konfiguracjÄ™?",
+                "Czy na pewno chcesz anulowaæ konfiguracjê?",
                 "Anuluj",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);

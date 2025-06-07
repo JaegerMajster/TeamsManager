@@ -35,5 +35,17 @@ namespace TeamsManager.UI.Services.Abstractions
         /// <param name="window">Okno rodzica dla dialogu logowania</param>
         /// <returns>Token dostępu lub null w przypadku błędu</returns>
         Task<string?> AcquireGraphTokenInteractiveAsync(Window window);
+        
+        /// <summary>
+        /// Pobiera token w trybie cichym (bez UI)
+        /// </summary>
+        /// <returns>Rezultat autentykacji lub null jeśli wymagana interakcja użytkownika</returns>
+        Task<AuthenticationResult?> AcquireTokenSilentAsync();
+        
+        /// <summary>
+        /// Pobiera token dostępu w trybie cichym
+        /// </summary>
+        /// <returns>Token dostępu lub null w przypadku błędu</returns>
+        Task<string?> GetAccessTokenAsync();
     }
 } 

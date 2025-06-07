@@ -18,13 +18,18 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.5" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.72.1" />
+    <PackageReference Include="ReactiveUI" Version="20.3.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.12.0" />
     <PackageReference Include="System.Net.Http.Json" Version="9.0.5" />
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.0-rc4.5" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView" Version="2.0.0-rc4.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TeamsManager.Core\TeamsManager.Core.csproj" />
     <ProjectReference Include="..\TeamsManager.Data\TeamsManager.Data.csproj" />
+    <ProjectReference Include="..\TeamsManager.Application\TeamsManager.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

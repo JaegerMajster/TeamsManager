@@ -226,6 +226,21 @@ namespace TeamsManager.Core.Services
 
             return pagedResult;
         }
+
+        /// <inheritdoc />
+        public async Task<IEnumerable<OperationHistory>> GetActiveOperationsAsync()
+        {
+            _logger.LogInformation("Pobieranie aktywnych operacji");
+            
+            Expression<Func<OperationHistory, bool>> predicate = oh => 
+                oh.Status == OperationStatus.InProgress || 
+                oh.Status == OperationStatus.Pending;
+            
+            var activeOperations = await _operationHistoryRepository.FindAsync(predicate);
+            
+            _logger.LogInformation("Znaleziono {Count} aktywnych operacji", activeOperations.Count());
+            return activeOperations.OrderByDescending(oh => oh.StartedAt);
+        }
     }
 
     // Klasa pomocnicza do budowania predykatów (często używana)

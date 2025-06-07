@@ -1,0 +1,454 @@
+<UserControl x:Class="TeamsManager.UI.Views.Operations.OperationHistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:converters="clr-namespace:TeamsManager.UI.Converters"
+             xmlns:operations="clr-namespace:TeamsManager.UI.ViewModels.Operations"
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1200"
+             d:DataContext="{d:DesignInstance Type=operations:OperationHistoryViewModel}">
+
+    <UserControl.Resources>
+        <!-- Konwertery -->
+        <converters:OperationTypeToIconConverter x:Key="OperationTypeToIconConverter" />
+        <converters:OperationStatusToColorConverter x:Key="OperationStatusToColorConverter" />
+        <converters:OperationStatusToTextColorConverter x:Key="OperationStatusToTextColorConverter" />
+        <converters:TimeSpanToReadableConverter x:Key="TimeSpanToReadableConverter" />
+        <converters:DateTimeToRelativeConverter x:Key="DateTimeToRelativeConverter" />
+        <converters:ProgressToTextConverter x:Key="ProgressToTextConverter" />
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+
+        <!-- Style dla kart statystyk -->
+        <Style x:Key="StatisticCardStyle" TargetType="materialDesign:Card">
+            <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2" />
+            <Setter Property="Margin" Value="8" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Background" Value="{DynamicResource MaterialDesignCardBackground}" />
+        </Style>
+
+        <!-- Style dla status chipów -->
+        <Style x:Key="StatusChipStyle" TargetType="materialDesign:Chip">
+            <Setter Property="Margin" Value="4,2" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="IsEnabled" Value="False" />
+        </Style>
+
+        <!-- Style dla przycisków eksportu -->
+        <Style x:Key="ExportButtonStyle" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Height" Value="36" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- Loading Overlay -->
+        <Grid Background="Black" Opacity="0.3" Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}" 
+              Panel.ZIndex="100">
+            <materialDesign:PackIcon Kind="Loading" Width="64" Height="64" 
+                                     Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     RenderTransformOrigin="0.5,0.5">
+                <materialDesign:PackIcon.RenderTransform>
+                    <RotateTransform />
+                </materialDesign:PackIcon.RenderTransform>
+                <materialDesign:PackIcon.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Angle" 
+                                                From="0" To="360" Duration="0:0:1" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </materialDesign:PackIcon.Triggers>
+            </materialDesign:PackIcon>
+        </Grid>
+
+        <DockPanel>
+            <!-- Header z gradientem i statystykami -->
+            <materialDesign:Card DockPanel.Dock="Top" Margin="0,0,0,16"
+                                 materialDesign:ElevationAssist.Elevation="Dp4">
+                <Border Background="{StaticResource HeaderGradient}" Padding="24,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Nagłówek -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="History" Width="32" Height="32" 
+                                                         Foreground="White" Margin="0,0,12,0" />
+                                <TextBlock Text="Historia Operacji" FontSize="24" FontWeight="Medium" 
+                                           Foreground="White" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <!-- Przyciski w toolbar -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Style="{StaticResource ExportButtonStyle}" Background="{StaticResource AccentGradient}"
+                                        Command="{Binding RefreshCommand}" ToolTip="Odśwież dane">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16" Margin="0,0,8,0" />
+                                        <TextBlock Text="Odśwież" />
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Button Style="{StaticResource ExportButtonStyle}" Background="#4CAF50"
+                                        Command="{Binding ExportToExcelCommand}" ToolTip="Eksportuj do Excel">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="FileExcel" Width="16" Height="16" Margin="0,0,8,0" />
+                                        <TextBlock Text="Excel" />
+                                    </StackPanel>
+                                </Button>
+                                
+                                <Button Style="{StaticResource ExportButtonStyle}" Background="#F44336"
+                                        Command="{Binding ExportToPdfCommand}" ToolTip="Eksportuj do PDF">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="FilePdf" Width="16" Height="16" Margin="0,0,8,0" />
+                                        <TextBlock Text="PDF" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Statystyki -->
+                        <UniformGrid Grid.Row="1" Rows="1" Columns="5" Margin="0,16,0,0">
+                            <!-- Total Operations -->
+                            <Border Background="White" CornerRadius="8" Margin="4" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="ŁĄCZNIE OPERACJI" FontSize="11" FontWeight="Medium" 
+                                               Foreground="#666" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding TotalOperationsCount}" FontSize="24" FontWeight="Bold" 
+                                               Foreground="#333" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Success Rate -->
+                            <Border Background="White" CornerRadius="8" Margin="4" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="POWODZENIE" FontSize="11" FontWeight="Medium" 
+                                               Foreground="#666" HorizontalAlignment="Center" />
+                                    <TextBlock FontSize="24" FontWeight="Bold" 
+                                               Foreground="#4CAF50" HorizontalAlignment="Center">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0:F1}%">
+                                                <Binding Path="SuccessRate" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Failed Operations -->
+                            <Border Background="White" CornerRadius="8" Margin="4" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="BŁĘDY" FontSize="11" FontWeight="Medium" 
+                                               Foreground="#666" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding FailedOperations}" FontSize="24" FontWeight="Bold" 
+                                               Foreground="#F44336" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- In Progress -->
+                            <Border Background="White" CornerRadius="8" Margin="4" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="W TOKU" FontSize="11" FontWeight="Medium" 
+                                               Foreground="#666" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding InProgressOperations}" FontSize="24" FontWeight="Bold" 
+                                               Foreground="#2196F3" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Average Time -->
+                            <Border Background="White" CornerRadius="8" Margin="4" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="ŚR. CZAS" FontSize="11" FontWeight="Medium" 
+                                               Foreground="#666" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding AverageExecutionTime, Converter={StaticResource TimeSpanToReadableConverter}}" 
+                                               FontSize="18" FontWeight="Bold" 
+                                               Foreground="#333" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </Grid>
+                </Border>
+            </materialDesign:Card>
+
+            <!-- Panel filtrów -->
+            <materialDesign:Card DockPanel.Dock="Top" Margin="0,0,0,16"
+                                 materialDesign:ElevationAssist.Elevation="Dp2">
+                <Expander Header="Filtry zaawansowane" Padding="16" IsExpanded="False">
+                    <Expander.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="FilterVariant" Width="20" Height="20" 
+                                                         Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding}" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </Expander.HeaderTemplate>
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Pierwsza linia filtrów -->
+                        <DatePicker Grid.Row="0" Grid.Column="0" Margin="8"
+                                    materialDesign:HintAssist.Hint="Data od"
+                                    SelectedDate="{Binding StartDate}" />
+
+                        <DatePicker Grid.Row="0" Grid.Column="1" Margin="8"
+                                    materialDesign:HintAssist.Hint="Data do"
+                                    SelectedDate="{Binding EndDate}" />
+
+                        <ComboBox Grid.Row="0" Grid.Column="2" Margin="8"
+                                  materialDesign:HintAssist.Hint="Typ operacji"
+                                  ItemsSource="{Binding AvailableOperationTypes}"
+                                  SelectedItem="{Binding SelectedOperationType}" />
+
+                        <ComboBox Grid.Row="0" Grid.Column="3" Margin="8"
+                                  materialDesign:HintAssist.Hint="Status"
+                                  ItemsSource="{Binding AvailableStatuses}"
+                                  SelectedItem="{Binding SelectedStatus}" />
+
+                        <!-- Druga linia filtrów -->
+                        <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="8"
+                                 materialDesign:HintAssist.Hint="Filtr użytkownika"
+                                 Text="{Binding UserFilter, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding RefreshCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+
+                        <TextBox Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Margin="8"
+                                 materialDesign:HintAssist.Hint="Wyszukaj w szczegółach"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding RefreshCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+
+                        <!-- Przyciski -->
+                        <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Orientation="Horizontal" 
+                                    HorizontalAlignment="Right" Margin="8">
+                            <Button Style="{StaticResource MaterialDesignOutlinedButton}" 
+                                    Command="{Binding ClearFiltersCommand}" Margin="4">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FilterOff" Width="16" Height="16" Margin="0,0,8,0" />
+                                    <TextBlock Text="Wyczyść" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Expander>
+            </materialDesign:Card>
+
+            <!-- Główny DataGrid -->
+            <materialDesign:Card materialDesign:ElevationAssist.Elevation="Dp2">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- DataGrid -->
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding FilteredOperations}"
+                              SelectedItem="{Binding SelectedOperation}"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              materialDesign:DataGridAssist.CellPadding="8"
+                              materialDesign:DataGridAssist.ColumnHeaderPadding="8"
+                              CanUserSortColumns="True" CanUserReorderColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              SelectionMode="Single"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True">
+
+                        <DataGrid.Columns>
+                            <!-- Typ operacji z ikoną -->
+                            <DataGridTemplateColumn Header="Typ" Width="120" SortMemberPath="OperationType">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon 
+                                                Kind="{Binding OperationType, Converter={StaticResource OperationTypeToIconConverter}}"
+                                                Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding OperationType}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Cel operacji -->
+                            <DataGridTextColumn Header="Cel" Binding="{Binding DisplayTarget}" Width="200" />
+
+                            <!-- Użytkownik -->
+                            <DataGridTextColumn Header="Użytkownik" Binding="{Binding DisplayUser}" Width="120" />
+
+                            <!-- Status z kolorami -->
+                            <DataGridTemplateColumn Header="Status" Width="120" SortMemberPath="Status">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <materialDesign:Chip Content="{Binding Status}" 
+                                                             Style="{StaticResource StatusChipStyle}"
+                                                             Background="{Binding Status, Converter={StaticResource OperationStatusToColorConverter}}"
+                                                             Foreground="White" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Data rozpoczęcia -->
+                            <DataGridTemplateColumn Header="Rozpoczęto" Width="140" SortMemberPath="StartTime">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding StartTime, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" 
+                                                       FontWeight="Medium" />
+                                            <TextBlock Text="{Binding StartTime, Converter={StaticResource DateTimeToRelativeConverter}}" 
+                                                       FontSize="11" Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Czas trwania -->
+                            <DataGridTextColumn Header="Czas trwania" 
+                                                Binding="{Binding Duration, Converter={StaticResource TimeSpanToReadableConverter}}" 
+                                                Width="100" />
+
+                            <!-- Progress (dla operacji batch) -->
+                            <DataGridTemplateColumn Header="Progress" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel>
+                                            <TextBlock HorizontalAlignment="Center">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource ProgressToTextConverter}">
+                                                        <Binding Path="ProcessedItems" />
+                                                        <Binding Path="TotalItems" />
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <ProgressBar Value="{Binding ProgressPercentage}" 
+                                                         Maximum="100" Height="6" Margin="0,2" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Akcje -->
+                            <DataGridTemplateColumn Header="Akcje" Width="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource MaterialDesignIconButton}"
+                                                Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Pokaż szczegóły">
+                                            <materialDesign:PackIcon Kind="InformationOutline" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+
+                        <!-- Empty state -->
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource MaterialDesignDataGridRow}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsInProgress}" Value="True">
+                                        <Setter Property="Background" Value="#E3F2FD" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                        <Setter Property="Background" Value="#FFEBEE" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+
+                    <!-- Empty State -->
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="{Binding FilteredOperations.Count, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                        <materialDesign:PackIcon Kind="DatabaseOff" Width="64" Height="64" 
+                                                 Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                        <TextBlock Text="Brak operacji do wyświetlenia" Margin="0,16" 
+                                   FontSize="16" Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                        <TextBlock Text="Spróbuj zmienić filtry lub odświeżyć dane" 
+                                   Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                    </StackPanel>
+
+                    <!-- Paginacja -->
+                    <Border Grid.Row="1" Background="{DynamicResource MaterialDesignCardBackground}" 
+                            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource MaterialDesignDivider}">
+                        <Grid Margin="16,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Info o stronach -->
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center">
+                                <Run Text="Strona" />
+                                <Run Text="{Binding CurrentPage}" FontWeight="Bold" />
+                                <Run Text="z" />
+                                <Run Text="{Binding TotalPages}" FontWeight="Bold" />
+                                <Run Text="(" /><Run Text="{Binding TotalOperations}" FontWeight="Bold" /><Run Text=" operacji)" />
+                            </TextBlock>
+
+                            <!-- Rozmiar strony -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="Pokaż:" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <ComboBox SelectedValue="{Binding PageSize}" Width="60">
+                                    <ComboBoxItem Content="10" />
+                                    <ComboBoxItem Content="20" />
+                                    <ComboBoxItem Content="50" />
+                                    <ComboBoxItem Content="100" />
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Przyciski nawigacji -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <Button Style="{StaticResource MaterialDesignIconButton}"
+                                        Command="{Binding PreviousPageCommand}"
+                                        ToolTip="Poprzednia strona">
+                                    <materialDesign:PackIcon Kind="ChevronLeft" />
+                                </Button>
+                                <Button Style="{StaticResource MaterialDesignIconButton}"
+                                        Command="{Binding NextPageCommand}"
+                                        ToolTip="Następna strona">
+                                    <materialDesign:PackIcon Kind="ChevronRight" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </materialDesign:Card>
+        </DockPanel>
+
+        <!-- Snackbar dla wiadomości -->
+        <materialDesign:Snackbar MessageQueue="{materialDesign:MessageQueue}" 
+                                 x:Name="OperationHistorySnackbar"
+                                 HorizontalAlignment="Center" 
+                                 VerticalAlignment="Bottom" />
+    </Grid>
+</UserControl> 

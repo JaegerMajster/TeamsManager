@@ -1,4 +1,4 @@
-﻿// Plik: TeamsManager.UI/Services/MsalAuthService.cs
+// Plik: TeamsManager.UI/Services/MsalAuthService.cs
 using Microsoft.Identity.Client;
 using System;
 using System.IO;
@@ -47,12 +47,12 @@ public class AzureAdUiConfig
 
             var config = _configProvider.GetConfiguration();
             
-            // Walidacja - zachowaj obecną logikę
+            // Walidacja - zachowaj obecn� logik�
             if (!config.IsValid())
             {
                 _logger.LogError("MSAL configuration is invalid");
                 HandleMissingConfiguration(
-                    "Kluczowe ustawienia Azure AD (ClientId, TenantId, Scopes) nie zostały poprawnie załadowane dla MSAL.");
+                    "Kluczowe ustawienia Azure AD (ClientId, TenantId, Scopes) nie zosta�y poprawnie za�adowane dla MSAL.");
                 _pca = null;
                 _scopes = Array.Empty<string>();
                 return;
@@ -60,7 +60,7 @@ public class AzureAdUiConfig
 
             _scopes = config.Scopes;
             
-            // Debug: Wyświetl scopes
+            // Debug: Wy�wietl scopes
             _logger.LogDebug("MSAL Config (UI): Loaded Scopes: [{Scopes}]", string.Join(", ", _scopes));
 
             // Budowanie PCA - bez zmian w logice
@@ -86,12 +86,12 @@ public class AzureAdUiConfig
         {
             _logger.LogCritical("MSAL configuration error: {Message}", message);
             
-            // Zachowaj MessageBox dla kompatybilności
-            Application.Current.Dispatcher.Invoke(() =>
+            // Zachowaj MessageBox dla kompatybilno�ci
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 MessageBox.Show(
-                    message + "\nAplikacja może nie działać poprawnie. Skonfiguruj ją lub skontaktuj się z administratorem.",
-                    "Błąd Konfiguracji MSAL", 
+                    message + "\nAplikacja mo�e nie dzia�a� poprawnie. Skonfiguruj j� lub skontaktuj si� z administratorem.",
+                    "B��d Konfiguracji MSAL", 
                     MessageBoxButton.OK, 
                     MessageBoxImage.Error);
             });
@@ -99,9 +99,9 @@ public class AzureAdUiConfig
 
     public async Task<AuthenticationResult?> AcquireTokenInteractiveAsync(Window window)
     {
-        if (_pca == null) // Sprawdź, czy _pca zostało poprawnie zainicjowane
+        if (_pca == null) // Sprawd�, czy _pca zosta�o poprawnie zainicjowane
         {
-            HandleMissingConfiguration("MSAL nie został poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemożliwe.");
+            HandleMissingConfiguration("MSAL nie zosta� poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemo�liwe.");
             return null;
         }
 
@@ -128,14 +128,14 @@ public class AzureAdUiConfig
             catch (MsalException msalEx)
             {
                 System.Diagnostics.Debug.WriteLine($"MSAL Error Acquiring Token Interactively: {msalEx}");
-                MessageBox.Show($"Błąd logowania MSAL: {msalEx.Message}", "Błąd Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"B��d logowania MSAL: {msalEx.Message}", "B��d Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
                 return null;
             }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"MSAL Error Acquiring Token Silently: {ex}");
-            MessageBox.Show($"Błąd MSAL: {ex.Message}", "Błąd Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"B��d MSAL: {ex.Message}", "B��d Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
             return null;
         }
 
@@ -179,7 +179,7 @@ public class AzureAdUiConfig
             var accounts = await _pca.GetAccountsAsync();
             IAccount? firstAccount = accounts.FirstOrDefault();
 
-            // Spróbuj pobrać token z cache
+            // Spr�buj pobra� token z cache
             var result = await _pca.AcquireTokenSilent(graphScopes, firstAccount).ExecuteAsync();
             
             System.Diagnostics.Debug.WriteLine($"MSAL: Graph token acquired silently. Scopes: {string.Join(", ", result.Scopes)}");
@@ -188,7 +188,7 @@ public class AzureAdUiConfig
         catch (MsalUiRequiredException)
         {
             System.Diagnostics.Debug.WriteLine("MSAL: Graph token requires user interaction");
-            return null; // Nie możemy w tym momencie wyświetlić UI
+            return null; // Nie mo�emy w tym momencie wy�wietli� UI
         }
         catch (Exception ex)
         {
@@ -226,6 +226,49 @@ public class AzureAdUiConfig
             System.Diagnostics.Debug.WriteLine($"MSAL Error acquiring Graph token interactively: {ex.Message}");
             return null;
         }
+    }
+
+    public async Task<AuthenticationResult?> AcquireTokenSilentAsync()
+    {
+        if (_pca == null)
+        {
+            _logger.LogWarning("MSAL AcquireTokenSilent: PCA not properly initialized.");
+            return null;
+        }
+
+        try
+        {
+            var accounts = await _pca.GetAccountsAsync();
+            IAccount? firstAccount = accounts.FirstOrDefault();
+
+            if (firstAccount == null)
+            {
+                _logger.LogDebug("MSAL AcquireTokenSilent: No cached account found");
+                return null;
+            }
+
+            // Spr�buj pobra� token z cache
+            var result = await _pca.AcquireTokenSilent(_scopes, firstAccount).ExecuteAsync();
+            
+            _logger.LogDebug("MSAL: Token acquired silently for user: {Username}", result.Account?.Username);
+            return result;
+        }
+        catch (MsalUiRequiredException)
+        {
+            _logger.LogDebug("MSAL AcquireTokenSilent: UI interaction required");
+            return null; // Wymagana interakcja u�ytkownika
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MSAL Error acquiring token silently");
+            return null;
+        }
+    }
+
+    public async Task<string?> GetAccessTokenAsync()
+    {
+        var result = await AcquireTokenSilentAsync();
+        return result?.AccessToken;
     }
 }
 }

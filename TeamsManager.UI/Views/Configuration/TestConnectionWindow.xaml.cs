@@ -39,8 +39,8 @@ namespace TeamsManager.UI.Views.Configuration
             _viewModel.RequestRestart += (sender, e) =>
             {
                 // Restart aplikacji
-                System.Diagnostics.Process.Start(Application.ResourceAssembly.Location);
-                Application.Current.Shutdown();
+                System.Diagnostics.Process.Start(System.Windows.Application.ResourceAssembly.Location);
+                System.Windows.Application.Current.Shutdown();
             };
         }
     }

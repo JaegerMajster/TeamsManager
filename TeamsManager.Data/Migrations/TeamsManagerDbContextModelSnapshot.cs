@@ -116,7 +116,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("Type");
 
-                    b.ToTable("ApplicationSettings");
+                    b.ToTable("ApplicationSettings", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.Channel", b =>
@@ -237,7 +237,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("TeamId", "DisplayName");
 
-                    b.ToTable("Channels");
+                    b.ToTable("Channels", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.Department", b =>
@@ -309,7 +309,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("ParentDepartmentId");
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.OperationHistory", b =>
@@ -428,7 +428,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("Type");
 
-                    b.ToTable("OperationHistories");
+                    b.ToTable("OperationHistories", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.SchoolType", b =>
@@ -489,7 +489,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("ShortName")
                         .IsUnique();
 
-                    b.ToTable("SchoolTypes");
+                    b.ToTable("SchoolTypes", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.SchoolYear", b =>
@@ -559,7 +559,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("SchoolYears");
+                    b.ToTable("SchoolYears", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.Subject", b =>
@@ -622,7 +622,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("Subjects");
+                    b.ToTable("Subjects", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.Team", b =>
@@ -760,7 +760,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("TemplateId");
 
-                    b.ToTable("Teams");
+                    b.ToTable("Teams", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.TeamMember", b =>
@@ -876,7 +876,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("UserId", "TeamId")
                         .IsUnique();
 
-                    b.ToTable("TeamMembers");
+                    b.ToTable("TeamMembers", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.TeamTemplate", b =>
@@ -986,7 +986,7 @@ namespace TeamsManager.Data.Migrations
 
                     b.HasIndex("SchoolTypeId");
 
-                    b.ToTable("TeamTemplates");
+                    b.ToTable("TeamTemplates", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.User", b =>
@@ -1081,7 +1081,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("UPN")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.UserSchoolType", b =>
@@ -1146,7 +1146,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("UserId", "SchoolTypeId")
                         .IsUnique();
 
-                    b.ToTable("UserSchoolTypes");
+                    b.ToTable("UserSchoolTypes", (string)null);
                 });
 
             modelBuilder.Entity("TeamsManager.Core.Models.UserSubject", b =>
@@ -1200,7 +1200,7 @@ namespace TeamsManager.Data.Migrations
                     b.HasIndex("UserId", "SubjectId")
                         .IsUnique();
 
-                    b.ToTable("UserSubjects");
+                    b.ToTable("UserSubjects", (string)null);
                 });
 
             modelBuilder.Entity("SchoolTypeUser", b =>

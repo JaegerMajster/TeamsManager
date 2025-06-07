@@ -125,7 +125,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 var config = await _configManager.LoadOAuthConfigAsync();
                 if (config != null)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         ClientId = config.AzureAd.ClientId;
                         RedirectUri = config.AzureAd.RedirectUri;
@@ -227,7 +227,7 @@ namespace TeamsManager.UI.ViewModels.Configuration
                 await _configManager.SaveOAuthConfigAsync(oauthConfig);
 
                 // Przejdź do następnego kroku - Test Connection
-                Application.Current.Dispatcher.Invoke(() =>
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     var testWindow = new TestConnectionWindow();
                     testWindow.Show();

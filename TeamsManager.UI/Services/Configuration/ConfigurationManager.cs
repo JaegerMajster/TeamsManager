@@ -179,6 +179,83 @@ namespace TeamsManager.UI.Services.Configuration
 
         #endregion
 
+        #region Login Settings
+
+        /// <summary>
+        /// Wczytuje ustawienia logowania
+        /// </summary>
+        public async Task<LoginSettings?> LoadLoginSettingsAsync()
+        {
+            var filePath = Path.Combine(_appDataPath, "login_settings.json");
+            
+            if (!File.Exists(filePath))
+            {
+                System.Diagnostics.Debug.WriteLine($"Plik ustawień logowania nie istnieje: {filePath}");
+                return new LoginSettings(); // Zwróć domyślne ustawienia
+            }
+            
+            try
+            {
+                var json = await File.ReadAllTextAsync(filePath);
+                var settings = JsonSerializer.Deserialize<LoginSettings>(json, _jsonOptions);
+                
+                // Odszyfruj refresh token jeśli istnieje
+                if (!string.IsNullOrEmpty(settings?.EncryptedRefreshToken))
+                {
+                    // Token pozostaje zaszyfrowany w modelu, odszyfrowanie na żądanie
+                    System.Diagnostics.Debug.WriteLine("Wczytano ustawienia logowania z zaszyfrowanym tokenem");
+                }
+                
+                return settings ?? new LoginSettings();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Błąd wczytywania ustawień logowania: {ex.Message}");
+                return new LoginSettings();
+            }
+        }
+
+        /// <summary>
+        /// Zapisuje ustawienia logowania
+        /// </summary>
+        public async Task SaveLoginSettingsAsync(LoginSettings settings)
+        {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+            
+            var filePath = Path.Combine(_appDataPath, "login_settings.json");
+            
+            // Nie zapisuj refresh token jeśli użytkownik nie chce być zapamiętany
+            if (!settings.RememberMe)
+            {
+                settings.EncryptedRefreshToken = null;
+                settings.LastUserEmail = null;
+            }
+            
+            var json = JsonSerializer.Serialize(settings, _jsonOptions);
+            await File.WriteAllTextAsync(filePath, json);
+            
+            System.Diagnostics.Debug.WriteLine($"Zapisano ustawienia logowania do: {filePath}");
+        }
+
+        /// <summary>
+        /// Czyści zapisane dane logowania
+        /// </summary>
+        public async Task ClearLoginSettingsAsync()
+        {
+            var filePath = Path.Combine(_appDataPath, "login_settings.json");
+            
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+                System.Diagnostics.Debug.WriteLine("Usunięto zapisane ustawienia logowania");
+            }
+            
+            await Task.CompletedTask;
+        }
+
+        #endregion
+
         #region Helper Methods
 
         /// <summary>

@@ -1,0 +1,242 @@
+<UserControl x:Class="TeamsManager.UI.UserControls.Teams.TokenHelperPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="350">
+    
+    <Border Style="{StaticResource InfoCardStyle}">
+        <StackPanel Margin="16">
+            <!-- Header -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <materialDesign:PackIcon Grid.Column="0" Kind="HelpCircle" 
+                                       Width="20" Height="20" 
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource AccentOrange}"/>
+                
+                <TextBlock Grid.Column="1" 
+                         Text="Pomocnik tokenów" 
+                         Style="{StaticResource SectionHeaderStyle}"
+                         Margin="8,0,0,0"/>
+                
+                <Button Grid.Column="2"
+                      Style="{StaticResource MaterialDesignIconButton}"
+                      ToolTip="Odśwież listę tokenów"
+                      Command="{Binding RefreshTokensCommand}">
+                    <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16"/>
+                </Button>
+            </Grid>
+
+            <!-- Search Box -->
+            <TextBox materialDesign:HintAssist.Hint="Szukaj tokenów..."
+                   materialDesign:HintAssist.IsFloating="True"
+                   Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                   Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                   Margin="0,0,0,16">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Escape" Command="{Binding ClearSearchCommand}"/>
+                </TextBox.InputBindings>
+            </TextBox>
+
+            <!-- Instructions -->
+            <Border Background="{StaticResource AccentBlue}"
+                  CornerRadius="4"
+                  Padding="8"
+                  Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="💡 Jak używać:" 
+                             Foreground="White"
+                             FontWeight="Bold"
+                             FontSize="12"/>
+                    <TextBlock Text="• Kliknij token aby wstawić do wzorca" 
+                             Foreground="White"
+                             FontSize="11"
+                             Margin="0,4,0,0"/>
+                    <TextBlock Text="• Użyj nawiasy klamrowe w wzorcu szablonu" 
+                             Foreground="White"
+                             FontSize="11"/>
+                    <TextBlock Text="• Wymagane tokeny są oznaczone *" 
+                             Foreground="White"
+                             FontSize="11"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Token Categories -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                        MaxHeight="300">
+                <StackPanel>
+                    <!-- Required Tokens -->
+                    <Expander Header="Tokeny wymagane" 
+                            IsExpanded="True"
+                            materialDesign:ExpanderAssist.HorizontalHeaderPadding="0"
+                            Margin="0,0,0,8">
+                        <ItemsControl ItemsSource="{Binding RequiredTokens}"
+                                    Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Left"
+                                          Margin="0,2"
+                                          Padding="8,4"
+                                          Command="{Binding DataContext.InsertTokenCommand, 
+                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <TextBlock Grid.Column="0" 
+                                                     Text="{Binding DisplayName}" 
+                                                     FontFamily="Consolas"
+                                                     FontWeight="Bold"
+                                                     Foreground="{StaticResource AccentRed}"
+                                                     VerticalAlignment="Center"/>
+                                            
+                                            <TextBlock Grid.Column="1" 
+                                                     Text="{Binding Description}" 
+                                                     FontSize="11"
+                                                     Foreground="{StaticResource TextSecondary}"
+                                                     TextWrapping="Wrap"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"/>
+                                            
+                                            <materialDesign:PackIcon Grid.Column="2" Kind="Asterisk" 
+                                                                   Width="12" Height="12" 
+                                                                   Foreground="{StaticResource AccentRed}"
+                                                                   VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Expander>
+
+                    <!-- Optional Tokens -->
+                    <Expander Header="Tokeny opcjonalne" 
+                            IsExpanded="True"
+                            materialDesign:ExpanderAssist.HorizontalHeaderPadding="0"
+                            Margin="0,0,0,8">
+                        <ItemsControl ItemsSource="{Binding OptionalTokens}"
+                                    Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Left"
+                                          Margin="0,2"
+                                          Padding="8,4"
+                                          Command="{Binding DataContext.InsertTokenCommand, 
+                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <TextBlock Grid.Column="0" 
+                                                     Text="{Binding DisplayName}" 
+                                                     FontFamily="Consolas"
+                                                     FontWeight="Bold"
+                                                     Foreground="{StaticResource AccentBlue}"
+                                                     VerticalAlignment="Center"/>
+                                            
+                                            <TextBlock Grid.Column="1" 
+                                                     Text="{Binding Description}" 
+                                                     FontSize="11"
+                                                     Foreground="{StaticResource TextSecondary}"
+                                                     TextWrapping="Wrap"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Expander>
+
+                    <!-- Custom Tokens -->
+                    <Expander Header="Tokeny niestandardowe" 
+                            materialDesign:ExpanderAssist.HorizontalHeaderPadding="0"
+                            Margin="0,0,0,8">
+                        <StackPanel Margin="0,8,0,0">
+                            <TextBlock Text="Możesz tworzyć własne tokeny używając dowolnych nazw w nawiasach klamrowych:" 
+                                     Style="{StaticResource InstructionTextStyle}"
+                                     Margin="0,0,0,8"/>
+                            
+                            <Border Background="{StaticResource DarkBackground}"
+                                  BorderBrush="{StaticResource AccentOrange}"
+                                  BorderThickness="1"
+                                  CornerRadius="4"
+                                  Padding="8">
+                                <StackPanel>
+                                    <TextBlock Text="Przykłady:" 
+                                             FontWeight="Bold"
+                                             FontSize="12"
+                                             Margin="0,0,0,4"/>
+                                    <TextBlock Text="{}{klasa} - nazwa klasy"
+                                             FontFamily="Consolas"
+                                             FontSize="11"
+                                             Foreground="{StaticResource AccentOrange}"/>
+                                    <TextBlock Text="{}{przedmiot} - nazwa przedmiotu"
+                                             FontFamily="Consolas"
+                                             FontSize="11"
+                                             Foreground="{StaticResource AccentOrange}"/>
+                                    <TextBlock Text="{}{nauczyciel} - nazwisko nauczyciela"
+                                             FontFamily="Consolas"
+                                             FontSize="11"
+                                             Foreground="{StaticResource AccentOrange}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Token Count Info -->
+            <Border Background="{StaticResource DarkBackground}"
+                  BorderBrush="{StaticResource TextSecondary}"
+                  BorderThickness="1"
+                  CornerRadius="4"
+                  Padding="8"
+                  Margin="0,16,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <materialDesign:PackIcon Grid.Column="0" Kind="Information" 
+                                           Width="16" Height="16" 
+                                           Foreground="{StaticResource AccentBlue}"
+                                           VerticalAlignment="Center"/>
+                    
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}">
+                            <Run Text="Dostępne tokeny: "/>
+                            <Run Text="{Binding TotalTokensCount}" FontWeight="Bold"/>
+                        </TextBlock>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}">
+                            <Run Text="Wymagane: "/>
+                            <Run Text="{Binding RequiredTokensCount}" FontWeight="Bold" Foreground="{StaticResource AccentRed}"/>
+                            <Run Text=" | Opcjonalne: "/>
+                            <Run Text="{Binding OptionalTokensCount}" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl> 

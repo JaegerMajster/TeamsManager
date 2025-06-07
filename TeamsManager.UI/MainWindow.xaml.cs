@@ -504,8 +504,8 @@ namespace TeamsManager.UI
                     configManager.DeleteConfiguration();
 
                     // Restart aplikacji
-                    System.Diagnostics.Process.Start(Application.ResourceAssembly.Location);
-                    Application.Current.Shutdown();
+                    System.Diagnostics.Process.Start(System.Windows.Application.ResourceAssembly.Location);
+                    System.Windows.Application.Current.Shutdown();
                 }
                 catch (Exception ex)
                 {
@@ -527,7 +527,7 @@ namespace TeamsManager.UI
         // Handler dla menu Exit
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
         {
-            Application.Current.Shutdown();
+            System.Windows.Application.Current.Shutdown();
         }
 
         // Handler dla menu About

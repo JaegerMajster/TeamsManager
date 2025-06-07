@@ -7,6 +7,10 @@ using FluentAssertions;
 using Microsoft.Identity.Client;
 using Moq;
 using Xunit;
+using TeamsManager.UI.Services;
+using TeamsManager.UI.Models.Configuration;
+using TeamsManager.UI.Services.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace TeamsManager.Tests.Services
 {
@@ -154,7 +158,7 @@ namespace TeamsManager.Tests.Services
             CreateTestConfigFile(_testDeveloperConfigFile, validConfig);
 
             // Act
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
 
             // Assert
             service.Should().NotBeNull();
@@ -169,7 +173,15 @@ namespace TeamsManager.Tests.Services
 
             // Act & Assert
             // Constructor should not throw exception but handle missing config
-            var service = new MsalAuthService();
+            var invalidConfig = new MsalConfiguration
+            {
+                AzureAd = new AzureAdSettings
+                {
+                    ClientId = "", // Invalid
+                    TenantId = ""  // Invalid
+                }
+            };
+            var service = CreateMsalAuthService(invalidConfig);
             service.Should().NotBeNull();
         }
 
@@ -189,7 +201,15 @@ namespace TeamsManager.Tests.Services
             CreateTestConfigFile(_testDeveloperConfigFile, invalidConfig);
 
             // Act & Assert
-            var service = new MsalAuthService();
+            var invalidMsalConfig = new MsalConfiguration
+            {
+                AzureAd = new AzureAdSettings
+                {
+                    ClientId = "", // Invalid
+                    TenantId = ""  // Invalid
+                }
+            };
+            var service = CreateMsalAuthService(invalidMsalConfig);
             service.Should().NotBeNull();
         }
 
@@ -201,7 +221,15 @@ namespace TeamsManager.Tests.Services
         public async Task AcquireTokenInteractiveAsync_WithUninitializedPca_ShouldReturnNull()
         {
             // Arrange
-            var service = new MsalAuthService(); // This will likely have null _pca due to missing config
+            var invalidConfig = new MsalConfiguration
+            {
+                AzureAd = new AzureAdSettings
+                {
+                    ClientId = "", // Invalid - will cause null _pca
+                    TenantId = ""  // Invalid
+                }
+            };
+            var service = CreateMsalAuthService(invalidConfig);
 
             // Act & Assert - wywołanie z null window powinno rzucić ArgumentNullException
             await Assert.ThrowsAsync<ArgumentNullException>(() => 
@@ -222,7 +250,7 @@ namespace TeamsManager.Tests.Services
             };
 
             CreateTestConfigFile(_testDeveloperConfigFile, validConfig);
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentNullException>(() => 
@@ -233,7 +261,15 @@ namespace TeamsManager.Tests.Services
         public async Task SignOutAsync_WithUninitializedPca_ShouldNotThrow()
         {
             // Arrange
-            var service = new MsalAuthService();
+            var invalidConfig = new MsalConfiguration
+            {
+                AzureAd = new AzureAdSettings
+                {
+                    ClientId = "", // Invalid
+                    TenantId = ""  // Invalid
+                }
+            };
+            var service = CreateMsalAuthService(invalidConfig);
 
             // Act & Assert
             await service.Invoking(s => s.SignOutAsync())
@@ -254,7 +290,7 @@ namespace TeamsManager.Tests.Services
             };
 
             CreateTestConfigFile(_testDeveloperConfigFile, validConfig);
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
 
             // Act & Assert
             await service.Invoking(s => s.SignOutAsync())
@@ -330,7 +366,7 @@ namespace TeamsManager.Tests.Services
 
             // Act & Assert
             // Constructor should handle corrupted JSON gracefully
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
             service.Should().NotBeNull();
         }
 
@@ -347,7 +383,7 @@ namespace TeamsManager.Tests.Services
             try
             {
                 // Act & Assert
-                var service = new MsalAuthService();
+                var service = CreateMsalAuthService();
                 service.Should().NotBeNull();
             }
             finally
@@ -387,7 +423,7 @@ namespace TeamsManager.Tests.Services
             CreateTestConfigFile(_testDeveloperConfigFile, developerConfig);
 
             // Act
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
 
             // Assert
             service.Should().NotBeNull();
@@ -414,7 +450,7 @@ namespace TeamsManager.Tests.Services
             CreateTestConfigFile(_testDeveloperConfigFile, config);
 
             // Act
-            var service = new MsalAuthService();
+            var service = CreateMsalAuthService();
 
             // Assert
             service.Should().NotBeNull();
@@ -425,6 +461,26 @@ namespace TeamsManager.Tests.Services
         #endregion
 
         #region Helper Methods
+
+        private MsalAuthService CreateMsalAuthService(MsalConfiguration? config = null)
+        {
+            var mockConfigProvider = new Mock<IMsalConfigurationProvider>();
+            var mockLogger = new Mock<ILogger<MsalAuthService>>();
+            
+            var defaultConfig = config ?? new MsalConfiguration
+            {
+                AzureAd = new AzureAdSettings
+                {
+                    ClientId = "test-client-id",
+                    TenantId = "test-tenant-id"
+                },
+                Scopes = new[] { "User.Read" }
+            };
+            
+            mockConfigProvider.Setup(x => x.GetConfiguration()).Returns(defaultConfig);
+            
+            return new MsalAuthService(mockConfigProvider.Object, mockLogger.Object);
+        }
 
         private void CreateTestConfigFile(string filePath, MsalUiAppConfiguration config)
         {
@@ -469,7 +525,8 @@ namespace TeamsManager.Tests.Services
     /// </summary>
     public class TestableMsalAuthService : MsalAuthService
     {
-        public TestableMsalAuthService() : base() { }
+        public TestableMsalAuthService(IMsalConfigurationProvider configProvider, ILogger<MsalAuthService> logger) 
+            : base(configProvider, logger) { }
 
         // If we need to expose protected methods for testing:
         // public new MsalUiAppConfiguration LoadConfiguration() => base.LoadConfiguration();

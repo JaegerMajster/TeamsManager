@@ -1,0 +1,194 @@
+<UserControl x:Class="TeamsManager.UI.Views.Subjects.SubjectEditDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Width="600" MaxHeight="700">
+    
+    <materialDesign:Card UniformCornerRadius="8" Padding="0" 
+                        Background="{DynamicResource BackgroundMedium}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Dialog header -->
+            <Border Grid.Row="0" Background="{DynamicResource AccentGradient}" Padding="24,16">
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="School" Width="24" Height="24" 
+                                               Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding DialogTitle}" 
+                                 Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                 Foreground="White" Margin="12,0,0,0"/>
+                    </StackPanel>
+                    
+                    <!-- Loading indicator -->
+                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                               IsIndeterminate="True"
+                               Width="20" Height="20"
+                               HorizontalAlignment="Right"
+                               Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </Grid>
+            </Border>
+            
+            <!-- Form content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" 
+                        HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="24,16">
+                    <!-- Required fields indicator -->
+                    <TextBlock Text="Pola oznaczone * są wymagane" 
+                             Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                             Foreground="{DynamicResource TextSecondary}"
+                             Margin="0,0,0,16"/>
+                    
+                    <!-- Name field -->
+                    <TextBox Text="{Binding Name, ValidatesOnDataErrors=True, UpdateSourceTrigger=PropertyChanged}"
+                           materialDesign:HintAssist.Hint="Nazwa przedmiotu *"
+                           Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                           Margin="0,8">
+                        <TextBox.ToolTip>
+                            <ToolTip Content="Pełna nazwa przedmiotu (np. 'Matematyka dla klas pierwszych')"/>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                    
+                    <!-- Code field -->
+                    <TextBox Text="{Binding Code, ValidatesOnDataErrors=True, UpdateSourceTrigger=PropertyChanged}"
+                           materialDesign:HintAssist.Hint="Kod przedmiotu"
+                           Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                           Margin="0,8">
+                        <TextBox.ToolTip>
+                            <ToolTip Content="Krótki kod przedmiotu (np. 'MAT-101', maksymalnie 10 znaków)"/>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                    
+                    <!-- Two-column layout for Category and Hours -->
+                    <Grid Margin="0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Category combo -->
+                        <ComboBox Grid.Column="0"
+                                ItemsSource="{Binding Categories}"
+                                SelectedItem="{Binding Category}"
+                                materialDesign:HintAssist.Hint="Kategoria"
+                                Style="{StaticResource MaterialDesignFloatingHintComboBox}">
+                            <ComboBox.ToolTip>
+                                <ToolTip Content="Kategoria tematyczna przedmiotu"/>
+                            </ComboBox.ToolTip>
+                        </ComboBox>
+                        
+                        <!-- Hours field -->
+                        <TextBox Grid.Column="2"
+                               Text="{Binding Hours, ValidatesOnDataErrors=True, UpdateSourceTrigger=PropertyChanged}"
+                               materialDesign:HintAssist.Hint="Liczba godzin"
+                               Style="{StaticResource MaterialDesignFloatingHintTextBox}">
+                            <TextBox.ToolTip>
+                                <ToolTip Content="Liczba godzin lekcyjnych przewidziana dla przedmiotu"/>
+                            </TextBox.ToolTip>
+                        </TextBox>
+                    </Grid>
+                    
+                    <!-- School type combo -->
+                    <ComboBox ItemsSource="{Binding SchoolTypes}"
+                            SelectedItem="{Binding SelectedSchoolType}"
+                            materialDesign:HintAssist.Hint="Domyślny typ szkoły"
+                            Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                            Margin="0,8">
+                        <ComboBox.ToolTip>
+                            <ToolTip Content="Typ szkoły dla którego ten przedmiot jest najczęściej przeznaczony"/>
+                        </ComboBox.ToolTip>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Medium"/>
+                                    <TextBlock Text="{Binding Description}" 
+                                             Foreground="{DynamicResource TextSecondary}"
+                                             Margin="8,0,0,0"
+                                             FontStyle="Italic"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    
+                    <!-- Description field -->
+                    <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                           materialDesign:HintAssist.Hint="Opis przedmiotu"
+                           Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                           TextWrapping="Wrap"
+                           AcceptsReturn="True"
+                           MinHeight="100"
+                           MaxHeight="200"
+                           VerticalScrollBarVisibility="Auto"
+                           Margin="0,16,0,8">
+                        <TextBox.ToolTip>
+                            <ToolTip Content="Szczegółowy opis przedmiotu, zakres materiału, cele kształcenia"/>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                    
+                    <!-- Validation summary -->
+                    <Border Background="{DynamicResource AccentRed}" 
+                          CornerRadius="4" 
+                          Padding="12,8" 
+                          Margin="0,8,0,0"
+                          Visibility="{Binding IsValid, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <materialDesign:PackIcon Kind="AlertCircle" 
+                                                       Width="16" Height="16" 
+                                                       Foreground="White" 
+                                                       VerticalAlignment="Center"/>
+                                <TextBlock Text="Formularz zawiera błędy:" 
+                                         Foreground="White" 
+                                         FontWeight="Medium"
+                                         Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Text="• Nazwa przedmiotu jest wymagana" 
+                                     Foreground="White"
+                                     FontSize="12"
+                                     Visibility="{Binding Name, Converter={StaticResource StringToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+            
+            <!-- Dialog actions -->
+            <Border Grid.Row="2" Background="{DynamicResource BackgroundLight}" Padding="16,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Help text -->
+                    <TextBlock Grid.Column="0" 
+                             Text="Wprowadź podstawowe informacje o przedmiocie"
+                             Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                             Foreground="{DynamicResource TextSecondary}"
+                             VerticalAlignment="Center"/>
+                    
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource MaterialDesignFlatButton}"
+                                Command="{x:Static materialDesign:DialogHost.CloseDialogCommand}"
+                                CommandParameter="False"
+                                Content="ANULUJ"
+                                Margin="0,0,8,0"/>
+                        <Button Style="{StaticResource PrimaryActionButton}"
+                                Command="{x:Static materialDesign:DialogHost.CloseDialogCommand}"
+                                CommandParameter="True"
+                                Content="ZAPISZ"
+                                IsEnabled="{Binding IsValid}">
+                            <Button.ToolTip>
+                                <ToolTip Content="Zapisz wprowadzone dane przedmiotu"/>
+                            </Button.ToolTip>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </materialDesign:Card>
+</UserControl> 

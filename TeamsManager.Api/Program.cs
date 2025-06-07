@@ -600,6 +600,7 @@ app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.Hea
 
 // ========== NOWA LINIA - Mapowanie Huba SignalR ==========
 app.MapHub<NotificationHub>("/notificationHub");
+app.MapHub<MonitoringHub>("/monitoringHub");
 // =========================================================
 
 // ----- KONIEC SEKCJI KONFIGURACJI HTTP PIPELINE -----

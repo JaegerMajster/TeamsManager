@@ -1,0 +1,513 @@
+<Window x:Class="TeamsManager.UI.Views.Teams.TeamLifecycleDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:converters="clr-namespace:TeamsManager.UI.Converters"
+        mc:Ignorable="d"
+        Title="Operacje cyklu życia zespołów"
+        Height="600" Width="900"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundDark}">
+    
+    <Window.Resources>
+        <converters:BoolToBackgroundConverter x:Key="BoolToBackgroundConverter"/>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderGradient}" Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <materialDesign:PackIcon Kind="Sync" 
+                                       Width="32" Height="32" 
+                                       VerticalAlignment="Center"
+                                       Foreground="White"/>
+                
+                <StackPanel Grid.Column="1" Margin="15,0">
+                    <TextBlock Text="Operacje cyklu życia zespołów" 
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Foreground="White"/>
+                    <TextBlock Text="{Binding SelectedTeamsCount, StringFormat='Wybrane zespoły: {0}'}"
+                             Opacity="0.8" Foreground="White"/>
+                </StackPanel>
+                
+                <Button Grid.Column="2" 
+                      Style="{StaticResource MaterialDesignIconButton}"
+                      Command="{Binding CloseCommand}"
+                      ToolTip="Zamknij">
+                    <materialDesign:PackIcon Kind="Close" Foreground="White"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="350"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Operations Panel -->
+            <Border Grid.Column="0" 
+                  Background="{StaticResource BackgroundMedium}"
+                  BorderBrush="{StaticResource BorderDark}"
+                  BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <TextBlock Text="DOSTĘPNE OPERACJE"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 Opacity="0.6" Margin="0,0,0,15"/>
+
+                        <!-- Archive Operation -->
+                        <materialDesign:Card Margin="0,0,0,10" Cursor="Hand"
+                                           Background="{Binding IsArchiveSelected, 
+                                                       Converter={StaticResource BoolToBackgroundConverter}}">
+                            <materialDesign:Card.InputBindings>
+                                <MouseBinding Gesture="LeftClick" 
+                                            Command="{Binding SelectOperationCommand}"
+                                            CommandParameter="Archive"/>
+                            </materialDesign:Card.InputBindings>
+                            <Grid Margin="15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <materialDesign:PackIcon Kind="Archive" 
+                                                       Width="40" Height="40"
+                                                       Foreground="{StaticResource AccentRed}"/>
+                                
+                                <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                    <TextBlock Text="Archiwizacja zespołów"
+                                             FontWeight="Medium" FontSize="16"/>
+                                    <TextBlock Text="Przeniesienie do archiwum z opcją cleanup"
+                                             Opacity="0.7" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <!-- Restore Operation -->
+                        <materialDesign:Card Margin="0,0,0,10" Cursor="Hand"
+                                           Background="{Binding IsRestoreSelected, 
+                                                       Converter={StaticResource BoolToBackgroundConverter}}">
+                            <materialDesign:Card.InputBindings>
+                                <MouseBinding Gesture="LeftClick" 
+                                            Command="{Binding SelectOperationCommand}"
+                                            CommandParameter="Restore"/>
+                            </materialDesign:Card.InputBindings>
+                            <Grid Margin="15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <materialDesign:PackIcon Kind="Restore" 
+                                                       Width="40" Height="40"
+                                                       Foreground="#FF4CAF50"/>
+                                
+                                <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                    <TextBlock Text="Przywracanie zespołów"
+                                             FontWeight="Medium" FontSize="16"/>
+                                    <TextBlock Text="Aktywacja zespołów z archiwum"
+                                             Opacity="0.7" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <!-- Migrate Operation -->
+                        <materialDesign:Card Margin="0,0,0,10" Cursor="Hand"
+                                           Background="{Binding IsMigrateSelected, 
+                                                       Converter={StaticResource BoolToBackgroundConverter}}">
+                            <materialDesign:Card.InputBindings>
+                                <MouseBinding Gesture="LeftClick" 
+                                            Command="{Binding SelectOperationCommand}"
+                                            CommandParameter="Migrate"/>
+                            </materialDesign:Card.InputBindings>
+                            <Grid Margin="15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <materialDesign:PackIcon Kind="TransitTransfer" 
+                                                       Width="40" Height="40"
+                                                       Foreground="{StaticResource AccentBlue}"/>
+                                
+                                <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                    <TextBlock Text="Migracja między latami"
+                                             FontWeight="Medium" FontSize="16"/>
+                                    <TextBlock Text="Przeniesienie do nowego roku szkolnego"
+                                             Opacity="0.7" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <!-- Consolidate Operation -->
+                        <materialDesign:Card Cursor="Hand"
+                                           Background="{Binding IsConsolidateSelected, 
+                                                       Converter={StaticResource BoolToBackgroundConverter}}">
+                            <materialDesign:Card.InputBindings>
+                                <MouseBinding Gesture="LeftClick" 
+                                            Command="{Binding SelectOperationCommand}"
+                                            CommandParameter="Consolidate"/>
+                            </materialDesign:Card.InputBindings>
+                            <Grid Margin="15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <materialDesign:PackIcon Kind="Group" 
+                                                       Width="40" Height="40"
+                                                       Foreground="#FF9C27B0"/>
+                                
+                                <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                    <TextBlock Text="Konsolidacja nieaktywnych"
+                                             FontWeight="Medium" FontSize="16"/>
+                                    <TextBlock Text="Automatyczne archiwizowanie nieużywanych"
+                                             Opacity="0.7" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Options Panel -->
+            <Grid Grid.Column="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                            Visibility="{Binding IsOperationSelected, 
+                                        Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <StackPanel Margin="20">
+                        <!-- Archive Options -->
+                        <StackPanel Visibility="{Binding IsArchiveSelected, 
+                                               Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="OPCJE ARCHIWIZACJI"
+                                     Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                     Margin="0,0,0,20"/>
+
+                            <TextBox Text="{Binding ArchiveReason}"
+                                   materialDesign:HintAssist.Hint="Powód archiwizacji"
+                                   Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                   Margin="0,0,0,15"/>
+
+                            <CheckBox Content="Powiadom właścicieli zespołów"
+                                    IsChecked="{Binding NotifyOwners}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Usuń nieaktywnych członków"
+                                    IsChecked="{Binding RemoveInactiveMembers}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Wyczyść nieużywane kanały"
+                                    IsChecked="{Binding CleanupChannels}"
+                                    Margin="0,0,0,20"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Slider Value="{Binding BatchSize}"
+                                      Minimum="5" Maximum="50"
+                                      TickFrequency="5"
+                                      IsSnapToTickEnabled="True"/>
+                                
+                                <TextBlock Grid.Column="1" 
+                                         Text="{Binding BatchSize, StringFormat='Batch: {0}'}"
+                                         Margin="10,0,0,0"
+                                         VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Restore Options -->
+                        <StackPanel Visibility="{Binding IsRestoreSelected, 
+                                               Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="OPCJE PRZYWRACANIA"
+                                     Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                     Margin="0,0,0,20"/>
+
+                            <CheckBox Content="Weryfikuj dostępność właściciela"
+                                    IsChecked="{Binding ValidateOwnerAvailability}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Przywróć oryginalne uprawnienia"
+                                    IsChecked="{Binding RestoreOriginalPermissions}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Powiadom członków o przywróceniu"
+                                    IsChecked="{Binding NotifyMembersOnRestore}"
+                                    Margin="0,0,0,20"/>
+                        </StackPanel>
+
+                        <!-- Migrate Options -->
+                        <StackPanel Visibility="{Binding IsMigrateSelected, 
+                                               Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="OPCJE MIGRACJI"
+                                     Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                     Margin="0,0,0,20"/>
+
+                            <ComboBox ItemsSource="{Binding AvailableSchoolYears}"
+                                    SelectedItem="{Binding TargetSchoolYear}"
+                                    DisplayMemberPath="Name"
+                                    materialDesign:HintAssist.Hint="Docelowy rok szkolny"
+                                    Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                    Margin="0,0,0,15"/>
+
+                            <CheckBox Content="Archiwizuj źródłowe zespoły"
+                                    IsChecked="{Binding ArchiveSourceTeams}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Kopiuj członków i uprawnienia"
+                                    IsChecked="{Binding CopyMembersAndPermissions}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Aktualizuj szablony nazw"
+                                    IsChecked="{Binding UpdateNameTemplates}"
+                                    Margin="0,0,0,20"/>
+                        </StackPanel>
+
+                        <!-- Consolidate Options -->
+                        <StackPanel Visibility="{Binding IsConsolidateSelected, 
+                                               Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="OPCJE KONSOLIDACJI"
+                                     Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                     Margin="0,0,0,20"/>
+
+                            <Grid Margin="0,0,0,15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Slider Value="{Binding MinInactiveDays}"
+                                      Minimum="30" Maximum="365"
+                                      TickFrequency="30"
+                                      IsSnapToTickEnabled="True"/>
+                                
+                                <TextBlock Grid.Column="1" 
+                                         Text="{Binding MinInactiveDays, StringFormat='Dni nieaktywności: {0}'}"
+                                         Margin="10,0,0,0"
+                                         Width="150"
+                                         VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,15">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Slider Value="{Binding MaxMembersForConsolidation}"
+                                      Minimum="0" Maximum="10"
+                                      TickFrequency="1"
+                                      IsSnapToTickEnabled="True"/>
+                                
+                                <TextBlock Grid.Column="1" 
+                                         Text="{Binding MaxMembersForConsolidation, StringFormat='Max członków: {0}'}"
+                                         Margin="10,0,0,0"
+                                         Width="150"
+                                         VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <CheckBox Content="Tylko zespoły bez aktywności"
+                                    IsChecked="{Binding OnlyInactiveTeams}"
+                                    Margin="0,0,0,10"/>
+
+                            <CheckBox Content="Wykluczaj zespoły z aktywnymi zadaniami"
+                                    IsChecked="{Binding ExcludeTeamsWithActiveTasks}"
+                                    Margin="0,0,0,20"/>
+                        </StackPanel>
+
+                        <!-- Common Options -->
+                        <Border Background="{StaticResource BackgroundMedium}"
+                              BorderBrush="{StaticResource BorderDark}"
+                              BorderThickness="1"
+                              CornerRadius="4"
+                              Padding="15"
+                              Margin="0,20,0,0">
+                            <StackPanel>
+                                <TextBlock Text="OPCJE ZAAWANSOWANE"
+                                         Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                         Opacity="0.6" Margin="0,0,0,10"/>
+
+                                <CheckBox Content="Tryb testowy (Dry Run)"
+                                        IsChecked="{Binding DryRun}"
+                                        Margin="0,0,0,10">
+                                    <CheckBox.ToolTip>
+                                        <TextBlock Text="Symulacja operacji bez wprowadzania zmian"/>
+                                    </CheckBox.ToolTip>
+                                </CheckBox>
+
+                                <CheckBox Content="Kontynuuj mimo błędów"
+                                        IsChecked="{Binding ContinueOnError}"
+                                        Margin="0,0,0,10"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <Slider Value="{Binding AcceptableErrorPercentage}"
+                                          Minimum="0" Maximum="50"
+                                          TickFrequency="5"
+                                          IsSnapToTickEnabled="True"
+                                          IsEnabled="{Binding ContinueOnError}"/>
+                                    
+                                    <TextBlock Grid.Column="1" 
+                                             Text="{Binding AcceptableErrorPercentage, 
+                                                    StringFormat='Próg błędów: {0}%'}"
+                                             Margin="10,0,0,0"
+                                             Width="120"
+                                             VerticalAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Empty State -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                          Visibility="{Binding IsOperationSelected, 
+                                     Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                    <materialDesign:PackIcon Kind="TouchApp" 
+                                           Width="64" Height="64" 
+                                           Opacity="0.3"
+                                           HorizontalAlignment="Center"/>
+                    <TextBlock Text="Wybierz operację z menu po lewej"
+                             Opacity="0.5" Margin="0,10,0,0"
+                             HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Actions -->
+        <Border Grid.Row="2" 
+              Background="{StaticResource BackgroundMedium}"
+              BorderBrush="{StaticResource BorderDark}"
+              BorderThickness="0,1,0,0">
+            <Grid Margin="20,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Summary -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <materialDesign:PackIcon Kind="Information" 
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                    <TextBlock VerticalAlignment="Center">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="Operacja dotyczy {0} zespołów">
+                                <Binding Path="SelectedTeamsCount"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="ANULUJ"
+                          Command="{Binding CancelCommand}"
+                          Style="{StaticResource MaterialDesignFlatButton}"
+                          Margin="0,0,10,0"/>
+                    
+                    <Button Content="WYKONAJ OPERACJĘ"
+                          Command="{Binding ExecuteOperationCommand}"
+                          Style="{StaticResource PrimaryActionButton}"
+                          IsEnabled="{Binding CanExecuteOperation}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Play" 
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Progress Overlay -->
+        <Grid Grid.RowSpan="3" 
+            Visibility="{Binding IsProcessing, 
+                       Converter={StaticResource BooleanToVisibilityConverter}}"
+            Background="#CC000000">
+            <materialDesign:Card Width="400" Height="300"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center">
+                <Grid Margin="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="{Binding ProgressTitle}"
+                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                             HorizontalAlignment="Center"/>
+
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                        <ProgressBar Value="{Binding ProgressPercentage}"
+                                   Height="8"
+                                   Margin="0,20"/>
+                        
+                        <TextBlock Text="{Binding ProgressStatus}"
+                                 HorizontalAlignment="Center"
+                                 Margin="0,0,0,10"/>
+                        
+                        <TextBlock HorizontalAlignment="Center"
+                                 Opacity="0.7">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0} z {1} przetworzonych">
+                                    <Binding Path="ProcessedItems"/>
+                                    <Binding Path="TotalItems"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+
+                        <!-- Errors Summary -->
+                        <TextBlock HorizontalAlignment="Center"
+                                 Foreground="{StaticResource AccentRed}"
+                                 Margin="0,10,0,0"
+                                 Visibility="{Binding HasErrors, 
+                                            Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="Błędy: {0}">
+                                    <Binding Path="ErrorCount"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <Button Grid.Row="2"
+                          Content="ANULUJ OPERACJĘ"
+                          Command="{Binding CancelOperationCommand}"
+                          Style="{StaticResource DangerButton}"
+                          HorizontalAlignment="Center"/>
+                </Grid>
+            </materialDesign:Card>
+        </Grid>
+    </Grid>
+</Window> 

@@ -1,0 +1,145 @@
+<UserControl x:Class="TeamsManager.UI.Views.Monitoring.Widgets.PerformanceMetricsWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
+    
+    <materialDesign:Card>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Header -->
+            <Border Grid.Row="0" Background="{DynamicResource PrimaryHueMidBrush}" Padding="16,12">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="ChartLine" 
+                                           Width="20" Height="20" 
+                                           Foreground="White" 
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"/>
+                    <TextBlock Text="Performance Metrics" 
+                               Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                               Foreground="White"/>
+                </StackPanel>
+            </Border>
+            
+            <!-- Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="16">
+                    <!-- CPU Usage -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <materialDesign:PackIcon Grid.Column="0" Kind="Cpu" 
+                                               Width="16" Height="16" 
+                                               Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="CPU Usage" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" 
+                                   Text="{Binding CpuUsage, StringFormat='{}{0:F1}%'}" 
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                    
+                    <ProgressBar Value="{Binding CpuUsage}" 
+                                 Maximum="100" 
+                                 Height="4" 
+                                 Margin="0,0,0,16"/>
+                    
+                    <!-- Memory Usage -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <materialDesign:PackIcon Grid.Column="0" Kind="Memory" 
+                                               Width="16" Height="16" 
+                                               Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Memory Usage" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" 
+                                   Text="{Binding MemoryUsage, StringFormat='{}{0:F1}%'}" 
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                    
+                    <ProgressBar Value="{Binding MemoryUsage}" 
+                                 Maximum="100" 
+                                 Height="4" 
+                                 Margin="0,0,0,16"/>
+                    
+                    <!-- Network Throughput -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <materialDesign:PackIcon Grid.Column="0" Kind="NetworkStrength4" 
+                                               Width="16" Height="16" 
+                                               Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Network" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" 
+                                   Text="{Binding NetworkThroughput, StringFormat='{}{0:F1} Mbps'}" 
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                    
+                    <!-- Additional Metrics -->
+                    <Separator Margin="0,8"/>
+                    
+                    <Grid Margin="0,8,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Active Connections" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                            <TextBlock Text="{Binding ActiveConnections}" 
+                                       FontSize="18" FontWeight="Medium"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Requests/min" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                            <TextBlock Text="{Binding RequestsPerMinute}" 
+                                       FontSize="18" FontWeight="Medium"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Avg Response Time" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                            <TextBlock Text="{Binding AverageResponseTime, StringFormat='{}{0:F0}ms'}" 
+                                       FontSize="18" FontWeight="Medium"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Error Rate" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                            <TextBlock Text="{Binding ErrorRate, StringFormat='{}{0:F2}%'}" 
+                                       FontSize="18" FontWeight="Medium"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </materialDesign:Card>
+</UserControl> 

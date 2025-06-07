@@ -6,7 +6,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="Konfiguracja TeamsManager" 
-        Height="580" Width="550"
+        Height="1000" Width="800"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Style="{StaticResource BaseWindowStyle}">
@@ -44,7 +44,7 @@
 
             <!-- Main Content Card -->
             <Border Style="{StaticResource InfoCardStyle}" 
-                    Margin="40" 
+                    Margin="30,20" 
                     VerticalAlignment="Center">
                 <Border.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
@@ -84,12 +84,12 @@
                     </StackPanel>
 
                     <!-- Message -->
-                    <StackPanel Grid.Row="1" Margin="40,0">
+                    <StackPanel Grid.Row="1" Margin="30,0">
                         <!-- Main error message -->
                         <Border Background="{StaticResource BackgroundDark}" 
                                 CornerRadius="8" 
                                 Padding="20,20"
-                                Margin="0,0,0,20">
+                                Margin="0,0,0,20" Height="51">
                             <TextBlock Style="{StaticResource InstructionTextStyle}"
                                      TextAlignment="Center"
                                      Text="{Binding ErrorMessage}"/>
@@ -98,22 +98,23 @@
                         <!-- Detailed explanation -->
                         <TextBlock Style="{StaticResource InstructionTextStyle}"
                                  TextAlignment="Center"
-                                 Margin="0,0,0,8">
-                            <Run Text="Aplikacja TeamsManager wymaga konfiguracji połączenia z"/>
+                                 Margin="0,0,0,12" Height="50">
+                            <Run Text="Aplikacja TeamsManager wymaga konfiguracji połączenia z "/>
                             <Run Text="Microsoft Azure AD" FontWeight="SemiBold"/>
-                            <Run Text="aby móc działać poprawnie."/>
+                            <Run Text=" aby móc działać poprawnie."/>
                         </TextBlock>
 
                         <TextBlock Style="{StaticResource InstructionTextStyle}"
-                                 TextAlignment="Center">
-                            <Run Text="Kreator konfiguracji poprowadzi Cię krok po kroku przez proces rejestracji aplikacji i ustawienia niezbędnych parametrów."/>
+                                 TextAlignment="Center"
+                                 Margin="0,0,0,12" Height="53">
+                            <Run Text="Kreator konfiguracji poprowadzi Cię krok po kroku przez proces ustawienia niezbędnych parametrów."/>
                         </TextBlock>
 
                         <!-- Requirements hint -->
-                        <Border Background="{StaticResource AccentBlue}" 
+                        <Border Background="#FF2D2D30" 
                                 CornerRadius="6" 
                                 Padding="12,8"
-                                Margin="0,20,0,0">
+                                Margin="0,20,0,0" Height="102">
                             <StackPanel>
                                 <TextBlock Text="Będziesz potrzebować:" 
                                          Style="{StaticResource MaterialDesignCaptionTextBlock}"
@@ -122,7 +123,7 @@
                                          Margin="0,0,0,4"/>
                                 <TextBlock Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                          Foreground="LightGray"
-                                         Text="• Dostępu do Azure Portal z uprawnieniami administratora"/>
+                                         Text="• Dostępu do Azure Portal z uprawnieniami administratora" Height="20"/>
                                 <TextBlock Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                          Foreground="LightGray"
                                          Text="• Około 10-15 minut na konfigurację"/>
@@ -131,7 +132,7 @@
                     </StackPanel>
 
                     <!-- Buttons -->
-                    <Grid Grid.Row="2" Margin="40,30,40,0">
+                    <Grid Grid.Row="2" Margin="30,20,30,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="20"/>

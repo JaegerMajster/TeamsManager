@@ -1,0 +1,254 @@
+<Window x:Class="TeamsManager.UI.Views.Import.BulkImportWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:local="clr-namespace:TeamsManager.UI.UserControls.Import"
+        Title="{Binding DialogTitle}"
+        Width="900" Height="700"
+        WindowStartupLocation="CenterOwner"
+        Style="{StaticResource BaseWindowStyle}"
+        ResizeMode="NoResize">
+
+    <materialDesign:DialogHost DialogTheme="Inherit">
+        <Grid>
+            <!-- Tło z gradientem -->
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF202020" Offset="0"/>
+                    <GradientStop Color="#FF252526" Offset="0.5"/>
+                    <GradientStop Color="#FF2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <!-- Elementy dekoracyjne -->
+            <Canvas>
+                <Ellipse Canvas.Right="50" Canvas.Top="50" Width="150" Height="150" Opacity="0.03">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#FF0078D4" Offset="0"/>
+                            <GradientStop Color="Transparent" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+            </Canvas>
+
+            <!-- Główny layout -->
+            <Grid Margin="20">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Nagłówek -->
+                    <RowDefinition Height="Auto"/> <!-- Progress stepper -->
+                    <RowDefinition Height="*"/>    <!-- Zawartość kroku -->
+                    <RowDefinition Height="Auto"/> <!-- Przyciski -->
+                </Grid.RowDefinitions>
+
+                <!-- Nagłówek -->
+                <Border Grid.Row="0" Background="{StaticResource BackgroundMedium}" 
+                        CornerRadius="12,12,0,0" Padding="24,20">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <materialDesign:PackIcon Grid.Column="0" Kind="CloudUpload" 
+                                                 Width="32" Height="32" 
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{StaticResource AccentBlue}"/>
+
+                        <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                            <TextBlock Text="Import masowy danych" 
+                                       Style="{StaticResource PageTitleStyle}"
+                                       FontSize="24" Margin="0"/>
+                            <TextBlock Text="Importuj użytkowników, zespoły i strukturę szkoły z plików CSV/Excel" 
+                                       Style="{StaticResource InstructionTextStyle}"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Style="{StaticResource IconButton}"
+                                Command="{Binding CancelCommand}" ToolTip="Zamknij">
+                            <materialDesign:PackIcon Kind="Close" Width="20" Height="20"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Progress Stepper -->
+                <Border Grid.Row="1" Background="{StaticResource BackgroundMedium}" 
+                        Padding="24,16" BorderThickness="0,1,0,1" 
+                        BorderBrush="{StaticResource BorderDark}">
+                    <ItemsControl ItemsSource="{Binding StepTitles}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Numer kroku -->
+                                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="16"
+                                            Margin="0,0,12,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{StaticResource BorderDark}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.CurrentStep}" 
+                                                                 Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(ItemsControl.AlternationIndex)}">
+                                                        <Setter Property="Background" Value="{StaticResource AccentBlue}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(ItemsControl.AlternationIndex), Converter={StaticResource MathConverter}, ConverterParameter=+1}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="White" FontWeight="Bold"/>
+                                    </Border>
+
+                                    <!-- Tytuł kroku -->
+                                    <TextBlock Grid.Column="1" Text="{Binding}" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignSubtitle2TextBlock}">
+                                                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.CurrentStep}" 
+                                                                 Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(ItemsControl.AlternationIndex)}">
+                                                        <Setter Property="Foreground" Value="{StaticResource AccentBlue}"/>
+                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- Zawartość kroków -->
+                <Border Grid.Row="2" Background="{StaticResource BackgroundMedium}" 
+                        CornerRadius="0,0,12,12" Padding="24">
+                    <Grid>
+                        <!-- Krok 1: Wybór pliku -->
+                        <local:FileSelectionStep DataContext="{Binding FileSelection}"
+                                               Visibility="{Binding IsFileSelectionStep, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <!-- Krok 2: Mapowanie kolumn -->
+                        <local:ColumnMappingStep DataContext="{Binding ColumnMapping}"
+                                               Visibility="{Binding IsColumnMappingStep, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <!-- Krok 3: Walidacja -->
+                        <local:ValidationStep DataContext="{Binding Validation}"
+                                            Visibility="{Binding IsValidationStep, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <!-- Krok 4: Progress -->
+                        <local:ProgressStep DataContext="{Binding Progress}"
+                                          Visibility="{Binding IsProgressStep, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Przyciski nawigacji -->
+                <Border Grid.Row="3" Background="{StaticResource BackgroundDark}" 
+                        CornerRadius="0,0,12,12" Padding="24,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Przycisk Wstecz -->
+                        <Button Grid.Column="0" Command="{Binding PreviousStepCommand}"
+                                Style="{StaticResource SecondaryActionButton}"
+                                Visibility="{Binding CanGoBack, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ArrowLeft" Margin="0,0,8,0"/>
+                                <TextBlock Text="Wstecz"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Informacje o statusie -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" 
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="{Binding IsImporting, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                         IsIndeterminate="True" Width="20" Height="20"/>
+                            <TextBlock Text="Import w toku..." Margin="12,0,0,0"
+                                       Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                       Foreground="{StaticResource AccentBlue}"/>
+                        </StackPanel>
+
+                        <!-- Przyciski akcji -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <!-- Przycisk Dalej (kroki 1-2) -->
+                            <Button Command="{Binding NextStepCommand}"
+                                    Margin="0,0,12,0">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource PrimaryActionButton}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CurrentStep}" Value="0"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CurrentStep}" Value="1"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Dalej"/>
+                                    <materialDesign:PackIcon Kind="ArrowRight" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Przycisk Rozpocznij import (krok 3) -->
+                            <Button Command="{Binding StartImportCommand}"
+                                    Style="{StaticResource SuccessButton}"
+                                    Visibility="{Binding IsValidationStep, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Margin="0,0,12,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Play" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Rozpocznij import"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Przycisk Anuluj -->
+                            <Button Command="{Binding CancelCommand}"
+                                    Style="{StaticResource DangerButton}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Close" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Anuluj"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Nakładka ładowania -->
+            <Grid x:Name="LoadingOverlay" Background="{StaticResource BackgroundDark}"
+                  Opacity="0.9" Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                 IsIndeterminate="True" Width="60" Height="60"/>
+                    <TextBlock Text="{Binding LoadingMessage}"
+                               Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                               Foreground="{StaticResource TextPrimary}"
+                               Margin="0,16,0,0" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </materialDesign:DialogHost>
+</Window> 

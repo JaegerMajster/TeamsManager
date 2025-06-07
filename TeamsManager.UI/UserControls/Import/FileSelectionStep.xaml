@@ -1,0 +1,234 @@
+<UserControl x:Class="TeamsManager.UI.UserControls.Import.FileSelectionStep"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:import="clr-namespace:TeamsManager.UI.Models.Import">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" materialDesign:ScrollViewerAssist.IsAutoHideEnabled="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Wybór typu danych -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                <TextBlock Text="Typ danych do importu" Style="{StaticResource SectionHeaderStyle}"/>
+                <ComboBox ItemsSource="{Binding DataContext.ImportDataTypes, RelativeSource={RelativeSource AncestorType=Window}}"
+                          SelectedItem="{Binding SelectedDataType}"
+                          materialDesign:HintAssist.Hint="Wybierz typ danych"
+                          Margin="0,8,0,0">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type import:ImportDataTypeModel}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <materialDesign:PackIcon Grid.Column="0" Kind="{Binding IconKind}" 
+                                                         Width="20" Height="20" 
+                                                         VerticalAlignment="Center"
+                                                         Foreground="{StaticResource AccentBlue}"/>
+
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Medium"/>
+                                    <TextBlock Text="{Binding Description}" 
+                                               Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                               Foreground="{StaticResource TextSecondary}"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- Drop Zone lub wybrany plik -->
+            <Grid Grid.Row="1" Margin="0,0,0,24">
+                <!-- File Drop Zone -->
+                <Border x:Name="DropBorder"
+                        Style="{StaticResource InfoCardStyle}"
+                        BorderThickness="2"
+                        BorderBrush="{DynamicResource BorderDark}"
+                        Background="{DynamicResource BackgroundLight}"
+                        AllowDrop="True"
+                        Drop="OnFileDrop"
+                        DragEnter="OnDragEnter"
+                        DragLeave="OnDragLeave"
+                        MinHeight="150"
+                        Visibility="{Binding HasFile, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <materialDesign:PackIcon Kind="CloudUpload" 
+                                                 Width="64" Height="64"
+                                                 HorizontalAlignment="Center"
+                                                 Foreground="{DynamicResource TextSecondary}"/>
+
+                        <TextBlock Text="Przeciągnij plik tutaj"
+                                   Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,16,0,8"/>
+
+                        <TextBlock Text="lub"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+
+                        <Button Content="Wybierz plik"
+                                Command="{Binding BrowseFileCommand}"
+                                Style="{StaticResource SecondaryActionButton}"
+                                Margin="0,12,0,0"/>
+
+                        <TextBlock Text="{Binding AllowedExtensions, StringFormat='Dozwolone formaty: {0}'}"
+                                   HorizontalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Margin="0,12,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Wybrany plik -->
+                <Border Visibility="{Binding HasFile, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{DynamicResource BackgroundMedium}"
+                        CornerRadius="8"
+                        Padding="20">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <materialDesign:PackIcon Kind="FileDocument"
+                                                 Width="40" Height="40"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{StaticResource AccentBlue}"/>
+
+                        <StackPanel Grid.Column="1" Margin="16,0">
+                            <TextBlock Text="{Binding FileName}"
+                                       Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                       FontWeight="Medium"/>
+                            <TextBlock Text="{Binding FileSize}"
+                                       Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                       Foreground="{DynamicResource TextSecondary}"/>
+                            
+                            <!-- Status walidacji pliku -->
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                        Visibility="{Binding HasValidFile, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <materialDesign:PackIcon Kind="CheckCircle" 
+                                                         Width="16" Height="16"
+                                                         Foreground="{StaticResource SuccessGreen}"
+                                                         VerticalAlignment="Center"/>
+                                <TextBlock Text="Plik jest gotowy do importu" 
+                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Foreground="{StaticResource SuccessGreen}"
+                                           Margin="4,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Style="{StaticResource IconButton}"
+                                Command="{Binding RemoveFileCommand}"
+                                ToolTip="Usuń plik">
+                            <materialDesign:PackIcon Kind="Close"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Opcje importu -->
+            <Expander Grid.Row="2" Header="Opcje importu" 
+                      Margin="0,0,0,24"
+                      IsExpanded="False">
+                <Expander.HeaderTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Settings" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding}" Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </Expander.HeaderTemplate>
+
+                <Border Background="{StaticResource BackgroundDark}" 
+                        CornerRadius="8" Padding="16" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                            <CheckBox Content="Aktualizuj istniejące rekordy"
+                                      IsChecked="{Binding ImportOptions.UpdateExisting}"
+                                      Margin="0,0,0,12"
+                                      ToolTip="Jeśli zaznaczone, istniejące rekordy zostaną zaktualizowane"/>
+
+                            <CheckBox Content="Tryb testowy (Dry Run)"
+                                      IsChecked="{Binding ImportOptions.DryRun}"
+                                      Margin="0,0,0,12"
+                                      ToolTip="Symulacja importu bez rzeczywistych zmian"/>
+
+                            <CheckBox Content="Pierwszy wiersz to nagłówki"
+                                      IsChecked="{Binding ImportOptions.HasHeaders}"
+                                      Margin="0,0,0,12"
+                                      ToolTip="Zaznacz jeśli pierwszy wiersz zawiera nazwy kolumn"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <ComboBox materialDesign:HintAssist.Hint="Kodowanie pliku"
+                                      ItemsSource="{Binding Encodings}"
+                                      SelectedValue="{Binding ImportOptions.Encoding}"
+                                      Margin="0,0,0,12"/>
+
+                            <TextBox materialDesign:HintAssist.Hint="Separator CSV"
+                                     Text="{Binding ImportOptions.CsvDelimiter}"
+                                     MaxLength="1"
+                                     Margin="0,0,0,12"
+                                     ToolTip="Znak separujący kolumny w pliku CSV"/>
+
+                            <TextBox materialDesign:HintAssist.Hint="Maksymalny rozmiar (MB)"
+                                     Text="{Binding ImportOptions.MaxFileSizeMB}"
+                                     Margin="0,0,0,12"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Expander>
+
+            <!-- Szablon do pobrania -->
+            <Border Grid.Row="3" Background="{StaticResource BackgroundDark}" 
+                    CornerRadius="8" Padding="16"
+                    Visibility="{Binding SelectedDataType, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <materialDesign:PackIcon Kind="Download" 
+                                                 Width="20" Height="20"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{StaticResource AccentBlue}"/>
+                        <TextBlock Text="Szablon importu" 
+                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                   Margin="8,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Pobierz szablon pliku dla wybranego typu danych, aby upewnić się, że Twoje dane mają właściwy format."
+                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                               Foreground="{StaticResource TextSecondary}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,12"/>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Pobierz szablon"
+                                Command="{Binding DownloadTemplateCommand}"
+                                Style="{StaticResource SecondaryActionButton}"/>
+                        
+                        <TextBlock Text="{Binding SelectedDataType.SampleFileName, StringFormat='Przykład: {0}'}"
+                                   Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Margin="16,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl> 

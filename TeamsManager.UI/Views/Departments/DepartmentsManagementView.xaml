@@ -1,0 +1,358 @@
+<UserControl x:Class="TeamsManager.UI.Views.Departments.DepartmentsManagementView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:departments="clr-namespace:TeamsManager.UI.ViewModels.Departments"
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1200"
+             d:DataContext="{d:DesignInstance Type=departments:DepartmentsManagementViewModel}">
+
+    <UserControl.Resources>
+        <!-- Style dla TreeViewItem -->
+        <Style x:Key="DepartmentTreeViewItemStyle" TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+
+        <!-- DataTemplate dla DepartmentTreeItemViewModel -->
+        <HierarchicalDataTemplate DataType="{x:Type departments:DepartmentTreeItemViewModel}" 
+                                  ItemsSource="{Binding Children}">
+            <Border Background="{DynamicResource MaterialDesignCardBackground}"
+                    CornerRadius="4"
+                    Padding="12,8"
+                    Margin="2">
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" Opacity="0.1" ShadowDepth="1" BlurRadius="3"/>
+                </Border.Effect>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Ikona działu -->
+                    <materialDesign:PackIcon Grid.Column="0" Grid.Row="0"
+                                           Kind="Domain"
+                                           Width="24" Height="24"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,12,0"
+                                           Foreground="{DynamicResource MaterialDesignBody}"/>
+
+                    <!-- Nazwa działu -->
+                    <TextBlock Grid.Column="1" Grid.Row="0"
+                             Text="{Binding Name}"
+                             Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                             FontWeight="Medium"
+                             VerticalAlignment="Center"/>
+
+                    <!-- Kod działu -->
+                    <Border Grid.Column="2" Grid.Row="0"
+                            Background="{DynamicResource MaterialDesignDivider}"
+                            CornerRadius="12"
+                            Padding="8,4"
+                            Margin="8,0"
+                            Visibility="{Binding Code, Converter={StaticResource NullToVisibilityConverter}}">
+                        <TextBlock Text="{Binding Code}"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 FontWeight="Medium"/>
+                    </Border>
+
+                    <!-- Status aktywności -->
+                    <materialDesign:PackIcon Grid.Column="3" Grid.Row="0"
+                                           Kind="CheckCircle"
+                                           Width="16" Height="16"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"
+                                           Visibility="{Binding Department.IsActive, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
+
+                    <!-- Opis działu -->
+                    <TextBlock Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="3"
+                             Text="{Binding Description}"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"
+                             TextWrapping="Wrap"
+                             Margin="0,4,0,0"
+                             Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}"/>
+                </Grid>
+            </Border>
+        </HierarchicalDataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <materialDesign:Card Grid.Row="0" 
+                           Margin="0,0,0,16"
+                           Padding="24,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Zarządzanie Działami"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Hierarchiczny widok struktury organizacyjnej szkoły"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                </StackPanel>
+
+                <!-- Statystyki -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <materialDesign:Card Background="{DynamicResource MaterialDesignDarkBackground}"
+                                       Padding="12,8"
+                                       Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Domain" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MaterialDesignDarkForeground}"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding TotalDepartments}"
+                                     Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                     Foreground="{DynamicResource MaterialDesignDarkForeground}"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="Wszystkich"
+                                     Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                     Foreground="{DynamicResource MaterialDesignDarkForeground}"
+                                     VerticalAlignment="Center"
+                                     Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </materialDesign:Card>
+
+                    <materialDesign:Card Background="{DynamicResource PrimaryHueMidBrush}"
+                                       Padding="12,8">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CheckCircle" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding ActiveDepartments}"
+                                     Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                     Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="Aktywnych"
+                                     Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                     Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+                                     VerticalAlignment="Center"
+                                     Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </materialDesign:Card>
+                </StackPanel>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- Toolbar -->
+        <materialDesign:Card Grid.Row="1" 
+                           Margin="0,0,0,16"
+                           Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Search Box -->
+                <Grid Grid.Column="0" MaxWidth="400" HorizontalAlignment="Left">
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                           materialDesign:HintAssist.Hint="Szukaj działów..."
+                           materialDesign:TextFieldAssist.HasLeadingIcon="True"
+                           materialDesign:TextFieldAssist.LeadingIcon="Magnify"
+                           Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
+                    
+                    <Button HorizontalAlignment="Right"
+                          VerticalAlignment="Center"
+                          Margin="0,0,8,0"
+                          Style="{StaticResource MaterialDesignIconButton}"
+                          Command="{Binding ClearSearchCommand}"
+                          Width="24" Height="24"
+                          Visibility="{Binding SearchText, Converter={StaticResource NullToVisibilityConverter}}">
+                        <materialDesign:PackIcon Kind="Close" Width="16" Height="16"/>
+                    </Button>
+                </Grid>
+
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Command="{Binding ExpandAllCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Margin="0,0,8,0"
+                          ToolTip="Rozwiń wszystkie">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="UnfoldMoreHorizontal" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Rozwiń"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding CollapseAllCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Margin="0,0,8,0"
+                          ToolTip="Zwiń wszystkie">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="UnfoldLessHorizontal" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Zwiń"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding RefreshCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Margin="0,0,8,0"
+                          ToolTip="Odśwież">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Refresh" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Odśwież"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding AddDepartmentCommand}"
+                          Style="{StaticResource MaterialDesignRaisedButton}"
+                          ToolTip="Dodaj nowy dział">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Plus" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Dodaj Dział"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- Main Content -->
+        <materialDesign:Card Grid.Row="2">
+            <Grid>
+                <!-- Loading Overlay -->
+                <Grid Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                      Background="{DynamicResource MaterialDesignCardBackground}"
+                      Opacity="0.8">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                   IsIndeterminate="True"
+                                   Width="48" Height="48"
+                                   Margin="0,0,0,16"/>
+                        <TextBlock Text="Ładowanie działów..."
+                                 Style="{StaticResource MaterialDesignBody1TextBlock}"
+                                 HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- TreeView -->
+                <TreeView ItemsSource="{Binding Departments}"
+                        SelectedItemChanged="TreeView_SelectedItemChanged"
+                        ItemContainerStyle="{StaticResource DepartmentTreeViewItemStyle}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="16"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+
+                <!-- Empty State -->
+                <StackPanel HorizontalAlignment="Center" 
+                          VerticalAlignment="Center"
+                          Visibility="{Binding Departments.Count, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=0}">
+                    <materialDesign:PackIcon Kind="Domain" 
+                                           Width="64" Height="64"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           Margin="0,0,0,16"/>
+                    <TextBlock Text="Brak działów do wyświetlenia"
+                             Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"
+                             HorizontalAlignment="Center"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Kliknij 'Dodaj Dział' aby utworzyć pierwszy dział"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"
+                             HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- Context Menu for Selected Department -->
+        <materialDesign:Card Grid.Row="3" 
+                           Margin="0,16,0,0"
+                           Padding="16"
+                           Visibility="{Binding SelectedDepartment, Converter={StaticResource NullToVisibilityConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Selected Department Info -->
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding SelectedDepartment.Name, StringFormat='Wybrany dział: {0}'}"
+                             Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                             Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding SelectedDepartment.FullPath}"
+                             Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                </StackPanel>
+
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Command="{Binding EditDepartmentCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Margin="0,0,8,0"
+                          ToolTip="Edytuj dział">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Edit" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Edytuj"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding DeleteDepartmentCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"
+                          BorderBrush="{DynamicResource MaterialDesignValidationErrorBrush}"
+                          ToolTip="Usuń dział">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Delete" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Usuń"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- Error Message -->
+        <materialDesign:Snackbar Grid.Row="3"
+                               MessageQueue="{materialDesign:MessageQueue}"
+                               VerticalAlignment="Bottom"
+                               HorizontalAlignment="Center"
+                               Margin="16"/>
+    </Grid>
+</UserControl> 
