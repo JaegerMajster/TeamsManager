@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 02:33  
+**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 03:31  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -50,12 +50,13 @@ TeamsManager.Api/
 ├── teamsmanager.db
 ├── Configuration/
 │   └── ApiAuthConfig.cs
-├── Controllers/ (16 kontrolerów)
+├── Controllers/ (17 kontrolerów)
 │   ├── ApplicationSettingsController.cs
 │   ├── ChannelsController.cs
 │   ├── DataImportController.cs           ← NOWY: Orkiestrator importu danych CSV/Excel
 │   ├── DepartmentsController.cs
 │   ├── DiagnosticsController.cs
+│   ├── HealthMonitoringController.cs     ← NOWY: Orkiestrator monitorowania zdrowia systemu
 │   ├── OperationHistoriesController.cs
 │   ├── PowerShellController.cs
 │   ├── SchoolTypesController.cs

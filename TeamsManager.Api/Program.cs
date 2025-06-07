@@ -67,7 +67,7 @@ builder.Services.AddControllers();
 builder.Services.AddHealthChecks()
     .AddCheck<DependencyInjectionHealthCheck>("di_check")
     .AddCheck<PowerShellConnectionHealthCheck>("powershell_connection", 
-        failureStatus: HealthStatus.Degraded,
+        failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
         tags: new[] { "powershell", "graph", "external" });
 // ==========================================
 
@@ -278,6 +278,10 @@ builder.Services.AddScoped<ITeamLifecycleOrchestrator, TeamLifecycleOrchestrator
 // ========== NOWA REJESTRACJA - Orkiestrator Zarządzania Użytkownikami ==========
 builder.Services.AddScoped<IBulkUserManagementOrchestrator, BulkUserManagementOrchestrator>();
 // ================================================================================
+
+// ========== NOWA REJESTRACJA - Orkiestrator Monitorowania Zdrowia ==========
+builder.Services.AddScoped<IHealthMonitoringOrchestrator, HealthMonitoringOrchestrator>();
+// ============================================================================
 
 // ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
 // Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience

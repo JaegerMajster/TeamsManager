@@ -1,96 +1,114 @@
-# TeamsManager
+# 🏫 TeamsManager
 
-> **🎓 Projekt Dyplomowy - System zarządzania zespołami Microsoft Teams**  
-> **👨‍💻 Autor:** Mariusz Jaguścik  
-> **🏫 Uczelnia:** Akademia Ekonomiczno-Humanistyczna  
-> **📅 Ukończony:** 6 czerwca 2025  
+> **System zarządzania zespołami Microsoft Teams dla środowisk edukacyjnych**
 
-## 📖 Dokumentacja
+[![.NET 9.0](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![Tests](https://img.shields.io/badge/Tests-961%2F961%20%E2%9C%85-brightgreen.svg)](TeamsManager.Tests)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**📋 Pełna dokumentacja projektu znajduje się w pliku:**  
-**[docs/README.md](docs/README.md)**
+**TeamsManager** to zaawansowany system do automatyzacji zarządzania zespołami Microsoft Teams, stworzony specjalnie dla szkół i uczelni. Łączy w sobie lokalną aplikację desktopową WPF z potężnym REST API, zapewniając pełną kontrolę nad organizacją cyfrowej przestrzeni edukacyjnej.
 
-## ⚡ Szybki Start
+## ✨ Kluczowe funkcjonalności
 
-1. **Wymagania:** .NET 9.0, Visual Studio 2022, Azure AD
-2. **Kompilacja:** `dotnet build --configuration Release`
-3. **Testy:** `961/961 testów przechodzi ✅`
-4. **Uruchomienie API:** `cd TeamsManager.Api && dotnet run`
-5. **Uruchomienie UI:** `cd TeamsManager.UI && dotnet run`
+🏗️ **Clean Architecture** - DDD + Application Layer wzorce projektowe  
+🔗 **Microsoft Graph** - integracja z pełnym przepływem OAuth2 OBO  
+📊 **Masowe operacje** - 5 zaawansowanych orkiestratorów enterprise-grade  
+🗄️ **Lokalna baza** - SQLite z Entity Framework Core  
+🖥️ **Nowoczesny UI** - WPF + MaterialDesign 3.0  
+🌐 **REST API** - ASP.NET Core z JWT authentication  
+🧪 **100% testów** - 961 testów jednostkowych i integracyjnych  
 
-## 📊 Status Projektu
+## 🚀 Szybki start
 
-| Komponent | Status | Pokrycie |
-|-----------|--------|----------|
-| 🏗️ **Core Domain** | ✅ 100% | ✅ Pełne |
-| 🗄️ **Data Layer** | ✅ 100% | ✅ Pełne |
-| 🌐 **REST API** | ✅ 95% | ✅ Wysokie |
-| 🖥️ **Desktop UI** | 🔄 80% | ⚠️ Częściowe |
-| 🧪 **Testy** | ✅ 961/961 | ✅ 100% |
+### Wymagania
+- **.NET 9.0 SDK**
+- **Visual Studio 2022** (17.8+)
+- **Azure AD tenant** z Microsoft Graph permissions
 
-## 🏆 Kluczowe Funkcjonalności
+### Instalacja
+```bash
+git clone https://github.com/JaegerMajster/TeamsManager.git
+cd TeamsManager
+dotnet build --configuration Release
+```
 
-- ✅ **Zarządzanie zespołami Teams** z Microsoft Graph API
-- ✅ **Hierarchiczne struktury organizacyjne** (działy, szkoły)
-- ✅ **Dynamiczne szablony nazw** zespołów
-- ✅ **Inteligentna synchronizacja** Graph-DB
-- ✅ **System audytu** i logowania operacji
-- ✅ **REST API** z JWT authentication
-- ✅ **SignalR Hub** dla powiadomień real-time
-- ✅ **Orkiestrator procesów szkolnych** - automatyzacja kompleksowych workflow
-  - 🔄 Tworzenie zespołów dla nowego roku szkolnego (batch processing)
-  - 📦 Archiwizacja zespołów z poprzedniego roku 
-  - 🔀 Płynne przejście między latami szkolnymi (transition workflow)
-  - 📊 Monitoring i anulowanie długotrwałych procesów
-  - 🛡️ Thread-safe operations z semaphore limiting
-- ✅ **Orkiestrator importu danych** - zorganizowany workflow importu CSV/Excel **(NOWY - 2025-06-07)**
-  - 📂 Import użytkowników z plików CSV z walidacją biznesową
-  - 📊 Import zespołów z plików Excel z mapowaniem kolumn
-  - 🏫 Import struktury szkoły (działy, przedmioty, szablony)
-  - ✔️ 7-etapowy workflow: walidacja → parsing → dry-run → batch processing → rollback → reporting
-  - 📋 Generowanie szablonów importu (CSV, Excel, JSON)
-  - 🎯 Monitoring i anulowanie procesów importu w czasie rzeczywistym
-  - 🛡️ Error handling z AcceptableErrorPercentage i ContinueOnError
-- ✅ **Orkiestrator cyklu życia zespołów** - kompleksowe zarządzanie lifecycle Teams **(NOWY - 2025-06-07)**
-  - 🗃️ Masowa archiwizacja zespołów z opcjonalnym cleanup (członkowie, kanały, pliki)
-  - 🔄 Masowe przywracanie zespołów z walidacją właścicieli
-  - 📦 Migracja zespołów między latami szkolnymi z kopiowaniem struktur
-  - 🧹 Konsolidacja nieaktywnych zespołów (automatyczna archiwizacja)
-  - 📊 Thread-safe batch processing z SemaphoreSlim(3,3) dla równoległych operacji
-  - 💬 Powiadomienia właścicieli przed archiwizacją
-  - 🎯 Real-time monitoring procesów z możliwością anulowania
-  - 🛡️ Resilient error handling z progami błędów i rollback
-- ✅ **Orkiestrator zarządzania użytkownikami** - kompleksowe operacje HR i masowe działania **(NOWY - 2025-06-07)**
-  - 👤 Masowy onboarding użytkowników z 7-etapowym workflow (walidacja → tworzenie → zespoły → typy szkół → przedmioty → powiadomienia → finalizacja)
-  - 👋 Masowy offboarding użytkowników z transferem własności zespołów i backup danych
-  - 🔄 Masowe zmiany ról użytkowników w systemie z walidacją uprawnień
-  - 👥 Masowe operacje członkostwa w zespołach Teams (dodawanie/usuwanie z wielu zespołów)
-  - 📊 Thread-safe processing z SemaphoreSlim(3,3) dla 3 równoległych procesów
-  - 🎯 Real-time monitoring i anulowanie procesów zarządzania użytkownikami
-  - 🛡️ Helper methods: ValidateOnboardingPlan, ProcessOnboardingBatch, TransferTeamOwnership
-  - 💾 Proper resource cleanup z finally blocks i cancellation tokens
-  - 🗃️ Masowa archiwizacja zespołów z opcjonalnym cleanup (członkowie, kanały, pliki)
-  - 🔄 Masowe przywracanie zespołów z walidacją właścicieli
-  - 📦 Migracja zespołów między latami szkolnymi z kopiowaniem struktur
-  - 🧹 Konsolidacja nieaktywnych zespołów (automatyczna archiwizacja)
-  - 📊 Thread-safe batch processing z SemaphoreSlim(3,3) dla równoległych operacji
-  - 💬 Powiadomienia właścicieli przed archiwizacją
-  - 🎯 Real-time monitoring procesów z możliwością anulowania
-  - 🛡️ Resilient error handling z progami błędów i rollback
-- ✅ **Orkiestrator zarządzania użytkownikami** - kompleksowe operacje HR i masowe działania **(NOWY - 2025-06-07)**
-  - 👤 Masowy onboarding użytkowników z 7-etapowym workflow (walidacja → tworzenie → zespoły → typy szkół → przedmioty → powiadomienia → finalizacja)
-  - 👋 Masowy offboarding użytkowników z transferem własności zespołów i backup danych
-  - 🔄 Masowe zmiany ról użytkowników w systemie z walidacją uprawnień
-  - 👥 Masowe operacje członkostwa w zespołach Teams (dodawanie/usuwanie z wielu zespołów)
-  - 📊 Thread-safe processing z SemaphoreSlim(3,3) dla 3 równoległych procesów
-  - 🎯 Real-time monitoring i anulowanie procesów zarządzania użytkownikami
-  - 🛡️ Helper methods: ValidateOnboardingPlan, ProcessOnboardingBatch, TransferTeamOwnership
-  - 💾 Proper resource cleanup z finally blocks i cancellation tokens
+### Uruchomienie
+```bash
+# API Server
+cd TeamsManager.Api
+dotnet run --urls http://localhost:5000
+
+# Desktop UI
+cd TeamsManager.UI  
+dotnet run
+```
+
+## 📋 Dokumentacja
+
+| Dokument | Opis |
+|----------|------|
+| **[📚 Dokumentacja Techniczna](docs/dokTech.md)** | Pełna dokumentacja architektury, implementacji i wzorców |
+| **[🏗️ Struktura Projektu](docs/strukturaProjektu.md)** | Szczegółowa struktura plików i komponentów |
+| **[🎨 Przewodnik Stylów UI](docs/styleUI.md)** | Standardy MaterialDesign i guidelines UX |
+| **[🔄 System Synchronizacji](docs/synchronizacja.md)** | Mechanizmy Graph-DB sync i cache |
+| **[🛡️ Strategia Cache](docs/strategiaCache.md)** | Optymalizacja wydajności i zarządzanie pamięcią |
+| **[⚙️ PowerShell Services](docs/powerShellService.md)** | Integracja z Microsoft Graph PowerShell |
+
+## 🎯 Obszary zastosowania
+
+### 🏫 Edukacja
+- Automatyczne tworzenie zespołów dla klas i przedmiotów
+- Zarządzanie latami szkolnymi z archiwizacją
+- Masowy import studentów i nauczycieli
+- Hierarchiczne struktury organizacyjne (działy, szkoły)
+
+### 🏢 Enterprise HR
+- Masowy onboarding/offboarding pracowników  
+- Zarządzanie rolami i uprawnieniami
+- Operacje członkostwa w zespołach
+- Audyt i monitoring działań administracyjnych
+
+## 🔧 Architektura
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   WPF Desktop   │ ── │   REST API      │ ── │ Microsoft Graph │
+│   Material UI   │    │   JWT + OBO     │    │   Teams API     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                        │
+         │              ┌─────────────────┐
+         └────────────── │   SQLite DB     │
+                         │   EF Core       │
+                         └─────────────────┘
+```
+
+## 📊 Status projektu
+
+| Komponent | Implementacja | Testy |
+|-----------|:------------:|:-----:|
+| Core Domain | ✅ 100% | ✅ Pełne |
+| Data Layer | ✅ 100% | ✅ Pełne | 
+| REST API | ✅ 95% | ✅ Wysokie |
+| Desktop UI | 🔄 80% | ⚠️ Częściowe |
+| **Łącznie** | **✅ 961/961** | **✅ 100%** |
+
+## 🏆 Zaawansowane orkiestratory
+
+🏫 **Procesy szkolne** - zarządzanie latami szkolnymi  
+📂 **Import danych** - CSV/Excel z walidacją biznesową  
+🔄 **Cykl życia zespołów** - archiwizacja i migracja  
+👥 **Zarządzanie użytkownikami** - masowy HR workflow  
+🏥 **Monitorowanie zdrowia** - diagnostyka i auto-naprawa systemu  
+
+*Wszystkie orkiestratory oferują thread-safe processing, real-time monitoring i graceful cancellation.*
+
+## 🤝 Autorzy
+
+**Mariusz Jaguścik**  
+📧 Email: [jaguscikm@gmail.com](mailto:jaguscikm@gmail.com)  
+🏫 Akademia Ekonomiczno-Humanistyczna w Warszawie 
+🎓 Projekt studencki - Programowanie aplikacji sieciowych, Programowanie w .NET, Projektowanie zaawansowanych systemów informatycznych  
 
 ## 📄 Licencja
 
-MIT License
-
----
-
-**🔗 [Pełna dokumentacja w docs/README.md](docs/README.md)**
+Ten projekt jest licencjonowany na warunkach [MIT License](LICENSE).
