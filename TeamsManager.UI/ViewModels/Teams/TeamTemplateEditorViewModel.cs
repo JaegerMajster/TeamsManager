@@ -584,9 +584,12 @@ namespace TeamsManager.UI.ViewModels.Teams
                 testDialog.Content = testDataControl;
                 
                 // Ustawienie właściciela jeśli to możliwe
-                if (System.Windows.Application.Current.MainWindow != null)
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault();
+                if (mainWindow != null)
                 {
-                    testDialog.Owner = System.Windows.Application.Current.MainWindow;
+                    testDialog.Owner = mainWindow;
                 }
 
                 // Pokazanie dialogu

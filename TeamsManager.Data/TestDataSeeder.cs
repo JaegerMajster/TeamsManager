@@ -34,6 +34,7 @@ namespace TeamsManager.Data
                 Email = "it@school.edu.pl",
                 Phone = "+48 123 456 789",
                 Location = "Budynek A, piętro 2",
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -47,6 +48,7 @@ namespace TeamsManager.Data
                 Email = "math@school.edu.pl",
                 Phone = "+48 123 456 790",
                 Location = "Budynek B, piętro 1",
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -62,6 +64,7 @@ namespace TeamsManager.Data
                 Description = "Szkoła podstawowa - klasy 1-8",
                 ColorCode = "#4CAF50",
                 SortOrder = 1,
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -74,6 +77,7 @@ namespace TeamsManager.Data
                 Description = "Liceum ogólnokształcące - klasy 1-4",
                 ColorCode = "#2196F3",
                 SortOrder = 2,
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -89,6 +93,7 @@ namespace TeamsManager.Data
                 StartDate = new DateTime(2024, 9, 1),
                 EndDate = new DateTime(2025, 6, 30),
                 IsCurrent = true,
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -106,6 +111,7 @@ namespace TeamsManager.Data
                 DepartmentId = itDepartment.Id,
                 Position = "Administrator systemu",
                 Phone = "+48 123 456 791",
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
@@ -120,11 +126,148 @@ namespace TeamsManager.Data
                 DepartmentId = mathDepartment.Id,
                 Position = "Nauczyciel matematyki",
                 Phone = "+48 123 456 792",
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };
 
-            context.Users.AddRange(adminUser, teacherUser);
+            // Dodaj więcej użytkowników testowych
+            var student1 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Marek",
+                LastName = "Testowy",
+                UPN = "marek.testowy@school.edu.pl",
+                Role = UserRole.Uczen,
+                DepartmentId = mathDepartment.Id,
+                Position = "Uczeń klasy 1A",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var teacher2 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Katarzyna",
+                LastName = "Nauczycielska",
+                UPN = "katarzyna.nauczycielska@school.edu.pl",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = itDepartment.Id,
+                Position = "Nauczyciel informatyki",
+                Phone = "+48 123 456 793",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var assistantUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Piotr",
+                LastName = "Asystent",
+                UPN = "piotr.asystent@school.edu.pl",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = itDepartment.Id,
+                Position = "Asystent laboratorium",
+                Phone = "+48 123 456 794",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            // Dodaj jeszcze więcej użytkowników dla lepszej demonstracji
+            var student2 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Maria",
+                LastName = "Kowalczyk",
+                UPN = "maria.kowalczyk@school.edu.pl",
+                Role = UserRole.Uczen,
+                DepartmentId = mathDepartment.Id,
+                Position = "Uczeń klasy 2A",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var teacher3 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Tomasz",
+                LastName = "Wiśniewski",
+                UPN = "tomasz.wisniewski@school.edu.pl",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = mathDepartment.Id,
+                Position = "Nauczyciel fizyki",
+                Phone = "+48 123 456 795",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var viceDirector = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Agnieszka",
+                LastName = "Zielińska",
+                UPN = "agnieszka.zielinska@school.edu.pl",
+                Role = UserRole.Wicedyrektor,
+                DepartmentId = itDepartment.Id,
+                Position = "Wicedyrektor ds. technicznych",
+                Phone = "+48 123 456 796",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var student3 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Paweł",
+                LastName = "Nowacki",
+                UPN = "pawel.nowacki@school.edu.pl",
+                Role = UserRole.Uczen,
+                DepartmentId = itDepartment.Id,
+                Position = "Uczeń klasy 3A",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var teacher4 = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Magdalena",
+                LastName = "Lewandowska",
+                UPN = "magdalena.lewandowska@school.edu.pl",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = mathDepartment.Id,
+                Position = "Nauczyciel chemii",
+                Phone = "+48 123 456 797",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            // Dodaj również jednego nieaktywnego użytkownika dla testów filtrowania
+            var inactiveUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Nieaktywny",
+                LastName = "Użytkownik",
+                UPN = "nieaktywny.uzytkownik@school.edu.pl",
+                Role = UserRole.Nauczyciel,
+                DepartmentId = itDepartment.Id,
+                Position = "Były nauczyciel",
+                Phone = "+48 123 456 798",
+                IsActive = false,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            context.Users.AddRange(adminUser, teacherUser, student1, teacher2, assistantUser, 
+                                 student2, teacher3, viceDirector, student3, teacher4, inactiveUser);
 
             // Dodaj zespół
             var mathTeam = new Team
@@ -162,6 +305,7 @@ namespace TeamsManager.Data
                 IsApproved = true,
                 ApprovedDate = DateTime.Now,
                 ApprovedBy = "System",
+                IsActive = true,
                 CreatedDate = DateTime.Now,
                 CreatedBy = "System"
             };

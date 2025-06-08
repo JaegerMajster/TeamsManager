@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Services.UserContext;
@@ -148,9 +149,12 @@ namespace TeamsManager.UI
             // komunikowa� si� wy��cznie z API.
             // Je�li jednak chcesz mie� DbContext dost�pny w UI (np. do test�w,
             // lub je�li cz�� logiki ma by� lokalna):
-            string uiDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "teamsmanager_ui.db");
+            
+            // BEZPIECZNA KONFIGURACJA BAZY DANYCH DLA PRODUCTION
+            var connectionString = GetDatabaseConnectionString(configuration);
+            
             services.AddDbContext<TeamsManagerDbContext>(options =>
-                options.UseSqlite($"Data Source={uiDbPath}"));
+                options.UseSqlite(connectionString));
 
             // --- Rejestracja ViewModeli (Przyk�ady) ---
             // Tutaj w przysz�o�ci b�dziesz rejestrowa� swoje ViewModele,
@@ -159,11 +163,10 @@ namespace TeamsManager.UI
             //      services.AddTransient<LoginViewModel>();
 
             // --- POCZĄTEK: REJESTRACJA OKIEN (ETAP 4) ---
-            // Rejestracja gwnego okna (legacy)
-            services.AddTransient<MainWindow>();
+            // Rejestracja okien
             
             // Opcjonalnie: rejestracja innych okien
-            services.AddTransient<DashboardWindow>();
+
             
             // ManualTestingWindow jako Transient - nowa instancja przy ka�dym otwarciu
             services.AddTransient<ManualTestingWindow>();
@@ -184,11 +187,13 @@ namespace TeamsManager.UI
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
 
-            // Tymczasowo: u�ywamy uproszczonych implementacji dla Dashboard
-            // W przysz�o�ci b�d� zast�pione komunikacj� z API
+            // Serwisy używane przez Dashboard - MOCK dla rozwoju
             services.AddSingleton<ITeamService, SimpleDashboardTeamService>();
-            services.AddSingleton<IUserService, SimpleDashboardUserService>();
+            // services.AddSingleton<IUserService, SimpleDashboardUserService>(); // USUNIĘTE: zastępuje prostym serwisem z bazy
             services.AddSingleton<IOperationHistoryService, SimpleDashboardOperationHistoryService>();
+            
+            // Prosta implementacja IUserService korzystająca z bazy danych
+            services.AddScoped<IUserService, SimpleUserService>();
             // --- KONIEC: REJESTRACJA DASHBOARD (ETAP 2) ---
 
             // --- POCZĄTEK: REJESTRACJA APPLICATION SETTINGS (ETAP 1.3) ---
@@ -302,7 +307,7 @@ namespace TeamsManager.UI
             // Core serwisy dla Users ju� zarejestrowane powy�ej (IUserService, IDepartmentService)
             
             // ViewModele dla User List
-            services.AddTransient<ViewModels.Users.UserListViewModel>();
+            services.AddScoped<ViewModels.Users.UserListViewModel>(); // Scoped - zachowaj między nawigacją
             services.AddTransient<ViewModels.Users.UserListItemViewModel>();
 
             // Widoki User List
@@ -466,8 +471,157 @@ namespace TeamsManager.UI
             services.AddSingleton<Converters.AlertLevelToColorConverter>();
             services.AddSingleton<Converters.ConnectionStateToColorConverter>();
             services.AddSingleton<Converters.PercentageToColorConverter>();
-            services.AddSingleton<Converters.TimeSpanToStringConverter>();
+            // services.AddSingleton<Converters.TimeSpanToStringConverter>(); // Konwerter nie istnieje
             // --- KONIEC: REJESTRACJA REAL-TIME MONITORING (ETAP 5.3) ---
+
+            // --- POCZĄTEK: REJESTRACJA BRAKUJĄCYCH VIEWMODELI (ETAP 6.0) ---
+            
+            // LoginViewModel - używany w LoginWindow
+            services.AddTransient<ViewModels.LoginViewModel>();
+            
+            // Core serwisy które mogą być używane w różnych miejscach
+            services.AddScoped<ITeamTemplateService, TeamsManager.Core.Services.TeamTemplateService>();
+            services.AddScoped<ITeamTemplateRepository, TeamsManager.Data.Repositories.TeamTemplateRepository>();
+            services.AddScoped<IChannelService, TeamsManager.Core.Services.ChannelService>();
+            services.AddScoped<IModernHttpService, TeamsManager.Core.Services.ModernHttpService>();
+            
+            // Application Services (Orchestrators)
+            services.AddScoped<ITeamLifecycleOrchestrator, TeamsManager.Application.Services.TeamLifecycleOrchestrator>();
+            services.AddScoped<IBulkUserManagementOrchestrator, TeamsManager.Application.Services.BulkUserManagementOrchestrator>();
+            services.AddScoped<IReportingOrchestrator, TeamsManager.Application.Services.ReportingOrchestrator>();
+            services.AddScoped<ISchoolYearProcessOrchestrator, TeamsManager.Application.Services.SchoolYearProcessOrchestrator>();
+            
+            // Additional repositories needed by orchestrators
+            services.AddScoped<IApplicationSettingRepository, TeamsManager.Data.Repositories.ApplicationSettingRepository>();
+            services.AddScoped<IOperationHistoryRepository, TeamsManager.Data.Repositories.OperationHistoryRepository>();
+            
+            // Unit of Work pattern - sprawdzę czy istnieje implementacja
+            // services.AddScoped<IUnitOfWork, TeamsManager.Data.UnitOfWork>(); // TODO: Dodać implementację UnitOfWork
+            
+            // Notification services
+            services.AddScoped<IAdminNotificationService, TeamsManager.Core.Services.StubAdminNotificationService>();
+            
+            // UI Helper Services (nie implementują interfejsów ale są używane przez ViewModele)
+            services.AddTransient<Services.UI.DepartmentTreeService>();
+            
+            // Brakujące konvertery (singleton dla wydajności)
+            services.AddSingleton<Converters.InverseBooleanConverter>();
+            services.AddSingleton<Converters.NullToVisibilityConverter>();
+            services.AddSingleton<Converters.StringToVisibilityConverter>();
+            services.AddSingleton<Converters.StringToBoolConverter>();
+            services.AddSingleton<Converters.StringToDateConverter>();
+            services.AddSingleton<Converters.StringToTimeConverter>();
+            services.AddSingleton<Converters.TeamMemberRoleToStringConverter>();
+            services.AddSingleton<Converters.WorkloadToColorConverter>();
+            services.AddSingleton<Converters.WorkloadToColorSingleConverter>();
+            services.AddSingleton<Converters.HierarchyLevelToMarginConverter>();
+            services.AddSingleton<Converters.BoolToIconConverter>();
+            services.AddSingleton<Converters.BoolToBackgroundConverter>();
+            services.AddSingleton<Converters.ColorToBrushConverter>();
+            // services.AddSingleton<Converters.OperationTypeToPolishNameConverter>(); // Konwerter nie istnieje
+            
+            // Brakujące UserControls
+            services.AddTransient<UserControls.Teams.TestDataDialog>();
+            
+            // --- KONIEC: REJESTRACJA BRAKUJĄCYCH VIEWMODELI (ETAP 6.0) ---
+        }
+
+        /// <summary>
+        /// Tworzy bezpieczny connection string dla bazy danych lokalnej
+        /// </summary>
+        private string GetDatabaseConnectionString(Microsoft.Extensions.Configuration.IConfiguration configuration)
+        {
+            try
+            {
+                // Sprawdź czy jest zdefiniowany connection string w konfiguracji
+                var configConnectionString = configuration.GetConnectionString("DefaultConnection");
+                if (!string.IsNullOrEmpty(configConnectionString))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Database] Używam connection string z konfiguracji");
+                    return configConnectionString;
+                }
+
+                // BEZPIECZNA LOKALIZACJA: LocalApplicationData
+                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var appFolderPath = Path.Combine(appDataPath, "TeamsManager");
+                
+                // Upewnij się, że folder aplikacji istnieje
+                if (!Directory.Exists(appFolderPath))
+                {
+                    Directory.CreateDirectory(appFolderPath);
+                    System.Diagnostics.Debug.WriteLine($"[Database] Utworzono folder aplikacji: {appFolderPath}");
+                }
+                
+                var dbPath = Path.Combine(appFolderPath, "teamsmanager.db");
+                
+                // Logowanie ścieżki
+                System.Diagnostics.Debug.WriteLine($"[Database] Ścieżka bazy danych: {dbPath}");
+                System.Diagnostics.Debug.WriteLine($"[Database] Folder aplikacji: {appFolderPath}");
+                
+                // MIGRACJA DANYCH Z STAREJ LOKALIZACJI (compatibility)
+                var oldDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "teamsmanager_ui.db");
+                if (File.Exists(oldDbPath) && !File.Exists(dbPath))
+                {
+                    try
+                    {
+                        File.Copy(oldDbPath, dbPath, overwrite: false);
+                        System.Diagnostics.Debug.WriteLine($"[Database] ✅ Zmigrowano bazę z {oldDbPath}");
+                        
+                        // Opcjonalnie: usuń starą bazę po udanej migracji
+                        // File.Delete(oldDbPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Database] ⚠️ Błąd migracji: {ex.Message}");
+                    }
+                }
+                
+                return $"Data Source={dbPath}";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Database] ❌ Błąd konfiguracji bazy danych: {ex.Message}");
+                
+                // Fallback do obecnego katalogu (dla przypadków krytycznych)
+                var fallbackPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "teamsmanager_fallback.db");
+                return $"Data Source={fallbackPath}";
+            }
+        }
+
+        private async Task InitializeDatabaseAsync(TeamsManagerDbContext context)
+        {
+            try
+            {
+                // Sprawdź czy baza danych istnieje i utwórz ją jeśli nie
+                await context.Database.EnsureCreatedAsync();
+                
+                // Sprawdź czy dane już istnieją
+                var usersCount = await context.Users.CountAsync();
+                var departmentsCount = await context.Departments.CountAsync();
+                
+                System.Diagnostics.Debug.WriteLine($"[Database] Users: {usersCount}, Departments: {departmentsCount}");
+                
+                // Jeśli baza jest pusta, dodaj przykładowe dane
+                if (usersCount == 0 && departmentsCount == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Database] Baza danych jest pusta, dodawanie przykładowych danych...");
+                    await TeamsManager.Data.TestDataSeeder.SeedAsync(context);
+                    System.Diagnostics.Debug.WriteLine("[Database] Przykładowe dane zostały dodane.");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[Database] Baza danych zawiera już dane.");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Database] Błąd podczas inicjalizacji bazy danych: {ex.Message}");
+                MessageBox.Show(
+                    $"Błąd podczas inicjalizacji bazy danych:\n\n{ex.Message}", 
+                    "Błąd bazy danych", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Warning);
+            }
         }
 
         protected override void OnStartup(StartupEventArgs e)
@@ -514,11 +668,14 @@ namespace TeamsManager.UI
                     System.Diagnostics.Debug.WriteLine($"[Config Test] Failed to load MSAL configuration");
                 }
 
-                // Sprawdzenie DbContext
+                // Sprawdzenie DbContext i seedowanie danych
                 try
                 {
                     var dbContext = ServiceProvider.GetRequiredService<TeamsManagerDbContext>();
                     System.Diagnostics.Debug.WriteLine($"[UI DI Test] DbContext instance created: {dbContext != null}");
+                    
+                    // Automatyczne seedowanie danych jeśli baza jest pusta (asynchronicznie)
+                    _ = Task.Run(async () => await InitializeDatabaseAsync(dbContext));
                 }
                 catch (Exception ex)
                 {

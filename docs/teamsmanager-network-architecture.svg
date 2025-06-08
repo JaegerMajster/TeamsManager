@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Gradient definitions -->
+    <linearGradient id="clientGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#BBDEFB;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="networkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFF3E0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFE0B2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="serverGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F5E8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#C8E6C9;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">
+    TeamsManager - Architektura Sieciowa
+  </text>
+  
+  <!-- Desktop Client Layer -->
+  <g id="clientLayer">
+    <rect x="50" y="60" width="700" height="140" rx="10" fill="url(#clientGradient)" stroke="#1976D2" stroke-width="2"/>
+    <text x="60" y="85" font-size="16" font-weight="bold" fill="#1976D2">🖥️ DESKTOP CLIENT (WPF)</text>
+    
+    <!-- Client components -->
+    <rect x="70" y="100" width="150" height="40" rx="5" fill="#2196F3" stroke="#1976D2"/>
+    <text x="75" y="115" font-size="12" fill="white">👤 TeamsManager UI</text>
+    <text x="75" y="130" font-size="10" fill="white">(WPF Desktop App)</text>
+    
+    <rect x="240" y="100" width="120" height="40" rx="5" fill="#4CAF50" stroke="#388E3C"/>
+    <text x="245" y="115" font-size="12" fill="white">💾 SQLite</text>
+    <text x="245" y="130" font-size="10" fill="white">(Local Cache)</text>
+    
+    <rect x="380" y="100" width="140" height="40" rx="5" fill="#FF9800" stroke="#F57C00"/>
+    <text x="385" y="115" font-size="12" fill="white">🔄 SignalR Client</text>
+    <text x="385" y="130" font-size="10" fill="white">(Real-time Updates)</text>
+    
+    <rect x="540" y="100" width="130" height="40" rx="5" fill="#9C27B0" stroke="#7B1FA2"/>
+    <text x="545" y="115" font-size="12" fill="white">🌐 HttpClient</text>
+    <text x="545" y="130" font-size="10" fill="white">(REST API Calls)</text>
+  </g>
+  
+  <!-- Network Protocols Layer -->
+  <g id="networkLayer">
+    <rect x="50" y="230" width="700" height="120" rx="10" fill="url(#networkGradient)" stroke="#F57C00" stroke-width="2"/>
+    <text x="60" y="255" font-size="16" font-weight="bold" fill="#F57C00">🌐 NETWORK PROTOCOLS</text>
+    
+    <!-- Protocol components -->
+    <rect x="80" y="270" width="130" height="40" rx="5" fill="#4CAF50" stroke="#388E3C"/>
+    <text x="85" y="285" font-size="12" fill="white">🔐 HTTPS</text>
+    <text x="85" y="300" font-size="10" fill="white">(REST APIs)</text>
+    
+    <rect x="230" y="270" width="140" height="40" rx="5" fill="#FF5722" stroke="#D84315"/>
+    <text x="235" y="285" font-size="12" fill="white">⚡ WebSocket</text>
+    <text x="235" y="300" font-size="10" fill="white">(SignalR Real-time)</text>
+    
+    <rect x="390" y="270" width="130" height="40" rx="5" fill="#3F51B5" stroke="#303F9F"/>
+    <text x="395" y="285" font-size="12" fill="white">🎫 OAuth 2.0</text>
+    <text x="395" y="300" font-size="10" fill="white">(Authentication)</text>
+    
+    <rect x="540" y="270" width="120" height="40" rx="5" fill="#607D8B" stroke="#455A64"/>
+    <text x="545" y="285" font-size="12" fill="white">🔒 TLS 1.3</text>
+    <text x="545" y="300" font-size="10" fill="white">(Encryption)</text>
+  </g>
+  
+  <!-- Backend Services Layer -->
+  <g id="serverLayer">
+    <rect x="50" y="380" width="700" height="180" rx="10" fill="url(#serverGradient)" stroke="#4CAF50" stroke-width="2"/>
+    <text x="60" y="405" font-size="16" font-weight="bold" fill="#4CAF50">☁️ BACKEND SERVICES</text>
+    
+    <!-- Server components -->
+    <rect x="70" y="420" width="140" height="40" rx="5" fill="#2196F3" stroke="#1976D2"/>
+    <text x="75" y="435" font-size="12" fill="white">🏢 TeamsManager API</text>
+    <text x="75" y="450" font-size="10" fill="white">(ASP.NET Core)</text>
+    
+    <rect x="230" y="420" width="120" height="40" rx="5" fill="#FF9800" stroke="#F57C00"/>
+    <text x="235" y="435" font-size="12" fill="white">📡 SignalR Hub</text>
+    <text x="235" y="450" font-size="10" fill="white">(Real-time Server)</text>
+    
+    <rect x="370" y="420" width="140" height="40" rx="5" fill="#9C27B0" stroke="#7B1FA2"/>
+    <text x="375" y="435" font-size="12" fill="white">📊 Microsoft Graph</text>
+    <text x="375" y="450" font-size="10" fill="white">(Graph API)</text>
+    
+    <rect x="530" y="420" width="140" height="40" rx="5" fill="#E91E63" stroke="#C2185B"/>
+    <text x="535" y="435" font-size="12" fill="white">👥 Microsoft Teams</text>
+    <text x="535" y="450" font-size="10" fill="white">(Teams API)</text>
+    
+    <rect x="220" y="480" width="140" height="40" rx="5" fill="#3F51B5" stroke="#303F9F"/>
+    <text x="225" y="495" font-size="12" fill="white">🔐 Azure AD</text>
+    <text x="225" y="510" font-size="10" fill="white">(Authentication)</text>
+    
+    <rect x="380" y="480" width="140" height="40" rx="5" fill="#795548" stroke="#5D4037"/>
+    <text x="385" y="495" font-size="12" fill="white">💾 SQL Database</text>
+    <text x="385" y="510" font-size="10" fill="white">(Persistent Storage)</text>
+  </g>
+  
+  <!-- Connection Lines -->
+  <g id="connections" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrowhead)">
+    <!-- Client to Network -->
+    <line x1="145" y1="140" x2="145" y2="270"/>
+    <line x1="300" y1="140" x2="300" y2="270"/>
+    <line x1="450" y1="140" x2="300" y2="270"/>
+    <line x1="605" y1="140" x2="145" y2="270"/>
+    
+    <!-- Network to Server -->
+    <line x1="145" y1="310" x2="140" y2="420"/>
+    <line x1="300" y1="310" x2="295" y2="420"/>
+    <line x1="455" y1="310" x2="290" y2="480"/>
+    <line x1="600" y1="310" x2="440" y2="420"/>
+  </g>
+  
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+  </defs>
+  
+  <!-- Legend -->
+  <g id="legend">
+    <rect x="580" y="520" width="160" height="60" rx="5" fill="white" stroke="#999" stroke-width="1"/>
+    <text x="590" y="540" font-size="12" font-weight="bold" fill="#333">Technologie:</text>
+    <text x="590" y="555" font-size="10" fill="#666">• SignalR (Real-time)</text>
+    <text x="590" y="568" font-size="10" fill="#666">• REST API (HTTP/HTTPS)</text>
+  </g>
+</svg> 

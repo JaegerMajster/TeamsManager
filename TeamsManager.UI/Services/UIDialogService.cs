@@ -42,8 +42,10 @@ namespace TeamsManager.UI.Services
         {
             System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                // Znajdź główne okno lub aktywne okno
-                var mainWindow = System.Windows.Application.Current.MainWindow ?? System.Windows.Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
+                // Znajdź główne okno (MainShellWindow) lub aktywne okno
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault() ?? System.Windows.Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
                 if (mainWindow != null)
                 {
                     // Znajdź element LoadingOverlay w oknie
@@ -62,8 +64,10 @@ namespace TeamsManager.UI.Services
         {
             System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                // Znajdź główne okno lub aktywne okno
-                var mainWindow = System.Windows.Application.Current.MainWindow ?? System.Windows.Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
+                // Znajdź główne okno (MainShellWindow) lub aktywne okno
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault() ?? System.Windows.Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
                 if (mainWindow != null)
                 {
                     // Znajdź element LoadingOverlay w oknie

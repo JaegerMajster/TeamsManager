@@ -1068,8 +1068,11 @@ namespace TeamsManager.UI.Views
         {
             try
             {
-                // Znajdź główne okno i przenieś na pierwszy plan
-                var mainWindow = System.Windows.Application.Current.MainWindow;
+                // Znajdź główne okno (MainShellWindow) i przenieś na pierwszy plan
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault();
+                    
                 if (mainWindow != null)
                 {
                     mainWindow.Show();

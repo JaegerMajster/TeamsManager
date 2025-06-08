@@ -67,6 +67,9 @@
             
             <!-- Team Lifecycle Management konwertery -->
             <converters:BoolToBackgroundConverter x:Key="BoolToBackgroundConverter"/>
+            
+            <!-- Operations konwertery -->
+            <converters:OperationTypeToIconConverter x:Key="OperationTypeToIconConverter"/>
 
             <!-- Globalne ustawienia czcionek -->
             <FontFamily x:Key="DefaultFontFamily">Segoe UI</FontFamily>

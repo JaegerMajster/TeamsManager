@@ -78,12 +78,7 @@ namespace TeamsManager.UI.ViewModels.Users
             ViewUserDetailsCommand = new RelayCommand<UserListItemViewModel>(ViewUserDetails);
             CreateNewUserCommand = new RelayCommand(CreateNewUser);
 
-            // Load initial data
-            Task.Run(async () =>
-            {
-                await LoadDepartmentsAsync();
-                await LoadUsersAsync();
-            });
+            // Inicjalizacja będzie wywołana przez View w event handlerze Loaded
         }
 
         #region Properties
@@ -278,6 +273,40 @@ namespace TeamsManager.UI.ViewModels.Users
         #endregion
 
         #region Methods
+
+        /// <summary>
+        /// Bezpieczna inicjalizacja asynchroniczna ViewModelu
+        /// </summary>
+        public async void InitializeAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Inicjalizacja UserListViewModel...");
+                
+                IsLoading = true;
+                ErrorMessage = null;
+                
+                // Małe opóźnienie, aby UI miało czas się załadować
+                await Task.Delay(100);
+                
+                // Załaduj działy i użytkowników równolegle
+                var departmentsTask = LoadDepartmentsAsync();
+                var usersTask = LoadUsersAsync(forceRefresh: true);
+                
+                await Task.WhenAll(departmentsTask, usersTask);
+                
+                _logger.LogInformation("UserListViewModel zainicjalizowany pomyślnie");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas inicjalizacji UserListViewModel");
+                ErrorMessage = "Wystąpił błąd podczas ładowania danych. Spróbuj odświeżyć.";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
 
         private async Task LoadUsersAsync(bool forceRefresh = false)
         {
@@ -487,7 +516,11 @@ namespace TeamsManager.UI.ViewModels.Users
                 }
 
                 var userDetailWindow = serviceProvider.GetRequiredService<Views.Users.UserDetailWindow>();
-                userDetailWindow.Owner = System.Windows.Application.Current.MainWindow;
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault();
+                if (mainWindow != null)
+                    userDetailWindow.Owner = mainWindow;
                 
                 // Initialize for editing existing user
                 await userDetailWindow.InitializeAsync(user.Id);
@@ -521,7 +554,11 @@ namespace TeamsManager.UI.ViewModels.Users
                 }
 
                 var userDetailWindow = serviceProvider.GetRequiredService<Views.Users.UserDetailWindow>();
-                userDetailWindow.Owner = System.Windows.Application.Current.MainWindow;
+                var mainWindow = System.Windows.Application.Current.Windows
+                    .OfType<Views.Shell.MainShellWindow>()
+                    .FirstOrDefault();
+                if (mainWindow != null)
+                    userDetailWindow.Owner = mainWindow;
                 
                 // Initialize for creating new user (no userId parameter)
                 await userDetailWindow.InitializeAsync();

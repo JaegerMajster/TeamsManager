@@ -277,7 +277,7 @@
                                         
                                         <!-- Progress bar -->
                                         <ProgressBar Grid.Row="0"
-                                                   Value="{Binding CompletionPercentage}"
+                                                   Value="{Binding CompletionPercentage, Mode=OneWay}"
                                                    Style="{StaticResource TimelineProgressBar}"
                                                    ToolTip="{Binding CompletionPercentage, StringFormat={}{0:F1}% ukończone}"/>
                                         

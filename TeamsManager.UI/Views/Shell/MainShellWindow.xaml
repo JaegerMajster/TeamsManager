@@ -355,34 +355,6 @@
                             <settings:ApplicationSettingsView />
                         </DataTemplate>
                     </ContentControl.Resources>
-                    
-                    <!-- Fallback template dla innych widoków -->
-                    <ContentControl.ContentTemplate>
-                        <DataTemplate>
-                            <Grid>
-                                <!-- Tymczasowy placeholder dla nieobsługiwanych widoków -->
-                                <materialDesign:Card Padding="32" 
-                                                   MaxWidth="600"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center">
-                                    <StackPanel>
-                                        <materialDesign:PackIcon Kind="Construction"
-                                                               Width="64" Height="64"
-                                                               HorizontalAlignment="Center"
-                                                               Foreground="{DynamicResource SecondaryHueMidBrush}"/>
-                                        <TextBlock Text="{Binding DataContext.CurrentViewTitle, 
-                                                         RelativeSource={RelativeSource AncestorType=Window}}"
-                                                 Margin="0,16,0,8"
-                                                 HorizontalAlignment="Center"
-                                                 Style="{StaticResource MaterialDesignHeadline5TextBlock}"/>
-                                        <TextBlock Text="Ten widok będzie zaimplementowany w kolejnych etapach"
-                                                 HorizontalAlignment="Center"
-                                                 Opacity="0.7"/>
-                                    </StackPanel>
-                                </materialDesign:Card>
-                            </Grid>
-                        </DataTemplate>
-                    </ContentControl.ContentTemplate>
                 </ContentControl>
             </Border>
         </Grid>
