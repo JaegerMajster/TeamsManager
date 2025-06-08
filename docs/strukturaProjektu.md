@@ -1,6 +1,6 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 07 czerwca 2025, 10:52  
+**📅 Ostatnia aktualizacja:** 08 czerwca 2025, 09:28  
 **🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
 **⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
 
@@ -362,6 +362,8 @@ TeamsManager.UI/
 │   │   ├── ConfigurationDetectionService.cs
 │   │   ├── UiConfigurationService.cs
 │   │   └── JsonConfigurationProviderService.cs
+│   ├── Database/
+│   │   └── TemporaryDatabaseService.cs         ← 🆕 NOWY: Tymczasowy serwis bazodanowy z CRUD
 │   ├── GraphUserProfileService.cs              ← 🆕 NOWY: Microsoft Graph implementation
 │   ├── ManualTestingService.cs                 ← 🆕 NOWY: Testy manualne implementation
 │   ├── MsalAuthService.cs                      ← 🆕 NOWY: MSAL authentication service
@@ -455,4 +457,4 @@ TeamsApiApp/
 
 ---
 
-> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **07 czerwca 2025, 08:46**
+> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **08 czerwca 2025, 09:28**
