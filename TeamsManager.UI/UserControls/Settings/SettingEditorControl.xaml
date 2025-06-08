@@ -14,7 +14,7 @@
         
         <!-- Style dla komunikatu błędu -->
         <Style x:Key="ErrorMessageStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource DangerRed}"/>
+                                <Setter Property="Foreground" Value="{StaticResource AccentRed}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Margin" Value="5,2,0,0"/>
             <Setter Property="TextWrapping" Value="Wrap"/>

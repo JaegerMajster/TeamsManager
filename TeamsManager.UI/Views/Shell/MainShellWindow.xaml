@@ -4,13 +4,16 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-                     xmlns:dashboard="clr-namespace:TeamsManager.UI.Views.Dashboard"
-             xmlns:schoolTypes="clr-namespace:TeamsManager.UI.Views.SchoolTypes"
-             xmlns:subjects="clr-namespace:TeamsManager.UI.Views.Subjects"
-             xmlns:users="clr-namespace:TeamsManager.UI.Views.Users"
-             xmlns:operations="clr-namespace:TeamsManager.UI.Views.Operations"
-             xmlns:teams="clr-namespace:TeamsManager.UI.Views.Teams"
-             xmlns:monitoring="clr-namespace:TeamsManager.UI.Views.Monitoring"
+        xmlns:dashboard="clr-namespace:TeamsManager.UI.Views.Dashboard"
+        xmlns:schoolTypes="clr-namespace:TeamsManager.UI.Views.SchoolTypes"
+        xmlns:subjects="clr-namespace:TeamsManager.UI.Views.Subjects"
+        xmlns:users="clr-namespace:TeamsManager.UI.Views.Users"
+        xmlns:operations="clr-namespace:TeamsManager.UI.Views.Operations"
+        xmlns:teams="clr-namespace:TeamsManager.UI.Views.Teams"
+        xmlns:monitoring="clr-namespace:TeamsManager.UI.Views.Monitoring"
+        xmlns:departments="clr-namespace:TeamsManager.UI.Views.Departments"
+        xmlns:settings="clr-namespace:TeamsManager.UI.Views.Settings"
+        xmlns:schoolYears="clr-namespace:TeamsManager.UI.Views.SchoolYears"
         mc:Ignorable="d"
         Title="TeamsManager" 
         Height="900" Width="1600"
@@ -19,245 +22,257 @@
         WindowState="Maximized"
         Style="{StaticResource BaseWindowStyle}">
     
-    <materialDesign:DrawerHost IsLeftDrawerOpen="{Binding IsDrawerOpen}">
-        <!-- Navigation Drawer Content -->
-        <materialDesign:DrawerHost.LeftDrawerContent>
-            <DockPanel MinWidth="280">
+    <!-- Main Grid with fixed navigation panel -->
+    <Grid>
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#FF202020" Offset="0"/>
+                <GradientStop Color="#FF252526" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
+
+        <Grid.ColumnDefinitions>
+            <!-- Fixed Navigation Panel -->
+            <ColumnDefinition Width="280"/>
+            <!-- Main Content Area -->
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- LEFT NAVIGATION PANEL (Always Visible) -->
+        <Border Grid.Column="0" 
+                Background="{DynamicResource MaterialDesignPaper}"
+                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                BorderThickness="0,0,1,0">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="0" Opacity="0.2"/>
+            </Border.Effect>
+            
+            <DockPanel>
                 <!-- Header z informacjami o użytkowniku -->
                 <Border DockPanel.Dock="Top" 
-                        Background="{DynamicResource MaterialDesignPaper}"
+                        Background="{DynamicResource PrimaryHueMidBrush}"
                         Padding="16">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="14" ShadowDepth="4.5" Direction="270" Opacity="0.3"/>
-                    </Border.Effect>
-                    
                     <StackPanel>
                         <materialDesign:PackIcon Kind="AccountCircle" 
                                                Width="64" Height="64"
                                                HorizontalAlignment="Center"
-                                               Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                                               Foreground="White"/>
                         <TextBlock Text="{Binding UserDisplayName}"
                                  HorizontalAlignment="Center"
                                  Margin="0,8,0,0"
+                                 Foreground="White"
                                  Style="{StaticResource MaterialDesignSubtitle1TextBlock}"/>
                         <TextBlock Text="{Binding UserEmail}"
                                  HorizontalAlignment="Center"
-                                 Opacity="0.7"
+                                 Foreground="White"
+                                 Opacity="0.8"
                                  Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Menu Items -->
-                <ListBox Margin="0,16,0,16">
-                    <ListBox.Resources>
-                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource MaterialDesignListBoxItem}">
-                            <Setter Property="Height" Value="48"/>
-                            <Setter Property="Padding" Value="16,0"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                        </Style>
-                    </ListBox.Resources>
-
-                    <!-- Dashboard -->
-                    <ListBoxItem>
+                <ScrollViewer DockPanel.Dock="Top" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,16,0,16">
+                        
+                        <!-- Dashboard -->
                         <Button Command="{Binding NavigateToDashboardCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="ViewDashboard" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Dashboard" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Separator -->
-                    <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
-                             Margin="16,8"/>
+                        <!-- Separator -->
+                        <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
+                                 Margin="16,8"/>
 
-                    <!-- Użytkownicy -->
-                    <ListBoxItem>
+                        <!-- Użytkownicy -->
                         <Button Command="{Binding NavigateToUsersCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="AccountMultiple" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Użytkownicy" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Zespoły -->
-                    <ListBoxItem>
+                        <!-- Zespoły -->
                         <Button Command="{Binding NavigateToTeamsCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="MicrosoftTeams" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Zespoły" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Typy Szkół -->
-                    <ListBoxItem>
+                        <!-- Typy Szkół -->
                         <Button Command="{Binding NavigateToSchoolTypesCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="School" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Typy Szkół" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Przedmioty -->
-                    <ListBoxItem>
+                        <!-- Lata Szkolne -->
+                        <Button Command="{Binding NavigateToSchoolYearsCommand}"
+                                Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CalendarMultiple" 
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,16,0"/>
+                                <TextBlock Text="Lata Szkolne" 
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Przedmioty -->
                         <Button Command="{Binding NavigateToSubjectsCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="BookOpenPageVariant" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Przedmioty" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Działy -->
-                    <ListBoxItem>
+                        <!-- Działy -->
                         <Button Command="{Binding NavigateToDepartmentsCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Domain" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Działy" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Historia Operacji -->
-                    <ListBoxItem>
+                        <!-- Historia Operacji -->
                         <Button Command="{Binding NavigateToOperationHistoryCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="History" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Historia Operacji" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Monitoring Systemu -->
-                    <ListBoxItem>
+                        <!-- Monitoring Systemu -->
                         <Button Command="{Binding NavigateToMonitoringCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="MonitorDashboard" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Monitoring Systemu" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Separator -->
-                    <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
-                             Margin="16,8"/>
+                        <!-- Separator -->
+                        <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
+                                 Margin="16,8"/>
 
-                    <!-- Ustawienia -->
-                    <ListBoxItem>
+                        <!-- Ustawienia -->
                         <Button Command="{Binding NavigateToSettingsCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Settings" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Ustawienia" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Testy manualne -->
-                    <ListBoxItem>
+                        <!-- Testy manualne -->
                         <Button Command="{Binding NavigateToManualTestingCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="TestTube" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Testy manualne" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
 
-                    <!-- Separator -->
-                    <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
-                             Margin="16,8"/>
+                        <!-- Separator -->
+                        <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
+                                 Margin="16,8"/>
 
-                    <!-- Wyloguj -->
-                    <ListBoxItem>
+                        <!-- Wyloguj -->
                         <Button Command="{Binding LogoutCommand}"
                                 Style="{StaticResource MaterialDesignFlatButton}"
+                                Height="48" Margin="8,2"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
                                 Foreground="{StaticResource AccentRed}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Logout" 
                                                        VerticalAlignment="Center"
-                                                       Margin="0,0,32,0"/>
+                                                       Margin="0,0,16,0"/>
                                 <TextBlock Text="Wyloguj" 
                                          VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
-                    </ListBoxItem>
-                </ListBox>
+                    </StackPanel>
+                </ScrollViewer>
             </DockPanel>
-        </materialDesign:DrawerHost.LeftDrawerContent>
+        </Border>
 
-        <!-- Main Content -->
-        <Grid>
-            <Grid.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#FF202020" Offset="0"/>
-                    <GradientStop Color="#FF252526" Offset="1"/>
-                </LinearGradientBrush>
-            </Grid.Background>
-
+        <!-- RIGHT MAIN CONTENT AREA -->
+        <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -269,17 +284,9 @@
                                     Padding="16"
                                     materialDesign:ElevationAssist.Elevation="Dp4">
                 <DockPanel>
-                    <!-- Menu Toggle Button -->
-                    <Button Command="{Binding ToggleDrawerCommand}"
-                            Style="{StaticResource MaterialDesignIconButton}"
-                            DockPanel.Dock="Left">
-                        <materialDesign:PackIcon Kind="Menu" />
-                    </Button>
-
                     <!-- Title -->
                     <TextBlock Text="{Binding CurrentViewTitle}"
                              VerticalAlignment="Center"
-                             Margin="16,0,0,0"
                              Style="{StaticResource MaterialDesignHeadline6TextBlock}"/>
 
                     <!-- Right side actions (future use) -->
@@ -313,6 +320,11 @@
                             <schoolTypes:SchoolTypesListView />
                         </DataTemplate>
                         
+                        <!-- DataTemplate dla SchoolYearListView -->
+                        <DataTemplate DataType="{x:Type schoolYears:SchoolYearListView}">
+                            <schoolYears:SchoolYearListView />
+                        </DataTemplate>
+                        
                         <!-- DataTemplate dla SubjectsView -->
                         <DataTemplate DataType="{x:Type subjects:SubjectsView}">
                             <subjects:SubjectsView />
@@ -323,10 +335,10 @@
                             <users:UserListView />
                         </DataTemplate>
                         
-                        <!-- DataTemplate dla DepartmentsManagementView - temporarily disabled (view does not exist) -->
-                        <!-- <DataTemplate DataType="{x:Type departments:DepartmentsManagementView}">
+                        <!-- DataTemplate dla DepartmentsManagementView -->
+                        <DataTemplate DataType="{x:Type departments:DepartmentsManagementView}">
                             <departments:DepartmentsManagementView />
-                        </DataTemplate> -->
+                        </DataTemplate>
                         
                         <!-- DataTemplate dla OperationHistoryView -->
                         <DataTemplate DataType="{x:Type operations:OperationHistoryView}">
@@ -336,6 +348,11 @@
                         <!-- DataTemplate dla MonitoringDashboardView -->
                         <DataTemplate DataType="{x:Type monitoring:MonitoringDashboardView}">
                             <monitoring:MonitoringDashboardView />
+                        </DataTemplate>
+                        
+                        <!-- DataTemplate dla ApplicationSettingsView -->
+                        <DataTemplate DataType="{x:Type settings:ApplicationSettingsView}">
+                            <settings:ApplicationSettingsView />
                         </DataTemplate>
                     </ContentControl.Resources>
                     
@@ -369,5 +386,5 @@
                 </ContentControl>
             </Border>
         </Grid>
-    </materialDesign:DrawerHost>
+    </Grid>
 </Window> 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.IO;
 using System.Windows;
@@ -30,6 +31,7 @@ using TeamsManager.UI.ViewModels.SchoolTypes;
 using TeamsManager.UI.Views.SchoolTypes;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.UI
 {
@@ -46,11 +48,21 @@ namespace TeamsManager.UI
 
         private void ConfigureServices(IServiceCollection services)
         {
-            // --- POCZ¥TEK: REJESTRACJA IMemoryCache ---
+            // --- POCZÄ„TEK: KONFIGURACJA ICONFIGURATION ---
+            var configurationBuilder = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddEnvironmentVariables();
+
+            var configuration = configurationBuilder.Build();
+            services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(configuration);
+            // --- KONIEC: KONFIGURACJA ICONFIGURATION ---
+
+            // --- POCZÄ„TEK: REJESTRACJA IMemoryCache ---
             services.AddMemoryCache();
             // --- KONIEC: REJESTRACJA IMemoryCache ---
 
-            // --- POCZ¥TEK: KONFIGURACJA LOGGERA ---
+            // --- POCZÄ„TEK: KONFIGURACJA LOGGERA ---
             services.AddLogging(configure =>
             {
                 configure.AddDebug();
@@ -59,17 +71,17 @@ namespace TeamsManager.UI
             // --- KONIEC: KONFIGURACJA LOGGERA ---
 
             // --- Konfiguracja ICurrentUserService ---
-            // Rejestrujemy jako Singleton, aby ta sama instancja by³a dostêpna 
-            // w ca³ej aplikacji UI. Pozwoli to na ustawienie u¿ytkownika 
+            // Rejestrujemy jako Singleton, aby ta sama instancja byï¿½a dostï¿½pna 
+            // w caï¿½ej aplikacji UI. Pozwoli to na ustawienie uï¿½ytkownika 
             // po zalogowaniu i odczytanie go w dowolnym miejscu.
             services.AddSingleton<ICurrentUserService, CurrentUserService>();
 
-            // --- Rejestracja serwisów konfiguracji ---
-            services.AddSingleton<ConfigurationManager>();
+            // --- Rejestracja serwisï¿½w konfiguracji ---
+            services.AddSingleton<TeamsManager.UI.Services.Configuration.ConfigurationManager>();
             services.AddSingleton<ConfigurationValidator>();
             services.AddSingleton<EncryptionService>();
 
-            // --- POCZ¥TEK: MIGRACJA SERWISÓW DO DI (ETAP 3) ---
+            // --- POCZÄ„TEK: MIGRACJA SERWISW DO DI (ETAP 3) ---
             
             // Rejestracja ConfigurationProvider
             services.AddSingleton<IMsalConfigurationProvider, MsalConfigurationProvider>();
@@ -77,17 +89,17 @@ namespace TeamsManager.UI
             // Aktualizacja rejestracji MsalAuthService - teraz z dependencies
             services.AddSingleton<IMsalAuthService, MsalAuthService>();
             
-            // GraphUserProfileService jest ju¿ zarejestrowany jako Scoped z Etapu 2
+            // GraphUserProfileService jest juï¿½ zarejestrowany jako Scoped z Etapu 2
             services.AddScoped<IGraphUserProfileService, GraphUserProfileService>();
             
-            // --- POCZ¥TEK: REJESTRACJA SERWISÓW TESTOWYCH (ETAP 5) ---
-            // ManualTestingService jako Singleton - zachowuje stan miêdzy oknami
+            // --- POCZÄ„TEK: REJESTRACJA SERWISW TESTOWYCH (ETAP 5) ---
+            // ManualTestingService jako Singleton - zachowuje stan miï¿½dzy oknami
             services.AddSingleton<IManualTestingService, ManualTestingService>();
-            // --- KONIEC: REJESTRACJA SERWISÓW TESTOWYCH (ETAP 5) ---
+            // --- KONIEC: REJESTRACJA SERWISï¿½W TESTOWYCH (ETAP 5) ---
             
-            // --- KONIEC: MIGRACJA SERWISÓW DO DI (ETAP 3) ---
+            // --- KONIEC: MIGRACJA SERWISï¿½W DO DI (ETAP 3) ---
 
-            // --- POCZ¥TEK: KONFIGURACJA HTTPCLIENT ---
+            // --- POCZÄ„TEK: KONFIGURACJA HTTPCLIENT ---
             // Rejestracja TokenAuthorizationHandler
             services.AddTransient<TokenAuthorizationHandler>();
 
@@ -129,38 +141,38 @@ namespace TeamsManager.UI
             // --- KONIEC: KONFIGURACJA HTTPCLIENT ---
 
             // --- (Opcjonalnie) Konfiguracja TeamsManagerDbContext ---
-            // W docelowej architekturze z API, klient WPF raczej nie powinien mieæ
-            // bezpoœredniego dostêpu do DbContext. Komunikacja z danymi powinna
-            // odbywaæ siê przez TeamsManager.Api.
-            // Tê sekcjê mo¿esz zakomentowaæ lub usun¹æ, jeœli UI bêdzie 
-            // komunikowaæ siê wy³¹cznie z API.
-            // Jeœli jednak chcesz mieæ DbContext dostêpny w UI (np. do testów,
-            // lub jeœli czêœæ logiki ma byæ lokalna):
+            // W docelowej architekturze z API, klient WPF raczej nie powinien mieï¿½
+            // bezpoï¿½redniego dostï¿½pu do DbContext. Komunikacja z danymi powinna
+            // odbywaï¿½ siï¿½ przez TeamsManager.Api.
+            // Tï¿½ sekcjï¿½ moï¿½esz zakomentowaï¿½ lub usunï¿½ï¿½, jeï¿½li UI bï¿½dzie 
+            // komunikowaï¿½ siï¿½ wyï¿½ï¿½cznie z API.
+            // Jeï¿½li jednak chcesz mieï¿½ DbContext dostï¿½pny w UI (np. do testï¿½w,
+            // lub jeï¿½li czï¿½ï¿½ logiki ma byï¿½ lokalna):
             string uiDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "teamsmanager_ui.db");
             services.AddDbContext<TeamsManagerDbContext>(options =>
                 options.UseSqlite($"Data Source={uiDbPath}"));
 
-            // --- Rejestracja ViewModeli (Przyk³ady) ---
-            // Tutaj w przysz³oœci bêdziesz rejestrowaæ swoje ViewModele,
-            // aby mo¿na je by³o wstrzykiwaæ do widoków lub pobieraæ z ServiceProvider.
+            // --- Rejestracja ViewModeli (Przykï¿½ady) ---
+            // Tutaj w przyszï¿½oï¿½ci bï¿½dziesz rejestrowaï¿½ swoje ViewModele,
+            // aby moï¿½na je byï¿½o wstrzykiwaï¿½ do widokï¿½w lub pobieraï¿½ z ServiceProvider.
             // np. services.AddTransient<MainViewModel>();
             //      services.AddTransient<LoginViewModel>();
 
-            // --- POCZ¥TEK: REJESTRACJA OKIEN (ETAP 4) ---
-            // Rejestracja g³ównego okna (legacy)
+            // --- POCZÄ„TEK: REJESTRACJA OKIEN (ETAP 4) ---
+            // Rejestracja gwnego okna (legacy)
             services.AddTransient<MainWindow>();
             
             // Opcjonalnie: rejestracja innych okien
             services.AddTransient<DashboardWindow>();
             
-            // ManualTestingWindow jako Transient - nowa instancja przy ka¿dym otwarciu
+            // ManualTestingWindow jako Transient - nowa instancja przy kaï¿½dym otwarciu
             services.AddTransient<ManualTestingWindow>();
             
-            // LoginWindow - nowa instancja przy ka¿dym logowaniu
+            // LoginWindow - nowa instancja przy kaï¿½dym logowaniu
             services.AddTransient<LoginWindow>();
             // --- KONIEC: REJESTRACJA OKIEN (ETAP 4) ---
 
-            // --- POCZ¥TEK: REJESTRACJA SHELL (ETAP 0.1) ---
+            // --- POCZÄ„TEK: REJESTRACJA SHELL (ETAP 0.1) ---
             // Rejestracja Shell ViewModels
             services.AddTransient<ViewModels.Shell.MainShellViewModel>();
 
@@ -168,18 +180,18 @@ namespace TeamsManager.UI
             services.AddTransient<Views.Shell.MainShellWindow>();
             // --- KONIEC: REJESTRACJA SHELL (ETAP 0.1) ---
 
-            // --- POCZ¥TEK: REJESTRACJA DASHBOARD (ETAP 2) ---
+            // --- POCZÄ„TEK: REJESTRACJA DASHBOARD (ETAP 2) ---
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
 
-            // Tymczasowo: u¿ywamy uproszczonych implementacji dla Dashboard
-            // W przysz³oœci bêd¹ zast¹pione komunikacj¹ z API
+            // Tymczasowo: uï¿½ywamy uproszczonych implementacji dla Dashboard
+            // W przyszï¿½oï¿½ci bï¿½dï¿½ zastï¿½pione komunikacjï¿½ z API
             services.AddSingleton<ITeamService, SimpleDashboardTeamService>();
             services.AddSingleton<IUserService, SimpleDashboardUserService>();
             services.AddSingleton<IOperationHistoryService, SimpleDashboardOperationHistoryService>();
             // --- KONIEC: REJESTRACJA DASHBOARD (ETAP 2) ---
 
-            // --- POCZ¥TEK: REJESTRACJA APPLICATION SETTINGS (ETAP 1.3) ---
+            // --- POCZÄ„TEK: REJESTRACJA APPLICATION SETTINGS (ETAP 1.3) ---
             // Serwis dla ApplicationSettings
             services.AddScoped<ApplicationSettingService>();
 
@@ -190,7 +202,7 @@ namespace TeamsManager.UI
             services.AddTransient<ApplicationSettingsView>();
             // --- KONIEC: REJESTRACJA APPLICATION SETTINGS (ETAP 1.3) ---
 
-            // --- POCZ¥TEK: REJESTRACJA SCHOOL TYPES (ETAP 5) ---
+            // --- POCZÄ„TEK: REJESTRACJA SCHOOL TYPES (ETAP 5) ---
             // Core serwisy dla SchoolTypes (tymczasowo w UI - docelowo przez API)
             services.AddScoped<ISchoolTypeService, TeamsManager.Core.Services.SchoolTypeService>();
             services.AddScoped<INotificationService, TeamsManager.Core.Services.StubNotificationService>();
@@ -211,10 +223,13 @@ namespace TeamsManager.UI
             services.AddTransient<Views.SchoolTypes.SchoolTypesListView>();
             // --- KONIEC: REJESTRACJA SCHOOL TYPES (ETAP 5) ---
 
-            // --- POCZ¥TEK: REJESTRACJA SCHOOL YEARS (ETAP 6) ---
-            // Core serwisy dla SchoolYears (ju¿ zarejestrowane powy¿ej)
+            // --- POCZÄ„TEK: REJESTRACJA SCHOOL YEARS (ETAP 6) ---
+            // Core serwisy dla SchoolYears (juï¿½ zarejestrowane powyï¿½ej)
             services.AddScoped<ISchoolYearService, TeamsManager.Core.Services.SchoolYearService>();
             services.AddScoped<ISchoolYearRepository, TeamsManager.Data.Repositories.SchoolYearRepository>();
+            
+            // Dodatkowe zaleÅ¼noÅ›ci wymagane przez SchoolYearService
+            services.AddScoped<ITeamRepository, TeamsManager.Data.Repositories.TeamRepository>();
 
             // Serwis UI dla SchoolYears
             services.AddTransient<SchoolYearUIService>();
@@ -226,8 +241,14 @@ namespace TeamsManager.UI
             services.AddTransient<Views.SchoolYears.SchoolYearListView>();
             // --- KONIEC: REJESTRACJA SCHOOL YEARS (ETAP 6) ---
 
-            // --- POCZ¥TEK: REJESTRACJA SUBJECTS (ETAP 2.3) ---
+            // --- POCZÄ„TEK: REJESTRACJA SUBJECTS (ETAP 2.3) ---
             // ViewModele dla Subjects
+            // Core serwisy dla Subjects
+            services.AddScoped<ISubjectService, TeamsManager.Core.Services.SubjectService>();
+            services.AddScoped<ISubjectRepository, TeamsManager.Data.Repositories.SubjectRepository>();
+            services.AddScoped<IGenericRepository<TeamsManager.Core.Models.Subject>, TeamsManager.Data.Repositories.GenericRepository<TeamsManager.Core.Models.Subject>>();
+            services.AddScoped<IGenericRepository<TeamsManager.Core.Models.UserSubject>, TeamsManager.Data.Repositories.GenericRepository<TeamsManager.Core.Models.UserSubject>>();
+
             services.AddTransient<ViewModels.Subjects.SubjectsViewModel>();
             services.AddTransient<ViewModels.Subjects.SubjectEditViewModel>();
             services.AddTransient<ViewModels.Subjects.SubjectImportViewModel>();
@@ -245,8 +266,8 @@ namespace TeamsManager.UI
             services.AddSingleton<Services.Abstractions.IUIDialogService, Services.UIDialogService>();
             // --- KONIEC: REJESTRACJA SUBJECTS (ETAP 2.3) ---
 
-            // --- POCZ¥TEK: REJESTRACJA DEPARTMENTS (ETAP 2.4) ---
-            // Core serwisy dla Departments (ju¿ zarejestrowane powy¿ej w innych sekcjach)
+            // --- POCZÄ„TEK: REJESTRACJA DEPARTMENTS (ETAP 2.4) ---
+            // Core serwisy dla Departments (juï¿½ zarejestrowane powyï¿½ej w innych sekcjach)
             services.AddScoped<IDepartmentService, TeamsManager.Core.Services.DepartmentService>();
             services.AddScoped<IGenericRepository<TeamsManager.Core.Models.Department>, TeamsManager.Data.Repositories.GenericRepository<TeamsManager.Core.Models.Department>>();
 
@@ -257,7 +278,7 @@ namespace TeamsManager.UI
             services.AddTransient<Views.Departments.DepartmentsManagementView>();
             // --- KONIEC: REJESTRACJA DEPARTMENTS (ETAP 2.4) ---
 
-            // --- POCZ¥TEK: REJESTRACJA OPERATION HISTORY (ETAP 2.5) ---
+            // --- POCZÄ„TEK: REJESTRACJA OPERATION HISTORY (ETAP 2.5) ---
             // ViewModele dla Operation History
             services.AddTransient<ViewModels.Operations.OperationHistoryViewModel>();
             services.AddTransient<ViewModels.Operations.OperationHistoryItemViewModel>();
@@ -265,7 +286,7 @@ namespace TeamsManager.UI
             // Widoki Operation History
             services.AddTransient<Views.Operations.OperationHistoryView>();
 
-            // Konwertery dla Operation History (singleton dla wydajnoœci)
+            // Konwertery dla Operation History (singleton dla wydajnoï¿½ci)
             services.AddSingleton<Converters.OperationTypeToIconConverter>();
             services.AddSingleton<Converters.OperationStatusToColorConverter>();
             services.AddSingleton<Converters.OperationStatusToTextColorConverter>();
@@ -277,8 +298,8 @@ namespace TeamsManager.UI
             services.AddSingleton<Converters.InverseBooleanToVisibilityConverter>();
             // --- KONIEC: REJESTRACJA OPERATION HISTORY (ETAP 2.5) ---
 
-            // --- POCZ¥TEK: REJESTRACJA USER LIST (ETAP 3.1) ---
-            // Core serwisy dla Users ju¿ zarejestrowane powy¿ej (IUserService, IDepartmentService)
+            // --- POCZÄ„TEK: REJESTRACJA USER LIST (ETAP 3.1) ---
+            // Core serwisy dla Users juï¿½ zarejestrowane powyï¿½ej (IUserService, IDepartmentService)
             
             // ViewModele dla User List
             services.AddTransient<ViewModels.Users.UserListViewModel>();
@@ -290,24 +311,24 @@ namespace TeamsManager.UI
             // UserControls
             services.AddTransient<UserControls.BulkOperationsToolbar>();
 
-            // Konwertery dla User List (singleton dla wydajnoœci)
+            // Konwertery dla User List (singleton dla wydajnoï¿½ci)
             services.AddSingleton<Converters.IntToVisibilityConverter>();
             services.AddSingleton<Converters.StringToBrushConverter>();
             // --- KONIEC: REJESTRACJA USER LIST (ETAP 3.1) ---
 
-            // --- POCZ¥TEK: REJESTRACJA USER DETAIL FORM (ETAP 3.2) ---
+            // --- POCZÄ„TEK: REJESTRACJA USER DETAIL FORM (ETAP 3.2) ---
             // ViewModele dla User Detail Form
             services.AddTransient<ViewModels.Users.UserDetailViewModel>();
 
             // Widoki User Detail Form
             services.AddTransient<Views.Users.UserDetailWindow>();
 
-            // Konwertery specyficzne dla User Detail Form ju¿ zarejestrowane powy¿ej
+            // Konwertery specyficzne dla User Detail Form juï¿½ zarejestrowane powyï¿½ej
             // (InverseBooleanConverter, EnumDescriptionConverter)
             services.AddSingleton<Converters.EnumDescriptionConverter>();
             // --- KONIEC: REJESTRACJA USER DETAIL FORM (ETAP 3.2) ---
 
-            // --- POCZ¥TEK: REJESTRACJA USER SCHOOL TYPE ASSIGNMENT (ETAP 3.4) ---
+            // --- POCZÄ„TEK: REJESTRACJA USER SCHOOL TYPE ASSIGNMENT (ETAP 3.4) ---
             // ViewModele dla User School Type Assignment
             services.AddTransient<ViewModels.Users.UserSchoolTypeAssignmentViewModel>();
 
@@ -319,7 +340,7 @@ namespace TeamsManager.UI
             services.AddSingleton<Converters.EqualToVisibilityConverter>();
             // --- KONIEC: REJESTRACJA USER SCHOOL TYPE ASSIGNMENT (ETAP 3.4) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM LIST VIEW (ETAP 4.1) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM LIST VIEW (ETAP 4.1) ---
             // ViewModele dla Team List View
             services.AddTransient<ViewModels.Teams.TeamListViewModel>();
 
@@ -332,7 +353,7 @@ namespace TeamsManager.UI
             services.AddSingleton<Converters.TeamStatusToRestoreVisibilityConverter>();
             // --- KONIEC: REJESTRACJA TEAM LIST VIEW (ETAP 4.1) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM CREATION WIZARD (ETAP 4.2) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM CREATION WIZARD (ETAP 4.2) ---
             // ViewModele dla Team Creation Wizard
             services.AddTransient<ViewModels.Teams.TeamCreationWizardViewModel>();
 
@@ -343,7 +364,7 @@ namespace TeamsManager.UI
             services.AddSingleton<Converters.StepStatusConverter>();
             // --- KONIEC: REJESTRACJA TEAM CREATION WIZARD (ETAP 4.2) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM MEMBERS MANAGEMENT (ETAP 4.3) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM MEMBERS MANAGEMENT (ETAP 4.3) ---
             // ViewModele dla Team Members Management
             services.AddTransient<ViewModels.Teams.TeamMembersViewModel>();
 
@@ -351,7 +372,7 @@ namespace TeamsManager.UI
             services.AddTransient<Views.Teams.TeamMembersView>();
             // --- KONIEC: REJESTRACJA TEAM MEMBERS MANAGEMENT (ETAP 4.3) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM CHANNELS MANAGEMENT (ETAP 4.4) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM CHANNELS MANAGEMENT (ETAP 4.4) ---
             // ViewModele dla Team Channels Management
             services.AddTransient<ViewModels.Teams.TeamChannelsViewModel>();
             services.AddTransient<ViewModels.Teams.ChannelCardViewModel>();
@@ -361,7 +382,7 @@ namespace TeamsManager.UI
             services.AddTransient<UserControls.ChannelCard>();
             // --- KONIEC: REJESTRACJA TEAM CHANNELS MANAGEMENT (ETAP 4.4) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM LIFECYCLE OPERATIONS (ETAP 4.5) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM LIFECYCLE OPERATIONS (ETAP 4.5) ---
             // ViewModele dla Team Lifecycle Operations
             services.AddTransient<ViewModels.Teams.TeamLifecycleDialogViewModel>();
 
@@ -369,7 +390,7 @@ namespace TeamsManager.UI
             services.AddTransient<Views.Teams.TeamLifecycleDialog>();
             // --- KONIEC: REJESTRACJA TEAM LIFECYCLE OPERATIONS (ETAP 4.5) ---
 
-            // --- POCZ¥TEK: REJESTRACJA TEAM TEMPLATE EDITOR (ETAP 5.1) ---
+            // --- POCZÄ„TEK: REJESTRACJA TEAM TEMPLATE EDITOR (ETAP 5.1) ---
             // ViewModele dla Team Template Editor
             services.AddTransient<ViewModels.Teams.TeamTemplateEditorViewModel>();
 
@@ -381,8 +402,8 @@ namespace TeamsManager.UI
             services.AddTransient<UserControls.Teams.TokenHelperPanel>();
             // --- KONIEC: REJESTRACJA TEAM TEMPLATE EDITOR (ETAP 5.1) ---
 
-            // --- POCZ¥TEK: REJESTRACJA BULK IMPORT WIZARD (ETAP 5.2) ---
-            // Core serwisy dla Import (ju¿ zarejestrowane w API)
+            // --- POCZÄ„TEK: REJESTRACJA BULK IMPORT WIZARD (ETAP 5.2) ---
+            // Core serwisy dla Import (juï¿½ zarejestrowane w API)
             services.AddScoped<IDataImportOrchestrator, TeamsManager.Application.Services.DataImportOrchestrator>();
 
             // ViewModele dla Bulk Import Wizard
@@ -399,8 +420,23 @@ namespace TeamsManager.UI
             services.AddTransient<UserControls.Import.FileSelectionStep>();
             // --- KONIEC: REJESTRACJA BULK IMPORT WIZARD (ETAP 5.2) ---
 
-            // --- POCZ¥TEK: REJESTRACJA REAL-TIME MONITORING (ETAP 5.3) ---
+            // --- POCZÄ„TEK: REJESTRACJA REAL-TIME MONITORING (ETAP 5.3) ---
             // Core serwisy dla monitoringu - potrzebne w UI dla demonstracji
+            
+            // Rejestracja Authentication Services wymaganych przez PowerShell
+            services.AddScoped<TeamsManager.Core.Abstractions.Services.Auth.ITokenManager, TeamsManager.Core.Services.Auth.TokenManager>();
+            
+            // Mock IConfidentialClientApplication dla TokenManager (nie uÅ¼ywane w UI, ale wymagane przez DI)
+            services.AddScoped<Microsoft.Identity.Client.IConfidentialClientApplication>(provider =>
+            {
+                return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder.Create("mock-client-id")
+                    .WithClientSecret("mock-secret")
+                    .WithAuthority(new Uri("https://login.microsoftonline.com/mock-tenant"))
+                    .Build();
+            });
+            
+            services.AddPowerShellServices(); // Rejestruje IPowerShellConnectionService i inne serwisy PowerShell
+            
             services.AddScoped<IHealthMonitoringOrchestrator, TeamsManager.Application.Services.HealthMonitoringOrchestrator>();
             services.AddScoped<TeamsManager.Core.Abstractions.Services.Cache.ICacheInvalidationService, TeamsManager.Core.Services.Cache.CacheInvalidationService>();
             
@@ -425,7 +461,7 @@ namespace TeamsManager.UI
             services.AddTransient<Views.Monitoring.Widgets.AlertsWidget>();
             services.AddTransient<Views.Monitoring.Widgets.AdvancedPerformanceChartWidget>();
             
-            // Konwertery dla monitoringu (singleton dla wydajnoœci)
+            // Konwertery dla monitoringu (singleton dla wydajnoï¿½ci)
             services.AddSingleton<Converters.HealthCheckToColorConverter>();
             services.AddSingleton<Converters.AlertLevelToColorConverter>();
             services.AddSingleton<Converters.ConnectionStateToColorConverter>();
@@ -440,7 +476,7 @@ namespace TeamsManager.UI
 
             try
             {
-                // Przywróæ normalny ShutdownMode i uruchom g³ówne okno
+                // Przywrï¿½ï¿½ normalny ShutdownMode i uruchom gï¿½ï¿½wne okno
                 System.Windows.Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 
                 // Tworzenie MainShellWindow przez DI
@@ -450,11 +486,11 @@ namespace TeamsManager.UI
                 // Weryfikacja DI (debug)
                 System.Diagnostics.Debug.WriteLine($"[DI Test] MainShellWindow created via DI: {mainShellWindow != null}");
 
-                // Sprawdzenie serwisów dla debugowania
+                // Sprawdzenie serwisï¿½w dla debugowania
                 var currentUserService = ServiceProvider.GetRequiredService<ICurrentUserService>();
                 System.Diagnostics.Debug.WriteLine($"[UI DI Test] Current User UPN: {currentUserService.GetCurrentUserUpn()}");
 
-                // Weryfikacja serwisów z Etapów 2-3
+                // Weryfikacja serwisï¿½w z Etapï¿½w 2-3
                 var httpClientFactory = ServiceProvider.GetService<IHttpClientFactory>();
                 System.Diagnostics.Debug.WriteLine($"[DI Test] IHttpClientFactory: {httpClientFactory != null}");
 
@@ -492,8 +528,8 @@ namespace TeamsManager.UI
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"B³¹d podczas tworzenia g³ównego okna:\n\n{ex.Message}\n\nSprawdŸ konfiguracjê serwisów.",
-                    "B³¹d krytyczny",
+                    $"Bï¿½ï¿½d podczas tworzenia gï¿½ï¿½wnego okna:\n\n{ex.Message}\n\nSprawdï¿½ konfiguracjï¿½ serwisï¿½w.",
+                    "Bï¿½ï¿½d krytyczny",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
                 System.Windows.Application.Current.Shutdown();

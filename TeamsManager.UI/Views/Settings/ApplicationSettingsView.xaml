@@ -46,7 +46,7 @@
                         </Border>
                         
                         <!-- Znacznik wymagane -->
-                        <Border Background="{StaticResource DangerRed}" 
+                        <Border Background="{StaticResource AccentRed}" 
                                 CornerRadius="8"
                                 Padding="8,2"
                                 Margin="5,0,0,0"
@@ -106,7 +106,7 @@
                                 ToolTip="Usuń ustawienie"
                                 Margin="5,0,0,0">
                             <materialDesign:PackIcon Kind="Delete" Width="20" Height="20" 
-                                                     Foreground="{StaticResource DangerRed}"/>
+                                                     Foreground="{StaticResource AccentRed}"/>
                         </Button>
                     </StackPanel>
 
@@ -185,7 +185,7 @@
         </Grid.RowDefinitions>
 
         <!-- Nagłówek -->
-        <Border Grid.Row="0" Style="{StaticResource HeaderBackgroundStyle}" Padding="20,15">
+                        <Border Grid.Row="0" Background="{DynamicResource BackgroundMedium}" Padding="20,15">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -321,7 +321,7 @@
                     <StackPanel>
                         <materialDesign:PackIcon Kind="AlertCircle" 
                                                  Width="60" Height="60"
-                                                 Foreground="{StaticResource DangerRed}"
+                                                 Foreground="{StaticResource AccentRed}"
                                                  HorizontalAlignment="Center"/>
                         <TextBlock Text="{Binding ErrorMessage}" 
                                    Style="{StaticResource ErrorTextStyle}"

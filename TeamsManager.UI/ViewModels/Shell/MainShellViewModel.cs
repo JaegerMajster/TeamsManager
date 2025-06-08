@@ -25,7 +25,6 @@ namespace TeamsManager.UI.ViewModels.Shell
 
         private object? _currentView;
         private string _currentViewTitle = "Dashboard";
-        private bool _isDrawerOpen = true; // Domyślnie otwarte
         private string _userDisplayName = "Użytkownik";
         private string _userEmail = string.Empty;
 
@@ -68,15 +67,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
         }
 
-        public bool IsDrawerOpen
-        {
-            get => _isDrawerOpen;
-            set
-            {
-                _isDrawerOpen = value;
-                OnPropertyChanged();
-            }
-        }
+
 
         public string UserDisplayName
         {
@@ -103,6 +94,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         public ICommand NavigateToUsersCommand { get; private set; } = null!;
         public ICommand NavigateToTeamsCommand { get; private set; } = null!;
         public ICommand NavigateToSchoolTypesCommand { get; private set; } = null!;
+        public ICommand NavigateToSchoolYearsCommand { get; private set; } = null!;
         public ICommand NavigateToSubjectsCommand { get; private set; } = null!;
         public ICommand NavigateToDepartmentsCommand { get; private set; } = null!;
         public ICommand NavigateToOperationHistoryCommand { get; private set; } = null!;
@@ -110,7 +102,6 @@ namespace TeamsManager.UI.ViewModels.Shell
         public ICommand NavigateToSettingsCommand { get; private set; } = null!;
         public ICommand NavigateToManualTestingCommand { get; private set; } = null!;
         public ICommand LogoutCommand { get; private set; } = null!;
-        public ICommand ToggleDrawerCommand { get; private set; } = null!;
 
         private void InitializeCommands()
         {
@@ -118,6 +109,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             NavigateToUsersCommand = new RelayCommand(ExecuteNavigateToUsers);
             NavigateToTeamsCommand = new RelayCommand(ExecuteNavigateToTeams);
             NavigateToSchoolTypesCommand = new RelayCommand(ExecuteNavigateToSchoolTypes);
+            NavigateToSchoolYearsCommand = new RelayCommand(ExecuteNavigateToSchoolYears);
             NavigateToSubjectsCommand = new RelayCommand(ExecuteNavigateToSubjects);
             NavigateToDepartmentsCommand = new RelayCommand(ExecuteNavigateToDepartments);
             NavigateToOperationHistoryCommand = new RelayCommand(ExecuteNavigateToOperationHistory);
@@ -125,7 +117,6 @@ namespace TeamsManager.UI.ViewModels.Shell
             NavigateToSettingsCommand = new RelayCommand(ExecuteNavigateToSettings);
             NavigateToManualTestingCommand = new RelayCommand(ExecuteNavigateToManualTesting);
             LogoutCommand = new RelayCommand(ExecuteLogout);
-            ToggleDrawerCommand = new RelayCommand(ExecuteToggleDrawer);
         }
 
         public void LoadUserInfo()
@@ -197,7 +188,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = dashboardView;
                 CurrentViewTitle = "Dashboard";
-                // Nie zamykaj menu przy pierwszej nawigacji
             }
             catch (Exception ex)
             {
@@ -219,7 +209,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = userListView;
                 CurrentViewTitle = "Zarządzanie Użytkownikami";
-                IsDrawerOpen = false;
             }
             catch (Exception ex)
             {
@@ -241,7 +230,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = teamListView;
                 CurrentViewTitle = "Zarządzanie Zespołami";
-                IsDrawerOpen = false;
             }
             catch (Exception ex)
             {
@@ -263,12 +251,32 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = schoolTypesView;
                 CurrentViewTitle = "Zarządzanie Typami Szkół";
-                // Menu zostanie otwarte
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas nawigacji do Typów Szkół");
                 System.Windows.MessageBox.Show($"Błąd nawigacji do Typów Szkół:\n\n{ex.Message}\n\nInner: {ex.InnerException?.Message}", "Błąd Menu", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private void ExecuteNavigateToSchoolYears()
+        {
+            try
+            {
+                _logger.LogDebug("Nawigacja do Lat Szkolnych");
+                
+                // Utwórz SchoolYearListView z DI i przypisz ViewModel
+                var schoolYearView = _serviceProvider.GetRequiredService<Views.SchoolYears.SchoolYearListView>();
+                var schoolYearViewModel = _serviceProvider.GetRequiredService<ViewModels.SchoolYears.SchoolYearListViewModel>();
+                schoolYearView.DataContext = schoolYearViewModel;
+                
+                CurrentView = schoolYearView;
+                CurrentViewTitle = "Zarządzanie Latami Szkolnymi";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas nawigacji do Lat Szkolnych");
+                System.Windows.MessageBox.Show($"Błąd nawigacji do Lat Szkolnych:\n\n{ex.Message}\n\nInner: {ex.InnerException?.Message}", "Błąd Menu", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 
@@ -285,7 +293,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = subjectsView;
                 CurrentViewTitle = "Zarządzanie przedmiotami";
-                // Menu zostanie otwarte
             }
             catch (Exception ex)
             {
@@ -307,7 +314,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = departmentsView;
                 CurrentViewTitle = "Zarządzanie Działami";
-                // Menu zostanie otwarte
             }
             catch (Exception ex)
             {
@@ -329,7 +335,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = operationHistoryView;
                 CurrentViewTitle = "Historia Operacji";
-                IsDrawerOpen = false;
             }
             catch (Exception ex)
             {
@@ -351,7 +356,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 
                 CurrentView = monitoringView;
                 CurrentViewTitle = "Monitoring Systemu";
-                IsDrawerOpen = false;
             }
             catch (Exception ex)
             {
@@ -365,14 +369,19 @@ namespace TeamsManager.UI.ViewModels.Shell
             try
             {
                 _logger.LogDebug("Nawigacja do Ustawień");
-                // TODO: Implementacja w przyszłym etapie
-                CurrentView = null;
-                CurrentViewTitle = "Ustawienia";
-                IsDrawerOpen = false;
+                
+                // Utwórz ApplicationSettingsView z DI i przypisz ViewModel
+                var settingsView = _serviceProvider.GetRequiredService<Views.Settings.ApplicationSettingsView>();
+                var settingsViewModel = _serviceProvider.GetRequiredService<ViewModels.Settings.ApplicationSettingsViewModel>();
+                settingsView.DataContext = settingsViewModel;
+                
+                CurrentView = settingsView;
+                CurrentViewTitle = "Ustawienia Aplikacji";
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas nawigacji do Ustawień");
+                System.Windows.MessageBox.Show($"Błąd nawigacji do Ustawień:\n\n{ex.Message}\n\nInner: {ex.InnerException?.Message}", "Błąd Menu", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 
@@ -426,10 +435,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
         }
 
-        private void ExecuteToggleDrawer()
-        {
-            IsDrawerOpen = !IsDrawerOpen;
-        }
+
 
         public event PropertyChangedEventHandler? PropertyChanged;
 

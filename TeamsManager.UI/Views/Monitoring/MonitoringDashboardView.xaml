@@ -62,12 +62,12 @@
                                            VerticalAlignment="Center"/>
                     <StackPanel>
                         <TextBlock Text="System Monitoring Dashboard" 
-                                   Style="{StaticResource TitleTextStyle}"
+                                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                                    FontSize="24" FontWeight="Bold"
                                    Foreground="White"/>
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                             <TextBlock Text="{Binding LastUpdateTime, StringFormat='Last update: {0:HH:mm:ss}'}"
-                                       Style="{StaticResource BodyTextStyle}"
+                                       Style="{StaticResource MaterialDesignBody1TextBlock}"
                                        Foreground="White"
                                        Opacity="0.8"
                                        Margin="0,0,16,0"/>
@@ -216,7 +216,7 @@
                                  Margin="0,0,0,16"/>
                     <TextBlock Text="Loading dashboard..."
                                HorizontalAlignment="Center"
-                               Style="{StaticResource BodyTextStyle}"/>
+                               Style="{StaticResource MaterialDesignBody1TextBlock}"/>
                 </StackPanel>
             </materialDesign:Card>
         </Grid>

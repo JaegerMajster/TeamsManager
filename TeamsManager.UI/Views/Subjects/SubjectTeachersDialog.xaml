@@ -115,7 +115,7 @@
                     </ItemsControl>
                     
                     <!-- Empty state -->
-                    <Grid Visibility="{Binding Teachers.Count, Converter={StaticResource ZeroToVisibilityConverter}}"
+                    <Grid Visibility="{Binding Teachers.Count, Converter={StaticResource IntToVisibilityConverter}}"
                           Margin="0,32">
                         <StackPanel HorizontalAlignment="Center">
                             <materialDesign:PackIcon Kind="AccountOff" 

@@ -35,7 +35,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         
-                        <materialDesign:PackIcon Grid.Column="0" Kind="Cpu" 
+                        <materialDesign:PackIcon Grid.Column="0" Kind="Memory" 
                                                Width="16" Height="16" 
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>

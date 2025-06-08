@@ -186,7 +186,7 @@
                 
                 <!-- Empty state -->
                 <Grid x:Name="EmptyState" 
-                      Visibility="{Binding TotalSubjects, Converter={StaticResource ZeroToVisibilityConverter}}"
+                      Visibility="{Binding TotalSubjects, Converter={StaticResource IntToVisibilityConverter}}"
                       HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel>
                         <materialDesign:PackIcon Kind="FolderOpen" 

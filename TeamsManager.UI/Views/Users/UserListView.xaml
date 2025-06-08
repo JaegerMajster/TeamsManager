@@ -196,7 +196,7 @@
                           GridLinesVisibility="None"
                           HeadersVisibility="Column"
                           SelectionMode="Extended"
-                          Style="{StaticResource ModernDataGrid}">
+                          Style="{StaticResource MaterialDesignDataGrid}">
                     
                     <DataGrid.Columns>
                         <!-- Checkbox column -->

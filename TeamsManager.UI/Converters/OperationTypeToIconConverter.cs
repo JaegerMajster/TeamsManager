@@ -51,18 +51,18 @@ namespace TeamsManager.UI.Converters
                 "dataimport" or "import" => PackIconKind.DatabaseImport,
                 "dataexport" or "export" => PackIconKind.DatabaseExport,
                 "datasync" or "sync" => PackIconKind.Sync,
-                "datamigration" or "migration" => PackIconKind.DatabaseArrowRight,
+                "datamigration" or "migration" => PackIconKind.DatabaseSync,
                 "datacleanup" or "cleanup" => PackIconKind.DatabaseRemove,
 
                 // Security Operations
                 "securityaudit" or "audit" => PackIconKind.Security,
                 "securitypolicyupdated" or "updatepolicy" => PackIconKind.Shield,
                 "securityalert" or "securityevent" => PackIconKind.ShieldAlert,
-                "passwordreset" or "resetpassword" => PackIconKind.KeyVariant,
-                "permissionchanged" or "changepermission" => PackIconKind.KeyChange,
+                "passwordreset" or "resetpassword" => PackIconKind.Key,
+                "permissionchanged" or "changepermission" => PackIconKind.Key,
 
                 // Notification Operations
-                "notificationsent" or "sendnotification" => PackIconKind.EmailSend,
+                "notificationsent" or "sendnotification" => PackIconKind.Send,
                 "emailsent" or "sendemail" => PackIconKind.Email,
                 "smssent" or "sendsms" => PackIconKind.Message,
                 "alertsent" or "sendalert" => PackIconKind.Bell,
@@ -74,15 +74,15 @@ namespace TeamsManager.UI.Converters
                 "policyupdated" or "updatepolicy" => PackIconKind.FileDocumentEdit,
 
                 // Report Operations
-                "reportgenerated" or "generatereport" => PackIconKind.FileChart,
-                "reportemailed" or "emailreport" => PackIconKind.FileChartOutline,
+                "reportgenerated" or "generatereport" => PackIconKind.ChartBox,
+                "reportemailed" or "emailreport" => PackIconKind.ChartLine,
                 "analyticsrun" or "runanalytics" => PackIconKind.ChartLine,
                 "dashboard" or "dashboardupdate" => PackIconKind.ViewDashboard,
 
                 // File Operations
                 "fileupload" or "upload" => PackIconKind.CloudUpload,
                 "filedownload" or "download" => PackIconKind.CloudDownload,
-                "filedeleted" or "deletefile" => PackIconKind.FileRemove,
+                "filedeleted" or "deletefile" => PackIconKind.Delete,
                 "fileprocessed" or "processfile" => PackIconKind.FileDocumentEdit,
 
                 // PowerShell Operations
@@ -91,10 +91,10 @@ namespace TeamsManager.UI.Converters
                 "automationrun" or "automation" => PackIconKind.Robot,
 
                 // Calendar/School Operations
-                "schoolyearstarted" or "startschoolyear" => PackIconKind.CalendarStart,
-                "schoolyearended" or "endschoolyear" => PackIconKind.CalendarEnd,
+                "schoolyearstarted" or "startschoolyear" => PackIconKind.Calendar,
+                "schoolyearended" or "endschoolyear" => PackIconKind.Calendar,
                 "semesterchanged" or "changesemester" => PackIconKind.Calendar,
-                "classscheduled" or "scheduleclass" => PackIconKind.CalendarClock,
+                "classscheduled" or "scheduleclass" => PackIconKind.CalendarToday,
 
                 // License Operations
                 "licenseassigned" or "assignlicense" => PackIconKind.License,
@@ -103,9 +103,9 @@ namespace TeamsManager.UI.Converters
 
                 // Department Operations
                 "departmentcreated" or "createdepartment" => PackIconKind.Domain,
-                "departmentupdated" or "updatedepartment" => PackIconKind.DomainPlus,
+                "departmentupdated" or "updatedepartment" => PackIconKind.Domain,
                 "departmentdeleted" or "deletedepartment" => PackIconKind.Domain,
-                "departmentmoved" or "movedepartment" => PackIconKind.FileMove,
+                "departmentmoved" or "movedepartment" => PackIconKind.FileOutline,
 
                 // Default dla nieznanych typów
                 _ => PackIconKind.HelpCircle
