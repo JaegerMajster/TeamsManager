@@ -38,7 +38,7 @@ namespace TeamsManager.UI.Converters
                 }
             }
 
-            return null;
+            return DateTime.Today; // Zwracamy dzisiejszą datę jako domyślną wartość
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

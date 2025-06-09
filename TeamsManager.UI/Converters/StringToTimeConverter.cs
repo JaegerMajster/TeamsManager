@@ -45,7 +45,7 @@ namespace TeamsManager.UI.Converters
                 }
             }
 
-            return null;
+            return TimeSpan.Zero; // Zwracamy domyślną wartość zamiast null
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

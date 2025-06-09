@@ -434,7 +434,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
 
     public class NotificationItem
     {
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
         public NotificationType Type { get; set; }
         public DateTime Timestamp { get; set; }
     }

@@ -272,7 +272,7 @@ namespace TeamsManager.UI.ViewModels.Import
             }
         }
 
-        private async Task PrepareColumnMappingAsync()
+        private Task PrepareColumnMappingAsync()
         {
             if (FileSelection.FileStream != null && FileSelection.SelectedDataType != null)
             {
@@ -281,6 +281,7 @@ namespace TeamsManager.UI.ViewModels.Import
                     FileSelection.SelectedDataType.Type,
                     FileSelection.ImportOptions);
             }
+            return Task.CompletedTask;
         }
 
         private async Task PrepareValidationAsync()

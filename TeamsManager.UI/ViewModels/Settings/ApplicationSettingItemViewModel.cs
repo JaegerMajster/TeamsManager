@@ -16,11 +16,11 @@ namespace TeamsManager.UI.ViewModels.Settings
     public class ApplicationSettingItemViewModel : INotifyPropertyChanged, IDataErrorInfo
     {
         private ApplicationSetting _setting;
-        private string _editableValue;
+        private string _editableValue = string.Empty;
         private bool _isEditing;
         private bool _hasChanges;
         private bool _isValid = true;
-        private string _validationError;
+        private string _validationError = string.Empty;
 
         public ApplicationSettingItemViewModel(ApplicationSetting setting)
         {
@@ -193,7 +193,7 @@ namespace TeamsManager.UI.ViewModels.Settings
             EditableValue = Value;
             IsEditing = false;
             HasChanges = false;
-            ValidationError = null;
+            ValidationError = string.Empty;
             IsValid = true;
         }
 
@@ -278,7 +278,7 @@ namespace TeamsManager.UI.ViewModels.Settings
 
         private void Validate()
         {
-            ValidationError = null;
+            ValidationError = string.Empty;
             IsValid = true;
 
             // Sprawdzenie czy wymagane
@@ -317,7 +317,7 @@ namespace TeamsManager.UI.ViewModels.Settings
             }
         }
 
-        private string ValidateType()
+        private string? ValidateType()
         {
             if (string.IsNullOrWhiteSpace(EditableValue))
                 return null;
@@ -361,7 +361,7 @@ namespace TeamsManager.UI.ViewModels.Settings
             {
                 if (columnName == nameof(EditableValue))
                     return ValidationError;
-                return null;
+                return string.Empty;
             }
         }
 
@@ -369,10 +369,10 @@ namespace TeamsManager.UI.ViewModels.Settings
 
         #region INotifyPropertyChanged
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        public event EventHandler SettingSaved;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public event EventHandler? SettingSaved;
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

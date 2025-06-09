@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1400" style="background:#f8fafc;">
+  <!-- Title -->
+  <text x="900" y="30" font-family="Segoe UI, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#1e293b">🏗️ Diagram Klas - Modele Domenowe TeamsManager</text>
+  <text x="900" y="55" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle" fill="#64748b">13 encji głównych • 5 tabel łączących • Dziedziczenie BaseEntity • Rich Domain Models</text>
+  
+  <!-- Base Entity (Center Top) -->
+  <rect x="700" y="80" width="400" height="140" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="8"/>
+  <text x="900" y="105" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#92400e">🏗️ BaseEntity (abstract)</text>
+  <line x1="700" y1="115" x2="1100" y2="115" stroke="#f59e0b" stroke-width="1"/>
+  <text x="710" y="135" font-family="Consolas, monospace" font-size="12" fill="#374151">+ string Id</text>
+  <text x="710" y="150" font-family="Consolas, monospace" font-size="12" fill="#374151">+ DateTime CreatedDate</text>
+  <text x="710" y="165" font-family="Consolas, monospace" font-size="12" fill="#374151">+ string CreatedBy</text>
+  <text x="710" y="180" font-family="Consolas, monospace" font-size="12" fill="#374151">+ DateTime? ModifiedDate</text>
+  <text x="710" y="195" font-family="Consolas, monospace" font-size="12" fill="#374151">+ bool IsActive</text>
+  <line x1="700" y1="205" x2="1100" y2="205" stroke="#f59e0b" stroke-width="1"/>
+  <text x="710" y="220" font-family="Consolas, monospace" font-size="11" fill="#059669">+ MarkAsModified(modifiedBy)</text>
+  
+  <!-- User Class -->
+  <rect x="50" y="260" width="380" height="220" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="8"/>
+  <text x="240" y="285" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1e40af">👤 User</text>
+  <line x1="50" y1="295" x2="430" y2="295" stroke="#3b82f6" stroke-width="1"/>
+  <text x="60" y="315" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string FirstName, LastName</text>
+  <text x="60" y="330" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string UPN</text>
+  <text x="60" y="345" font-family="Consolas, monospace" font-size="11" fill="#374151">+ UserRole Role</text>
+  <text x="60" y="360" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string DepartmentId</text>
+  <text x="60" y="375" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime? BirthDate</text>
+  <text x="60" y="390" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsSystemAdmin</text>
+  <line x1="50" y1="400" x2="430" y2="400" stroke="#3b82f6" stroke-width="1"/>
+  <text x="60" y="420" font-family="Consolas, monospace" font-size="11" fill="#059669">+ string FullName { get; }</text>
+  <text x="60" y="435" font-family="Consolas, monospace" font-size="11" fill="#059669">+ string DisplayName { get; }</text>
+  <text x="60" y="450" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool CanManageTeams { get; }</text>
+  <text x="60" y="465" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ Department Department</text>
+  
+  <!-- Department Class -->
+  <rect x="470" y="260" width="350" height="200" fill="#dcfce7" stroke="#22c55e" stroke-width="2" rx="8"/>
+  <text x="645" y="285" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#15803d">🏢 Department</text>
+  <line x1="470" y1="295" x2="820" y2="295" stroke="#22c55e" stroke-width="1"/>
+  <text x="480" y="315" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Name</text>
+  <text x="480" y="330" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="480" y="345" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? ParentDepartmentId</text>
+  <text x="480" y="360" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? Email, Phone</text>
+  <text x="480" y="375" font-family="Consolas, monospace" font-size="11" fill="#374151">+ int SortOrder</text>
+  <line x1="470" y1="385" x2="820" y2="385" stroke="#22c55e" stroke-width="1"/>
+  <text x="480" y="405" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool IsRootDepartment { get; }</text>
+  <text x="480" y="420" font-family="Consolas, monospace" font-size="11" fill="#059669">+ string FullPath { get; }</text>
+  <text x="480" y="435" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;User&gt; Users</text>
+  <text x="480" y="450" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;Department&gt; SubDepartments</text>
+  
+  <!-- Team Class -->
+  <rect x="860" y="260" width="380" height="240" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2" rx="8"/>
+  <text x="1050" y="285" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#7c3aed">👨‍👩‍👧‍👦 Team</text>
+  <line x1="860" y1="295" x2="1240" y2="295" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="870" y="315" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string DisplayName</text>
+  <text x="870" y="330" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="870" y="345" font-family="Consolas, monospace" font-size="11" fill="#374151">+ TeamStatus Status</text>
+  <text x="870" y="360" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? ExternalId</text>
+  <text x="870" y="375" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string SchoolTypeId</text>
+  <text x="870" y="390" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string SchoolYearId</text>
+  <text x="870" y="405" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsArchived</text>
+  <line x1="860" y1="415" x2="1240" y2="415" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="870" y="435" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool IsActive { get; }</text>
+  <text x="870" y="450" font-family="Consolas, monospace" font-size="11" fill="#059669">+ Archive(), Restore()</text>
+  <text x="870" y="465" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;Channel&gt; Channels</text>
+  <text x="870" y="480" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;TeamMember&gt; Members</text>
+  <text x="870" y="495" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ SchoolType SchoolType</text>
+  
+  <!-- SchoolType Class -->
+  <rect x="1280" y="260" width="380" height="200" fill="#fef0e7" stroke="#f97316" stroke-width="2" rx="8"/>
+  <text x="1470" y="285" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#ea580c">🏫 SchoolType</text>
+  <line x1="1280" y1="295" x2="1660" y2="295" stroke="#f97316" stroke-width="1"/>
+  <text x="1290" y="315" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string ShortName</text>
+  <text x="1290" y="330" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string FullName</text>
+  <text x="1290" y="345" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="1290" y="360" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? ColorCode</text>
+  <text x="1290" y="375" font-family="Consolas, monospace" font-size="11" fill="#374151">+ int SortOrder</text>
+  <line x1="1280" y1="385" x2="1660" y2="385" stroke="#f97316" stroke-width="1"/>
+  <text x="1290" y="405" font-family="Consolas, monospace" font-size="11" fill="#059669">+ string DisplayName { get; }</text>
+  <text x="1290" y="420" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;Team&gt; Teams</text>
+  <text x="1290" y="435" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;User&gt; SupervisingViceDirectors</text>
+  <text x="1290" y="450" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;TeamTemplate&gt; Templates</text>
+  
+  <!-- SchoolYear Class -->
+  <rect x="50" y="520" width="350" height="200" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="2" rx="8"/>
+  <text x="225" y="545" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#0284c7">📅 SchoolYear</text>
+  <line x1="50" y1="555" x2="400" y2="555" stroke="#0ea5e9" stroke-width="1"/>
+  <text x="60" y="575" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Name</text>
+  <text x="60" y="590" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime StartDate, EndDate</text>
+  <text x="60" y="605" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsCurrent</text>
+  <text x="60" y="620" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="60" y="635" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime? FirstSemesterStart</text>
+  <line x1="50" y1="645" x2="400" y2="645" stroke="#0ea5e9" stroke-width="1"/>
+  <text x="60" y="665" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool HasStarted { get; }</text>
+  <text x="60" y="680" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool IsCurrentlyActive { get; }</text>
+  <text x="60" y="695" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;Team&gt; Teams</text>
+  <text x="60" y="710" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ int ActiveTeamsCount { get; }</text>
+  
+  <!-- Subject Class -->
+  <rect x="440" y="520" width="340" height="180" fill="#f0fdfa" stroke="#14b8a6" stroke-width="2" rx="8"/>
+  <text x="610" y="545" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#0f766e">📚 Subject</text>
+  <line x1="440" y1="555" x2="780" y2="555" stroke="#14b8a6" stroke-width="1"/>
+  <text x="450" y="575" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Name</text>
+  <text x="450" y="590" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? Code</text>
+  <text x="450" y="605" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? Description</text>
+  <text x="450" y="620" font-family="Consolas, monospace" font-size="11" fill="#374151">+ int? Hours</text>
+  <text x="450" y="635" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? DefaultSchoolTypeId</text>
+  <text x="450" y="650" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? Category</text>
+  <line x1="440" y1="660" x2="780" y2="660" stroke="#14b8a6" stroke-width="1"/>
+  <text x="450" y="680" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ SchoolType? DefaultSchoolType</text>
+  <text x="450" y="695" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;UserSubject&gt; TeacherAssignments</text>
+  
+  <!-- Channel Class -->
+  <rect x="820" y="520" width="340" height="200" fill="#fef7f0" stroke="#f59e0b" stroke-width="2" rx="8"/>
+  <text x="990" y="545" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#d97706">💬 Channel</text>
+  <line x1="820" y1="555" x2="1160" y2="555" stroke="#f59e0b" stroke-width="1"/>
+  <text x="830" y="575" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string DisplayName</text>
+  <text x="830" y="590" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="830" y="605" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string ChannelType</text>
+  <text x="830" y="620" font-family="Consolas, monospace" font-size="11" fill="#374151">+ ChannelStatus Status</text>
+  <text x="830" y="635" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsGeneral, IsPrivate</text>
+  <text x="830" y="650" font-family="Consolas, monospace" font-size="11" fill="#374151">+ int MessageCount</text>
+  <text x="830" y="665" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string TeamId</text>
+  <line x1="820" y1="675" x2="1160" y2="675" stroke="#f59e0b" stroke-width="1"/>
+  <text x="830" y="695" font-family="Consolas, monospace" font-size="11" fill="#059669">+ bool IsActive { get; }</text>
+  <text x="830" y="710" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ Team Team</text>
+  
+  <!-- TeamTemplate Class -->
+  <rect x="1200" y="520" width="380" height="200" fill="#f8f4f6" stroke="#a855f7" stroke-width="2" rx="8"/>
+  <text x="1390" y="545" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#9333ea">📋 TeamTemplate</text>
+  <line x1="1200" y1="555" x2="1580" y2="555" stroke="#a855f7" stroke-width="1"/>
+  <text x="1210" y="575" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Name</text>
+  <text x="1210" y="590" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Template</text>
+  <text x="1210" y="605" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Description</text>
+  <text x="1210" y="620" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsDefault, IsUniversal</text>
+  <text x="1210" y="635" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? SchoolTypeId</text>
+  <text x="1210" y="650" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Category</text>
+  <text x="1210" y="665" font-family="Consolas, monospace" font-size="11" fill="#374151">+ int UsageCount</text>
+  <line x1="1200" y1="675" x2="1580" y2="675" stroke="#a855f7" stroke-width="1"/>
+  <text x="1210" y="695" font-family="Consolas, monospace" font-size="11" fill="#059669">+ string GenerateTeamName(values)</text>
+  <text x="1210" y="710" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ List&lt;Team&gt; Teams</text>
+  
+  <!-- Junction Tables -->
+  <rect x="50" y="760" width="300" height="120" fill="#fef2f2" stroke="#ef4444" stroke-width="2" rx="8"/>
+  <text x="200" y="785" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🔗 UserSchoolType</text>
+  <line x1="50" y1="795" x2="350" y2="795" stroke="#ef4444" stroke-width="1"/>
+  <text x="60" y="815" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string UserId, SchoolTypeId</text>
+  <text x="60" y="830" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime AssignedDate</text>
+  <text x="60" y="845" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime? EndDate</text>
+  <text x="60" y="860" font-family="Consolas, monospace" font-size="11" fill="#374151">+ decimal? WorkloadPercentage</text>
+  <text x="60" y="875" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsCurrentlyActive</text>
+  
+  <rect x="370" y="760" width="300" height="120" fill="#fef2f2" stroke="#ef4444" stroke-width="2" rx="8"/>
+  <text x="520" y="785" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🔗 UserSubject</text>
+  <line x1="370" y1="795" x2="670" y2="795" stroke="#ef4444" stroke-width="1"/>
+  <text x="380" y="815" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string UserId, SubjectId</text>
+  <text x="380" y="830" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime AssignedDate</text>
+  <text x="380" y="845" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? Notes</text>
+  <text x="380" y="860" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ User User</text>
+  <text x="380" y="875" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ Subject Subject</text>
+  
+  <rect x="690" y="760" width="320" height="120" fill="#fef2f2" stroke="#ef4444" stroke-width="2" rx="8"/>
+  <text x="850" y="785" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🔗 TeamMember</text>
+  <line x1="690" y1="795" x2="1010" y2="795" stroke="#ef4444" stroke-width="1"/>
+  <text x="700" y="815" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string TeamId, UserId</text>
+  <text x="700" y="830" font-family="Consolas, monospace" font-size="11" fill="#374151">+ MemberRole Role</text>
+  <text x="700" y="845" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime JoinedDate</text>
+  <text x="700" y="860" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ Team Team</text>
+  <text x="700" y="875" font-family="Consolas, monospace" font-size="11" fill="#dc2626">+ User User</text>
+  
+  <!-- System Entities -->
+  <rect x="1030" y="760" width="320" height="120" fill="#f0f4f8" stroke="#64748b" stroke-width="2" rx="8"/>
+  <text x="1190" y="785" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#475569">📊 OperationHistory</text>
+  <line x1="1030" y1="795" x2="1350" y2="795" stroke="#64748b" stroke-width="1"/>
+  <text x="1040" y="815" font-family="Consolas, monospace" font-size="11" fill="#374151">+ OperationType Type</text>
+  <text x="1040" y="830" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string TargetEntityType</text>
+  <text x="1040" y="845" font-family="Consolas, monospace" font-size="11" fill="#374151">+ OperationStatus Status</text>
+  <text x="1040" y="860" font-family="Consolas, monospace" font-size="11" fill="#374151">+ DateTime StartedAt</text>
+  <text x="1040" y="875" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string? ParentOperationId</text>
+  
+  <rect x="1370" y="760" width="320" height="120" fill="#f0f4f8" stroke="#64748b" stroke-width="2" rx="8"/>
+  <text x="1530" y="785" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#475569">⚙️ ApplicationSetting</text>
+  <line x1="1370" y1="795" x2="1690" y2="795" stroke="#64748b" stroke-width="1"/>
+  <text x="1380" y="815" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Key</text>
+  <text x="1380" y="830" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Value</text>
+  <text x="1380" y="845" font-family="Consolas, monospace" font-size="11" fill="#374151">+ SettingType Type</text>
+  <text x="1380" y="860" font-family="Consolas, monospace" font-size="11" fill="#374151">+ string Category</text>
+  <text x="1380" y="875" font-family="Consolas, monospace" font-size="11" fill="#374151">+ bool IsRequired</text>
+  
+  <!-- Enums -->
+  <rect x="50" y="920" width="280" height="160" fill="#fef3f2" stroke="#f87171" stroke-width="2" rx="8"/>
+  <text x="190" y="945" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🏷️ UserRole (enum)</text>
+  <line x1="50" y1="955" x2="330" y2="955" stroke="#f87171" stroke-width="1"/>
+  <text x="60" y="975" font-family="Consolas, monospace" font-size="11" fill="#374151">Uczen = 0</text>
+  <text x="60" y="990" font-family="Consolas, monospace" font-size="11" fill="#374151">Nauczyciel = 1</text>
+  <text x="60" y="1005" font-family="Consolas, monospace" font-size="11" fill="#374151">Wicedyrektor = 2</text>
+  <text x="60" y="1020" font-family="Consolas, monospace" font-size="11" fill="#374151">Dyrektor = 3</text>
+  <text x="60" y="1035" font-family="Consolas, monospace" font-size="11" fill="#374151">Administrator = 4</text>
+  <text x="60" y="1050" font-family="Consolas, monospace" font-size="11" fill="#374151">Zewnetrzny = 5</text>
+  <text x="60" y="1065" font-family="Consolas, monospace" font-size="11" fill="#374151">Nieznany = 99</text>
+  
+  <rect x="350" y="920" width="280" height="160" fill="#fef3f2" stroke="#f87171" stroke-width="2" rx="8"/>
+  <text x="490" y="945" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🏷️ TeamStatus (enum)</text>
+  <line x1="350" y1="955" x2="630" y2="955" stroke="#f87171" stroke-width="1"/>
+  <text x="360" y="975" font-family="Consolas, monospace" font-size="11" fill="#374151">Active = 0</text>
+  <text x="360" y="990" font-family="Consolas, monospace" font-size="11" fill="#374151">Archived = 1</text>
+  <text x="360" y="1005" font-family="Consolas, monospace" font-size="11" fill="#374151">SoftDeleted = 2</text>
+  <text x="360" y="1020" font-family="Consolas, monospace" font-size="11" fill="#374151">PendingDeletion = 3</text>
+  <text x="360" y="1035" font-family="Consolas, monospace" font-size="11" fill="#374151">Error = 4</text>
+  <text x="360" y="1050" font-family="Consolas, monospace" font-size="11" fill="#374151">Unknown = 99</text>
+  
+  <rect x="650" y="920" width="280" height="160" fill="#fef3f2" stroke="#f87171" stroke-width="2" rx="8"/>
+  <text x="790" y="945" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#dc2626">🏷️ OperationType (enum)</text>
+  <line x1="650" y1="955" x2="930" y2="955" stroke="#f87171" stroke-width="1"/>
+  <text x="660" y="975" font-family="Consolas, monospace" font-size="11" fill="#374151">Create = 0</text>
+  <text x="660" y="990" font-family="Consolas, monospace" font-size="11" fill="#374151">Update = 1</text>
+  <text x="660" y="1005" font-family="Consolas, monospace" font-size="11" fill="#374151">Delete = 2</text>
+  <text x="660" y="1020" font-family="Consolas, monospace" font-size="11" fill="#374151">Archive = 3</text>
+  <text x="660" y="1035" font-family="Consolas, monospace" font-size="11" fill="#374151">Restore = 4</text>
+  <text x="660" y="1050" font-family="Consolas, monospace" font-size="11" fill="#374151">BulkOperation = 5</text>
+  <text x="660" y="1065" font-family="Consolas, monospace" font-size="11" fill="#374151">Import = 6</text>
+  
+  <!-- Inheritance Lines -->
+  <!-- User extends BaseEntity -->
+  <line x1="240" y1="260" x2="240" y2="240" stroke="#374151" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <line x1="240" y1="240" x2="850" y2="240" stroke="#374151" stroke-width="2"/>
+  <line x1="850" y1="240" x2="850" y2="220" stroke="#374151" stroke-width="2"/>
+  
+  <!-- Department extends BaseEntity -->
+  <line x1="645" y1="260" x2="645" y2="240" stroke="#374151" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <line x1="645" y1="240" x2="850" y2="240" stroke="#374151" stroke-width="2"/>
+  
+  <!-- Team extends BaseEntity -->
+  <line x1="1050" y1="260" x2="1050" y2="240" stroke="#374151" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <line x1="1050" y1="240" x2="950" y2="240" stroke="#374151" stroke-width="2"/>
+  <line x1="950" y1="240" x2="950" y2="220" stroke="#374151" stroke-width="2"/>
+  
+  <!-- SchoolType extends BaseEntity -->
+  <line x1="1470" y1="260" x2="1470" y2="240" stroke="#374151" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <line x1="1470" y1="240" x2="1000" y2="240" stroke="#374151" stroke-width="2"/>
+  <line x1="1000" y1="240" x2="1000" y2="220" stroke="#374151" stroke-width="2"/>
+  
+  <!-- Other inheritance lines -->
+  <line x1="225" y1="520" x2="225" y2="480" stroke="#374151" stroke-width="2" marker-end="url(#inheritanceArrow)"/>
+  <line x1="225" y1="480" x2="850" y2="480" stroke="#374151" stroke-width="2"/>
+  <line x1="850" y1="480" x2="850" y2="240" stroke="#374151" stroke-width="2"/>
+  
+  <!-- Association Lines -->
+  <!-- User -> Department -->
+  <line x1="430" y1="360" x2="470" y2="360" stroke="#64748b" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="450" y="355" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">1</text>
+  
+  <!-- Team -> SchoolType -->
+  <line x1="1240" y1="360" x2="1280" y2="360" stroke="#64748b" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="1260" y="355" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">1</text>
+  
+  <!-- Channel -> Team -->
+  <line x1="990" y1="520" x2="990" y2="500" stroke="#64748b" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="1000" y="510" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">*</text>
+  
+  <!-- Arrow marker for inheritance -->
+  <defs>
+    <marker id="inheritanceArrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="white" stroke="#374151" stroke-width="2"/>
+    </marker>
+  </defs>
+  
+  <!-- Legend -->
+  <rect x="1050" y="920" width="640" height="160" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" rx="8"/>
+  <text x="1370" y="945" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#0f172a">📚 Legenda</text>
+  <line x1="1050" y1="955" x2="1690" y2="955" stroke="#cbd5e1" stroke-width="1"/>
+  
+  <line x1="1070" y1="975" x2="1100" y2="975" stroke="#374151" stroke-width="2"/>
+  <path d="M1095,975 L1105,980 L1095,985 L1105,975 z" fill="white" stroke="#374151" stroke-width="2"/>
+  <text x="1115" y="980" font-family="Segoe UI, sans-serif" font-size="12" fill="#374151">Dziedziczenie (extends BaseEntity)</text>
+  
+  <line x1="1070" y1="995" x2="1100" y2="995" stroke="#64748b" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="1115" y="1000" font-family="Segoe UI, sans-serif" font-size="12" fill="#374151">Asocjacja (has-a / foreign key)</text>
+  
+  <text x="1070" y="1020" font-family="Segoe UI, sans-serif" font-size="12" fill="#374151">🔗 Tabele łączące (Many-to-Many)</text>
+  <text x="1070" y="1040" font-family="Segoe UI, sans-serif" font-size="12" fill="#374151">🏷️ Enumeracje (typy wyliczeniowe)</text>
+  <text x="1070" y="1060" font-family="Segoe UI, sans-serif" font-size="12" fill="#374151">+ Właściwości i metody publiczne | # Protected | - Private</text>
+  
+  <!-- Statistics -->
+  <rect x="50" y="1120" width="1640" height="80" fill="#f1f5f9" stroke="#cbd5e1" rx="8"/>
+  <text x="900" y="1145" font-family="Segoe UI, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#0f172a">📊 Statystyki Modelu Domenowego</text>
+  <text x="900" y="1165" font-family="Segoe UI, sans-serif" font-size="12" text-anchor="middle" fill="#64748b">13 encji głównych • 5 tabel łączących • 6 enumeracji • ~120 właściwości • 15+ metod biznesowych</text>
+  <text x="900" y="1180" font-family="Segoe UI, sans-serif" font-size="12" text-anchor="middle" fill="#64748b">Rich Domain Models • SOLID Principles • Clean Architecture • Entity Framework Core 9.0</text>
+  <text x="900" y="1195" font-family="Segoe UI, sans-serif" font-size="12" text-anchor="middle" fill="#64748b">Wygenerowano: 08 czerwca 2025, 15:07 | TeamsManager v1.0</text>
+</svg>

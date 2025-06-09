@@ -39,7 +39,7 @@ namespace TeamsManager.UI.Converters
             {
                 return brush.Color.ToString();
             }
-            return null;
+            return string.Empty;
         }
     }
 } 

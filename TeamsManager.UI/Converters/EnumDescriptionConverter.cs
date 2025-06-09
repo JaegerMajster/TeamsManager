@@ -18,12 +18,12 @@ namespace TeamsManager.UI.Converters
                 return string.Empty;
 
             if (!value.GetType().IsEnum)
-                return value.ToString();
+                return value.ToString() ?? string.Empty;
 
             // Pobierz pole enum
-            var fieldInfo = value.GetType().GetField(value.ToString());
+            var fieldInfo = value.GetType().GetField(value.ToString() ?? string.Empty);
             if (fieldInfo == null)
-                return value.ToString();
+                return value.ToString() ?? string.Empty;
 
             // Sprawdź czy jest atrybut Description
             var descriptionAttribute = fieldInfo.GetCustomAttribute<DescriptionAttribute>();
@@ -31,7 +31,7 @@ namespace TeamsManager.UI.Converters
                 return descriptionAttribute.Description;
 
             // Fallback: skonwertuj CamelCase na spacje
-            return ConvertCamelCaseToSpaces(value.ToString());
+            return ConvertCamelCaseToSpaces(value.ToString() ?? string.Empty);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -39,7 +39,7 @@ namespace TeamsManager.UI.Converters
             if (value == null || !targetType.IsEnum)
                 return Binding.DoNothing;
 
-            var stringValue = value.ToString();
+            var stringValue = value.ToString() ?? string.Empty;
 
             // Spróbuj znaleźć enum value po Description
             foreach (var field in targetType.GetFields())
@@ -57,6 +57,9 @@ namespace TeamsManager.UI.Converters
             // Spróbuj bezpośrednio
             try
             {
+                if (string.IsNullOrEmpty(stringValue))
+                    return Binding.DoNothing;
+                    
                 return Enum.Parse(targetType, stringValue, true);
             }
             catch

@@ -32,7 +32,7 @@ namespace TeamsManager.UI.Views.Import
             Focus();
         }
 
-        private void BulkImportWizardWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void BulkImportWizardWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             // Sprawdź czy import jest w toku
             if (DataContext is BulkImportWizardViewModel viewModel && viewModel.IsImporting)

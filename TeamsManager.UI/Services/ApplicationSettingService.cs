@@ -21,7 +21,7 @@ namespace TeamsManager.UI.Services
         private const string ApiPath = "api/v1.0/ApplicationSettings";
         
         // Cache ustawień - odświeżany przy każdym pobraniu wszystkich
-        private List<ApplicationSetting> _cachedSettings;
+        private List<ApplicationSetting>? _cachedSettings;
         private DateTime _cacheExpiry = DateTime.MinValue;
         private readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5);
 
@@ -91,7 +91,7 @@ namespace TeamsManager.UI.Services
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    return await response.Content.ReadFromJsonAsync<ApplicationSetting>();
+                    return await response.Content.ReadFromJsonAsync<ApplicationSetting>() ?? new ApplicationSetting();
                 }
                 
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -103,12 +103,12 @@ namespace TeamsManager.UI.Services
                     _logger.LogWarning("Błąd pobierania ustawienia {Key}. Status: {StatusCode}", key, response.StatusCode);
                 }
                 
-                return null;
+                return new ApplicationSetting();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas pobierania ustawienia o kluczu: {Key}", key);
-                return null;
+                return new ApplicationSetting();
             }
         }
 

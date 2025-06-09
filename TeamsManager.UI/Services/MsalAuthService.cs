@@ -86,19 +86,37 @@ public class AzureAdUiConfig
         {
             _logger.LogCritical("MSAL configuration error: {Message}", message);
             
-            // Zachowaj MessageBox dla kompatybilno�ci
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            // Bezpieczne wyświetlenie MessageBox zgodnie z wzorcem obsługi błędów
+            try
             {
-                MessageBox.Show(
-                    message + "\nAplikacja mo�e nie dzia�a� poprawnie. Skonfiguruj j� lub skontaktuj si� z administratorem.",
-                    "B��d Konfiguracji MSAL", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Error);
-            });
+                if (System.Windows.Application.Current?.Dispatcher != null)
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show(
+                            message + "\nAplikacja może nie działać poprawnie. Skonfiguruj ją lub skontaktuj się z administratorem.",
+                            "Błąd Konfiguracji MSAL", 
+                            MessageBoxButton.OK, 
+                            MessageBoxImage.Error);
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("Cannot show MessageBox - Application.Current or Dispatcher is null");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error showing configuration error MessageBox");
+            }
         }
 
     public async Task<AuthenticationResult?> AcquireTokenInteractiveAsync(Window window)
     {
+        // Sprawdź argumenty zgodnie z wzorcem implementacyjnym
+        if (window == null)
+            throw new ArgumentNullException(nameof(window));
+            
         if (_pca == null) // Sprawd�, czy _pca zosta�o poprawnie zainicjowane
         {
             HandleMissingConfiguration("MSAL nie zosta� poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemo�liwe.");
@@ -199,6 +217,10 @@ public class AzureAdUiConfig
 
     public async Task<string?> AcquireGraphTokenInteractiveAsync(Window window)
     {
+        // Sprawdź argumenty zgodnie z wzorcem implementacyjnym
+        if (window == null)
+            throw new ArgumentNullException(nameof(window));
+            
         if (_pca == null)
         {
             System.Diagnostics.Debug.WriteLine("MSAL AcquireGraphTokenInteractive: PCA not properly initialized.");

@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1400" height="900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradienty dla aktorów -->
+    <linearGradient id="userGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#388E3C;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="wpfGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1976D2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="apiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9C27B0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7B1FA2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="azureGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0078D4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#106EBE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="graphGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF9800;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F57C00;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Message box gradients -->
+    <linearGradient id="requestGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#BBDEFB;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="responseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F5E8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#C8E6C9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="authGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFF3E0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFE0B2;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Shadow filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#00000025"/>
+    </filter>
+    
+    <!-- Arrow markers -->
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" 
+            refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#333" />
+    </marker>
+    
+    <marker id="returnArrow" markerWidth="12" markerHeight="8" 
+            refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#666" />
+    </marker>
+  </defs>
+
+  <!-- Tło -->
+  <rect width="1400" height="900" fill="#FAFAFA"/>
+  
+  <!-- Tytuł -->
+  <text x="700" y="30" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="22" font-weight="bold" fill="#212121">
+    TeamsManager - Diagram Sekwencji: OAuth2 On-Behalf-Of (OBO) Flow
+  </text>
+  
+  <text x="700" y="50" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="14" fill="#666">
+    Przykład: Użytkownik tworzy nowy Team przez aplikację WPF
+  </text>
+
+  <!-- AKTORZY/SYSTEMY -->
+  
+  <!-- User -->
+  <g transform="translate(50, 80)">
+    <rect width="120" height="60" rx="8" fill="url(#userGradient)" 
+          stroke="#388E3C" stroke-width="2" filter="url(#shadow)"/>
+    <text x="60" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="white">👤 Użytkownik</text>
+    <text x="60" y="40" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" fill="white">(Nauczyciel/Dyrektor)</text>
+    <text x="60" y="52" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="white">user@school.edu.pl</text>
+  </g>
+
+  <!-- WPF App -->
+  <g transform="translate(250, 80)">
+    <rect width="120" height="60" rx="8" fill="url(#wpfGradient)" 
+          stroke="#1976D2" stroke-width="2" filter="url(#shadow)"/>
+    <text x="60" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="white">🖥️ WPF App</text>
+    <text x="60" y="40" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" fill="white">TeamsManager.UI</text>
+    <text x="60" y="52" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="white">MSAL.NET Client</text>
+  </g>
+
+  <!-- API Backend -->
+  <g transform="translate(450, 80)">
+    <rect width="120" height="60" rx="8" fill="url(#apiGradient)" 
+          stroke="#7B1FA2" stroke-width="2" filter="url(#shadow)"/>
+    <text x="60" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="white">⚡ API Backend</text>
+    <text x="60" y="40" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" fill="white">ASP.NET Core</text>
+    <text x="60" y="52" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="white">JWT Bearer Auth</text>
+  </g>
+
+  <!-- Azure AD -->
+  <g transform="translate(650, 80)">
+    <rect width="120" height="60" rx="8" fill="url(#azureGradient)" 
+          stroke="#106EBE" stroke-width="2" filter="url(#shadow)"/>
+    <text x="60" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="white">🔐 Azure AD</text>
+    <text x="60" y="40" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" fill="white">Identity Provider</text>
+    <text x="60" y="52" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="white">OAuth2 / OpenID</text>
+  </g>
+
+  <!-- Microsoft Graph -->
+  <g transform="translate(850, 80)">
+    <rect width="120" height="60" rx="8" fill="url(#graphGradient)" 
+          stroke="#F57C00" stroke-width="2" filter="url(#shadow)"/>
+    <text x="60" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="white">🌐 Graph API</text>
+    <text x="60" y="40" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" fill="white">Microsoft Graph</text>
+    <text x="60" y="52" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="white">Teams Management</text>
+  </g>
+
+  <!-- LIFELINES (pionowe linie) -->
+  <line x1="110" y1="140" x2="110" y2="850" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="310" y1="140" x2="310" y2="850" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="510" y1="140" x2="510" y2="850" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="710" y1="140" x2="710" y2="850" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="910" y1="140" x2="910" y2="850" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+
+  <!-- ACTIVATION BOXES -->
+  <rect x="305" y="180" width="10" height="60" fill="#1976D2" stroke="#1565C0"/>
+  <rect x="505" y="260" width="10" height="320" fill="#7B1FA2" stroke="#6A1B9A"/>
+  <rect x="705" y="290" width="10" height="50" fill="#106EBE" stroke="#0D47A1"/>
+  <rect x="705" y="370" width="10" height="50" fill="#106EBE" stroke="#0D47A1"/>
+  <rect x="705" y="480" width="10" height="50" fill="#106EBE" stroke="#0D47A1"/>
+  <rect x="905" y="550" width="10" height="30" fill="#F57C00" stroke="#EF6C00"/>
+
+  <!-- MESSAGES/INTERACTIONS -->
+
+  <!-- 1. User initiuje logowanie -->
+  <g transform="translate(0, 180)">
+    <line x1="110" y1="0" x2="305" y2="0" stroke="#4CAF50" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="125" y="-15" width="165" height="25" rx="4" fill="url(#requestGradient)" 
+          stroke="#2196F3" filter="url(#shadow)"/>
+    <text x="207" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">1. Uruchomienie aplikacji</text>
+    <text x="207" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">"Zaloguj się do Teams"</text>
+  </g>
+
+  <!-- 2. WPF -> Azure AD -->
+  <g transform="translate(0, 220)">
+    <line x1="310" y1="0" x2="705" y2="0" stroke="#2196F3" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="350" y="-15" width="320" height="25" rx="4" fill="url(#authGradient)" 
+          stroke="#FF9800" filter="url(#shadow)"/>
+    <text x="510" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">2. MSAL Interactive Login</text>
+    <text x="510" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">scope: User.Read, TeamMember.ReadWrite.All</text>
+  </g>
+
+  <!-- 3. Azure AD Response -->
+  <g transform="translate(0, 260)">
+    <line x1="705" y1="0" x2="315" y2="0" stroke="#0078D4" stroke-width="2" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="350" y="-15" width="320" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="510" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">3. Access Token + ID Token</text>
+    <text x="510" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">JWT Bearer Token dla API</text>
+  </g>
+
+  <!-- 4. User action -->
+  <g transform="translate(0, 300)">
+    <line x1="110" y1="0" x2="305" y2="0" stroke="#4CAF50" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="125" y="-15" width="165" height="25" rx="4" fill="url(#requestGradient)" 
+          stroke="#2196F3" filter="url(#shadow)"/>
+    <text x="207" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">4. "Utwórz nowy Team"</text>
+    <text x="207" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Nazwa: "Matematyka 2A"</text>
+  </g>
+
+  <!-- 5. WPF -> API -->
+  <g transform="translate(0, 340)">
+    <line x1="310" y1="0" x2="505" y2="0" stroke="#2196F3" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="325" y="-15" width="165" height="25" rx="4" fill="url(#requestGradient)" 
+          stroke="#2196F3" filter="url(#shadow)"/>
+    <text x="407" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">5. POST /api/teams</text>
+    <text x="407" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Authorization: Bearer {token}</text>
+  </g>
+
+  <!-- 6. API -> Azure AD (OBO) -->
+  <g transform="translate(0, 380)">
+    <line x1="510" y1="0" x2="705" y2="0" stroke="#9C27B0" stroke-width="3" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="525" y="-15" width="165" height="25" rx="4" fill="url(#authGradient)" 
+          stroke="#FF9800" filter="url(#shadow)"/>
+    <text x="607" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">6. OBO Token Request</text>
+    <text x="607" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">grant_type: urn:ietf:params:oauth:grant-type:jwt-bearer</text>
+  </g>
+
+  <!-- 7. Azure AD OBO Response -->
+  <g transform="translate(0, 420)">
+    <line x1="705" y1="0" x2="515" y2="0" stroke="#0078D4" stroke-width="3" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="525" y="-15" width="165" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="607" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">7. OBO Access Token</text>
+    <text x="607" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">dla Microsoft Graph API</text>
+  </g>
+
+  <!-- 8. API caches token -->
+  <g transform="translate(480, 460)">
+    <rect x="0" y="0" width="60" height="30" rx="4" fill="#FFF3E0" 
+          stroke="#FF9800" stroke-dasharray="2,2" filter="url(#shadow)"/>
+    <text x="30" y="12" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" font-weight="bold" fill="#E65100">8. Cache</text>
+    <text x="30" y="22" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="8" fill="#E65100">OBO Token</text>
+  </g>
+
+  <!-- 9. API -> Azure AD (kolejny request) -->
+  <g transform="translate(0, 490)">
+    <line x1="510" y1="0" x2="705" y2="0" stroke="#9C27B0" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="525" y="-15" width="165" height="25" rx="4" fill="url(#authGradient)" 
+          stroke="#FF9800" filter="url(#shadow)"/>
+    <text x="607" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">9. Token Validation</text>
+    <text x="607" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Sprawdzenie uprawnień</text>
+  </g>
+
+  <!-- 10. Azure AD Validation Response -->
+  <g transform="translate(0, 530)">
+    <line x1="705" y1="0" x2="515" y2="0" stroke="#0078D4" stroke-width="2" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="525" y="-15" width="165" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="607" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">10. Valid + User Info</text>
+    <text x="607" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Uprawnienia potwierdzone</text>
+  </g>
+
+  <!-- 11. API -> Graph API -->
+  <g transform="translate(0, 570)">
+    <line x1="510" y1="0" x2="905" y2="0" stroke="#9C27B0" stroke-width="3" 
+          marker-end="url(#arrowhead)"/>
+    <rect x="575" y="-15" width="270" height="25" rx="4" fill="url(#requestGradient)" 
+          stroke="#2196F3" filter="url(#shadow)"/>
+    <text x="710" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">11. POST /teams (Graph API)</text>
+    <text x="710" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Authorization: Bearer {obo_token}</text>
+  </g>
+
+  <!-- 12. Graph API Response -->
+  <g transform="translate(0, 610)">
+    <line x1="905" y1="0" x2="515" y2="0" stroke="#FF9800" stroke-width="3" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="575" y="-15" width="270" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="710" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">12. Team Created Successfully</text>
+    <text x="710" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Team ID: d4f2b8c1-... </text>
+  </g>
+
+  <!-- 13. API saves to DB -->
+  <g transform="translate(480, 650)">
+    <rect x="0" y="0" width="60" height="30" rx="4" fill="#E8F5E8" 
+          stroke="#4CAF50" stroke-dasharray="2,2" filter="url(#shadow)"/>
+    <text x="30" y="12" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" font-weight="bold" fill="#2E7D32">13. Save</text>
+    <text x="30" y="22" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="8" fill="#2E7D32">to SQLite</text>
+  </g>
+
+  <!-- 14. API -> WPF Response -->
+  <g transform="translate(0, 690)">
+    <line x1="505" y1="0" x2="315" y2="0" stroke="#9C27B0" stroke-width="2" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="325" y="-15" width="165" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="407" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">14. HTTP 201 Created</text>
+    <text x="407" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Team DTO + lokalne ID</text>
+  </g>
+
+  <!-- 15. WPF -> User -->
+  <g transform="translate(0, 730)">
+    <line x1="305" y1="0" x2="115" y2="0" stroke="#2196F3" stroke-width="2" 
+          marker-end="url(#returnArrow)" stroke-dasharray="3,3"/>
+    <rect x="125" y="-15" width="165" height="25" rx="4" fill="url(#responseGradient)" 
+          stroke="#4CAF50" filter="url(#shadow)"/>
+    <text x="207" y="-2" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="10" font-weight="bold" fill="#333">15. "Team utworzony!"</text>
+    <text x="207" y="8" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="9" fill="#333">Sukces + odświeżenie UI</text>
+  </g>
+
+  <!-- NOTES -->
+  
+  <!-- OBO Flow Note -->
+  <g transform="translate(1020, 350)">
+    <rect width="300" height="150" rx="8" fill="#FFF8E1" stroke="#FFC107" 
+          stroke-width="2" filter="url(#shadow)"/>
+    <text x="150" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="#E65100">🔄 OAuth2 OBO Flow</text>
+    
+    <text x="15" y="40" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      <tspan font-weight="bold">On-Behalf-Of</tspan> pozwala API na:</text>
+    <text x="15" y="55" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Działanie w imieniu użytkownika</text>
+    <text x="15" y="68" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Zachowanie kontekstu uprawnień</text>
+    <text x="15" y="81" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Bezpieczne wywołania Graph API</text>
+    
+    <text x="15" y="100" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#E65100">
+      Kluczowe elementy:</text>
+    <text x="15" y="115" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • assertion = original access token</text>
+    <text x="15" y="128" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • scope = Microsoft Graph scopes</text>
+    <text x="15" y="141" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • grant_type = jwt-bearer</text>
+  </g>
+
+  <!-- Security Note -->
+  <g transform="translate(1020, 520)">
+    <rect width="300" height="120" rx="8" fill="#E8F5E8" stroke="#4CAF50" 
+          stroke-width="2" filter="url(#shadow)"/>
+    <text x="150" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="12" font-weight="bold" fill="#2E7D32">🔒 Bezpieczeństwo</text>
+    
+    <text x="15" y="40" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      <tspan font-weight="bold">MSAL.NET</tspan> zapewnia:</text>
+    <text x="15" y="55" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Automatyczne odświeżanie tokenów</text>
+    <text x="15" y="68" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Cache tokenów w pamięci</text>
+    <text x="15" y="81" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • PKCE dla desktop apps</text>
+    <text x="15" y="94" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Silent token acquisition</text>
+    <text x="15" y="107" font-family="Arial, sans-serif" font-size="9" fill="#333">
+      • Proper logout handling</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(50, 780)">
+    <rect width="900" height="100" rx="8" fill="white" stroke="#ddd" stroke-width="2" 
+          filter="url(#shadow)"/>
+    <text x="450" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="14" font-weight="bold" fill="#333">🔄 Legenda Diagramu Sekwencji</text>
+    
+    <!-- Arrow types -->
+    <line x1="30" y1="40" x2="80" y2="40" stroke="#333" stroke-width="2" 
+          marker-end="url(#arrowhead)"/>
+    <text x="90" y="44" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      Wywołanie synchroniczne (request)</text>
+    
+    <line x1="30" y1="55" x2="80" y2="55" stroke="#666" stroke-width="2" 
+          stroke-dasharray="3,3" marker-end="url(#returnArrow)"/>
+    <text x="90" y="59" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      Odpowiedź (response)</text>
+    
+    <!-- Token flow -->
+    <line x1="300" y1="40" x2="350" y2="40" stroke="#9C27B0" stroke-width="3" 
+          marker-end="url(#arrowhead)"/>
+    <text x="360" y="44" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      OAuth2 OBO Flow (kluczowe wywołania)</text>
+    
+    <!-- Message types -->
+    <rect x="30" y="70" width="60" height="15" rx="3" fill="url(#authGradient)" stroke="#FF9800"/>
+    <text x="100" y="80" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      Autentykacja OAuth2</text>
+    
+    <rect x="200" y="70" width="60" height="15" rx="3" fill="url(#requestGradient)" stroke="#2196F3"/>
+    <text x="270" y="80" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      Żądania API/HTTP</text>
+    
+    <rect x="370" y="70" width="60" height="15" rx="3" fill="url(#responseGradient)" stroke="#4CAF50"/>
+    <text x="440" y="80" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      Odpowiedzi/Sukces</text>
+    
+    <!-- Flow info -->
+    <text x="550" y="44" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#333">
+      ⏱️ Czas przepływu: ~2-3 sekundy</text>
+    <text x="550" y="59" font-family="Arial, sans-serif" font-size="10" fill="#666">
+      Cache zmniejsza do ~500ms przy kolejnych wywołaniach</text>
+    <text x="550" y="80" font-family="Arial, sans-serif" font-size="10" fill="#666">
+      MSAL automatycznie odnawia tokeny co 55 minut</text>
+  </g>
+
+</svg> 

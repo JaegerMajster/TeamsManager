@@ -351,7 +351,7 @@ namespace TeamsManager.UI.ViewModels.Operations
         #region Commands
 
         public RelayCommand RefreshCommand { get; private set; } = null!;
-        public RelayCommand<OperationHistoryItemViewModel> ShowDetailsCommand { get; private set; } = null!;
+        public RelayCommand<OperationHistoryItemViewModel?> ShowDetailsCommand { get; private set; } = null!;
         public RelayCommand ExportToExcelCommand { get; private set; } = null!;
         public RelayCommand ExportToPdfCommand { get; private set; } = null!;
         public RelayCommand ClearFiltersCommand { get; private set; } = null!;
@@ -365,7 +365,7 @@ namespace TeamsManager.UI.ViewModels.Operations
         private void InitializeCommands()
         {
             RefreshCommand = new RelayCommand(async () => await LoadOperationsAsync(), () => !IsLoading);
-            ShowDetailsCommand = new RelayCommand<OperationHistoryItemViewModel>(ShowOperationDetails, op => op != null);
+            ShowDetailsCommand = new RelayCommand<OperationHistoryItemViewModel?>(ShowOperationDetails, op => op != null);
             ExportToExcelCommand = new RelayCommand(async () => await ExportToExcelAsync(), () => !IsExporting && FilteredOperations.Any());
             ExportToPdfCommand = new RelayCommand(async () => await ExportToPdfAsync(), () => !IsExporting && FilteredOperations.Any());
             ClearFiltersCommand = new RelayCommand(ClearFilters);
@@ -616,10 +616,13 @@ namespace TeamsManager.UI.ViewModels.Operations
             }
         }
 
-        private void ShowOperationDetails(OperationHistoryItemViewModel operation)
+        private void ShowOperationDetails(OperationHistoryItemViewModel? operation)
         {
-            // TODO: Show details popup
-            _logger.LogDebug($"Showing details for operation {operation.Id}");
+            if (operation != null)
+            {
+                // TODO: Show details popup
+                _logger.LogDebug($"Showing details for operation {operation.Id}");
+            }
         }
 
         private async Task ExportToExcelAsync()

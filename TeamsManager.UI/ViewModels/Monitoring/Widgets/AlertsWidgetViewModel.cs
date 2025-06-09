@@ -121,9 +121,9 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             }
         }
         
-        private async Task AcknowledgeAlert(SystemAlertViewModel alert)
+        private Task AcknowledgeAlert(SystemAlertViewModel alert)
         {
-            if (alert == null || alert.IsAcknowledged) return;
+            if (alert == null || alert.IsAcknowledged) return Task.CompletedTask;
             
             try
             {
@@ -140,9 +140,10 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             {
                 _logger.LogError(ex, "[ALERTS-WIDGET] Error acknowledging alert {AlertId}", alert.Id);
             }
+            return Task.CompletedTask;
         }
         
-        private async Task AcknowledgeAllAlerts()
+        private Task AcknowledgeAllAlerts()
         {
             try
             {
@@ -161,9 +162,10 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             {
                 _logger.LogError(ex, "[ALERTS-WIDGET] Error acknowledging all alerts");
             }
+            return Task.CompletedTask;
         }
         
-        private async Task ClearAllAlerts()
+        private Task ClearAllAlerts()
         {
             try
             {
@@ -177,6 +179,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             {
                 _logger.LogError(ex, "[ALERTS-WIDGET] Error clearing all alerts");
             }
+            return Task.CompletedTask;
         }
         
         private void UpdateAlertCounts()

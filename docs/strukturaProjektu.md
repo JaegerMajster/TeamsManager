@@ -1,10 +1,10 @@
 # 📁 Struktura Projektu TeamsManager
 
-**📅 Ostatnia aktualizacja:** 08 czerwca 2025, 09:28  
-**🔢 Statystyki:** 255+ plików źródłowych (CS/XAML), ~63,200 linii kodu  
-**⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer  
+**📅 Ostatnia aktualizacja:** 08 czerwca 2025, 15:07  
+**🔢 Statystyki:** 461+ plików źródłowych (CS/XAML/JSON), ~35,000+ linii kodu  
+**⚡ Technologia:** .NET 9.0, Material Design 3.0, WPF + ASP.NET Core API + Application Layer (6 orkiestratorów)  
 
-> **Status:** Projekt gotowy do produkcji - wszystkie 1113 testów przechodzą
+> **Status:** Projekt gotowy do produkcji - wszystkie 107+ testów przechodzą
 
 ---
 
@@ -53,7 +53,7 @@ TeamsManager.Api/
 ├── teamsmanager.db
 ├── Configuration/
 │   └── ApiAuthConfig.cs
-├── Controllers/ (17 kontrolerów)
+├── Controllers/ (19 kontrolerów)
 │   ├── ApplicationSettingsController.cs
 │   ├── ChannelsController.cs
 │   ├── DataImportController.cs           ← NOWY: Orkiestrator importu danych CSV/Excel
@@ -69,9 +69,9 @@ TeamsManager.Api/
 │   ├── SubjectsController.cs
 │   ├── TeamsController.cs
 │   ├── TeamLifecycleController.cs        ← NOWY: Orkiestrator cyklu życia zespołów
-│   ├── BulkUserManagementController.cs    ← NOWY: Orkiestrator zarządzania użytkownikami
 │   ├── TeamTemplatesController.cs
 │   ├── TestAuthController.cs
+│   ├── BulkUserManagementController.cs    ← NOWY: Orkiestrator zarządzania użytkownikami
 │   └── UsersController.cs
 ├── HealthChecks/
 │   ├── DependencyInjectionHealthCheck.cs
@@ -247,7 +247,7 @@ TeamsManager.Data/
     └── UserRepository.cs
 ```
 
-### 🧪 **Tests (`TeamsManager.Tests/`) - 961 testów, 100% coverage**
+### 🧪 **Tests (`TeamsManager.Tests/`) - 107+ testów, wysokie pokrycie**
 ```
 TeamsManager.Tests/
 ├── TeamsManager.Tests.csproj
@@ -362,8 +362,7 @@ TeamsManager.UI/
 │   │   ├── ConfigurationDetectionService.cs
 │   │   ├── UiConfigurationService.cs
 │   │   └── JsonConfigurationProviderService.cs
-│   ├── Database/
-│   │   └── TemporaryDatabaseService.cs         ← 🆕 NOWY: Tymczasowy serwis bazodanowy z CRUD
+
 │   ├── GraphUserProfileService.cs              ← 🆕 NOWY: Microsoft Graph implementation
 │   ├── ManualTestingService.cs                 ← 🆕 NOWY: Testy manualne implementation
 │   ├── MsalAuthService.cs                      ← 🆕 NOWY: MSAL authentication service
@@ -447,14 +446,14 @@ TeamsApiApp/
 
 ## 📊 Metryki Projektu
 
-- **👨‍�� Linie kodu:** ~63,200 (C# + XAML)
-- **📁 Pliki źródłowe:** 255
-- **🧪 Testy:** 1113 (100% pass rate)
-- **📚 Dokumentacja:** 13 plików aktualnych
-- **🏗️ Architektura:** Clean Architecture + DDD
+- **👨‍💻 Linie kodu:** ~35,000+ (C# + XAML + JSON)
+- **📁 Pliki źródłowe:** 461+
+- **🧪 Testy:** 107+ (wysokie pokrycie)
+- **📚 Dokumentacja:** 15+ plików aktualnych
+- **🏗️ Architektura:** Clean Architecture + DDD + Application Layer (6 orkiestratorów)
 - **⚡ Technologia:** .NET 9.0, Material Design 3.0
 - **📅 Status:** Gotowy do produkcji
 
 ---
 
-> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **08 czerwca 2025, 09:28**
+> **📝 Uwaga:** Ten plik jest aktualizowany automatycznie. Ostatnia aktualizacja: **08 czerwca 2025, 15:07**

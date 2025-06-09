@@ -24,13 +24,13 @@ namespace TeamsManager.UI.ViewModels.Settings
         private readonly ApplicationSettingService _settingService;
         private readonly ILogger<ApplicationSettingsViewModel> _logger;
         
-        private ObservableCollection<ApplicationSettingItemViewModel> _settings;
+        private ObservableCollection<ApplicationSettingItemViewModel> _settings = new();
         private ICollectionView _settingsView;
         private string _searchText = string.Empty;
         private string _selectedCategory = "Wszystkie";
         private bool _isLoading;
         private bool _hasError;
-        private string _errorMessage;
+        private string _errorMessage = string.Empty;
         private bool _showOnlyRequired;
         private bool _showInvisible;
 
@@ -199,7 +199,7 @@ namespace TeamsManager.UI.ViewModels.Settings
             {
                 IsLoading = true;
                 HasError = false;
-                ErrorMessage = null;
+                ErrorMessage = string.Empty;
 
                 _logger.LogInformation("Ładowanie ustawień aplikacji");
                 
@@ -274,7 +274,7 @@ namespace TeamsManager.UI.ViewModels.Settings
             return true;
         }
 
-        private async void OnSettingSaved(object sender, EventArgs e)
+        private async void OnSettingSaved(object? sender, EventArgs e)
         {
             if (sender is ApplicationSettingItemViewModel settingVm)
             {
@@ -350,9 +350,9 @@ namespace TeamsManager.UI.ViewModels.Settings
 
         #region INotifyPropertyChanged
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
