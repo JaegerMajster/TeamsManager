@@ -1,0 +1,354 @@
+<Window x:Class="TeamsManager.UI.Views.UserProfileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        mc:Ignorable="d"
+        Title="Profil Użytkownika"
+        Height="700" Width="450"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Border CornerRadius="10" Background="#FF1E1E1E" BorderBrush="#FF32505F" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header with drag capability -->
+            <materialDesign:ColorZone Grid.Row="0" Mode="PrimaryDark" 
+                                    CornerRadius="10,10,0,0" 
+                                    MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid Height="40">
+                    <TextBlock Text="Profil Użytkownika" 
+                               VerticalAlignment="Center" 
+                               HorizontalAlignment="Center"
+                               Foreground="White" 
+                               FontSize="16" 
+                               FontWeight="Medium"/>
+                    
+                    <!-- Close button -->
+                    <Button HorizontalAlignment="Right" 
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"
+                            Click="CloseButton_Click"
+                            Width="24" Height="24"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            ToolTip="Zamknij"
+                            Cursor="Hand">
+                        <materialDesign:PackIcon Kind="WindowClose" 
+                                               Foreground="#FF5F7D8C" 
+                                               Width="14" Height="14"/>
+                    </Button>
+                </Grid>
+            </materialDesign:ColorZone>
+
+            <!-- Main Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="30,20">
+                <StackPanel>
+                    
+                    <!-- Avatar and Name Section -->
+                    <Border Background="#FF2D2D30" 
+                            CornerRadius="8" 
+                            Padding="20"
+                            Margin="0,0,0,20">
+                        <StackPanel HorizontalAlignment="Center">
+                            <!-- Avatar -->
+                            <Border Width="80" Height="80" 
+                                    CornerRadius="40" 
+                                    Background="#FF4B50BE"
+                                    Margin="0,0,0,15">
+                                <TextBlock Text="{Binding UserInitials}" 
+                                         FontSize="28" 
+                                         FontWeight="Bold"
+                                         Foreground="White"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"/>
+                            </Border>
+                            
+                            <!-- Display Name -->
+                            <TextBlock Text="{Binding UserDisplayName}" 
+                                     FontSize="20" 
+                                     FontWeight="Medium"
+                                     Foreground="White"
+                                     HorizontalAlignment="Center"
+                                     TextAlignment="Center"
+                                     Margin="0,0,0,5"/>
+                            
+                            <!-- Email -->
+                            <TextBlock Text="{Binding UserEmail}" 
+                                     FontSize="14"
+                                     Foreground="#FFB0B0B0"
+                                     HorizontalAlignment="Center"
+                                     TextAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Basic Information -->
+                    <Border Background="#FF2A4A54" 
+                            CornerRadius="8" 
+                            Padding="20"
+                            Margin="0,0,0,15">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="Account" 
+                                                       Foreground="#FF4CAF50"
+                                                       Width="20" Height="20"
+                                                       VerticalAlignment="Top"
+                                                       Margin="0,1,10,0"/>
+                                <TextBlock Text="Informacje podstawowe" 
+                                         FontSize="16" 
+                                         FontWeight="Medium"
+                                         Foreground="White"/>
+                            </StackPanel>
+                            
+                            <!-- Job Title -->
+                            <Grid Margin="0,0,0,10" Visibility="{Binding UserJobTitle, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Stanowisko:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding UserJobTitle}" 
+                                         FontSize="12" Foreground="White" 
+                                         TextWrapping="Wrap"/>
+                            </Grid>
+                            
+                            <!-- Department -->
+                            <Grid Margin="0,0,0,10" Visibility="{Binding UserDepartment, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Dział:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding UserDepartment}" 
+                                         FontSize="12" Foreground="White" 
+                                         TextWrapping="Wrap"/>
+                            </Grid>
+                            
+                            <!-- Office Location -->
+                            <Grid Margin="0,0,0,10" Visibility="{Binding UserOfficeLocation, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Lokalizacja:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding UserOfficeLocation}" 
+                                         FontSize="12" Foreground="White" 
+                                         TextWrapping="Wrap"/>
+                            </Grid>
+                            
+                            <!-- Phone -->
+                            <Grid Margin="0,0,0,0" Visibility="{Binding UserPhone, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Telefon:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding UserPhone}" 
+                                         FontSize="12" Foreground="White" 
+                                         TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Security Information -->
+                    <Border Background="#FF2D3E50" 
+                            CornerRadius="8" 
+                            Padding="20"
+                            Margin="0,0,0,15">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="ShieldCheck" 
+                                                       Foreground="#FFFF9800"
+                                                       Width="20" Height="20"
+                                                       VerticalAlignment="Top"
+                                                       Margin="0,1,10,0"/>
+                                <TextBlock Text="Bezpieczeństwo i tokeny" 
+                                         FontSize="16" 
+                                         FontWeight="Medium"
+                                         Foreground="White"/>
+                            </StackPanel>
+                            
+                            <!-- Security Summary -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Status:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding SecuritySummary}" 
+                                         FontSize="12" Foreground="#FFFF9800" 
+                                         FontWeight="Medium"/>
+                            </Grid>
+                            
+                            <!-- Token Expiry -->
+                            <Grid Margin="0,0,0,10" Visibility="{Binding TokenExpiresOn, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Token wygasa:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TokenExpiresOn, StringFormat='{}{0:HH:mm}'}" 
+                                         FontSize="12" Foreground="White"/>
+                            </Grid>
+                            
+                            <!-- Token Type -->
+                            <Grid Margin="0,0,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Typ tokenu:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="WAM (Windows Authentication Manager)" 
+                                         FontSize="12" Foreground="#FF4CAF50"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Technical Details -->
+                    <Border Background="#FF1E2832" 
+                            CornerRadius="8" 
+                            Padding="20"
+                            Margin="0,0,0,15">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="Information" 
+                                                       Foreground="#FF2196F3"
+                                                       Width="20" Height="20"
+                                                       VerticalAlignment="Top"
+                                                       Margin="0,1,10,0"/>
+                                <TextBlock Text="Szczegóły techniczne" 
+                                         FontSize="16" 
+                                         FontWeight="Medium"
+                                         Foreground="White"/>
+                            </StackPanel>
+                            
+                            <!-- User ID -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="User ID:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding UserId}" 
+                                         FontSize="10" Foreground="#FFB0B0B0" 
+                                         TextWrapping="Wrap" FontFamily="Consolas"/>
+                            </Grid>
+                            
+                            <!-- Tenant ID -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Tenant ID:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding TenantId}" 
+                                         FontSize="10" Foreground="#FFB0B0B0" 
+                                         TextWrapping="Wrap" FontFamily="Consolas"/>
+                            </Grid>
+                            
+                            <!-- Last Login -->
+                            <Grid Margin="0,0,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Ostatnie login:" 
+                                         FontSize="12" Foreground="#FFB0B0B0" 
+                                         Width="100" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Text="{Binding LastLoginTime, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" 
+                                         FontSize="12" Foreground="White"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Footer with Action Buttons -->
+            <Border Grid.Row="2" Background="#FF252526" CornerRadius="0,0,10,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="20,15">
+                    
+                    <!-- Refresh Profile Button -->
+                    <Button Content="Odśwież profil"
+                            Command="{Binding RefreshProfileCommand}"
+                            Style="{StaticResource MaterialDesignFlatButton}"
+                            Foreground="#FF4CAF50"
+                            Margin="0,0,15,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent" 
+                                        BorderBrush="#FF4CAF50" 
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="15,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Refresh" 
+                                                               Width="16" Height="16"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0"/>
+                                        <TextBlock Text="{TemplateBinding Content}" 
+                                                 VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    
+                    <!-- Close Button -->
+                    <Button Content="Zamknij"
+                            Click="CloseButton_Click"
+                            Style="{StaticResource MaterialDesignFlatButton}"
+                            Foreground="#FFB0B0B0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent" 
+                                        BorderBrush="#FFB0B0B0" 
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="15,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="WindowClose" 
+                                                               Width="16" Height="16"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0"/>
+                                        <TextBlock Text="{TemplateBinding Content}" 
+                                                 VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

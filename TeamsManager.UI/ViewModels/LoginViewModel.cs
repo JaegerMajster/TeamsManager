@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Models.Configuration;
+using TeamsManager.UI.Models;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.UI.Services.Configuration;
@@ -17,21 +18,26 @@ namespace TeamsManager.UI.ViewModels
         private readonly IMsalAuthService _msalAuthService;
         private readonly ConfigurationManager _configManager;
         private readonly ILogger<LoginViewModel> _logger;
+        private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
         
         private bool _isLoading;
         // Usunięte checkboxy - WAM automatycznie zarządza tokenami
         private string? _statusMessage;
         private string? _userEmail;
         private bool _canLogin = true;
+        private ConditionalAccessInfo? _conditionalAccessInfo;
+        private string? _securitySummary;
 
         public LoginViewModel(
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
-            ILogger<LoginViewModel> logger)
+            ILogger<LoginViewModel> logger,
+            ConditionalAccessAnalyzer conditionalAccessAnalyzer)
         {
             _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
             _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _conditionalAccessAnalyzer = conditionalAccessAnalyzer ?? throw new ArgumentNullException(nameof(conditionalAccessAnalyzer));
             
             // Inicjalizacja komend
             LoginCommand = new RelayCommand(async _ => await LoginAsync(), _ => CanLogin);
@@ -78,6 +84,26 @@ namespace TeamsManager.UI.ViewModels
         }
 
         public bool CanLogin => !IsLoading && _canLogin;
+
+        public ConditionalAccessInfo? ConditionalAccessInfo
+        {
+            get => _conditionalAccessInfo;
+            set
+            {
+                _conditionalAccessInfo = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string? SecuritySummary
+        {
+            get => _securitySummary;
+            set
+            {
+                _securitySummary = value;
+                OnPropertyChanged();
+            }
+        }
 
         #endregion
 
@@ -140,6 +166,12 @@ namespace TeamsManager.UI.ViewModels
                     _logger.LogInformation("Pomyślne logowanie użytkownika: {UserEmail}", 
                         authResult.Account?.Username);
                     
+                    // Analizuj Conditional Access z tokenu
+                    ConditionalAccessInfo = _conditionalAccessAnalyzer.AnalyzeToken(authResult);
+                    SecuritySummary = _conditionalAccessAnalyzer.GetSecuritySummary(ConditionalAccessInfo);
+                    
+                    _logger.LogInformation("Conditional Access Analysis: {SecuritySummary}", SecuritySummary);
+                    
                     // Zapisz informację o ostatnim logowaniu (WAM zarządza tokenami automatycznie)
                     var settings = new LoginSettings
                     {
@@ -152,8 +184,8 @@ namespace TeamsManager.UI.ViewModels
                     await _configManager.SaveLoginSettingsAsync(settings);
                     _logger.LogDebug("Zapisano informacje o ostatnim logowaniu");
                     
-                    StatusMessage = "Logowanie zakończone pomyślnie!";
-                    await Task.Delay(500); // Krótka pauza dla UX
+                    StatusMessage = $"Logowanie zakończone! {SecuritySummary}";
+                    await Task.Delay(1000); // Dłuższa pauza żeby użytkownik widział security info
                     
                     // Zgłoś sukces
                     LoginCompleted?.Invoke(this, true);

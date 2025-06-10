@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Views.Dashboard;
 using TeamsManager.UI.ViewModels.Dashboard;
 using TeamsManager.UI.Services;
+using TeamsManager.UI.Models;
 
 namespace TeamsManager.UI.ViewModels.Shell
 {
@@ -24,6 +26,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         private readonly IMsalAuthService _msalAuthService;
         private readonly ConfigurationManager _configManager;
         private readonly IGraphUserProfileService _graphUserProfileService;
+        private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
         private readonly ILogger<MainShellViewModel> _logger;
 
         private object? _currentView;
@@ -32,8 +35,16 @@ namespace TeamsManager.UI.ViewModels.Shell
         private string _userEmail = string.Empty;
         private string _userJobTitle = string.Empty;
         private string _userOfficeLocation = string.Empty;
+        private string _userPhone = string.Empty;
+        private string _userDepartment = string.Empty;
+        private string _userId = string.Empty;
+        private string _tenantId = string.Empty;
+        private DateTime? _lastLoginTime;
         private BitmapImage? _userProfilePicture;
         private bool _isLoadingProfile = false;
+        private string? _securitySummary = "🔐 Sprawdzanie...";
+        private DateTime? _tokenExpiresOn;
+        private string _tokenCacheStatus = "Brak danych";
 
         public MainShellViewModel(
             IServiceProvider serviceProvider,
@@ -41,6 +52,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
             IGraphUserProfileService graphUserProfileService,
+            ConditionalAccessAnalyzer conditionalAccessAnalyzer,
             ILogger<MainShellViewModel> logger)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -48,11 +60,13 @@ namespace TeamsManager.UI.ViewModels.Shell
             _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
             _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
             _graphUserProfileService = graphUserProfileService ?? throw new ArgumentNullException(nameof(graphUserProfileService));
+            _conditionalAccessAnalyzer = conditionalAccessAnalyzer ?? throw new ArgumentNullException(nameof(conditionalAccessAnalyzer));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             InitializeCommands();
             LoadUserInfo();
             LoadDashboard();
+            UpdateTokenStatus();
         }
 
         // Properties
@@ -83,6 +97,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             {
                 _userDisplayName = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(UserInitials)); // Zaktualizuj także UserInitials
             }
         }
 
@@ -116,6 +131,78 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
         }
 
+        public string UserPhone
+        {
+            get => _userPhone;
+            set
+            {
+                _userPhone = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string UserDepartment
+        {
+            get => _userDepartment;
+            set
+            {
+                _userDepartment = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string UserId
+        {
+            get => _userId;
+            set
+            {
+                _userId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string TenantId
+        {
+            get => _tenantId;
+            set
+            {
+                _tenantId = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public DateTime? LastLoginTime
+        {
+            get => _lastLoginTime;
+            set
+            {
+                _lastLoginTime = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string UserInitials
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(UserDisplayName)) return "U";
+                
+                var parts = UserDisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+                }
+                else if (parts.Length == 1 && parts[0].Length >= 2)
+                {
+                    return parts[0].Substring(0, 2).ToUpper();
+                }
+                else
+                {
+                    return parts[0][0].ToString().ToUpper();
+                }
+            }
+        }
+
         public BitmapImage? UserProfilePicture
         {
             get => _userProfilePicture;
@@ -136,6 +223,36 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
         }
 
+        public string? SecuritySummary
+        {
+            get => _securitySummary;
+            set
+            {
+                _securitySummary = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public DateTime? TokenExpiresOn
+        {
+            get => _tokenExpiresOn;
+            set
+            {
+                _tokenExpiresOn = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string TokenCacheStatus
+        {
+            get => _tokenCacheStatus;
+            set
+            {
+                _tokenCacheStatus = value;
+                OnPropertyChanged();
+            }
+        }
+
         // Commands
         public ICommand NavigateToDashboardCommand { get; private set; } = null!;
         public ICommand NavigateToUsersCommand { get; private set; } = null!;
@@ -149,6 +266,9 @@ namespace TeamsManager.UI.ViewModels.Shell
         public ICommand NavigateToSettingsCommand { get; private set; } = null!;
         public ICommand NavigateToManualTestingCommand { get; private set; } = null!;
         public ICommand LogoutCommand { get; private set; } = null!;
+        public ICommand ViewProfileCommand { get; private set; } = null!;
+        public ICommand RefreshProfileCommand { get; private set; } = null!;
+        public ICommand ClearTokenCacheCommand { get; private set; } = null!;
 
         private void InitializeCommands()
         {
@@ -164,6 +284,9 @@ namespace TeamsManager.UI.ViewModels.Shell
             NavigateToSettingsCommand = new RelayCommand(ExecuteNavigateToSettings);
             NavigateToManualTestingCommand = new RelayCommand(ExecuteNavigateToManualTesting);
             LogoutCommand = new RelayCommand(ExecuteLogout);
+            ViewProfileCommand = new RelayCommand(ExecuteViewProfile);
+            RefreshProfileCommand = new RelayCommand(ExecuteRefreshProfile);
+            ClearTokenCacheCommand = new RelayCommand(ExecuteClearTokenCache);
         }
 
         public void LoadUserInfo()
@@ -172,6 +295,12 @@ namespace TeamsManager.UI.ViewModels.Shell
             {
                 UserEmail = _currentUserService.GetCurrentUserUpn() ?? "Nie zalogowano";
                 UserDisplayName = UserEmail.Contains("@") ? UserEmail.Split('@')[0] : UserEmail;
+                
+                // Ustaw LastLoginTime przy pierwszym załadowaniu
+                if (LastLoginTime == null)
+                {
+                    LastLoginTime = DateTime.Now;
+                }
                 
                 _logger.LogDebug("Załadowano podstawowe informacje o użytkowniku: {DisplayName} ({Email})", UserDisplayName, UserEmail);
                 
@@ -207,6 +336,9 @@ namespace TeamsManager.UI.ViewModels.Shell
                     return;
                 }
 
+                // Ustaw TenantId z tokenu
+                TenantId = authResult.TenantId ?? string.Empty;
+
                 // Pobierz profil użytkownika
                 var userProfile = await _graphUserProfileService.GetUserProfileAsync(authResult.AccessToken);
                 if (userProfile != null)
@@ -228,9 +360,15 @@ namespace TeamsManager.UI.ViewModels.Shell
 
                     UserJobTitle = userProfile.JobTitle ?? string.Empty;
                     UserOfficeLocation = userProfile.OfficeLocation ?? string.Empty;
+                    UserPhone = string.Empty; // Graph API UserProfile nie zawiera numerów telefonów w podstawowym response
+                    UserDepartment = string.Empty; // Graph API UserProfile nie zawiera działu w podstawowym response
+                    UserId = userProfile.Id ?? string.Empty;
+                    
+                    // Ustaw ostatni czas logowania na teraz
+                    LastLoginTime = DateTime.Now;
 
-                    _logger.LogInformation("Załadowano profil użytkownika: {DisplayName}, Stanowisko: {JobTitle}, Lokalizacja: {OfficeLocation}", 
-                        UserDisplayName, UserJobTitle, UserOfficeLocation);
+                    _logger.LogInformation("Załadowano profil użytkownika: {DisplayName}, Stanowisko: {JobTitle}, Lokalizacja: {OfficeLocation}, Dział: {Department}", 
+                        UserDisplayName, UserJobTitle, UserOfficeLocation, UserDepartment);
                 }
 
                 // Pobierz zdjęcie profilowe
@@ -243,6 +381,27 @@ namespace TeamsManager.UI.ViewModels.Shell
                 else
                 {
                     _logger.LogDebug("Brak zdjęcia profilowego użytkownika lub błąd podczas pobierania");
+                }
+
+                // Analizuj Conditional Access
+                try
+                {
+                    var conditionalAccessInfo = _conditionalAccessAnalyzer.AnalyzeToken(authResult);
+                    if (conditionalAccessInfo != null)
+                    {
+                        var summary = GenerateSecuritySummary(conditionalAccessInfo);
+                        UpdateConditionalAccessInfo(summary, conditionalAccessInfo.TokenExpiresOn);
+                        _logger.LogDebug("Conditional Access info analyzed and updated");
+                    }
+                    else
+                    {
+                        UpdateConditionalAccessInfo("🔐 Podstawowy", authResult.ExpiresOn.DateTime);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Błąd podczas analizy Conditional Access");
+                    UpdateConditionalAccessInfo("🔐 Podstawowy", authResult.ExpiresOn.DateTime);
                 }
             }
             catch (Exception ex)
@@ -288,6 +447,87 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
             
             return false;
+        }
+
+        /// <summary>
+        /// Aktualizuje status tokenów i cache
+        /// </summary>
+        public void UpdateTokenStatus()
+        {
+            try
+            {
+                // Sprawdź status cache
+                var cacheStatus = MsalCacheHelper.GetCacheStatus();
+                if (cacheStatus.Exists)
+                {
+                    var sizeKb = cacheStatus.SizeBytes / 1024.0;
+                    TokenCacheStatus = $"Cache: {sizeKb:F1} KB ({cacheStatus.LastModified:HH:mm})";
+                }
+                else
+                {
+                    TokenCacheStatus = "Cache: Brak danych";
+                }
+
+                _logger.LogDebug("Token status updated: {CacheStatus}", TokenCacheStatus);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating token status");
+                TokenCacheStatus = "Cache: Błąd";
+            }
+        }
+
+        /// <summary>
+        /// Aktualizuje informacje o Conditional Access
+        /// </summary>
+        public void UpdateConditionalAccessInfo(string? securitySummary, DateTime? tokenExpiresOn)
+        {
+            SecuritySummary = securitySummary;
+            TokenExpiresOn = tokenExpiresOn;
+            
+            _logger.LogDebug("Conditional Access info updated: {SecuritySummary}, Expires: {ExpiresOn}", 
+                           securitySummary, tokenExpiresOn);
+        }
+
+        /// <summary>
+        /// Generuje podsumowanie bezpieczeństwa na podstawie analizy Conditional Access
+        /// </summary>
+        private string GenerateSecuritySummary(ConditionalAccessInfo info)
+        {
+            var factors = new List<string>();
+            
+            if (info.RequiresMfa && info.MfaCompleted)
+            {
+                factors.Add("MFA");
+            }
+            
+            if (info.IsManagedDevice)
+            {
+                factors.Add("Managed Device");
+            }
+            
+            if (info.IsCompliantDevice)
+            {
+                factors.Add("Compliant Device");
+            }
+            
+            if (info.IsTrustedLocation)
+            {
+                factors.Add("Trusted Location");
+            }
+
+            if (factors.Count >= 3)
+            {
+                return "🔐 High Security";
+            }
+            else if (factors.Count >= 1)
+            {
+                return "🔐 Medium Security";
+            }
+            else
+            {
+                return "🔐 Basic Security";
+            }
         }
 
         private void LoadDashboard()
@@ -559,6 +799,89 @@ namespace TeamsManager.UI.ViewModels.Shell
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void ExecuteViewProfile()
+        {
+            try
+            {
+                _logger.LogInformation("Otwieranie okna profilu użytkownika");
+                
+                var profileWindow = new TeamsManager.UI.Views.UserProfileWindow(this);
+                profileWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas otwierania profilu użytkownika");
+                System.Windows.MessageBox.Show(
+                    $"Błąd podczas otwierania profilu: {ex.Message}",
+                    "Błąd",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private async void ExecuteRefreshProfile()
+        {
+            try
+            {
+                _logger.LogInformation("Odświeżanie profilu użytkownika");
+                
+                await LoadDetailedUserProfileAsync();
+                UpdateTokenStatus();
+                
+                // Krótkie potwierdzenie
+                System.Windows.MessageBox.Show(
+                    "Profil użytkownika został odświeżony",
+                    "Odświeżanie profilu",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas odświeżania profilu");
+                System.Windows.MessageBox.Show(
+                    $"Błąd podczas odświeżania profilu: {ex.Message}",
+                    "Błąd",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private async void ExecuteClearTokenCache()
+        {
+            try
+            {
+                var result = System.Windows.MessageBox.Show(
+                    "Czy na pewno chcesz wyczyścić cache tokenów?\n\n" +
+                    "To spowoduje, że przy następnym logowaniu będziesz musiał/a ponownie przejść przez proces uwierzytelniania.",
+                    "Wyczyść Cache Tokenów",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question);
+
+                if (result == System.Windows.MessageBoxResult.Yes)
+                {
+                    _logger.LogInformation("Czyszczenie cache tokenów");
+                    
+                    await MsalCacheHelper.ClearTokenCacheAsync(_logger);
+                    UpdateTokenStatus();
+                    
+                    System.Windows.MessageBox.Show(
+                        "Cache tokenów został wyczyszczony",
+                        "Cache wyczyszczony",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas czyszczenia cache tokenów");
+                System.Windows.MessageBox.Show(
+                    $"Błąd podczas czyszczenia cache: {ex.Message}",
+                    "Błąd",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+        }
 
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {

@@ -98,6 +98,12 @@ public class AzureAdUiConfig
 
             _pca = pcaBuilder.Build();
             _logger.LogInformation("MSAL initialized with WAM support");
+            
+            // Włącz trwałe przechowywanie tokenów z szyfrowaniem
+            _ = Task.Run(async () =>
+            {
+                await MsalCacheHelper.EnableTokenCacheSerializationAsync(_pca, _logger);
+            });
         }
 
         /// <summary>

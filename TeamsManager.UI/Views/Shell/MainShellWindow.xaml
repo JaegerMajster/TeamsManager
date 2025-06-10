@@ -53,22 +53,222 @@
                         Background="{DynamicResource PrimaryHueMidBrush}"
                         Padding="16">
                     <StackPanel>
-                        <!-- Zdjęcie profilowe lub ikona -->
-                        <Grid Width="64" Height="64" HorizontalAlignment="Center">
-                            <!-- Domyślna ikona placeholdera - pokazuje się gdy brak zdjęcia lub użytkownik niezalogowany -->
-                            <materialDesign:PackIcon Kind="AccountCircle" 
-                                                   Width="64" Height="64"
-                                                   Foreground="White"
-                                                   Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                        <!-- User Profile Section - Clickable with Dropdown -->
+                        <Button x:Name="UserProfileButton"
+                                Width="64" Height="64" 
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource MaterialDesignFloatingActionButton}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="0"
+                                ToolTip="Kliknij aby zobaczyć opcje profilu">
                             
-                            <!-- Zdjęcie profilowe - pokazuje się tylko gdy jest dostępne -->
-                            <Border CornerRadius="32" 
-                                    Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}}">
-                                <Border.Background>
-                                    <ImageBrush ImageSource="{Binding UserProfilePicture}" Stretch="UniformToFill"/>
-                                </Border.Background>
-                            </Border>
-                        </Grid>
+                            <Button.Content>
+                                <Grid Width="64" Height="64">
+                                    <!-- Domyślna ikona placeholdera -->
+                                    <materialDesign:PackIcon Kind="AccountCircle" 
+                                                           Width="64" Height="64"
+                                                           Foreground="White"
+                                                           Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                                    
+                                    <!-- Zdjęcie profilowe -->
+                                    <Border CornerRadius="32" 
+                                            Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding UserProfilePicture}" Stretch="UniformToFill"/>
+                                        </Border.Background>
+                                    </Border>
+                                    
+                                    <!-- Hover overlay -->
+                                    <Border CornerRadius="32"
+                                            Background="#40000000"
+                                            Opacity="0"
+                                            x:Name="HoverOverlay">
+                                        <materialDesign:PackIcon Kind="ChevronDown" 
+                                                               Width="20" Height="20"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                        <Border.Triggers>
+                                            <EventTrigger RoutedEvent="MouseEnter">
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                       To="1" Duration="0:0:0.2"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                            <EventTrigger RoutedEvent="MouseLeave">
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                       To="0" Duration="0:0:0.2"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Border.Triggers>
+                                    </Border>
+                                </Grid>
+                            </Button.Content>
+                            
+                            <!-- Dropdown Menu -->
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="UserProfileContextMenu"
+                                           Background="#FF1E1E1E"
+                                           BorderBrush="#FF32505F"
+                                           BorderThickness="1"
+                                           Padding="8"
+                                           HasDropShadow="True">
+                                    <ContextMenu.Resources>
+                                        <!-- Custom Style for Menu Items -->
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Padding" Value="12,6"/>
+                                            <Setter Property="Margin" Value="0,1"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsHighlighted" Value="True">
+                                                    <Setter Property="Background" Value="#FF2D2D30"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                        
+                                        <!-- Custom Style for Header MenuItem (Name) -->
+                                        <Style x:Key="HeaderMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Padding" Value="12,6"/>
+                                            <Setter Property="Margin" Value="0,1"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="FontSize" Value="13"/>
+                                        </Style>
+                                        
+                                        <!-- Custom Style for Info MenuItem -->
+                                        <Style x:Key="InfoMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Padding" Value="12,6"/>
+                                            <Setter Property="Margin" Value="0,1"/>
+                                            <Setter Property="Foreground" Value="#FFB0B0B0"/>
+                                            <Setter Property="FontSize" Value="12"/>
+                                        </Style>
+                                        
+                                        <!-- Custom Style for Separators -->
+                                        <Style TargetType="Separator">
+                                            <Setter Property="Background" Value="#FF32505F"/>
+                                            <Setter Property="Height" Value="1"/>
+                                            <Setter Property="Margin" Value="8,4"/>
+                                        </Style>
+                                    </ContextMenu.Resources>
+                                    
+                                    <ContextMenu.Template>
+                                        <ControlTemplate TargetType="ContextMenu">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="8"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <StackPanel IsItemsHost="True"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </ContextMenu.Template>
+                                    
+                                    <!-- Profile Info Header -->
+                                    <MenuItem Header="{Binding UserDisplayName}" 
+                                              IsEnabled="False"
+                                              Style="{StaticResource HeaderMenuItemStyle}">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="Account" 
+                                                                   Foreground="White"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <Separator/>
+                                    
+                                    <!-- Quick Token Status -->
+                                    <MenuItem Header="{Binding SecuritySummary, FallbackValue='🔐 Ładowanie...'}" 
+                                              IsEnabled="False"
+                                              Style="{StaticResource InfoMenuItemStyle}">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="ShieldCheck" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <!-- Token Expiry -->
+                                    <MenuItem Header="{Binding TokenExpiresOn, StringFormat='⏰ Token wygasa: {0:HH:mm}', FallbackValue='⏰ Sprawdzanie...'}" 
+                                              IsEnabled="False"
+                                              Style="{StaticResource InfoMenuItemStyle}"
+                                              Visibility="{Binding TokenExpiresOn, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="TimerOutline" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <Separator/>
+                                    
+                                    <!-- View Profile -->
+                                    <MenuItem Header="Pokaż profil" 
+                                              Command="{Binding ViewProfileCommand}"
+                                              Foreground="#FFB0B0B0">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="AccountBox" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <!-- Refresh Profile -->
+                                    <MenuItem Header="Odśwież profil" 
+                                              Command="{Binding RefreshProfileCommand}"
+                                              Foreground="#FFB0B0B0">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="Refresh" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <!-- Clear Token Cache -->
+                                    <MenuItem Header="Wyczyść cache tokenów" 
+                                              Command="{Binding ClearTokenCacheCommand}"
+                                              Foreground="#FFB0B0B0">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="DatabaseOff" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <Separator/>
+                                    
+                                    <!-- Account Settings -->
+                                    <MenuItem Header="Ustawienia konta" 
+                                              Command="{Binding NavigateToSettingsCommand}"
+                                              Foreground="#FFB0B0B0">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="CogOutline" 
+                                                                   Foreground="#FFB0B0B0"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    
+                                    <Separator/>
+                                    
+                                    <!-- Logout - highlighted -->
+                                    <MenuItem Header="Wyloguj się" 
+                                              Command="{Binding LogoutCommand}"
+                                              Foreground="#FFFF5722">
+                                        <MenuItem.Icon>
+                                            <materialDesign:PackIcon Kind="ExitToApp" 
+                                                                   Foreground="#FFFF5722"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
                         
                         <!-- Nazwa użytkownika -->
                         <TextBlock Text="{Binding UserDisplayName}"
@@ -256,24 +456,59 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Separator -->
-                        <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
-                                 Margin="16,8"/>
 
-                        <!-- Wyloguj -->
-                        <Button Command="{Binding LogoutCommand}"
-                                Style="{StaticResource NavigationMenuButton}"
-                                Foreground="{StaticResource AccentRed}">
-                            <StackPanel Orientation="Horizontal">
-                                <materialDesign:PackIcon Kind="Logout" 
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,0,16,0"/>
-                                <TextBlock Text="Wyloguj" 
-                                         VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
                     </StackPanel>
                 </ScrollViewer>
+
+                <!-- Token Status Panel (na dole) -->
+                <Border DockPanel.Dock="Bottom" 
+                        Background="{DynamicResource MaterialDesignDarkBackground}"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}"
+                        BorderThickness="0,1,0,0"
+                        Padding="16,12">
+                    <StackPanel>
+                        <!-- Token Status Header -->
+                        <TextBlock Text="🔐 Token Status"
+                                 Foreground="{DynamicResource MaterialDesignBody}"
+                                 FontWeight="SemiBold"
+                                 FontSize="12"
+                                 Margin="0,0,0,8"/>
+                        
+                        <!-- Security Summary -->
+                        <TextBlock Text="{Binding SecuritySummary}"
+                                 Foreground="{DynamicResource PrimaryHueMidBrush}"
+                                 FontSize="11"
+                                 TextWrapping="Wrap"
+                                 Margin="0,0,0,4"
+                                 Visibility="{Binding SecuritySummary, Converter={StaticResource NullToVisibilityConverter}}"/>
+                        
+                        <!-- Token Expires -->
+                        <StackPanel Orientation="Horizontal" 
+                                    Margin="0,0,0,4"
+                                    Visibility="{Binding TokenExpiresOn, Converter={StaticResource NullToVisibilityConverter}}">
+                            <materialDesign:PackIcon Kind="Timer" 
+                                                   Width="12" Height="12"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                   Margin="0,0,4,0"
+                                                   VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding TokenExpiresOn, StringFormat='Wygasa: {0:HH:mm}'}"
+                                     Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                     FontSize="10"/>
+                        </StackPanel>
+                        
+                        <!-- Cache Status -->
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="DatabaseOutline" 
+                                                   Width="12" Height="12"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                   Margin="0,0,4,0"
+                                                   VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding TokenCacheStatus}"
+                                     Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                     FontSize="10"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </DockPanel>
         </Border>
 

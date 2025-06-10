@@ -22,10 +22,24 @@ namespace TeamsManager.UI.Views.Shell
             
             DataContext = _viewModel;
             
+            // Dodaj obsługę kliknięcia na przycisk profilu
+            UserProfileButton.Click += UserProfileButton_Click;
+            
             // Sprawdź auto-login po załadowaniu okna
             Loaded += async (s, e) => await CheckAutoLoginAsync();
             
             _logger.LogDebug("MainShellWindow utworzone pomyślnie");
+        }
+
+        private void UserProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Otwórz context menu przy przycisku
+            var button = sender as System.Windows.Controls.Button;
+            if (button?.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
         }
 
         protected override void OnContentRendered(EventArgs e)

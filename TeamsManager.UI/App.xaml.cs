@@ -90,6 +90,9 @@ namespace TeamsManager.UI
             // Aktualizacja rejestracji MsalAuthService - teraz z dependencies
             services.AddSingleton<IMsalAuthService, MsalAuthService>();
             
+            // Conditional Access Analyzer
+            services.AddScoped<ConditionalAccessAnalyzer>();
+            
             // GraphUserProfileService jest ju� zarejestrowany jako Scoped z Etapu 2
             services.AddScoped<IGraphUserProfileService, GraphUserProfileService>();
             

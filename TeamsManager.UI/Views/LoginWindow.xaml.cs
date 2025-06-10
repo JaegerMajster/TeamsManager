@@ -16,12 +16,13 @@ namespace TeamsManager.UI.Views
         public LoginWindow(
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
-            ILogger<LoginViewModel> logger)
+            ILogger<LoginViewModel> logger,
+            Services.ConditionalAccessAnalyzer conditionalAccessAnalyzer)
         {
             InitializeComponent();
             
             // Utwórz ViewModel z wstrzykniętymi zależnościami
-            _viewModel = new LoginViewModel(msalAuthService, configManager, logger);
+            _viewModel = new LoginViewModel(msalAuthService, configManager, logger, conditionalAccessAnalyzer);
             DataContext = _viewModel;
             
             // Subskrybuj zdarzenia
