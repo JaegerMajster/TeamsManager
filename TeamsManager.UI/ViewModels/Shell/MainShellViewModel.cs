@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
@@ -12,6 +13,7 @@ using TeamsManager.UI.Views;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Views.Dashboard;
 using TeamsManager.UI.ViewModels.Dashboard;
+using TeamsManager.UI.Services;
 
 namespace TeamsManager.UI.ViewModels.Shell
 {
@@ -21,24 +23,31 @@ namespace TeamsManager.UI.ViewModels.Shell
         private readonly ICurrentUserService _currentUserService;
         private readonly IMsalAuthService _msalAuthService;
         private readonly ConfigurationManager _configManager;
+        private readonly IGraphUserProfileService _graphUserProfileService;
         private readonly ILogger<MainShellViewModel> _logger;
 
         private object? _currentView;
         private string _currentViewTitle = "Dashboard";
         private string _userDisplayName = "Użytkownik";
         private string _userEmail = string.Empty;
+        private string _userJobTitle = string.Empty;
+        private string _userOfficeLocation = string.Empty;
+        private BitmapImage? _userProfilePicture;
+        private bool _isLoadingProfile = false;
 
         public MainShellViewModel(
             IServiceProvider serviceProvider,
             ICurrentUserService currentUserService,
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
+            IGraphUserProfileService graphUserProfileService,
             ILogger<MainShellViewModel> logger)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
             _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
+            _graphUserProfileService = graphUserProfileService ?? throw new ArgumentNullException(nameof(graphUserProfileService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             InitializeCommands();
@@ -67,8 +76,6 @@ namespace TeamsManager.UI.ViewModels.Shell
             }
         }
 
-
-
         public string UserDisplayName
         {
             get => _userDisplayName;
@@ -85,6 +92,46 @@ namespace TeamsManager.UI.ViewModels.Shell
             set
             {
                 _userEmail = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string UserJobTitle
+        {
+            get => _userJobTitle;
+            set
+            {
+                _userJobTitle = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string UserOfficeLocation
+        {
+            get => _userOfficeLocation;
+            set
+            {
+                _userOfficeLocation = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public BitmapImage? UserProfilePicture
+        {
+            get => _userProfilePicture;
+            set
+            {
+                _userProfilePicture = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsLoadingProfile
+        {
+            get => _isLoadingProfile;
+            set
+            {
+                _isLoadingProfile = value;
                 OnPropertyChanged();
             }
         }
@@ -126,13 +173,85 @@ namespace TeamsManager.UI.ViewModels.Shell
                 UserEmail = _currentUserService.GetCurrentUserUpn() ?? "Nie zalogowano";
                 UserDisplayName = UserEmail.Contains("@") ? UserEmail.Split('@')[0] : UserEmail;
                 
-                _logger.LogDebug("Załadowano informacje o użytkowniku: {DisplayName} ({Email})", UserDisplayName, UserEmail);
+                _logger.LogDebug("Załadowano podstawowe informacje o użytkowniku: {DisplayName} ({Email})", UserDisplayName, UserEmail);
+                
+                // Pobierz szczegółowy profil z Microsoft Graph
+                _ = LoadDetailedUserProfileAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas ładowania informacji o użytkowniku");
                 UserDisplayName = "Użytkownik";
                 UserEmail = "Nie zalogowano";
+            }
+        }
+
+        /// <summary>
+        /// Ładuje szczegółowe informacje o użytkowniku z Microsoft Graph
+        /// </summary>
+        public async Task LoadDetailedUserProfileAsync()
+        {
+            if (IsLoadingProfile) return;
+
+            IsLoadingProfile = true;
+            
+            try
+            {
+                _logger.LogInformation("Pobieranie szczegółowego profilu użytkownika z Microsoft Graph...");
+                
+                // Pobierz token dostępu
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken == null)
+                {
+                    _logger.LogWarning("Brak tokenu dostępu - nie można pobrać profilu z Graph");
+                    return;
+                }
+
+                // Pobierz profil użytkownika
+                var userProfile = await _graphUserProfileService.GetUserProfileAsync(authResult.AccessToken);
+                if (userProfile != null)
+                {
+                    // Aktualizuj dane użytkownika
+                    if (!string.IsNullOrEmpty(userProfile.DisplayName))
+                    {
+                        UserDisplayName = userProfile.DisplayName;
+                    }
+                    
+                    if (!string.IsNullOrEmpty(userProfile.UserPrincipalName))
+                    {
+                        UserEmail = userProfile.UserPrincipalName;
+                    }
+                    else if (!string.IsNullOrEmpty(userProfile.Mail))
+                    {
+                        UserEmail = userProfile.Mail;
+                    }
+
+                    UserJobTitle = userProfile.JobTitle ?? string.Empty;
+                    UserOfficeLocation = userProfile.OfficeLocation ?? string.Empty;
+
+                    _logger.LogInformation("Załadowano profil użytkownika: {DisplayName}, Stanowisko: {JobTitle}, Lokalizacja: {OfficeLocation}", 
+                        UserDisplayName, UserJobTitle, UserOfficeLocation);
+                }
+
+                // Pobierz zdjęcie profilowe
+                var profilePicture = await _graphUserProfileService.GetUserPhotoAsync(authResult.AccessToken);
+                if (profilePicture != null)
+                {
+                    UserProfilePicture = profilePicture;
+                    _logger.LogDebug("Załadowano zdjęcie profilowe użytkownika");
+                }
+                else
+                {
+                    _logger.LogDebug("Brak zdjęcia profilowego użytkownika lub błąd podczas pobierania");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania szczegółowego profilu użytkownika");
+            }
+            finally
+            {
+                IsLoadingProfile = false;
             }
         }
 
@@ -153,6 +272,7 @@ namespace TeamsManager.UI.ViewModels.Shell
                         if (authResult != null && !string.IsNullOrEmpty(authResult.AccessToken))
                         {
                             LoadUserInfo();
+                            await LoadDetailedUserProfileAsync();
                             return true;
                         }
                     }
@@ -414,6 +534,9 @@ namespace TeamsManager.UI.ViewModels.Shell
                 // Zresetuj informacje o użytkowniku
                 UserDisplayName = "Nie zalogowano";
                 UserEmail = string.Empty;
+                UserJobTitle = string.Empty;
+                UserOfficeLocation = string.Empty;
+                UserProfilePicture = null;
                 
                 // Pokaż okno logowania
                 var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
@@ -434,8 +557,6 @@ namespace TeamsManager.UI.ViewModels.Shell
                 _logger.LogError(ex, "Błąd podczas wylogowywania");
             }
         }
-
-
 
         public event PropertyChangedEventHandler? PropertyChanged;
 

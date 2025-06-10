@@ -53,20 +53,62 @@
                         Background="{DynamicResource PrimaryHueMidBrush}"
                         Padding="16">
                     <StackPanel>
-                        <materialDesign:PackIcon Kind="AccountCircle" 
-                                               Width="64" Height="64"
-                                               HorizontalAlignment="Center"
-                                               Foreground="White"/>
+                        <!-- Zdjęcie profilowe lub ikona -->
+                        <Grid Width="64" Height="64" HorizontalAlignment="Center">
+                            <!-- Domyślna ikona placeholdera - pokazuje się gdy brak zdjęcia lub użytkownik niezalogowany -->
+                            <materialDesign:PackIcon Kind="AccountCircle" 
+                                                   Width="64" Height="64"
+                                                   Foreground="White"
+                                                   Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                            
+                            <!-- Zdjęcie profilowe - pokazuje się tylko gdy jest dostępne -->
+                            <Border CornerRadius="32" 
+                                    Visibility="{Binding UserProfilePicture, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding UserProfilePicture}" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
+                        
+                        <!-- Nazwa użytkownika -->
                         <TextBlock Text="{Binding UserDisplayName}"
                                  HorizontalAlignment="Center"
                                  Margin="0,8,0,0"
                                  Foreground="White"
                                  Style="{StaticResource MaterialDesignSubtitle1TextBlock}"/>
+                        
+                        <!-- Email -->
                         <TextBlock Text="{Binding UserEmail}"
                                  HorizontalAlignment="Center"
                                  Foreground="White"
                                  Opacity="0.8"
                                  Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                        
+                        <!-- Stanowisko -->
+                        <TextBlock Text="{Binding UserJobTitle}"
+                                 HorizontalAlignment="Center"
+                                 Foreground="White"
+                                 Opacity="0.7"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 Visibility="{Binding UserJobTitle, Converter={StaticResource NullToVisibilityConverter}}"
+                                 Margin="0,2,0,0"/>
+                        
+                        <!-- Lokalizacja biura -->
+                        <TextBlock Text="{Binding UserOfficeLocation}"
+                                 HorizontalAlignment="Center"
+                                 Foreground="White"
+                                 Opacity="0.7"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 Visibility="{Binding UserOfficeLocation, Converter={StaticResource NullToVisibilityConverter}}"
+                                 Margin="0,2,0,0"/>
+                        
+                        <!-- Wskaźnik ładowania profilu -->
+                        <ProgressBar Style="{StaticResource MaterialDesignLinearProgressBar}"
+                                   IsIndeterminate="True"
+                                   Height="4"
+                                   Margin="0,8,0,0"
+                                   Foreground="White"
+                                   Visibility="{Binding IsLoadingProfile, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                     </StackPanel>
                 </Border>
 

@@ -59,6 +59,9 @@ namespace TeamsManager.UI.Views.Shell
                 
                 // Odśwież informacje o użytkowniku
                 _viewModel.LoadUserInfo();
+                
+                // Załaduj szczegółowy profil z Microsoft Graph
+                _ = _viewModel.LoadDetailedUserProfileAsync();
             }
             else
             {
