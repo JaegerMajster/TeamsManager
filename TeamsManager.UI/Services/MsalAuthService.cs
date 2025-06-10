@@ -11,6 +11,7 @@ using TeamsManager.UI.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Models.Configuration;
+using Microsoft.Identity.Client.Broker;
 
 namespace TeamsManager.UI.Services
 {
@@ -47,12 +48,12 @@ public class AzureAdUiConfig
 
             var config = _configProvider.GetConfiguration();
             
-            // Walidacja - zachowaj obecn� logik�
+            // Walidacja - zachowaj obecną logikę
             if (!config.IsValid())
             {
                 _logger.LogError("MSAL configuration is invalid");
                 HandleMissingConfiguration(
-                    "Kluczowe ustawienia Azure AD (ClientId, TenantId, Scopes) nie zosta�y poprawnie za�adowane dla MSAL.");
+                    "Kluczowe ustawienia Azure AD (ClientId, TenantId, Scopes) nie zostały poprawnie załadowane dla MSAL.");
                 _pca = null;
                 _scopes = Array.Empty<string>();
                 return;
@@ -60,14 +61,25 @@ public class AzureAdUiConfig
 
             _scopes = config.Scopes;
             
-            // Debug: Wy�wietl scopes
+            // Debug: Wyświetl scopes
             _logger.LogDebug("MSAL Config (UI): Loaded Scopes: [{Scopes}]", string.Join(", ", _scopes));
 
-            // Budowanie PCA - bez zmian w logice
+            // Budowanie PCA z WAM support
             var pcaBuilder = PublicClientApplicationBuilder
                 .Create(config.AzureAd.ClientId!)
                 .WithAuthority($"{config.AzureAd.Instance?.TrimEnd('/')}/{config.AzureAd.TenantId}/v2.0");
 
+            // Konfiguracja WAM Broker
+            BrokerOptions brokerOptions = new BrokerOptions(BrokerOptions.OperatingSystems.Windows)
+            {
+                Title = "TeamsManager",
+                ListOperatingSystemAccounts = true // Pokazuj konta Windows w account picker
+            };
+            
+            pcaBuilder.WithBroker(brokerOptions);
+            _logger.LogDebug("MSAL: WAM Broker enabled with title 'TeamsManager'");
+
+            // Redirect URI - dla WAM potrzebujemy specjalny format
             if (!string.IsNullOrWhiteSpace(config.AzureAd.RedirectUri))
             {
                 pcaBuilder.WithRedirectUri(config.AzureAd.RedirectUri);
@@ -75,11 +87,38 @@ public class AzureAdUiConfig
             }
             else
             {
-                pcaBuilder.WithDefaultRedirectUri();
-                _logger.LogDebug("Using DefaultRedirectUri");
+                // Dla WAM dodajemy specjalny redirect URI
+                var wamRedirectUri = $"ms-appx-web://microsoft.aad.brokerplugin/{config.AzureAd.ClientId}";
+                pcaBuilder.WithRedirectUri(wamRedirectUri);
+                _logger.LogDebug("Using WAM RedirectUri: {RedirectUri}", wamRedirectUri);
             }
 
+            // Parent window handle będzie ustawiony przy każdym wywołaniu
+            pcaBuilder.WithParentActivityOrWindow(() => GetMainWindowHandle());
+
             _pca = pcaBuilder.Build();
+            _logger.LogInformation("MSAL initialized with WAM support");
+        }
+
+        /// <summary>
+        /// Pobiera handle głównego okna aplikacji
+        /// </summary>
+        private IntPtr GetMainWindowHandle()
+        {
+            try
+            {
+                if (System.Windows.Application.Current?.MainWindow != null)
+                {
+                    var helper = new WindowInteropHelper(System.Windows.Application.Current.MainWindow);
+                    return helper.Handle;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cannot get MainWindow handle, using IntPtr.Zero");
+            }
+            
+            return IntPtr.Zero;
         }
 
         private void HandleMissingConfiguration(string message)
@@ -117,52 +156,71 @@ public class AzureAdUiConfig
         if (window == null)
             throw new ArgumentNullException(nameof(window));
             
-        if (_pca == null) // Sprawd�, czy _pca zosta�o poprawnie zainicjowane
+        if (_pca == null) // Sprawdź, czy _pca zostało poprawnie zainicjowane
         {
-            HandleMissingConfiguration("MSAL nie zosta� poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemo�liwe.");
+            HandleMissingConfiguration("MSAL nie został poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemożliwe.");
             return null;
         }
 
         AuthenticationResult? authResult = null;
-        var accounts = await _pca.GetAccountsAsync();
-        IAccount? firstAccount = accounts.FirstOrDefault();
-
+        
         try
         {
-            authResult = await _pca.AcquireTokenSilent(_scopes, firstAccount).ExecuteAsync();
-            System.Diagnostics.Debug.WriteLine("MSAL: Token Acquired Silently.");
+            // Najpierw próbuj SSO z istniejącymi kontami
+            var accounts = await _pca.GetAccountsAsync();
+            IAccount? accountToUse = accounts.FirstOrDefault();
+            
+            // Jeśli nie ma cached accounts, spróbuj z Windows OS account
+            if (accountToUse == null)
+            {
+                accountToUse = PublicClientApplication.OperatingSystemAccount;
+                _logger.LogDebug("MSAL: No cached accounts, trying Windows OS account for SSO");
+            }
+            else
+            {
+                _logger.LogDebug("MSAL: Found cached account: {Username}", accountToUse.Username);
+            }
+
+            // Próba silent authentication (SSO)
+            authResult = await _pca.AcquireTokenSilent(_scopes, accountToUse).ExecuteAsync();
+            _logger.LogInformation("MSAL: Token acquired silently via SSO for user: {Username}", authResult.Account?.Username);
         }
-        catch (MsalUiRequiredException)
+        catch (MsalUiRequiredException ex)
         {
-            System.Diagnostics.Debug.WriteLine("MSAL: UI required for auth. Acquiring token interactively.");
+            _logger.LogDebug("MSAL: Silent auth failed, interactive authentication required. Reason: {Reason}", ex.ErrorCode);
+            
             try
             {
+                // Fallback do interactive authentication z WAM - WYMUŚ wybór konta
                 authResult = await _pca.AcquireTokenInteractive(_scopes)
-                                       .WithAccount(firstAccount)
+                                       .WithPrompt(Prompt.ForceLogin) // WYMUŚ pełne logowanie (zmiana z SelectAccount)
                                        .WithParentActivityOrWindow(new WindowInteropHelper(window).Handle)
                                        .ExecuteAsync();
-                System.Diagnostics.Debug.WriteLine("MSAL: Token Acquired Interactively.");
+                                       
+                _logger.LogInformation("MSAL: Token acquired interactively via WAM for user: {Username}", authResult.Account?.Username);
             }
             catch (MsalException msalEx)
             {
-                System.Diagnostics.Debug.WriteLine($"MSAL Error Acquiring Token Interactively: {msalEx}");
-                MessageBox.Show($"B��d logowania MSAL: {msalEx.Message}", "B��d Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
+                _logger.LogError(msalEx, "MSAL Error during interactive authentication: {ErrorCode}", msalEx.ErrorCode);
+                MessageBox.Show($"Błąd logowania MSAL: {msalEx.Message}\n\nKod błędu: {msalEx.ErrorCode}", 
+                               "Błąd Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
                 return null;
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"MSAL Error Acquiring Token Silently: {ex}");
-            MessageBox.Show($"B��d MSAL: {ex.Message}", "B��d Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
+            _logger.LogError(ex, "MSAL: Unexpected error during authentication");
+            MessageBox.Show($"Nieoczekiwany błąd MSAL: {ex.Message}", "Błąd Logowania", MessageBoxButton.OK, MessageBoxImage.Error);
             return null;
         }
 
         if (authResult != null)
         {
+            _logger.LogDebug("MSAL: Authentication successful - User: {Username}, Tenant: {TenantId}", 
+                           authResult.Account?.Username, authResult.TenantId);
             System.Diagnostics.Debug.WriteLine($"MSAL Access Token (fragment): {authResult.AccessToken?.Substring(0, Math.Min(authResult.AccessToken.Length, 20))}...");
-            System.Diagnostics.Debug.WriteLine($"MSAL User UPN: {authResult.Account?.Username}");
-            System.Diagnostics.Debug.WriteLine($"MSAL Tenant ID from Token: {authResult.TenantId}");
         }
+        
         return authResult;
     }
 
@@ -173,11 +231,16 @@ public class AzureAdUiConfig
             System.Diagnostics.Debug.WriteLine("MSAL SignOut: PCA not properly initialized.");
             return;
         }
+        
+        // Wyczyść wszystkie cached accounts
         var accounts = await _pca.GetAccountsAsync();
         foreach (var account in accounts)
         {
             await _pca.RemoveAsync(account);
+            _logger.LogDebug("MSAL: Removed cached account: {Username}", account.Username);
         }
+        
+        _logger.LogInformation("MSAL: All accounts signed out and cache cleared");
         System.Diagnostics.Debug.WriteLine("MSAL: User signed out.");
     }
 
@@ -261,16 +324,17 @@ public class AzureAdUiConfig
         try
         {
             var accounts = await _pca.GetAccountsAsync();
-            IAccount? firstAccount = accounts.FirstOrDefault();
+            IAccount? accountToUse = accounts.FirstOrDefault();
 
-            if (firstAccount == null)
+            // Jeśli nie ma cached accounts, spróbuj z Windows OS account (SSO)
+            if (accountToUse == null)
             {
-                _logger.LogDebug("MSAL AcquireTokenSilent: No cached account found");
-                return null;
+                accountToUse = PublicClientApplication.OperatingSystemAccount;
+                _logger.LogDebug("MSAL: No cached accounts, trying Windows OS account for SSO");
             }
 
-            // Spr�buj pobra� token z cache
-            var result = await _pca.AcquireTokenSilent(_scopes, firstAccount).ExecuteAsync();
+            // Spróbuj pobrać token z cache lub SSO
+            var result = await _pca.AcquireTokenSilent(_scopes, accountToUse).ExecuteAsync();
             
             _logger.LogDebug("MSAL: Token acquired silently for user: {Username}", result.Account?.Username);
             return result;

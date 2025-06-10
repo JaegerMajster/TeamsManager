@@ -6,7 +6,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="TeamsManager - Logowanie"
-        Height="550" Width="400"
+        Height="600" Width="400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -125,19 +125,38 @@
                     </Grid>
                 </Border>
 
-                <!-- Login options -->
-                <StackPanel Grid.Row="4" Margin="0,0,0,20">
-                    <CheckBox IsChecked="{Binding RememberMe}"
-                            Foreground="White"
-                            Margin="0,0,0,10">
-                        <TextBlock Text="Zapamiętaj mnie" FontSize="14"/>
-                    </CheckBox>
-                    
-                    <CheckBox IsChecked="{Binding AutoLogin}"
-                            Foreground="White">
-                        <TextBlock Text="Loguj automatycznie przy starcie" FontSize="14"/>
-                    </CheckBox>
-                </StackPanel>
+                <!-- WAM Info -->
+                <Border Grid.Row="4" 
+                        Background="#FF2A4A54" 
+                        CornerRadius="5" 
+                        Padding="15"
+                        Margin="0,0,0,20">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <materialDesign:PackIcon Kind="ShieldCheck" 
+                                                   Foreground="#FF4CAF50"
+                                                   Width="18" Height="18"
+                                                   VerticalAlignment="Top"
+                                                   Margin="0,1,8,0"/>
+                            <TextBlock Text="Bezpieczne logowanie przez Windows" 
+                                     FontSize="14" 
+                                     FontWeight="Medium"
+                                     Foreground="White"
+                                     TextWrapping="Wrap"/>
+                        </StackPanel>
+                        
+                        <TextBlock FontSize="12"
+                                 Foreground="#FFB0B0B0"
+                                 TextWrapping="Wrap"
+                                 LineHeight="16">
+                            <Run Text="• Automatyczne logowanie z kontem Windows"/>
+                            <LineBreak/>
+                            <Run Text="• Obsługa Windows Hello (biometria)"/>
+                            <LineBreak/>
+                            <Run Text="• Bezpieczne przechowywanie tokenów"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
 
                 <!-- Status message -->
                 <TextBlock Grid.Row="5" 

@@ -19,8 +19,7 @@ namespace TeamsManager.UI.ViewModels
         private readonly ILogger<LoginViewModel> _logger;
         
         private bool _isLoading;
-        private bool _rememberMe;
-        private bool _autoLogin;
+        // Usunięte checkboxy - WAM automatycznie zarządza tokenami
         private string? _statusMessage;
         private string? _userEmail;
         private bool _canLogin = true;
@@ -56,37 +55,7 @@ namespace TeamsManager.UI.ViewModels
             }
         }
 
-        public bool RememberMe
-        {
-            get => _rememberMe;
-            set
-            {
-                _rememberMe = value;
-                OnPropertyChanged();
-                
-                // Jeśli użytkownik odznacza "Zapamiętaj mnie", odznacz też "Auto-login"
-                if (!value)
-                {
-                    AutoLogin = false;
-                }
-            }
-        }
-
-        public bool AutoLogin
-        {
-            get => _autoLogin;
-            set
-            {
-                _autoLogin = value;
-                OnPropertyChanged();
-                
-                // Jeśli użytkownik zaznacza "Auto-login", zaznacz też "Zapamiętaj mnie"
-                if (value)
-                {
-                    RememberMe = true;
-                }
-            }
-        }
+        // Usunięte właściwości checkboxów - WAM automatycznie zarządza stanem logowania
 
         public string? StatusMessage
         {
@@ -136,8 +105,6 @@ namespace TeamsManager.UI.ViewModels
                 var settings = await _configManager.LoadLoginSettingsAsync();
                 if (settings != null)
                 {
-                    RememberMe = settings.RememberMe;
-                    AutoLogin = settings.AutoLogin;
                     UserEmail = settings.LastUserEmail;
                     
                     if (!string.IsNullOrEmpty(UserEmail))
@@ -173,25 +140,17 @@ namespace TeamsManager.UI.ViewModels
                     _logger.LogInformation("Pomyślne logowanie użytkownika: {UserEmail}", 
                         authResult.Account?.Username);
                     
-                    // Zapisz ustawienia jeśli użytkownik chce być zapamiętany
-                    if (RememberMe)
+                    // Zapisz informację o ostatnim logowaniu (WAM zarządza tokenami automatycznie)
+                    var settings = new LoginSettings
                     {
-                        var settings = new LoginSettings
-                        {
-                            RememberMe = RememberMe,
-                            AutoLogin = AutoLogin,
-                            LastUserEmail = authResult.Account?.Username,
-                            LastLoginDate = DateTime.Now
-                        };
-                        
-                        await _configManager.SaveLoginSettingsAsync(settings);
-                        _logger.LogDebug("Zapisano ustawienia logowania");
-                    }
-                    else
-                    {
-                        // Wyczyść zapisane ustawienia
-                        await _configManager.ClearLoginSettingsAsync();
-                    }
+                        RememberMe = true, // WAM automatycznie "pamięta"
+                        AutoLogin = true,  // WAM automatycznie obsługuje SSO
+                        LastUserEmail = authResult.Account?.Username,
+                        LastLoginDate = DateTime.Now
+                    };
+                    
+                    await _configManager.SaveLoginSettingsAsync(settings);
+                    _logger.LogDebug("Zapisano informacje o ostatnim logowaniu");
                     
                     StatusMessage = "Logowanie zakończone pomyślnie!";
                     await Task.Delay(500); // Krótka pauza dla UX
@@ -225,8 +184,6 @@ namespace TeamsManager.UI.ViewModels
             try
             {
                 await _configManager.ClearLoginSettingsAsync();
-                RememberMe = false;
-                AutoLogin = false;
                 UserEmail = null;
                 StatusMessage = "Wyczyszczono zapisane dane";
                 
