@@ -118,10 +118,7 @@
                         
                         <!-- Dashboard -->
                         <Button Command="{Binding NavigateToDashboardCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="ViewDashboard" 
                                                        VerticalAlignment="Center"
@@ -137,10 +134,7 @@
 
                         <!-- Użytkownicy -->
                         <Button Command="{Binding NavigateToUsersCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="AccountMultiple" 
                                                        VerticalAlignment="Center"
@@ -152,10 +146,7 @@
 
                         <!-- Zespoły -->
                         <Button Command="{Binding NavigateToTeamsCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="MicrosoftTeams" 
                                                        VerticalAlignment="Center"
@@ -167,10 +158,7 @@
 
                         <!-- Typy Szkół -->
                         <Button Command="{Binding NavigateToSchoolTypesCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="School" 
                                                        VerticalAlignment="Center"
@@ -182,10 +170,7 @@
 
                         <!-- Lata Szkolne -->
                         <Button Command="{Binding NavigateToSchoolYearsCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="CalendarMultiple" 
                                                        VerticalAlignment="Center"
@@ -197,10 +182,7 @@
 
                         <!-- Przedmioty -->
                         <Button Command="{Binding NavigateToSubjectsCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="BookOpenPageVariant" 
                                                        VerticalAlignment="Center"
@@ -212,10 +194,7 @@
 
                         <!-- Działy -->
                         <Button Command="{Binding NavigateToDepartmentsCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Domain" 
                                                        VerticalAlignment="Center"
@@ -227,10 +206,7 @@
 
                         <!-- Historia Operacji -->
                         <Button Command="{Binding NavigateToOperationHistoryCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="History" 
                                                        VerticalAlignment="Center"
@@ -242,10 +218,7 @@
 
                         <!-- Monitoring Systemu -->
                         <Button Command="{Binding NavigateToMonitoringCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="MonitorDashboard" 
                                                        VerticalAlignment="Center"
@@ -261,10 +234,7 @@
 
                         <!-- Ustawienia -->
                         <Button Command="{Binding NavigateToSettingsCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Settings" 
                                                        VerticalAlignment="Center"
@@ -276,10 +246,7 @@
 
                         <!-- Testy manualne -->
                         <Button Command="{Binding NavigateToManualTestingCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left">
+                                Style="{StaticResource NavigationMenuButton}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="TestTube" 
                                                        VerticalAlignment="Center"
@@ -295,10 +262,7 @@
 
                         <!-- Wyloguj -->
                         <Button Command="{Binding LogoutCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"
-                                Height="48" Margin="8,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
+                                Style="{StaticResource NavigationMenuButton}"
                                 Foreground="{StaticResource AccentRed}">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Logout" 
@@ -320,16 +284,19 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- App Bar -->
+            <!-- App Bar - ciemniejsza belka tytułu -->
             <materialDesign:ColorZone Grid.Row="0"
-                                    Mode="PrimaryMid"
+                                    Mode="PrimaryDark"
                                     Padding="16"
                                     materialDesign:ElevationAssist.Elevation="Dp4">
                 <DockPanel>
-                    <!-- Title -->
+                    <!-- Title - jasny stonowany napis, inna czcionka -->
                     <TextBlock Text="{Binding CurrentViewTitle}"
                              VerticalAlignment="Center"
-                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"/>
+                             Foreground="#FFE8E8E8"
+                             FontFamily="Segoe UI Semibold"
+                             FontSize="22"
+                             FontWeight="SemiBold"/>
 
                     <!-- Right side actions (future use) -->
                     <StackPanel Orientation="Horizontal" 

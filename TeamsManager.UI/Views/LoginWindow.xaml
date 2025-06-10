@@ -13,7 +13,7 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border CornerRadius="10" Background="#FF1E1E1E" BorderBrush="#FF0078D4" BorderThickness="1">
+    <Border CornerRadius="10" Background="#FF1E1E1E" BorderBrush="#FF32505F" BorderThickness="2">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -22,8 +22,9 @@
             </Grid.RowDefinitions>
 
             <!-- Header with drag capability -->
-            <Border Grid.Row="0" Background="#FF0078D4" CornerRadius="10,10,0,0" 
-                    MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <materialDesign:ColorZone Grid.Row="0" Mode="PrimaryDark" 
+                                    CornerRadius="10,10,0,0" 
+                                    MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid Height="40">
                     <TextBlock Text="TeamsManager - Logowanie" 
                                VerticalAlignment="Center" 
@@ -32,17 +33,23 @@
                                FontSize="16" 
                                FontWeight="Medium"/>
                     
-                    <!-- Close button -->
+                    <!-- Close button - No border version -->
                     <Button HorizontalAlignment="Right" 
                             VerticalAlignment="Center"
-                            Margin="0,0,10,0"
-                            Style="{StaticResource MaterialDesignFlatButton}"
+                            Margin="0,0,8,0"
                             Command="{Binding CancelCommand}"
-                            Width="30" Height="30">
-                        <materialDesign:PackIcon Kind="Close" Foreground="White"/>
+                            Width="24" Height="24"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            ToolTip="Zamknij"
+                            Cursor="Hand">
+                        <materialDesign:PackIcon Kind="WindowClose" 
+                                               Foreground="#FF5F7D8C" 
+                                               Width="14" Height="14"/>
                     </Button>
                 </Grid>
-            </Border>
+            </materialDesign:ColorZone>
 
             <!-- Main Content -->
             <Grid Grid.Row="1" Margin="40,20">
@@ -61,7 +68,7 @@
                                        Kind="MicrosoftTeams" 
                                        Width="80" Height="80"
                                        HorizontalAlignment="Center"
-                                       Foreground="{StaticResource AccentBlue}"
+                                       Foreground="#FF4B50BE"
                                        Margin="0,0,0,20"/>
 
                 <!-- Title -->

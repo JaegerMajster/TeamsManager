@@ -2,23 +2,23 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
 
-	<!-- Dodatowe kolory dla gradientów i efektów -->
-	<SolidColorBrush x:Key="AccentBlueLight" Color="#FF42A5F5"/>
-	<SolidColorBrush x:Key="AccentBlueDark" Color="#FF0D47A1"/>
-	<SolidColorBrush x:Key="AccentLime" Color="#FFCDDC39"/>
-	<SolidColorBrush x:Key="AccentLimeLight" Color="#FFE6EE9C"/>
-	<SolidColorBrush x:Key="SuccessGreen" Color="#FF4CAF50"/>
+	<!-- Dodatowe kolory dla gradientów i efektów - stonowane -->
+	<SolidColorBrush x:Key="AccentBlueLight" Color="#FF78909C"/>
+	<SolidColorBrush x:Key="AccentBlueDark" Color="#FF37474F"/>
+	<SolidColorBrush x:Key="AccentLime" Color="#FF90A4AE"/>
+	<SolidColorBrush x:Key="AccentLimeLight" Color="#FFCFD8DC"/>
+	<SolidColorBrush x:Key="SuccessGreen" Color="#FF66BB6A"/>
 	<SolidColorBrush x:Key="WarningOrange" Color="#FFFF9800"/>
 
-	<!-- Gradientowe tła -->
+	<!-- Gradientowe tła - stonowane, nieco ciemniejsze -->
 	<LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,1">
-		<GradientStop Color="#FF0078D4" Offset="0"/>
-		<GradientStop Color="#FF42A5F5" Offset="1"/>
+		<GradientStop Color="#FF455A64" Offset="0"/>
+		<GradientStop Color="#FF607D8B" Offset="1"/>
 	</LinearGradientBrush>
 
 	<LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,0">
-		<GradientStop Color="#FF0078D4" Offset="0"/>
-		<GradientStop Color="#FFCDDC39" Offset="1"/>
+		<GradientStop Color="#FF546E7A" Offset="0"/>
+		<GradientStop Color="#FF90A4AE" Offset="1"/>
 	</LinearGradientBrush>
 
 	<!-- Efekty cienia -->
@@ -264,7 +264,7 @@
 			<Trigger Property="IsMouseOver" Value="True">
 				<Setter Property="Background">
 					<Setter.Value>
-						<SolidColorBrush Color="#FF0078D4" Opacity="0.1"/>
+						<SolidColorBrush Color="#FF546E7A" Opacity="0.1"/>
 					</Setter.Value>
 				</Setter>
 				<Setter Property="BorderBrush" Value="{StaticResource AccentBlueLight}"/>
@@ -340,9 +340,29 @@
 			<Trigger Property="IsMouseOver" Value="True">
 				<Setter Property="Background">
 					<Setter.Value>
-						<SolidColorBrush Color="#FF0078D4" Opacity="0.1"/>
+						<SolidColorBrush Color="#FF546E7A" Opacity="0.1"/>
 					</Setter.Value>
 				</Setter>
+			</Trigger>
+		</Style.Triggers>
+	</Style>
+
+	<!-- Navigation Menu Button Style - delikatnie ciemniejsze napisy -->
+	<Style x:Key="NavigationMenuButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+		<Setter Property="Height" Value="48"/>
+		<Setter Property="Margin" Value="8,2"/>
+		<Setter Property="HorizontalAlignment" Value="Stretch"/>
+		<Setter Property="HorizontalContentAlignment" Value="Left"/>
+		<Setter Property="Foreground" Value="#FFD0D0D0"/>
+		<Setter Property="FontWeight" Value="Medium"/>
+		<Style.Triggers>
+			<Trigger Property="IsMouseOver" Value="True">
+				<Setter Property="Background">
+					<Setter.Value>
+						<SolidColorBrush Color="#FF546E7A" Opacity="0.15"/>
+					</Setter.Value>
+				</Setter>
+				<Setter Property="Foreground" Value="#FFFFFFFF"/>
 			</Trigger>
 		</Style.Triggers>
 	</Style>
@@ -393,7 +413,7 @@
 			<Trigger Property="IsMouseOver" Value="True">
 				<Setter Property="Background">
 					<Setter.Value>
-						<SolidColorBrush Color="#FF0078D4" Opacity="0.1"/>
+						<SolidColorBrush Color="#FF546E7A" Opacity="0.1"/>
 					</Setter.Value>
 				</Setter>
 			</Trigger>
@@ -507,7 +527,7 @@
 			<Trigger Property="IsMouseOver" Value="True">
 				<Setter Property="Background">
 					<Setter.Value>
-						<SolidColorBrush Color="#FF0078D4" Opacity="0.1"/>
+						<SolidColorBrush Color="#FF546E7A" Opacity="0.1"/>
 					</Setter.Value>
 				</Setter>
 			</Trigger>

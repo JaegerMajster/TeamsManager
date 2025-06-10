@@ -19,7 +19,8 @@ Ten dokument opisuje, jak używać nowoczesnych stylów zdefiniowanych w `Styles
     <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries>
             <!-- Material Design 5.2.1 BundledTheme -->
-            <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="Blue" SecondaryColor="Lime" />
+            <!-- Material Design - BlueGrey + Amber (jak ciemny VS Code) -->
+            <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="BlueGrey" SecondaryColor="Amber" />
             <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Defaults.xaml" />
             
             <!-- Dodatkowe kolory -->
