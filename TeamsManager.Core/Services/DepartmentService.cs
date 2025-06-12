@@ -271,11 +271,18 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Dział '{DepartmentName}' pomyślnie przygotowany do zapisu. ID: {DepartmentId}", name, newDepartment.Id);
 
-                _powerShellCacheService.InvalidateAllDepartmentLists();
+                // Zapisz zmiany do bazy danych
+                await _departmentRepository.SaveChangesAsync();
+
+                // Invaliduj cache IMemoryCache
+                _cache.Remove(AllDepartmentsAllCacheKey);
+                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
                 if (!string.IsNullOrEmpty(newDepartment.ParentDepartmentId))
                 {
-                    _powerShellCacheService.InvalidateSubDepartments(newDepartment.ParentDepartmentId);
+                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + newDepartment.ParentDepartmentId);
                 }
+
+                _powerShellCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -457,18 +464,25 @@ namespace TeamsManager.Core.Services
                 _departmentRepository.Update(existingDepartment);
 
                 _powerShellCacheService.InvalidateDepartment(existingDepartment.Id);
-                _powerShellCacheService.InvalidateAllDepartmentLists();
 
+                // Zapisz zmiany do bazy danych
+                await _departmentRepository.SaveChangesAsync();
+
+                // Invaliduj cache IMemoryCache
+                _cache.Remove(AllDepartmentsAllCacheKey);
+                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
+                _cache.Remove(DepartmentByIdCacheKeyPrefix + existingDepartment.Id);
+                
                 if (!string.IsNullOrEmpty(oldParentId))
                 {
-                    _powerShellCacheService.InvalidateSubDepartments(oldParentId);
+                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + oldParentId);
+                }
+                if (!string.IsNullOrEmpty(existingDepartment.ParentDepartmentId))
+                {
+                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + existingDepartment.ParentDepartmentId);
                 }
 
-                if (!string.IsNullOrEmpty(existingDepartment.ParentDepartmentId) && 
-                    existingDepartment.ParentDepartmentId != oldParentId)
-                {
-                    _powerShellCacheService.InvalidateSubDepartments(existingDepartment.ParentDepartmentId);
-                }
+                _powerShellCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -584,6 +598,18 @@ namespace TeamsManager.Core.Services
                 department.MarkAsDeleted(_currentUserService.GetCurrentUserUpn() ?? "system");
                 _departmentRepository.Update(department);
 
+                // Zapisz zmiany do bazy danych
+                await _departmentRepository.SaveChangesAsync();
+
+                // Invaliduj cache IMemoryCache
+                _cache.Remove(AllDepartmentsAllCacheKey);
+                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
+                _cache.Remove(DepartmentByIdCacheKeyPrefix + departmentId);
+                if (!string.IsNullOrEmpty(department.ParentDepartmentId))
+                {
+                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + department.ParentDepartmentId);
+                }
+
                 _powerShellCacheService.InvalidateDepartment(departmentId);
                 _powerShellCacheService.InvalidateAllDepartmentLists();
 
@@ -625,6 +651,15 @@ namespace TeamsManager.Core.Services
         public Task RefreshCacheAsync()
         {
             _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a działów.");
+            
+            // Invaliduj cache IMemoryCache
+            _cache.Remove(AllDepartmentsAllCacheKey);
+            _cache.Remove(AllDepartmentsRootOnlyCacheKey);
+            
+            // Invaliduj wszystkie cache'e dla poszczególnych działów i poddziałów
+            // Niestety IMemoryCache nie ma metody Clear(), więc nie możemy wyczyścić wszystkich kluczy z prefiksem
+            // Ale główne cache'e są już invalidowane powyżej
+            
             _powerShellCacheService.InvalidateAllCache();
             _logger.LogInformation("Cache działów został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;

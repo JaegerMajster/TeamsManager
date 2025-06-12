@@ -160,7 +160,7 @@
                             <TextBox Grid.Row="6"
                                     Margin="0,24,0,0"
                                     Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding Model.Description, UpdateSourceTrigger=PropertyChanged}"
+                                    Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
                                     materialDesign:HintAssist.Hint="Opis działu"
                                     materialDesign:HintAssist.IsFloating="True"
                                     IsEnabled="{Binding CanEditFields}"/>
@@ -175,7 +175,7 @@
                                 
                                 <TextBox Grid.Column="0"
                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding Model.SortOrder, UpdateSourceTrigger=PropertyChanged}"
+                                        Text="{Binding SortOrder, UpdateSourceTrigger=PropertyChanged}"
                                         materialDesign:HintAssist.Hint="Kolejność sortowania"
                                         materialDesign:HintAssist.IsFloating="True"
                                         materialDesign:HintAssist.HelperText="Liczba określająca kolejność wyświetlania"
@@ -276,6 +276,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
                     <!-- Status info -->
@@ -309,7 +310,24 @@
                            Command="{Binding CancelCommand}"
                            Margin="0,0,8,0"/>
                     
+                    <!-- Przycisk Edytuj (tylko w trybie View) -->
                     <Button Grid.Column="2"
+                           Style="{StaticResource SecondaryActionButton}"
+                           Command="{Binding EditCommand}"
+                           MinWidth="120"
+                           Margin="0,0,8,0"
+                           Visibility="{Binding IsViewMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Pencil" 
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="EDYTUJ" 
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <!-- Przycisk Zapisz/Zamknij -->
+                    <Button Grid.Column="3"
                            Style="{StaticResource PrimaryActionButton}"
                            Command="{Binding SaveCommand}"
                            MinWidth="120">

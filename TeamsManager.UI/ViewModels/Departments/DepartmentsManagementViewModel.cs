@@ -150,8 +150,6 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         public async Task LoadDepartmentsAsync(bool forceRefresh = false)
         {
-            if (IsLoading) return;
-
             IsLoading = true;
             ErrorMessage = null;
 
@@ -159,29 +157,49 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 _logger.LogDebug("Loading departments (forceRefresh: {ForceRefresh})", forceRefresh);
 
-                var departments = await _departmentService.GetAllDepartmentsAsync();
+                // Zapisz ID zaznaczonego działu przed odświeżeniem
+                string? selectedDepartmentId = SelectedDepartment?.Id;
+
+                var departments = await _departmentService.GetAllDepartmentsAsync(forceRefresh: forceRefresh);
                 
                 // Build hierarchy
                 var rootDepartments = departments.Where(d => d.IsRootDepartment).OrderBy(d => d.SortOrder).ThenBy(d => d.Name);
                 
-                Departments.Clear();
+                _departments.Clear();
+                
                 foreach (var rootDept in rootDepartments)
                 {
-                    var treeItem = new DepartmentTreeItemViewModel(rootDept);
-                    BuildDepartmentTree(treeItem, departments);
-                    Departments.Add(treeItem);
+                    var rootItem = new DepartmentTreeItemViewModel(rootDept);
+                    BuildDepartmentTree(rootItem, departments);
+                    _departments.Add(rootItem);
                 }
 
+                // Przywróć zaznaczony element, rozwiń ścieżkę do niego i ustaw wizualne zaznaczenie
+                if (!string.IsNullOrEmpty(selectedDepartmentId))
+                {
+                    var selectedItem = FindDepartmentById(selectedDepartmentId);
+                    if (selectedItem != null)
+                    {
+                        ExpandPathToItem(selectedItem);
+                        SelectedDepartment = selectedItem;
+                        UpdateTreeViewSelection(selectedItem);
+                        _logger.LogDebug("Restored selected department: {DepartmentName}", selectedItem.Name);
+                    }
+                }
+
+                // Refresh the view
+                _departmentsView?.Refresh();
+                
+                // Odśwież właściwości liczników
                 OnPropertyChanged(nameof(TotalDepartments));
                 OnPropertyChanged(nameof(ActiveDepartments));
-
-                _logger.LogDebug("Loaded {Count} root departments", Departments.Count);
+                
+                _logger.LogInformation("Loaded {Count} departments", _departments.Count);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error loading departments");
                 ErrorMessage = $"Błąd podczas ładowania działów: {ex.Message}";
-                await ShowErrorDialog("Błąd", ErrorMessage);
             }
             finally
             {
@@ -268,8 +286,24 @@ namespace TeamsManager.UI.ViewModels.Departments
                 var result = dialog.ShowDialog();
                 if (result == true)
                 {
+                    // Pobierz ID nowo utworzonego działu
+                    string? newDepartmentId = viewModel.CreatedDepartmentId;
+                    
                     // Odśwież listę działów po dodaniu
                     await LoadDepartmentsAsync(forceRefresh: true);
+                    
+                    // Automatycznie zaznacz nowo utworzony dział
+                    if (!string.IsNullOrEmpty(newDepartmentId))
+                    {
+                        var newDepartment = FindDepartmentById(newDepartmentId);
+                        if (newDepartment != null)
+                        {
+                            SelectedDepartment = newDepartment;
+                            ExpandPathToItem(newDepartment);
+                            UpdateTreeViewSelection(newDepartment);
+                            _logger.LogDebug("Automatically selected newly created department: {DepartmentId}", newDepartmentId);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -434,6 +468,40 @@ namespace TeamsManager.UI.ViewModels.Departments
             }
         }
 
+        private DepartmentTreeItemViewModel? FindDepartmentById(string id)
+        {
+            foreach (var dept in _departments)
+            {
+                if (dept.Id == id)
+                {
+                    return dept;
+                }
+                var found = FindDepartmentById(id, dept.Children);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        private DepartmentTreeItemViewModel? FindDepartmentById(string id, ObservableCollection<DepartmentTreeItemViewModel> children)
+        {
+            foreach (var dept in children)
+            {
+                if (dept.Id == id)
+                {
+                    return dept;
+                }
+                var found = FindDepartmentById(id, dept.Children);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
         private void ClearSearch()
         {
             SearchText = string.Empty;
@@ -517,6 +585,43 @@ namespace TeamsManager.UI.ViewModels.Departments
             finally
             {
                 IsLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Rozwija ścieżkę do podanego elementu (wszystkich rodziców)
+        /// </summary>
+        private void ExpandPathToItem(DepartmentTreeItemViewModel item)
+        {
+            var current = item.Parent;
+            while (current != null)
+            {
+                current.IsExpanded = true;
+                current = current.Parent;
+            }
+        }
+
+        /// <summary>
+        /// Aktualizuje wizualne zaznaczenie w TreeView - ustawia IsSelected na odpowiednich elementach
+        /// </summary>
+        private void UpdateTreeViewSelection(DepartmentTreeItemViewModel selectedItem)
+        {
+            // Najpierw wyczyść wszystkie zaznaczenia
+            ClearAllSelections(_departments);
+            
+            // Następnie ustaw zaznaczenie na wybranym elemencie
+            selectedItem.IsSelected = true;
+        }
+
+        /// <summary>
+        /// Rekurencyjnie czyści wszystkie zaznaczenia w drzewie
+        /// </summary>
+        private void ClearAllSelections(ObservableCollection<DepartmentTreeItemViewModel> departments)
+        {
+            foreach (var dept in departments)
+            {
+                dept.IsSelected = false;
+                ClearAllSelections(dept.Children);
             }
         }
 

@@ -71,6 +71,12 @@ namespace TeamsManager.Core.Abstractions.Data
         /// <param name="predicate">Predykat określający warunki.</param>
         Task<bool> ExistsAsync(Expression<Func<TEntity, bool>> predicate);
 
+        /// <summary>
+        /// Asynchronicznie zapisuje wszystkie zmiany do bazy danych.
+        /// </summary>
+        /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
+        Task<int> SaveChangesAsync();
+
         // SaveChangesAsync będzie prawdopodobnie w jednostce pracy (Unit of Work) lub bezpośrednio w DbContext,
         // ale czasami dodaje się je do repozytorium, jeśli nie używa się UoW.
         // Na razie pominiemy SaveChangesAsync w generycznym repozytorium,

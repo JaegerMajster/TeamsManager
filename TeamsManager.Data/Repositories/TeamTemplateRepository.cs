@@ -58,7 +58,7 @@ namespace TeamsManager.Data.Repositories
         /// Automatycznie ustawia pola audytu dzięki TeamsManagerDbContext.SaveChangesAsync().
         /// </summary>
         /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
-        public async Task<int> SaveChangesAsync()
+        public new async Task<int> SaveChangesAsync()
         {
             return await _context.SaveChangesAsync();
         }

@@ -40,7 +40,7 @@ namespace TeamsManager.Core.Abstractions.Data
         /// Asynchronicznie zapisuje wszystkie zmiany do bazy danych.
         /// </summary>
         /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
-        Task<int> SaveChangesAsync();
+        new Task<int> SaveChangesAsync();
 
         // Metoda do "budowania" nowego szablonu (czyli jego tworzenia z walidacją)
         // mogłaby być częścią serwisu TeamTemplateService, który używałby tego repozytorium do zapisu.

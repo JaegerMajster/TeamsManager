@@ -52,6 +52,16 @@ namespace TeamsManager.UI.ViewModels.Departments
         private string? _teamsValidationMessage;
         private bool _canDeactivate = true;
 
+        // Kopie robocze danych - nie modyfikują oryginalnego Model do momentu zapisania
+        private string? _workingName;
+        private string? _workingParentDepartmentId;
+        private bool _workingIsActive;
+        private string? _workingDescription;
+        private int? _workingSortOrder;
+
+        // ID nowo utworzonego działu (tylko dla trybu Add)
+        private string? _createdDepartmentId;
+
         public DepartmentEditViewModel(
             IDepartmentService departmentService,
             ILogger<DepartmentEditViewModel> logger,
@@ -69,6 +79,7 @@ namespace TeamsManager.UI.ViewModels.Departments
 
             SaveCommand = new AsyncRelayCommand(SaveAsync);
             CancelCommand = new RelayCommand(Cancel);
+            EditCommand = new RelayCommand(SwitchToEditMode);
 
             // Load available parent departments
             _ = LoadAvailableParentDepartmentsAsync();
@@ -205,9 +216,10 @@ namespace TeamsManager.UI.ViewModels.Departments
         public bool IsAddMode => Mode == DepartmentEditMode.Add;
 
         /// <summary>
-        /// Czy pokazywać informacje o hierarchii (tylko dla istniejących działów)
+        /// Czy pokazać informacje o hierarchii
+        /// Pokazuj tylko w trybie edycji dla działów które mają rodzica (nie są główne)
         /// </summary>
-        public bool ShowHierarchyInfo => !IsAddMode && !string.IsNullOrEmpty(Model?.Id);
+        public bool ShowHierarchyInfo => Mode == DepartmentEditMode.Edit && !string.IsNullOrEmpty(Model?.Id) && !string.IsNullOrEmpty(Model?.ParentDepartmentId);
 
         /// <summary>
         /// Czy można zapisać
@@ -215,9 +227,9 @@ namespace TeamsManager.UI.ViewModels.Departments
         public bool CanSave => !IsLoading && IsEditMode && !string.IsNullOrWhiteSpace(DepartmentName) && !HasCodeConflict && !HasNameConflict && CanEditFields && CanDeactivate;
 
         /// <summary>
-        /// Czy można edytować pola (w trybie dodawania wymaga wyboru działu nadrzędnego)
+        /// Czy można edytować pola
         /// </summary>
-        public bool CanEditFields => IsViewMode || IsEditMode && (Mode != DepartmentEditMode.Add || IsParentDepartmentSelected);
+        public bool CanEditFields => IsEditMode && (Mode != DepartmentEditMode.Add || IsParentDepartmentSelected);
 
         /// <summary>
         /// Czy dział nadrzędny został wybrany (w trybie dodawania)
@@ -310,10 +322,16 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 if (SetProperty(ref _canDeactivate, value))
                 {
+                    OnPropertyChanged(nameof(CanSave));
                     UpdateCommandStates();
                 }
             }
         }
+
+        /// <summary>
+        /// ID nowo utworzonego działu (dostępne tylko po pomyślnym utworzeniu w trybie Add)
+        /// </summary>
+        public string? CreatedDepartmentId => _createdDepartmentId;
 
         /// <summary>
         /// Czy istnieją jakiekolwiek błędy walidacji
@@ -325,12 +343,12 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public string? DepartmentName
         {
-            get => Model?.Name;
+            get => _workingName ?? Model?.Name;
             set
             {
-                if (Model != null && Model.Name != value)
+                if (_workingName != value)
                 {
-                    Model.Name = value ?? string.Empty;
+                    _workingName = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CanSave));
                     _ = GenerateAndValidateCodeAsync();
@@ -344,12 +362,15 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public string? ParentDepartmentId
         {
-            get => Model?.ParentDepartmentId;
+            get => _workingParentDepartmentId ?? Model?.ParentDepartmentId ?? string.Empty; // Zwróć pusty string dla UI jeśli null
             set
             {
-                if (Model != null && Model.ParentDepartmentId != value)
+                // Konwertuj pusty string na null dla bazy danych
+                var normalizedValue = string.IsNullOrEmpty(value) ? null : value;
+                
+                if (_workingParentDepartmentId != normalizedValue)
                 {
-                    Model.ParentDepartmentId = value;
+                    _workingParentDepartmentId = normalizedValue;
                     
                     // Oznacz że użytkownik dokonał wyboru (nawet jeśli wybrał "Brak")
                     if (IsAddMode)
@@ -372,19 +393,20 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public bool DepartmentIsActive
         {
-            get => Model?.IsActive ?? true;
+            get => _workingIsActive != default ? _workingIsActive : (Model?.IsActive ?? true);
             set
             {
-                if (Model != null && Model.IsActive != value)
+                var currentValue = _workingIsActive != default ? _workingIsActive : (Model?.IsActive ?? true);
+                if (currentValue != value)
                 {
                     // Jeśli próbujemy deaktywować dział, sprawdź zespoły
-                    if (!value && Model.IsActive)
+                    if (!value && currentValue)
                     {
                         _ = ValidateTeamsBeforeDeactivationAsync(value);
                     }
                     else
                     {
-                        Model.IsActive = value;
+                        _workingIsActive = value;
                         OnPropertyChanged();
                         OnPropertyChanged(nameof(CanSave));
                         
@@ -400,12 +422,47 @@ namespace TeamsManager.UI.ViewModels.Departments
             }
         }
 
+        /// <summary>
+        /// Opis działu - wrapper używający kopii roboczej
+        /// </summary>
+        public string? Description
+        {
+            get => _workingDescription ?? Model?.Description;
+            set
+            {
+                if (_workingDescription != value)
+                {
+                    _workingDescription = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSave));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Kolejność sortowania - wrapper używający kopii roboczej
+        /// </summary>
+        public int SortOrder
+        {
+            get => _workingSortOrder ?? Model?.SortOrder ?? 0;
+            set
+            {
+                if (_workingSortOrder != value)
+                {
+                    _workingSortOrder = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSave));
+                }
+            }
+        }
+
         #endregion
 
         #region Commands
 
         public ICommand SaveCommand { get; }
         public ICommand CancelCommand { get; }
+        public ICommand EditCommand { get; }
 
         #endregion
 
@@ -416,6 +473,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public void InitializeForAdd(string? parentDepartmentId = null)
         {
+            ResetViewModel();
             Mode = DepartmentEditMode.Add;
             Model = new Department
             {
@@ -426,14 +484,19 @@ namespace TeamsManager.UI.ViewModels.Departments
             ClearMessages();
             StatusMessage = "Wprowadź dane nowego działu";
             
-            // Zresetuj flagę wyboru działu nadrzędnego
+            // Jeśli przekazano parentDepartmentId, oznacz że wybór został dokonany
+            // Jeśli nie, użytkownik będzie musiał wybrać z listy (w tym "Brak")
             _parentDepartmentSelectionMade = !string.IsNullOrEmpty(parentDepartmentId);
             
+            // Jeśli nie ma parentDepartmentId, ustaw domyślnie "Brak" (null)
+            if (string.IsNullOrEmpty(parentDepartmentId))
+            {
+                Model.ParentDepartmentId = null; // null oznacza dział główny
+                _parentDepartmentSelectionMade = true; // Domyślny wybór "Brak"
+            }
+            
             // Powiadom o zmianie właściwości
-            OnPropertyChanged(nameof(CanEditFields));
-            OnPropertyChanged(nameof(IsParentDepartmentSelected));
-            OnPropertyChanged(nameof(DepartmentName));
-            OnPropertyChanged(nameof(ParentDepartmentId));
+            RefreshAllProperties();
             
             // Wygeneruj kod po ustawieniu modelu
             _ = GenerateAndValidateCodeAsync();
@@ -444,15 +507,11 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public async Task InitializeForViewAsync(string departmentId)
         {
+            ResetViewModel();
             Mode = DepartmentEditMode.View;
             await LoadDepartmentAsync(departmentId);
             StatusMessage = "Podgląd danych działu";
-            
-            // Powiadom o zmianie właściwości wrapper
-            OnPropertyChanged(nameof(DepartmentName));
-            OnPropertyChanged(nameof(ParentDepartmentId));
-            OnPropertyChanged(nameof(CanEditFields));
-            OnPropertyChanged(nameof(IsParentDepartmentSelected));
+            RefreshAllProperties();
         }
 
         /// <summary>
@@ -460,15 +519,11 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         public async Task InitializeForEditAsync(string departmentId)
         {
+            ResetViewModel();
             Mode = DepartmentEditMode.Edit;
             await LoadDepartmentAsync(departmentId);
             StatusMessage = "Wprowadź zmiany w danych działu";
-            
-            // Powiadom o zmianie właściwości wrapper
-            OnPropertyChanged(nameof(DepartmentName));
-            OnPropertyChanged(nameof(ParentDepartmentId));
-            OnPropertyChanged(nameof(CanEditFields));
-            OnPropertyChanged(nameof(IsParentDepartmentSelected));
+            RefreshAllProperties();
         }
 
         #endregion
@@ -488,12 +543,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                 if (department != null)
                 {
                     Model = department;
-                    
-                    // Powiadom o zmianie właściwości wrapper
-                    OnPropertyChanged(nameof(DepartmentName));
-                    OnPropertyChanged(nameof(ParentDepartmentId));
-                    OnPropertyChanged(nameof(CanEditFields));
-                    OnPropertyChanged(nameof(IsParentDepartmentSelected));
+                    RefreshAllProperties();
                 }
                 else
                 {
@@ -560,6 +610,9 @@ namespace TeamsManager.UI.ViewModels.Departments
 
             try
             {
+                // Zastosuj zmiany z kopii roboczych do oryginalnego Model przed zapisaniem
+                ApplyWorkingChangesToModel();
+                
                 if (IsAddMode)
                 {
                     var createdDepartment = await _departmentService.CreateDepartmentAsync(
@@ -578,6 +631,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                         
                         _logger.LogInformation("Created new department: {DepartmentName}", Model.Name);
                         StatusMessage = "Dział został pomyślnie utworzony";
+                        _createdDepartmentId = createdDepartment.Id;
                     }
                     else
                     {
@@ -606,9 +660,122 @@ namespace TeamsManager.UI.ViewModels.Departments
             }
         }
 
-        private void Cancel()
+        /// <summary>
+        /// Kopiuje zmiany z kopii roboczych do oryginalnego Model
+        /// </summary>
+        private void ApplyWorkingChangesToModel()
         {
+            if (Model == null) return;
+            
+            // Zastosuj zmiany tylko jeśli zostały wprowadzone
+            if (_workingName != null)
+            {
+                Model.Name = _workingName;
+            }
+            
+            if (_workingParentDepartmentId != null)
+            {
+                Model.ParentDepartmentId = _workingParentDepartmentId;
+            }
+            
+            if (_workingIsActive != default)
+            {
+                Model.IsActive = _workingIsActive;
+            }
+            
+            if (_workingDescription != null)
+            {
+                Model.Description = _workingDescription;
+            }
+            
+            if (_workingSortOrder != null)
+            {
+                Model.SortOrder = _workingSortOrder.Value;
+            }
+        }
+
+        private async void Cancel()
+        {
+            // W trybie edycji - porzuć zmiany i wróć do oryginalnych danych
+            if (Mode == DepartmentEditMode.Edit && !string.IsNullOrEmpty(Model?.Id))
+            {
+                try
+                {
+                    // Przeładuj oryginalne dane z bazy
+                    await LoadDepartmentAsync(Model.Id);
+                    
+                    // Resetuj wszystkie flagi walidacji
+                    ResetViewModel();
+                    
+                    // Odśwież wszystkie właściwości
+                    RefreshAllProperties();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error reloading department data during cancel");
+                    ErrorMessage = "Błąd podczas anulowania zmian";
+                }
+            }
+            
             RequestClose?.Invoke(false);
+        }
+
+        private void SwitchToEditMode()
+        {
+            if (Mode == DepartmentEditMode.View)
+            {
+                Mode = DepartmentEditMode.Edit;
+                StatusMessage = "Wprowadź zmiany w danych działu";
+                RefreshAllProperties();
+            }
+        }
+
+        private void ResetViewModel()
+        {
+            // Resetuj wszystkie flagi i komunikaty
+            _parentDepartmentSelectionMade = false;
+            _hasCodeConflict = false;
+            _hasNameConflict = false;
+            _hasTeamsAssigned = false;
+            _canDeactivate = true;
+            
+            // Wyczyść kopie robocze - powróć do oryginalnych wartości z Model
+            _workingName = null;
+            _workingParentDepartmentId = null;
+            _workingIsActive = default;
+            _workingDescription = null;
+            _workingSortOrder = null;
+            
+            ClearMessages();
+            
+            // Resetuj komunikaty walidacji
+            _generatedCode = null;
+            _codeConflictMessage = null;
+            _nameConflictMessage = null;
+            _teamsValidationMessage = null;
+        }
+
+        private void RefreshAllProperties()
+        {
+            OnPropertyChanged(nameof(CanEditFields));
+            OnPropertyChanged(nameof(IsParentDepartmentSelected));
+            OnPropertyChanged(nameof(DepartmentName));
+            OnPropertyChanged(nameof(ParentDepartmentId));
+            OnPropertyChanged(nameof(DepartmentIsActive));
+            OnPropertyChanged(nameof(Description));
+            OnPropertyChanged(nameof(SortOrder));
+            OnPropertyChanged(nameof(ShowHierarchyInfo));
+            OnPropertyChanged(nameof(WindowTitle));
+            OnPropertyChanged(nameof(SaveButtonText));
+            OnPropertyChanged(nameof(GeneratedCode));
+            OnPropertyChanged(nameof(HasCodeConflict));
+            OnPropertyChanged(nameof(CodeConflictMessage));
+            OnPropertyChanged(nameof(HasNameConflict));
+            OnPropertyChanged(nameof(NameConflictMessage));
+            OnPropertyChanged(nameof(HasTeamsAssigned));
+            OnPropertyChanged(nameof(TeamsValidationMessage));
+            OnPropertyChanged(nameof(CanDeactivate));
+            UpdateCommandStates();
         }
 
         private void ClearMessages()
@@ -665,17 +832,19 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         private async Task<string> GenerateDepartmentCodeAsync()
         {
-            if (string.IsNullOrWhiteSpace(Model?.Name))
+            var workingName = _workingName ?? Model?.Name;
+            if (string.IsNullOrWhiteSpace(workingName))
                 return string.Empty;
 
             var codeParts = new List<string>();
             
             // Jeśli ma działu nadrzędnego, pobierz jego hierarchię
-            if (!string.IsNullOrEmpty(Model.ParentDepartmentId))
+            var workingParentId = _workingParentDepartmentId ?? Model?.ParentDepartmentId;
+            if (!string.IsNullOrEmpty(workingParentId))
             {
                 try
                 {
-                    var parentDepartment = await _departmentService.GetDepartmentByIdAsync(Model.ParentDepartmentId);
+                    var parentDepartment = await _departmentService.GetDepartmentByIdAsync(workingParentId);
                     if (parentDepartment != null)
                     {
                         // Pobierz kod rodzica (który już zawiera pełną hierarchię)
@@ -701,7 +870,7 @@ namespace TeamsManager.UI.ViewModels.Departments
             }
 
             // Dodaj znormalizowaną nazwę tego działu
-            var normalizedName = NormalizeDepartmentName(Model.Name);
+            var normalizedName = NormalizeDepartmentName(workingName);
             if (!string.IsNullOrEmpty(normalizedName))
             {
                 codeParts.Add(normalizedName);

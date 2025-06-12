@@ -86,6 +86,16 @@ namespace TeamsManager.Data.Repositories
             return await _dbSet.AnyAsync(predicate);
         }
 
+        /// <summary>
+        /// Asynchronicznie zapisuje wszystkie zmiany do bazy danych.
+        /// Automatycznie ustawia pola audytu dzięki TeamsManagerDbContext.SaveChangesAsync().
+        /// </summary>
+        /// <returns>Liczba zmienionych wpisów w bazie danych.</returns>
+        public virtual async Task<int> SaveChangesAsync()
+        {
+            return await _context.SaveChangesAsync();
+        }
+
         // Metoda SaveChangesAsync nie jest tutaj implementowana.
         // Zmiany będą zapisywane przez wywołanie _context.SaveChangesAsync()
         // na wyższym poziomie (np. w serwisie lub jednostce pracy).
