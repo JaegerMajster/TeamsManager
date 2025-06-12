@@ -363,20 +363,55 @@ namespace TeamsManager.UI.ViewModels.Departments
                 
                 var hasChildren = SelectedDepartment.Children.Any();
                 var message = hasChildren 
-                    ? $"Czy na pewno chcesz usunąć dział '{SelectedDepartment.Name}' wraz z wszystkimi poddziałami?"
-                    : $"Czy na pewno chcesz usunąć dział '{SelectedDepartment.Name}'?";
+                    ? $"Nie można usunąć działu '{SelectedDepartment.Name}', ponieważ ma poddziały.\n\nNajpierw usuń wszystkie poddziały."
+                    : $"Czy na pewno chcesz usunąć dział '{SelectedDepartment.Name}'?\n\nTa operacja oznacza dział jako nieaktywny (logiczne usunięcie).";
+
+                if (hasChildren)
+                {
+                    await ShowWarningDialog("Nie można usunąć działu", message);
+                    return;
+                }
 
                 var confirmed = UIDialogService != null ? await UIDialogService.ShowConfirmationDialog("Potwierdź usunięcie", message) : false;
                 
                 if (confirmed)
                 {
-                    await ShowInfoDialog("Usuń dział", "Funkcja usuwania działów zostanie wkrótce zaimplementowana.");
+                    IsLoading = true;
+                    ErrorMessage = null;
+
+                    var success = await _departmentService.DeleteDepartmentAsync(SelectedDepartment.Department.Id);
+                    
+                    if (success)
+                    {
+                        _logger.LogInformation("Dział '{DepartmentName}' został pomyślnie usunięty", SelectedDepartment.Name);
+                        await ShowSuccessDialog("Sukces", $"Dział '{SelectedDepartment.Name}' został pomyślnie usunięty.");
+                        
+                        // Odśwież listę działów
+                        await LoadDepartmentsAsync(forceRefresh: true);
+                        
+                        // Wyczyść zaznaczenie
+                        SelectedDepartment = null;
+                    }
+                    else
+                    {
+                        await ShowErrorDialog("Błąd", "Nie udało się usunąć działu. Sprawdź logi aplikacji.");
+                    }
                 }
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Cannot delete department due to validation rules");
+                await ShowWarningDialog("Nie można usunąć działu", ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting department");
-                await ShowErrorDialog("Błąd", $"Błąd podczas usuwania działu: {ex.Message}");
+                ErrorMessage = $"Błąd podczas usuwania działu: {ex.Message}";
+                await ShowErrorDialog("Błąd", ErrorMessage);
+            }
+            finally
+            {
+                IsLoading = false;
             }
         }
 

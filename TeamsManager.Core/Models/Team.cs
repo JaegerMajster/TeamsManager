@@ -73,6 +73,11 @@ namespace TeamsManager.Core.Models
         public string? SchoolYearId { get; set; }
 
         /// <summary>
+        /// Identyfikator działu, do którego przypisany jest zespół.
+        /// </summary>
+        public string? DepartmentId { get; set; }
+
+        /// <summary>
         /// Nazwa roku akademickiego/szkolnego w formacie tekstowym (np. "2024/2025").
         /// </summary>
         public string? AcademicYear { get; set; }
@@ -181,6 +186,11 @@ namespace TeamsManager.Core.Models
         /// Rok szkolny (SchoolYear), w ramach którego funkcjonuje ten zespół.
         /// </summary>
         public SchoolYear? SchoolYear { get; set; }
+
+        /// <summary>
+        /// Dział, do którego przypisany jest zespół.
+        /// </summary>
+        public Department? Department { get; set; }
 
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 

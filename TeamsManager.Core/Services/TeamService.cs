@@ -1971,5 +1971,43 @@ namespace TeamsManager.Core.Services
 
             return teamsList;
         }
+
+        /// <inheritdoc />
+        public async Task<IEnumerable<Team>> GetTeamsByDepartmentAsync(string departmentId, bool forceRefresh = false, string? apiAccessToken = null)
+        {
+            _logger.LogInformation("Pobieranie zespołów dla działu {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh);
+
+            if (string.IsNullOrWhiteSpace(departmentId))
+            {
+                _logger.LogWarning("Próba pobrania zespołów z pustym ID działu.");
+                return Enumerable.Empty<Team>();
+            }
+
+            string cacheKey = $"Teams_ByDepartment_{departmentId}";
+
+            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            {
+                _logger.LogDebug("Zespoły dla działu {DepartmentId} znalezione w cache. Liczba zespołów: {Count}", departmentId, cachedTeams.Count());
+                return cachedTeams;
+            }
+
+            _logger.LogDebug("Zespoły dla działu {DepartmentId} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", departmentId);
+
+            // Pobierz z lokalnej bazy danych
+            var teamsFromDb = await _teamRepository.FindAsync(t => t.DepartmentId == departmentId && t.Status == TeamStatus.Active);
+            var teamsList = teamsFromDb.ToList();
+
+            // Opcjonalnie: synchronizacja z Graph API jeśli podano token
+            if (!string.IsNullOrEmpty(apiAccessToken))
+            {
+                _logger.LogDebug("Token API podany - można rozważyć synchronizację z Graph API w przyszłości");
+                // Tutaj można dodać logikę synchronizacji z Graph API w przyszłości
+            }
+
+            _powerShellCacheService.Set(cacheKey, teamsList);
+            _logger.LogDebug("Zespoły dla działu {DepartmentId} dodane do cache. Liczba zespołów: {Count}", departmentId, teamsList.Count);
+
+            return teamsList;
+        }
     }
 }

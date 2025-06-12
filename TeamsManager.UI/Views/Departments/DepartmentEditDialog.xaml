@@ -64,6 +64,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             
                             <!-- Ikona działu -->
@@ -103,8 +104,28 @@
                                     materialDesign:TextFieldAssist.HasClearButton="True"
                                     IsEnabled="{Binding CanEditFields}"/>
                             
+                            <!-- Komunikat o konflikcie nazwy -->
+                            <Border Grid.Row="3"
+                                   Margin="0,8,0,0"
+                                   Background="{DynamicResource AccentRed}"
+                                   CornerRadius="4"
+                                   Padding="12,8"
+                                   Visibility="{Binding HasNameConflict, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AlertCircle" 
+                                                           Width="16" Height="16"
+                                                           Foreground="White"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding NameConflictMessage}"
+                                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                             Foreground="White"
+                                             VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            
                             <!-- Kod działu (automatycznie generowany) -->
-                            <TextBox Grid.Row="3"
+                            <TextBox Grid.Row="4"
                                     Margin="0,24,0,0"
                                     Style="{StaticResource MaterialDesignOutlinedTextBox}"
                                     Text="{Binding GeneratedCode, Mode=OneWay}"
@@ -116,7 +137,7 @@
                                     Background="{DynamicResource BackgroundMedium}"/>
                             
                             <!-- Komunikat o konflikcie kodu -->
-                            <Border Grid.Row="4"
+                            <Border Grid.Row="5"
                                    Margin="0,12,0,0"
                                    Background="{DynamicResource AccentRed}"
                                    CornerRadius="4"
@@ -136,7 +157,7 @@
                             </Border>
                             
                             <!-- Opis działu -->
-                            <TextBox Grid.Row="5"
+                            <TextBox Grid.Row="6"
                                     Margin="0,24,0,0"
                                     Style="{StaticResource MaterialDesignOutlinedTextBox}"
                                     Text="{Binding Model.Description, UpdateSourceTrigger=PropertyChanged}"
@@ -145,7 +166,7 @@
                                     IsEnabled="{Binding CanEditFields}"/>
                             
                             <!-- Kolejność sortowania i aktywność -->
-                            <Grid Grid.Row="6" Margin="0,24,0,0">
+                            <Grid Grid.Row="7" Margin="0,24,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="16"/>
@@ -162,15 +183,36 @@
                                 
                                 <CheckBox Grid.Column="2"
                                          Style="{StaticResource MaterialDesignCheckBox}"
-                                         IsChecked="{Binding Model.IsActive}"
+                                         IsChecked="{Binding DepartmentIsActive}"
                                          Content="Dział aktywny"
                                          VerticalAlignment="Center"
                                          ToolTip="Czy dział jest aktywny i widoczny w systemie"
                                          IsEnabled="{Binding CanEditFields}"/>
                             </Grid>
                             
+                            <!-- Komunikat walidacji zespołów -->
+                            <Border Grid.Row="8"
+                                   Margin="0,12,0,0"
+                                   Background="{DynamicResource AccentRed}"
+                                   CornerRadius="4"
+                                   Padding="12,8"
+                                   Visibility="{Binding HasTeamsAssigned, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AlertCircle" 
+                                                           Width="16" Height="16"
+                                                           Foreground="White"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding TeamsValidationMessage}"
+                                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                             Foreground="White"
+                                             VerticalAlignment="Center"
+                                             TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            
                             <!-- Informacje o hierarchii -->
-                            <Border Grid.Row="7"
+                            <Border Grid.Row="9"
                                    Margin="0,36,0,0"
                                    Style="{StaticResource InfoCardStyle}"
                                    Visibility="{Binding ShowHierarchyInfo, Converter={StaticResource BooleanToVisibilityConverter}}">

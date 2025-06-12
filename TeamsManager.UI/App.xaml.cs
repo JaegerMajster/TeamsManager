@@ -286,6 +286,9 @@ namespace TeamsManager.UI
             services.AddTransient<ViewModels.Departments.DepartmentsManagementViewModel>();
             services.AddTransient<ViewModels.Departments.DepartmentEditViewModel>();
             
+            // ViewModele dla dialogów
+            services.AddTransient<ViewModels.Dialogs.UniversalDialogViewModel>();
+            
             // Widoki Departments
             services.AddTransient<Views.Departments.DepartmentsManagementView>();
             // --- KONIEC: REJESTRACJA DEPARTMENTS (ETAP 2.4) ---

@@ -55,6 +55,28 @@ namespace TeamsManager.UI.ViewModels
         }
 
         /// <summary>
+        /// Wyświetla dialog ostrzeżenia
+        /// </summary>
+        protected async Task ShowWarningDialog(string title, string message)
+        {
+            if (UIDialogService != null)
+                await UIDialogService.ShowWarningDialog(title, message);
+            else
+                System.Diagnostics.Debug.WriteLine($"[WARNING] {title}: {message}");
+        }
+
+        /// <summary>
+        /// Wyświetla dialog sukcesu
+        /// </summary>
+        protected async Task ShowSuccessDialog(string title, string message)
+        {
+            if (UIDialogService != null)
+                await UIDialogService.ShowSuccessDialog(title, message);
+            else
+                System.Diagnostics.Debug.WriteLine($"[SUCCESS] {title}: {message}");
+        }
+
+        /// <summary>
         /// Wyświetla dialog potwierdzenia
         /// </summary>
         protected async Task<bool> ShowConfirmationDialog(string title, string message)

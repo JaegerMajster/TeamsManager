@@ -95,6 +95,13 @@ namespace TeamsManager.UI.Services.Dashboard
             return Task.FromResult<IEnumerable<Team>>(new List<Team>());
         }
 
+        public Task<IEnumerable<Team>> GetTeamsByDepartmentAsync(string departmentId, bool forceRefresh = false, string? accessToken = null)
+        {
+            // Dla celów demonstracyjnych zwracamy puste zespoły - w rzeczywistej implementacji
+            // należałoby filtrować zespoły według departmentId
+            return Task.FromResult<IEnumerable<Team>>(new List<Team>());
+        }
+
         public Task<bool> UpdateTeamAsync(Team team, string accessToken)
         {
             return Task.FromResult(true);

@@ -72,6 +72,11 @@ namespace TeamsManager.Core.Models
         /// </summary>
         public List<User> Users { get; set; } = new List<User>();
 
+        /// <summary>
+        /// Zespoły przypisane do tego działu
+        /// </summary>
+        public List<Team> Teams { get; set; } = new List<Team>();
+
         // ===== WŁAŚCIWOŚCI OBLICZANE =====
 
         /// <summary>

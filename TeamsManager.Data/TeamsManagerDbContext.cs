@@ -233,6 +233,7 @@ namespace TeamsManager.Data
                 entity.Property(t => t.TemplateId);
                 entity.Property(t => t.SchoolTypeId);
                 entity.Property(t => t.SchoolYearId);
+                entity.Property(t => t.DepartmentId);
 
                 entity.Property(t => t.AcademicYear).HasMaxLength(20);
                 entity.Property(t => t.Semester).HasMaxLength(50);
@@ -250,6 +251,7 @@ namespace TeamsManager.Data
                 entity.HasIndex(t => t.SchoolTypeId);
                 entity.HasIndex(t => t.SchoolYearId);
                 entity.HasIndex(t => t.TemplateId);
+                entity.HasIndex(t => t.DepartmentId);
                 // Indeks na BaseEntity.IsActive jest konfigurowany w ConfigureBaseEntity
 
                 entity.HasOne(t => t.Template)
@@ -265,6 +267,11 @@ namespace TeamsManager.Data
                 entity.HasOne(t => t.SchoolYear)
                       .WithMany(sy => sy.Teams)
                       .HasForeignKey(t => t.SchoolYearId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(t => t.Department)
+                      .WithMany(d => d.Teams)
+                      .HasForeignKey(t => t.DepartmentId)
                       .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasMany(t => t.Members)

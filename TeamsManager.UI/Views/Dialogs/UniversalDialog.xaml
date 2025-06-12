@@ -1,0 +1,259 @@
+<Window x:Class="TeamsManager.UI.Views.Dialogs.UniversalDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:converters="clr-namespace:TeamsManager.UI.Converters"
+        mc:Ignorable="d"
+        Title="{Binding Title}"
+        SizeToContent="WidthAndHeight"
+        MinWidth="420"
+        MaxWidth="{Binding MaxWidth, FallbackValue=600}"
+        MinHeight="180"
+        WindowStartupLocation="CenterOwner"
+        Background="Transparent"
+        FontFamily="{DynamicResource MaterialDesignFont}"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStyle="None"
+        AllowsTransparency="True">
+    
+    <Window.Resources>
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        
+        <!-- Dedykowane style przycisków dla dialogów -->
+        <Style x:Key="DialogPrimaryButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
+            <Setter Property="Background" Value="{StaticResource HeaderGradient}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2"/>
+            <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentBlueLight}"/>
+                    <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp4"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp1"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.6"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style x:Key="DialogSecondaryButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBlue}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBlue}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background">
+                        <Setter.Value>
+                            <SolidColorBrush Color="#FF546E7A" Opacity="0.1"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBlueLight}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background">
+                        <Setter.Value>
+                            <SolidColorBrush Color="#FF546E7A" Opacity="0.2"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <!-- Główny kontener z cieniem -->
+    <Border Background="{DynamicResource BackgroundDark}"
+            CornerRadius="12"
+            Effect="{StaticResource ShadowHeavy}"
+            Margin="8">
+            
+            <!-- Główna struktura okna -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Header z gradientem -->
+                <Border Grid.Row="0" 
+                        Background="{StaticResource HeaderGradient}" 
+                        CornerRadius="12,12,0,0"
+                        Padding="24,20,24,20">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Ikona typu dialogu -->
+                        <Border Grid.Column="0"
+                                Background="{Binding IconBackground}"
+                                Width="44" Height="44"
+                                CornerRadius="22"
+                                VerticalAlignment="Center">
+                            <materialDesign:PackIcon Kind="{Binding IconKind}" 
+                                                   Width="26" Height="26"
+                                                   Foreground="{Binding IconColor}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                        </Border>
+                        
+                        <!-- Tytuł -->
+                        <TextBlock Grid.Column="1" 
+                                 Text="{Binding Title}"
+                                 Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                 Foreground="White"
+                                 Margin="20,0,16,0"
+                                 VerticalAlignment="Center"
+                                 FontWeight="Medium"
+                                 TextWrapping="Wrap"/>
+                        
+                        <!-- Przycisk zamknij -->
+                        <Button Grid.Column="2"
+                                Style="{StaticResource MaterialDesignIconButton}"
+                                Command="{Binding CloseCommand}"
+                                Width="36" Height="36"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                Foreground="White"
+                                Opacity="0.8">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent" 
+                                            CornerRadius="18"
+                                            x:Name="border">
+                                        <materialDesign:PackIcon Kind="Close" 
+                                                               Width="20" Height="20"
+                                                               Foreground="{TemplateBinding Foreground}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="Background" Value="#20FFFFFF"/>
+                                            <Setter Property="Opacity" Value="1"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </Border>
+                
+                <!-- Główna zawartość z dynamicznym rozmiarem -->
+                <Border Grid.Row="1" 
+                        Padding="32,28,32,28">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Główny komunikat -->
+                        <TextBlock Grid.Row="0"
+                                 Text="{Binding Message}"
+                                 Foreground="{DynamicResource TextPrimary}"
+                                 TextWrapping="Wrap"
+                                 LineHeight="26"
+                                 FontSize="15">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody1TextBlock}">
+                                    <Setter Property="Margin" Value="0,0,0,20"/>
+                                    <Style.Triggers>
+                                        <!-- Jeśli nie ma szczegółów, usuń dolny margines -->
+                                        <DataTrigger Binding="{Binding HasDetails}" Value="False">
+                                            <Setter Property="Margin" Value="0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        
+                        <!-- Dodatkowe szczegóły bez ScrollViewer -->
+                        <Border Grid.Row="1"
+                               Background="{DynamicResource BackgroundMedium}"
+                               CornerRadius="8"
+                               Padding="20,16"
+                               Visibility="{Binding HasDetails, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="{Binding Details}"
+                                     Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                     Foreground="{DynamicResource TextSecondary}"
+                                     TextWrapping="Wrap"
+                                     LineHeight="22"
+                                     FontSize="13"/>
+                        </Border>
+                    </Grid>
+                </Border>
+                
+                <!-- Footer z przyciskami -->
+                <Border Grid.Row="2" 
+                       Background="{DynamicResource BackgroundMedium}"
+                       BorderBrush="{DynamicResource BorderDark}"
+                       BorderThickness="0,1,0,0"
+                       CornerRadius="0,0,12,12"
+                       Padding="24,16,24,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Spacer -->
+                        <Border Grid.Column="0"/>
+                        
+                        <!-- Drugi przycisk (Anuluj/Nie) -->
+                        <Button Grid.Column="1"
+                               Style="{StaticResource DialogSecondaryButton}"
+                               Content="{Binding SecondaryButtonText}"
+                               Command="{Binding SecondaryCommand}"
+                               Margin="0,0,12,0"
+                               MinWidth="90"
+                               IsCancel="{Binding IsSecondaryCancel}"
+                               Visibility="{Binding ShowSecondaryButton, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        
+                        <!-- Główny przycisk (OK/Tak) -->
+                        <Button Grid.Column="2"
+                               Style="{StaticResource DialogPrimaryButton}"
+                               Content="{Binding PrimaryButtonText}"
+                               Command="{Binding PrimaryCommand}"
+                               MinWidth="90"
+                               IsDefault="{Binding IsPrimaryDefault}">
+                            <Button.Effect>
+                                <DropShadowEffect Color="{DynamicResource AccentBlueColor}" 
+                                                BlurRadius="8" 
+                                                ShadowDepth="0" 
+                                                Opacity="0.3"/>
+                            </Button.Effect>
+                        </Button>
+                                    </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window> 

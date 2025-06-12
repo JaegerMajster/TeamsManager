@@ -31,6 +31,8 @@ namespace TeamsManager.UI.ViewModels.Departments
     {
         private readonly IDepartmentService _departmentService;
         private readonly ILogger<DepartmentEditViewModel> _logger;
+        private readonly IUIDialogService _uiDialogService;
+        private readonly ITeamService _teamService;
         
         private Department _model;
         private DepartmentEditMode _mode;
@@ -42,22 +44,30 @@ namespace TeamsManager.UI.ViewModels.Departments
         private bool _hasCodeConflict;
         private string? _codeConflictMessage;
         private bool _parentDepartmentSelectionMade;
+        
+        // Nowe właściwości dla ulepszonego error handlingu
+        private bool _hasNameConflict;
+        private string? _nameConflictMessage;
+        private bool _hasTeamsAssigned;
+        private string? _teamsValidationMessage;
+        private bool _canDeactivate = true;
 
         public DepartmentEditViewModel(
             IDepartmentService departmentService,
             ILogger<DepartmentEditViewModel> logger,
-            IUIDialogService uiDialogService)
+            IUIDialogService uiDialogService,
+            ITeamService teamService)
         {
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            UIDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
+            _uiDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
+            _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
 
             _model = new Department();
             _mode = DepartmentEditMode.Add;
             _availableParentDepartments = new ObservableCollection<Department>();
 
-            // Initialize commands
-            SaveCommand = new RelayCommand(async () => await SaveAsync(), () => CanSave);
+            SaveCommand = new AsyncRelayCommand(SaveAsync);
             CancelCommand = new RelayCommand(Cancel);
 
             // Load available parent departments
@@ -202,7 +212,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// <summary>
         /// Czy można zapisać
         /// </summary>
-        public bool CanSave => !IsLoading && IsEditMode && !string.IsNullOrWhiteSpace(DepartmentName) && !HasCodeConflict && CanEditFields;
+        public bool CanSave => !IsLoading && IsEditMode && !string.IsNullOrWhiteSpace(DepartmentName) && !HasCodeConflict && !HasNameConflict && CanEditFields && CanDeactivate;
 
         /// <summary>
         /// Czy można edytować pola (w trybie dodawania wymaga wyboru działu nadrzędnego)
@@ -249,6 +259,68 @@ namespace TeamsManager.UI.ViewModels.Departments
         }
 
         /// <summary>
+        /// Czy istnieje konflikt nazwy działu
+        /// </summary>
+        public bool HasNameConflict
+        {
+            get => _hasNameConflict;
+            set
+            {
+                if (SetProperty(ref _hasNameConflict, value))
+                {
+                    UpdateCommandStates();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Komunikat o konflikcie nazwy
+        /// </summary>
+        public string? NameConflictMessage
+        {
+            get => _nameConflictMessage;
+            set => SetProperty(ref _nameConflictMessage, value);
+        }
+
+        /// <summary>
+        /// Czy dział ma przypisane zespoły (blokuje deaktywację)
+        /// </summary>
+        public bool HasTeamsAssigned
+        {
+            get => _hasTeamsAssigned;
+            set => SetProperty(ref _hasTeamsAssigned, value);
+        }
+
+        /// <summary>
+        /// Komunikat walidacji zespołów
+        /// </summary>
+        public string? TeamsValidationMessage
+        {
+            get => _teamsValidationMessage;
+            set => SetProperty(ref _teamsValidationMessage, value);
+        }
+
+        /// <summary>
+        /// Czy można deaktywować dział (nie ma zespołów)
+        /// </summary>
+        public bool CanDeactivate
+        {
+            get => _canDeactivate;
+            set
+            {
+                if (SetProperty(ref _canDeactivate, value))
+                {
+                    UpdateCommandStates();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Czy istnieją jakiekolwiek błędy walidacji
+        /// </summary>
+        public bool HasValidationErrors => HasCodeConflict || HasNameConflict || HasTeamsAssigned;
+
+        /// <summary>
         /// Nazwa działu - wrapper z automatycznym generowaniem kodu
         /// </summary>
         public string? DepartmentName
@@ -262,6 +334,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CanSave));
                     _ = GenerateAndValidateCodeAsync();
+                    _ = ValidateNameConflictAsync();
                 }
             }
         }
@@ -289,6 +362,40 @@ namespace TeamsManager.UI.ViewModels.Departments
                     OnPropertyChanged(nameof(CanEditFields));
                     OnPropertyChanged(nameof(IsParentDepartmentSelected));
                     _ = GenerateAndValidateCodeAsync();
+                    _ = ValidateNameConflictAsync(); // Walidacja nazw po zmianie działu nadrzędnego
+                }
+            }
+        }
+
+        /// <summary>
+        /// Wrapper dla właściwości IsActive z walidacją zespołów
+        /// </summary>
+        public bool DepartmentIsActive
+        {
+            get => Model?.IsActive ?? true;
+            set
+            {
+                if (Model != null && Model.IsActive != value)
+                {
+                    // Jeśli próbujemy deaktywować dział, sprawdź zespoły
+                    if (!value && Model.IsActive)
+                    {
+                        _ = ValidateTeamsBeforeDeactivationAsync(value);
+                    }
+                    else
+                    {
+                        Model.IsActive = value;
+                        OnPropertyChanged();
+                        OnPropertyChanged(nameof(CanSave));
+                        
+                        // Wyczyść komunikaty walidacji zespołów jeśli aktywujemy dział
+                        if (value)
+                        {
+                            HasTeamsAssigned = false;
+                            TeamsValidationMessage = null;
+                            CanDeactivate = true;
+                        }
+                    }
                 }
             }
         }
@@ -512,7 +619,7 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         private void UpdateCommandStates()
         {
-            (SaveCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (SaveCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
 
         private void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -713,6 +820,138 @@ namespace TeamsManager.UI.ViewModels.Departments
                 GeneratedCode = string.Empty;
                 HasCodeConflict = false;
                 CodeConflictMessage = null;
+            }
+        }
+
+        private async Task ValidateNameConflictAsync()
+        {
+            if (string.IsNullOrEmpty(Model?.Name))
+            {
+                HasNameConflict = false;
+                NameConflictMessage = null;
+                return;
+            }
+
+            try
+            {
+                var allDepartments = await _departmentService.GetAllDepartmentsAsync();
+                
+                // Sprawdź konflikty na tym samym poziomie hierarchii (ten sam ParentDepartmentId)
+                var conflictingDepartments = allDepartments.Where(d => 
+                    d.Name.Equals(Model.Name, StringComparison.OrdinalIgnoreCase) && 
+                    d.ParentDepartmentId == Model.ParentDepartmentId &&
+                    d.Id != Model.Id // Wyklucz siebie (w przypadku edycji)
+                ).ToList();
+
+                if (conflictingDepartments.Any())
+                {
+                    HasNameConflict = true;
+                    
+                    // Stwórz odpowiedni komunikat w zależności od poziomu hierarchii
+                    if (string.IsNullOrEmpty(Model.ParentDepartmentId))
+                    {
+                        NameConflictMessage = "Dział o podanej nazwie już istnieje";
+                    }
+                    else
+                    {
+                        // Znajdź nazwę działu nadrzędnego
+                        var parentDepartment = allDepartments.FirstOrDefault(d => d.Id == Model.ParentDepartmentId);
+                        var parentName = parentDepartment?.Name ?? "wybranej kategorii nadrzędnej";
+                        NameConflictMessage = $"Podana nazwa już istnieje w: {parentName}";
+                    }
+                }
+                else
+                {
+                    HasNameConflict = false;
+                    NameConflictMessage = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking name conflict");
+                HasNameConflict = false;
+                NameConflictMessage = null;
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza czy dział ma przypisane zespoły przed deaktywacją
+        /// </summary>
+        private async Task ValidateTeamsBeforeDeactivationAsync(bool newActiveState)
+        {
+            if (string.IsNullOrEmpty(Model?.Id))
+            {
+                Model.IsActive = newActiveState;
+                OnPropertyChanged(nameof(DepartmentIsActive));
+                OnPropertyChanged(nameof(CanSave));
+                return;
+            }
+
+            try
+            {
+                // Sprawdź bezpośrednio czy dział ma przypisane aktywne zespoły
+                var teamsInDepartment = await _teamService.GetTeamsByDepartmentAsync(Model.Id);
+                var activeTeams = teamsInDepartment.Where(t => t.IsActive).ToList();
+
+                if (activeTeams.Any())
+                {
+                    HasTeamsAssigned = true;
+                    CanDeactivate = false;
+                    
+                    TeamsValidationMessage = $"Nie można deaktywować działu. Przypisanych jest {activeTeams.Count} aktywnych zespołów: {string.Join(", ", activeTeams.Take(3).Select(t => t.DisplayName))}{(activeTeams.Count > 3 ? "..." : "")}.";
+                    
+                    // Nie zmieniaj stanu - pozostaw aktywny
+                    OnPropertyChanged(nameof(DepartmentIsActive));
+                    OnPropertyChanged(nameof(CanSave));
+                    return;
+                }
+
+                // Jeśli nie ma bezpośrednio przypisanych zespołów, sprawdź czy użytkownicy z działu są członkami zespołów
+                var usersInDepartment = await _departmentService.GetUsersInDepartmentAsync(Model.Id);
+                var activeUsers = usersInDepartment.Where(u => u.IsActive).ToList();
+
+                if (activeUsers.Any())
+                {
+                    // Sprawdź czy którzyś z użytkowników ma aktywne członkostwa w zespołach
+                    var usersWithTeams = activeUsers.Where(u => u.TeamMemberships?.Any(tm => tm.IsMembershipActive) == true).ToList();
+                    
+                    if (usersWithTeams.Any())
+                    {
+                        HasTeamsAssigned = true;
+                        CanDeactivate = false;
+                        
+                        var teamCount = usersWithTeams.SelectMany(u => u.TeamMemberships.Where(tm => tm.IsMembershipActive)).Count();
+                        TeamsValidationMessage = $"Nie można deaktywować działu. Użytkownicy z tego działu są członkami {teamCount} aktywnych zespołów.";
+                        
+                        // Nie zmieniaj stanu - pozostaw aktywny
+                        OnPropertyChanged(nameof(DepartmentIsActive));
+                        OnPropertyChanged(nameof(CanSave));
+                        return;
+                    }
+                }
+
+                // Jeśli nie ma konfliktów, pozwól na deaktywację
+                HasTeamsAssigned = false;
+                TeamsValidationMessage = null;
+                CanDeactivate = true;
+                
+                Model.IsActive = newActiveState;
+                OnPropertyChanged(nameof(DepartmentIsActive));
+                OnPropertyChanged(nameof(CanSave));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating teams before deactivation");
+                
+                // W przypadku błędu, pozwól na deaktywację ale zaloguj ostrzeżenie
+                _logger.LogWarning("Could not validate teams for department {DepartmentId}, allowing deactivation", Model.Id);
+                HasTeamsAssigned = false;
+                TeamsValidationMessage = null;
+                CanDeactivate = true;
+                
+                Model.IsActive = newActiveState;
+                OnPropertyChanged(nameof(DepartmentIsActive));
+                OnPropertyChanged(nameof(CanSave));
             }
         }
 
