@@ -200,7 +200,7 @@
                     
                     <DataGrid.Columns>
                         <!-- Checkbox column -->
-                        <DataGridTemplateColumn Width="50" CanUserResize="False">
+                        <DataGridTemplateColumn Width="50" CanUserResize="False" MinWidth="50" MaxWidth="50">
                             <DataGridTemplateColumn.Header>
                                 <CheckBox IsChecked="{Binding DataContext.IsAllSelected, 
                                           RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -215,7 +215,7 @@
                         </DataGridTemplateColumn>
                         
                         <!-- Avatar and name -->
-                        <DataGridTemplateColumn Header="Użytkownik" Width="250" CanUserResize="True">
+                        <DataGridTemplateColumn Header="Użytkownik" Width="2*" MinWidth="280" CanUserResize="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Margin="10,5">
@@ -230,10 +230,12 @@
                                         </Border>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding FullName}"
-                                                       FontWeight="Medium"/>
+                                                       FontWeight="Medium"
+                                                       TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding Email}"
                                                        FontSize="12"
-                                                       Foreground="{DynamicResource TextSecondary}"/>
+                                                       Foreground="{DynamicResource TextSecondary}"
+                                                       TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </DataTemplate>
@@ -241,7 +243,7 @@
                         </DataGridTemplateColumn>
                         
                         <!-- Role -->
-                        <DataGridTemplateColumn Header="Rola" Width="150">
+                        <DataGridTemplateColumn Header="Rola" Width="*" MinWidth="140" CanUserResize="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Margin="10,0">
@@ -250,7 +252,8 @@
                                                                  Margin="0,0,8,0"
                                                                  Foreground="{DynamicResource AccentBlue}"/>
                                         <TextBlock Text="{Binding RoleDisplayName}"
-                                                   VerticalAlignment="Center"/>
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -259,21 +262,40 @@
                         <!-- Department -->
                         <DataGridTextColumn Header="Dział" 
                                             Binding="{Binding DepartmentName}" 
-                                            Width="150"/>
+                                            Width="*" MinWidth="120"
+                                            CanUserResize="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Margin" Value="10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         
                         <!-- Position -->
                         <DataGridTextColumn Header="Stanowisko" 
                                             Binding="{Binding Position}" 
-                                            Width="150"/>
+                                            Width="*" MinWidth="120"
+                                            CanUserResize="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Margin" Value="10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         
                         <!-- Status -->
-                        <DataGridTemplateColumn Header="Status" Width="100">
+                        <DataGridTemplateColumn Header="Status" Width="110" MinWidth="110" MaxWidth="130" CanUserResize="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border Background="{Binding StatusColor, Converter={StaticResource StringToBrushConverter}}"
                                             CornerRadius="12"
                                             Padding="8,4"
-                                            HorizontalAlignment="Center">
+                                            HorizontalAlignment="Center"
+                                            Margin="5,2">
                                         <StackPanel Orientation="Horizontal">
                                             <materialDesign:PackIcon Kind="{Binding StatusIcon}"
                                                                      Width="16" Height="16"
@@ -293,22 +315,34 @@
                         <!-- Last login -->
                         <DataGridTextColumn Header="Ostatnie logowanie" 
                                             Binding="{Binding LastLoginText}" 
-                                            Width="140"/>
+                                            Width="160" MinWidth="140" MaxWidth="180"
+                                            CanUserResize="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Margin" Value="10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         
                         <!-- Actions -->
-                        <DataGridTemplateColumn Header="Akcje" Width="100">
+                        <DataGridTemplateColumn Header="Akcje" Width="120" MinWidth="120" MaxWidth="120" CanUserResize="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="5,0">
                                         <Button Style="{StaticResource IconButton}"
                                                 Command="{Binding DataContext.ViewUserDetailsCommand, 
                                                           RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
-                                                ToolTip="Szczegóły">
+                                                ToolTip="Szczegóły"
+                                                Margin="2,0">
                                             <materialDesign:PackIcon Kind="Eye"/>
                                         </Button>
                                         <Button Style="{StaticResource IconButton}"
-                                                ToolTip="Edytuj">
+                                                ToolTip="Edytuj"
+                                                Margin="2,0">
                                             <materialDesign:PackIcon Kind="Pencil"/>
                                         </Button>
                                     </StackPanel>

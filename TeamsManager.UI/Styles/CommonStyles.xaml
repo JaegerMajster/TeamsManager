@@ -12,8 +12,8 @@
 
 	<!-- Gradientowe tła - stonowane, nieco ciemniejsze -->
 	<LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,1">
-		<GradientStop Color="#FF455A64" Offset="0"/>
-		<GradientStop Color="#FF607D8B" Offset="1"/>
+		<GradientStop Color="#FF263238" Offset="0"/>
+		<GradientStop Color="#FF37474F" Offset="1"/>
 	</LinearGradientBrush>
 
 	<LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,0">
@@ -405,6 +405,22 @@
 		<Setter Property="BorderBrush" Value="Transparent"/>
 		<Setter Property="BorderThickness" Value="0"/>
 		<Setter Property="HorizontalContentAlignment" Value="Left"/>
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="DataGridColumnHeader">
+					<Border Background="{TemplateBinding Background}"
+							BorderBrush="{TemplateBinding BorderBrush}"
+							BorderThickness="{TemplateBinding BorderThickness}"
+							Padding="{TemplateBinding Padding}">
+						<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+										  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+										  TextBlock.Foreground="White"
+										  TextBlock.FontWeight="SemiBold"
+										  TextBlock.FontSize="14"/>
+					</Border>
+				</ControlTemplate>
+			</Setter.Value>
+		</Setter>
 	</Style>
 
 	<Style TargetType="DataGridRow" BasedOn="{StaticResource MaterialDesignDataGridRow}">

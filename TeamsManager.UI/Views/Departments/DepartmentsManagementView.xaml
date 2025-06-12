@@ -117,46 +117,39 @@
 
                 <!-- Statystyki -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <materialDesign:Card Background="{DynamicResource MaterialDesignDarkBackground}"
-                                       Padding="12,8"
-                                       Margin="0,0,8,0">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Domain" 
-                                                   Width="16" Height="16"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource MaterialDesignDarkForeground}"
-                                                   Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding TotalDepartments}"
-                                     Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
-                                     Foreground="{DynamicResource MaterialDesignDarkForeground}"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock Text="Wszystkich"
-                                     Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                     Foreground="{DynamicResource MaterialDesignDarkForeground}"
-                                     VerticalAlignment="Center"
-                                     Margin="4,0,0,0"/>
-                        </StackPanel>
-                    </materialDesign:Card>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                        <materialDesign:PackIcon Kind="Domain" 
+                                               Width="16" Height="16"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding TotalDepartments}"
+                                 Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                 Foreground="{DynamicResource TextSecondary}"
+                                 VerticalAlignment="Center"/>
+                        <TextBlock Text="Wszystkich"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 Foreground="{DynamicResource TextSecondary}"
+                                 VerticalAlignment="Center"
+                                 Margin="4,0,0,0"/>
+                    </StackPanel>
 
-                    <materialDesign:Card Background="{DynamicResource PrimaryHueMidBrush}"
-                                       Padding="12,8">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="CheckCircle" 
-                                                   Width="16" Height="16"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
-                                                   Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding ActiveDepartments}"
-                                     Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
-                                     Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
-                                     VerticalAlignment="Center"/>
-                            <TextBlock Text="Aktywnych"
-                                     Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                     Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
-                                     VerticalAlignment="Center"
-                                     Margin="4,0,0,0"/>
-                        </StackPanel>
-                    </materialDesign:Card>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="CheckCircle" 
+                                               Width="16" Height="16"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding ActiveDepartments}"
+                                 Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                 Foreground="{DynamicResource TextSecondary}"
+                                 VerticalAlignment="Center"/>
+                        <TextBlock Text="Aktywnych"
+                                 Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                 Foreground="{DynamicResource TextSecondary}"
+                                 VerticalAlignment="Center"
+                                 Margin="4,0,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </materialDesign:Card>
@@ -193,7 +186,8 @@
                 <!-- Action Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Command="{Binding ExpandAllCommand}"
-                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Style="{StaticResource MaterialDesignFlatButton}"
+                          Foreground="{DynamicResource TextSecondary}"
                           Margin="0,0,8,0"
                           ToolTip="Rozwiń wszystkie">
                         <StackPanel Orientation="Horizontal">
@@ -206,7 +200,8 @@
                     </Button>
 
                     <Button Command="{Binding CollapseAllCommand}"
-                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Style="{StaticResource MaterialDesignFlatButton}"
+                          Foreground="{DynamicResource TextSecondary}"
                           Margin="0,0,8,0"
                           ToolTip="Zwiń wszystkie">
                         <StackPanel Orientation="Horizontal">
@@ -219,7 +214,8 @@
                     </Button>
 
                     <Button Command="{Binding RefreshCommand}"
-                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Style="{StaticResource MaterialDesignFlatButton}"
+                          Foreground="{DynamicResource TextSecondary}"
                           Margin="0,0,8,0"
                           ToolTip="Odśwież">
                         <StackPanel Orientation="Horizontal">
@@ -232,8 +228,27 @@
                     </Button>
 
                     <Button Command="{Binding AddDepartmentCommand}"
-                          Style="{StaticResource MaterialDesignRaisedButton}"
                           ToolTip="Dodaj nowy dział">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
+                                <Setter Property="Background" Value="{StaticResource HeaderGradient}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background">
+                                            <Setter.Value>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#FF37474F" Offset="0"/>
+                                                    <GradientStop Color="#FF546E7A" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp4"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Plus" 
                                                    Width="16" Height="16"
@@ -320,6 +335,8 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Command="{Binding EditDepartmentCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Foreground="{DynamicResource AccentBlue}"
+                          BorderBrush="{DynamicResource AccentBlue}"
                           Margin="0,0,8,0"
                           ToolTip="Edytuj dział">
                         <StackPanel Orientation="Horizontal">
@@ -333,8 +350,8 @@
 
                     <Button Command="{Binding DeleteDepartmentCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
-                          Foreground="{DynamicResource MaterialDesignValidationErrorBrush}"
-                          BorderBrush="{DynamicResource MaterialDesignValidationErrorBrush}"
+                          Foreground="{DynamicResource AccentRed}"
+                          BorderBrush="{DynamicResource AccentRed}"
                           ToolTip="Usuń dział">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Delete" 
