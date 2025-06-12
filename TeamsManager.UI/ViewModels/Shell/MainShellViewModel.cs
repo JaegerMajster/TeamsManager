@@ -45,6 +45,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         private string? _securitySummary = "🔐 Sprawdzanie...";
         private DateTime? _tokenExpiresOn;
         private string _tokenCacheStatus = "Brak danych";
+        private bool _isDialogOpen;
 
         public MainShellViewModel(
             IServiceProvider serviceProvider,
@@ -249,6 +250,19 @@ namespace TeamsManager.UI.ViewModels.Shell
             set
             {
                 _tokenCacheStatus = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Czy jest otwarty dialog (dla overlay)
+        /// </summary>
+        public bool IsDialogOpen
+        {
+            get => _isDialogOpen;
+            set
+            {
+                _isDialogOpen = value;
                 OnPropertyChanged();
             }
         }
@@ -779,17 +793,25 @@ namespace TeamsManager.UI.ViewModels.Shell
                 UserProfilePicture = null;
                 
                 // Pokaż okno logowania
+                IsDialogOpen = true;
                 var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
                 
-                if (loginWindow.ShowDialog() == true)
+                try
                 {
-                    // Odśwież informacje o użytkowniku po ponownym zalogowaniu
-                    LoadUserInfo();
+                    if (loginWindow.ShowDialog() == true)
+                    {
+                        // Odśwież informacje o użytkowniku po ponownym zalogowaniu
+                        LoadUserInfo();
+                    }
+                    else
+                    {
+                        // Zamknij aplikację jeśli użytkownik anulował
+                        System.Windows.Application.Current.Shutdown();
+                    }
                 }
-                else
+                finally
                 {
-                    // Zamknij aplikację jeśli użytkownik anulował
-                    System.Windows.Application.Current.Shutdown();
+                    IsDialogOpen = false;
                 }
             }
             catch (Exception ex)
@@ -806,6 +828,9 @@ namespace TeamsManager.UI.ViewModels.Shell
             {
                 _logger.LogInformation("Otwieranie okna profilu użytkownika");
                 
+                // Pokaż overlay
+                IsDialogOpen = true;
+                
                 var profileWindow = new TeamsManager.UI.Views.UserProfileWindow(this);
                 profileWindow.ShowDialog();
             }
@@ -817,6 +842,11 @@ namespace TeamsManager.UI.ViewModels.Shell
                     "Błąd",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Ukryj overlay
+                IsDialogOpen = false;
             }
         }
 

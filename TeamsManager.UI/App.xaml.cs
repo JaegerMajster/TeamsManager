@@ -179,8 +179,8 @@ namespace TeamsManager.UI
             // --- KONIEC: REJESTRACJA OKIEN (ETAP 4) ---
 
             // --- POCZĄTEK: REJESTRACJA SHELL (ETAP 0.1) ---
-            // Rejestracja Shell ViewModels
-            services.AddTransient<ViewModels.Shell.MainShellViewModel>();
+            // Rejestracja Shell ViewModels - Singleton aby można było współdzielić stan między ViewModelami
+            services.AddSingleton<ViewModels.Shell.MainShellViewModel>();
 
             // Rejestracja Shell Views  
             services.AddTransient<Views.Shell.MainShellWindow>();
@@ -223,6 +223,9 @@ namespace TeamsManager.UI
 
             // Serwis UI dla SchoolTypes
             services.AddTransient<SchoolTypeUIService>();
+            
+            // Serwis migracji kodów działów
+            services.AddTransient<DepartmentCodeMigrationService>();
 
             // ViewModele dla SchoolTypes
             services.AddTransient<ViewModels.SchoolTypes.SchoolTypesListViewModel>();
@@ -281,6 +284,7 @@ namespace TeamsManager.UI
 
             // ViewModele dla Departments
             services.AddTransient<ViewModels.Departments.DepartmentsManagementViewModel>();
+            services.AddTransient<ViewModels.Departments.DepartmentEditViewModel>();
             
             // Widoki Departments
             services.AddTransient<Views.Departments.DepartmentsManagementView>();

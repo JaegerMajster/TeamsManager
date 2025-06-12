@@ -227,6 +227,20 @@
                         </StackPanel>
                     </Button>
 
+                    <Button Command="{Binding MigrateDepartmentCodesCommand}"
+                          Style="{StaticResource MaterialDesignFlatButton}"
+                          Foreground="{DynamicResource AccentOrange}"
+                          Margin="0,0,8,0"
+                          ToolTip="Zaktualizuj kody działów zgodnie z nowym schematem">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CodeBraces" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Migruj Kody"/>
+                        </StackPanel>
+                    </Button>
+
                     <Button Command="{Binding AddDepartmentCommand}"
                           ToolTip="Dodaj nowy dział">
                         <Button.Style>
@@ -287,7 +301,11 @@
                         BorderThickness="0"
                         Padding="16"
                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                        ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                        ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <TreeView.InputBindings>
+                        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewDepartmentCommand}"/>
+                    </TreeView.InputBindings>
+                </TreeView>
 
                 <!-- Empty State -->
                 <StackPanel HorizontalAlignment="Center" 
@@ -333,6 +351,21 @@
 
                 <!-- Action Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Command="{Binding ViewDepartmentCommand}"
+                          Style="{StaticResource MaterialDesignOutlinedButton}"
+                          Foreground="{DynamicResource TextSecondary}"
+                          BorderBrush="{DynamicResource TextSecondary}"
+                          Margin="0,0,8,0"
+                          ToolTip="Podgląd działu">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Eye" 
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Podgląd"/>
+                        </StackPanel>
+                    </Button>
+
                     <Button Command="{Binding EditDepartmentCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource AccentBlue}"

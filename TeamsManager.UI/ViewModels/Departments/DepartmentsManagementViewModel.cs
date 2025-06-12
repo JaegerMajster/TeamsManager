@@ -5,11 +5,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Data;
 using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.UI.ViewModels.Shell;
+using TeamsManager.UI.Services;
 
 namespace TeamsManager.UI.ViewModels.Departments
 {
@@ -20,6 +23,8 @@ namespace TeamsManager.UI.ViewModels.Departments
     {
         private readonly IDepartmentService _departmentService;
         private readonly ILogger<DepartmentsManagementViewModel> _logger;
+        private readonly MainShellViewModel _mainShellViewModel;
+        private readonly DepartmentCodeMigrationService _migrationService;
         
         private ObservableCollection<DepartmentTreeItemViewModel> _departments;
         private ICollectionView _departmentsView;
@@ -31,11 +36,15 @@ namespace TeamsManager.UI.ViewModels.Departments
         public DepartmentsManagementViewModel(
             IDepartmentService departmentService,
             ILogger<DepartmentsManagementViewModel> logger,
-            IUIDialogService uiDialogService)
+            IUIDialogService uiDialogService,
+            MainShellViewModel mainShellViewModel,
+            DepartmentCodeMigrationService migrationService)
         {
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             UIDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
+            _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
+            _migrationService = migrationService ?? throw new ArgumentNullException(nameof(migrationService));
 
             _departments = new ObservableCollection<DepartmentTreeItemViewModel>();
             _departmentsView = CollectionViewSource.GetDefaultView(_departments);
@@ -47,9 +56,11 @@ namespace TeamsManager.UI.ViewModels.Departments
             AddDepartmentCommand = new RelayCommand(async () => await AddDepartmentAsync(), () => !IsLoading);
             EditDepartmentCommand = new RelayCommand(async () => await EditDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
             DeleteDepartmentCommand = new RelayCommand(async () => await DeleteDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
+            ViewDepartmentCommand = new RelayCommand(async () => await ViewDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
             ExpandAllCommand = new RelayCommand(ExpandAll);
             CollapseAllCommand = new RelayCommand(CollapseAll);
             ClearSearchCommand = new RelayCommand(ClearSearch, () => !string.IsNullOrEmpty(SearchText));
+            MigrateDepartmentCodesCommand = new RelayCommand(async () => await MigrateDepartmentCodesAsync(), () => !IsLoading);
 
             // Load initial data
             _ = LoadDepartmentsAsync();
@@ -127,9 +138,11 @@ namespace TeamsManager.UI.ViewModels.Departments
         public ICommand AddDepartmentCommand { get; }
         public ICommand EditDepartmentCommand { get; }
         public ICommand DeleteDepartmentCommand { get; }
+        public ICommand ViewDepartmentCommand { get; }
         public ICommand ExpandAllCommand { get; }
         public ICommand CollapseAllCommand { get; }
         public ICommand ClearSearchCommand { get; }
+        public ICommand MigrateDepartmentCodesCommand { get; }
 
         #endregion
 
@@ -241,12 +254,33 @@ namespace TeamsManager.UI.ViewModels.Departments
             try
             {
                 _logger.LogDebug("Adding new department");
-                await ShowInfoDialog("Dodaj dział", "Funkcja dodawania działów zostanie wkrótce zaimplementowana.");
+                
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
+                var dialog = new Views.Departments.DepartmentEditDialog();
+                var viewModel = App.ServiceProvider.GetRequiredService<DepartmentEditViewModel>();
+                
+                viewModel.InitializeForAdd(SelectedDepartment?.Department.Id);
+                dialog.DataContext = viewModel;
+                dialog.Owner = System.Windows.Application.Current.MainWindow;
+                
+                var result = dialog.ShowDialog();
+                if (result == true)
+                {
+                    // Odśwież listę działów po dodaniu
+                    await LoadDepartmentsAsync(forceRefresh: true);
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding department");
                 await ShowErrorDialog("Błąd", $"Błąd podczas dodawania działu: {ex.Message}");
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 
@@ -257,12 +291,65 @@ namespace TeamsManager.UI.ViewModels.Departments
             try
             {
                 _logger.LogDebug("Editing department {DepartmentId}", SelectedDepartment.Id);
-                await ShowInfoDialog("Edytuj dział", $"Funkcja edycji działu '{SelectedDepartment.Name}' zostanie wkrótce zaimplementowana.");
+                
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
+                var dialog = new Views.Departments.DepartmentEditDialog();
+                var viewModel = App.ServiceProvider.GetRequiredService<DepartmentEditViewModel>();
+                
+                await viewModel.InitializeForEditAsync(SelectedDepartment.Department.Id);
+                dialog.DataContext = viewModel;
+                dialog.Owner = System.Windows.Application.Current.MainWindow;
+                
+                var result = dialog.ShowDialog();
+                if (result == true)
+                {
+                    // Odśwież listę działów po edycji
+                    await LoadDepartmentsAsync(forceRefresh: true);
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error editing department");
                 await ShowErrorDialog("Błąd", $"Błąd podczas edycji działu: {ex.Message}");
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
+            }
+        }
+
+        private async Task ViewDepartmentAsync()
+        {
+            if (SelectedDepartment == null) return;
+
+            try
+            {
+                _logger.LogDebug("Viewing department {DepartmentId}", SelectedDepartment.Id);
+                
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
+                var dialog = new Views.Departments.DepartmentEditDialog();
+                var viewModel = App.ServiceProvider.GetRequiredService<DepartmentEditViewModel>();
+                
+                await viewModel.InitializeForViewAsync(SelectedDepartment.Department.Id);
+                dialog.DataContext = viewModel;
+                dialog.Owner = System.Windows.Application.Current.MainWindow;
+                
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error viewing department");
+                await ShowErrorDialog("Błąd", $"Błąd podczas wyświetlania działu: {ex.Message}");
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 
@@ -324,7 +411,78 @@ namespace TeamsManager.UI.ViewModels.Departments
             (AddDepartmentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (EditDepartmentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (DeleteDepartmentCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (ViewDepartmentCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ClearSearchCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (MigrateDepartmentCodesCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        private async Task MigrateDepartmentCodesAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Rozpoczynanie migracji kodów działów...");
+                
+                // Pokaż potwierdzenie
+                var confirmResult = System.Windows.MessageBox.Show(
+                    "Czy na pewno chcesz zaktualizować kody wszystkich działów zgodnie z nowym schematem?\n\n" +
+                    "Ta operacja:\n" +
+                    "• Zaktualizuje kody działów według formuły: NazwaDzialuGlownego-NazwaDzialu1Poziomu-...-NazwaDzialu\n" +
+                    "• Usunie polskie znaki i spacje z kodów\n" +
+                    "• Może zająć kilka sekund\n\n" +
+                    "Operacja jest bezpieczna - można ją cofnąć ręcznie edytując działy.",
+                    "Migracja kodów działów",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question);
+
+                if (confirmResult != System.Windows.MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                IsLoading = true;
+                ErrorMessage = null;
+
+                // Wykonaj migrację
+                var result = await _migrationService.MigrateDepartmentCodesAsync();
+
+                // Pokaż wyniki
+                var resultMessage = result.GetSummary();
+                
+                if (result.IsSuccess)
+                {
+                    _logger.LogInformation("Migracja kodów działów zakończona sukcesem. Zaktualizowano: {Updated}, Pominięto: {Skipped}", 
+                        result.UpdatedDepartments, result.SkippedDepartments);
+                    
+                    System.Windows.MessageBox.Show(
+                        resultMessage,
+                        "Migracja zakończona pomyślnie",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Information);
+                    
+                    // Odśwież listę działów
+                    await LoadDepartmentsAsync(forceRefresh: true);
+                }
+                else
+                {
+                    _logger.LogWarning("Migracja kodów działów zakończona z błędami: {Errors}", result.ErroredDepartments);
+                    
+                    System.Windows.MessageBox.Show(
+                        resultMessage,
+                        "Migracja zakończona z błędami",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas migracji kodów działów");
+                ErrorMessage = $"Błąd podczas migracji kodów działów: {ex.Message}";
+                await ShowErrorDialog("Błąd migracji", ErrorMessage);
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         #endregion

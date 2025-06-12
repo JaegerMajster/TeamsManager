@@ -11,6 +11,7 @@ using TeamsManager.UI.Models.SchoolTypeModels;
 using TeamsManager.UI.Services.UI;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Views.SchoolTypes;
+using TeamsManager.UI.ViewModels.Shell;
 using BaseViewModel = TeamsManager.UI.ViewModels.BaseViewModel;
 
 namespace TeamsManager.UI.ViewModels.SchoolTypes
@@ -22,6 +23,7 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
     {
         private readonly SchoolTypeUIService _schoolTypeUIService;
         private readonly ILogger<SchoolTypesListViewModel> _logger;
+        private readonly MainShellViewModel _mainShellViewModel;
         
         private ObservableCollection<SchoolTypeDisplayModel> _schoolTypes;
         private ICollectionView _schoolTypesView;
@@ -32,10 +34,12 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
 
         public SchoolTypesListViewModel(
             SchoolTypeUIService schoolTypeUIService,
-            ILogger<SchoolTypesListViewModel> logger)
+            ILogger<SchoolTypesListViewModel> logger,
+            MainShellViewModel mainShellViewModel)
         {
             _schoolTypeUIService = schoolTypeUIService ?? throw new ArgumentNullException(nameof(schoolTypeUIService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
 
             _schoolTypes = new ObservableCollection<SchoolTypeDisplayModel>();
             _schoolTypesView = CollectionViewSource.GetDefaultView(_schoolTypes);
@@ -164,28 +168,39 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
 
         private async Task AddNewSchoolTypeAsync()
         {
-            _logger.LogInformation("Otwieranie dialogu dodawania nowego typu szkoły");
-
-            var dialog = new SchoolTypeEditDialog(null);
-            var result = dialog.ShowDialog();
-
-            if (result == true && dialog.DataContext is SchoolTypeEditViewModel vm && vm.EditedSchoolType != null)
+            try
             {
-                var (success, errorMessage) = await _schoolTypeUIService.CreateSchoolTypeAsync(
-                    vm.EditedSchoolType.ShortName,
-                    vm.EditedSchoolType.FullName,
-                    vm.EditedSchoolType.Description,
-                    vm.EditedSchoolType.ColorCode,
-                    vm.EditedSchoolType.SortOrder);
+                _logger.LogInformation("Otwieranie dialogu dodawania nowego typu szkoły");
 
-                if (success)
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+
+                var dialog = new SchoolTypeEditDialog(null);
+                var result = dialog.ShowDialog();
+
+                if (result == true && dialog.DataContext is SchoolTypeEditViewModel vm && vm.EditedSchoolType != null)
                 {
-                    await LoadDataAsync();
+                    var (success, errorMessage) = await _schoolTypeUIService.CreateSchoolTypeAsync(
+                        vm.EditedSchoolType.ShortName,
+                        vm.EditedSchoolType.FullName,
+                        vm.EditedSchoolType.Description,
+                        vm.EditedSchoolType.ColorCode,
+                        vm.EditedSchoolType.SortOrder);
+
+                    if (success)
+                    {
+                        await LoadDataAsync();
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Nie udało się utworzyć typu szkoły: {Error}", errorMessage);
+                    }
                 }
-                else
-                {
-                    _logger.LogWarning("Nie udało się utworzyć typu szkoły: {Error}", errorMessage);
-                }
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 
@@ -193,29 +208,40 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
         {
             if (SelectedSchoolType == null) return;
 
-            _logger.LogInformation("Otwieranie dialogu edycji typu szkoły: {SchoolTypeId}", SelectedSchoolType.Id);
-
-            var schoolTypeToEdit = SelectedSchoolType.ToSchoolType();
-            var dialog = new SchoolTypeEditDialog(schoolTypeToEdit);
-            var result = dialog.ShowDialog();
-
-            if (result == true && dialog.DataContext is SchoolTypeEditViewModel vm && vm.EditedSchoolType != null)
+            try
             {
-                var (success, errorMessage) = await _schoolTypeUIService.UpdateSchoolTypeAsync(vm.EditedSchoolType);
+                _logger.LogInformation("Otwieranie dialogu edycji typu szkoły: {SchoolTypeId}", SelectedSchoolType.Id);
 
-                if (success)
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+
+                var schoolTypeToEdit = SelectedSchoolType.ToSchoolType();
+                var dialog = new SchoolTypeEditDialog(schoolTypeToEdit);
+                var result = dialog.ShowDialog();
+
+                if (result == true && dialog.DataContext is SchoolTypeEditViewModel vm && vm.EditedSchoolType != null)
                 {
-                    // Odśwież tylko edytowany element
-                    var updated = await _schoolTypeUIService.GetSchoolTypeByIdAsync(vm.EditedSchoolType.Id);
-                    if (updated != null)
+                    var (success, errorMessage) = await _schoolTypeUIService.UpdateSchoolTypeAsync(vm.EditedSchoolType);
+
+                    if (success)
                     {
-                        SelectedSchoolType.UpdateFromSchoolType(updated.ToSchoolType());
+                        // Odśwież tylko edytowany element
+                        var updated = await _schoolTypeUIService.GetSchoolTypeByIdAsync(vm.EditedSchoolType.Id);
+                        if (updated != null)
+                        {
+                            SelectedSchoolType.UpdateFromSchoolType(updated.ToSchoolType());
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Nie udało się zaktualizować typu szkoły: {Error}", errorMessage);
                     }
                 }
-                else
-                {
-                    _logger.LogWarning("Nie udało się zaktualizować typu szkoły: {Error}", errorMessage);
-                }
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 

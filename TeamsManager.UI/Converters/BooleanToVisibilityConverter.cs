@@ -15,7 +15,16 @@ namespace TeamsManager.UI.Converters
         {
             if (value is bool boolValue)
             {
-                return boolValue ? Visibility.Visible : Visibility.Collapsed;
+                bool isInverse = parameter != null && parameter.ToString()?.Equals("Inverse", StringComparison.OrdinalIgnoreCase) == true;
+                
+                if (isInverse)
+                {
+                    return boolValue ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else
+                {
+                    return boolValue ? Visibility.Visible : Visibility.Collapsed;
+                }
             }
             return Visibility.Collapsed;
         }

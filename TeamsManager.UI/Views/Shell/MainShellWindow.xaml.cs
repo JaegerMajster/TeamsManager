@@ -62,28 +62,39 @@ namespace TeamsManager.UI.Views.Shell
 
         private void ShowLoginWindow()
         {
-            var serviceProvider = App.ServiceProvider;
-            
-            _loginWindow = serviceProvider.GetRequiredService<LoginWindow>();
-            
-            if (_loginWindow.ShowDialog() == true)
+            try
             {
-                // Logowanie zakończone sukcesem
-                _logger.LogInformation("Użytkownik zalogowany pomyślnie");
+                var serviceProvider = App.ServiceProvider;
                 
-                // Odśwież informacje o użytkowniku
-                _viewModel.LoadUserInfo();
+                // Pokaż overlay
+                _viewModel.IsDialogOpen = true;
                 
-                // Załaduj szczegółowy profil z Microsoft Graph
-                _ = _viewModel.LoadDetailedUserProfileAsync();
+                _loginWindow = serviceProvider.GetRequiredService<LoginWindow>();
+                
+                if (_loginWindow.ShowDialog() == true)
+                {
+                    // Logowanie zakończone sukcesem
+                    _logger.LogInformation("Użytkownik zalogowany pomyślnie");
+                    
+                    // Odśwież informacje o użytkowniku
+                    _viewModel.LoadUserInfo();
+                    
+                    // Załaduj szczegółowy profil z Microsoft Graph
+                    _ = _viewModel.LoadDetailedUserProfileAsync();
+                }
+                else
+                {
+                    // Użytkownik anulował logowanie
+                    _logger.LogWarning("Logowanie anulowane przez użytkownika");
+                    
+                    // Zamknij aplikację
+                    System.Windows.Application.Current.Shutdown();
+                }
             }
-            else
+            finally
             {
-                // Użytkownik anulował logowanie
-                _logger.LogWarning("Logowanie anulowane przez użytkownika");
-                
-                // Zamknij aplikację
-                System.Windows.Application.Current.Shutdown();
+                // Ukryj overlay
+                _viewModel.IsDialogOpen = false;
             }
         }
 

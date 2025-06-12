@@ -11,6 +11,7 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.ViewModels;
+using TeamsManager.UI.ViewModels.Shell;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,6 +26,7 @@ namespace TeamsManager.UI.ViewModels.Users
         private readonly IUserService _userService;
         private readonly IDepartmentService _departmentService;
         private readonly ILogger<UserListViewModel> _logger;
+        private readonly MainShellViewModel _mainShellViewModel;
         
         private ObservableCollection<UserListItemViewModel> _users;
         private CollectionViewSource _usersViewSource;
@@ -47,11 +49,13 @@ namespace TeamsManager.UI.ViewModels.Users
         public UserListViewModel(
             IUserService userService,
             IDepartmentService departmentService,
-            ILogger<UserListViewModel> logger)
+            ILogger<UserListViewModel> logger,
+            MainShellViewModel mainShellViewModel)
         {
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
 
             _users = new ObservableCollection<UserListItemViewModel>();
             _usersViewSource = new CollectionViewSource { Source = _users };
@@ -507,6 +511,9 @@ namespace TeamsManager.UI.ViewModels.Users
             {
                 _logger.LogInformation("Opening user details for: {UserId}", user.Id);
                 
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
                 // Get UserDetailWindow from DI
                 var serviceProvider = App.ServiceProvider;
                 if (serviceProvider == null)
@@ -537,6 +544,11 @@ namespace TeamsManager.UI.ViewModels.Users
                 _logger.LogError(ex, "Error opening user details for user {UserId}", user.Id);
                 ErrorMessage = "Nie udało się otworzyć szczegółów użytkownika.";
             }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
+            }
         }
 
         private async void CreateNewUser()
@@ -544,6 +556,9 @@ namespace TeamsManager.UI.ViewModels.Users
             try
             {
                 _logger.LogInformation("Opening create new user dialog");
+                
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
                 
                 // Get UserDetailWindow from DI
                 var serviceProvider = App.ServiceProvider;
@@ -574,6 +589,11 @@ namespace TeamsManager.UI.ViewModels.Users
             {
                 _logger.LogError(ex, "Error opening create user dialog");
                 ErrorMessage = "Nie udało się otworzyć formularza tworzenia użytkownika.";
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 

@@ -10,6 +10,7 @@ using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.Models.Teams;
 using TeamsManager.UI.ViewModels;
+using TeamsManager.UI.ViewModels.Shell;
 using TeamsManager.UI.Views.Teams;
 using System.Windows;
 
@@ -22,6 +23,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         private readonly ISchoolYearService _schoolYearService;
         private readonly ICurrentUserService _currentUserService;
         private readonly INotificationService _notificationService;
+        private readonly MainShellViewModel _mainShellViewModel;
 
         // Kolekcje
         private ObservableCollection<TeamGrouping> _teamGroups = new();
@@ -139,13 +141,15 @@ namespace TeamsManager.UI.ViewModels.Teams
             ISchoolTypeService schoolTypeService,
             ISchoolYearService schoolYearService,
             ICurrentUserService currentUserService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            MainShellViewModel mainShellViewModel)
         {
             _teamService = teamService;
             _schoolTypeService = schoolTypeService;
             _schoolYearService = schoolYearService;
             _currentUserService = currentUserService;
             _notificationService = notificationService;
+            _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
             
             // Inicjalizacja komend
             LoadTeamsCommand = new RelayCommand(async () => await LoadTeamsAsync());
@@ -411,6 +415,9 @@ namespace TeamsManager.UI.ViewModels.Teams
         {
             try
             {
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
                 // Pobierz ViewModel z DI
                 var wizardViewModel = App.ServiceProvider.GetRequiredService<TeamCreationWizardViewModel>();
                 
@@ -434,6 +441,11 @@ namespace TeamsManager.UI.ViewModels.Teams
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
+            }
         }
         
         private void ShowLifecycleOperations()
@@ -455,6 +467,9 @@ namespace TeamsManager.UI.ViewModels.Teams
 
             try
             {
+                // Pokaż overlay
+                _mainShellViewModel.IsDialogOpen = true;
+                
                 // Pobierz dialog i ViewModel z DI
                 var dialog = App.ServiceProvider.GetRequiredService<TeamLifecycleDialog>();
                 var viewModel = App.ServiceProvider.GetRequiredService<TeamLifecycleDialogViewModel>();
@@ -481,6 +496,11 @@ namespace TeamsManager.UI.ViewModels.Teams
                     "Błąd",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Ukryj overlay
+                _mainShellViewModel.IsDialogOpen = false;
             }
         }
 
