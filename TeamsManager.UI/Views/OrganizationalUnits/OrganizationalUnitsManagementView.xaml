@@ -307,7 +307,7 @@
                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
                         ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <TreeView.InputBindings>
-                        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewSelectedItemCommand}"/>
+                        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewOrganizationalUnitCommand}"/>
                     </TreeView.InputBindings>
                 </TreeView>
 
@@ -336,7 +336,7 @@
                 Background="{DynamicResource MaterialDesignCardBackground}"
                 Margin="0,16,0,0"
                 Padding="16"
-                Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisibilityConverter}}">
+                Visibility="{Binding SelectedOrganizationalUnit, Converter={StaticResource NullToVisibilityConverter}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -345,17 +345,17 @@
 
                 <!-- Selected Item Info -->
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding SelectedItem.DisplayName, StringFormat='Wybrano: {0}'}"
+                    <TextBlock Text="{Binding SelectedOrganizationalUnit.DisplayName, StringFormat='Wybrano: {0}'}"
                              Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                              Margin="0,0,0,4"/>
-                    <TextBlock Text="{Binding SelectedItem.FullPath}"
+                    <TextBlock Text="{Binding SelectedOrganizationalUnit.FullPath}"
                              Style="{StaticResource MaterialDesignCaptionTextBlock}"
                              Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
 
                 <!-- Action Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Command="{Binding ViewSelectedItemCommand}"
+                    <Button Command="{Binding ViewOrganizationalUnitCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource TextSecondary}"
                           BorderBrush="{DynamicResource TextSecondary}"
@@ -370,7 +370,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding EditSelectedItemCommand}"
+                    <Button Command="{Binding EditOrganizationalUnitCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource AccentBlue}"
                           BorderBrush="{DynamicResource AccentBlue}"
@@ -385,7 +385,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding DeleteSelectedItemCommand}"
+                    <Button Command="{Binding DeleteOrganizationalUnitCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource AccentRed}"
                           BorderBrush="{DynamicResource AccentRed}"

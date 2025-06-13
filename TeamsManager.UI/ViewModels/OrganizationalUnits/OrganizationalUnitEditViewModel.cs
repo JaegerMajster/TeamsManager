@@ -49,14 +49,17 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         private bool _hasCodeConflict;
         private string? _codeConflictMessage;
 
-        // Kopie robocze danych - nie modyfikują oryginalnego Model do momentu zapisania
+        // Kopie robocze dla edycji
         private string? _workingName;
         private string? _workingParentUnitId;
         private bool? _workingIsActive;
         private string? _workingDescription;
         private int? _workingSortOrder;
+        
+        // Flaga śledząca czy użytkownik zmienił jednostkę nadrzędną w trybie edycji
+        private bool _parentUnitChanged = false;
 
-        // ID nowo utworzonej jednostki (tylko dla trybu Add)
+        // ID utworzonej jednostki (dla trybu Add)
         private string? _createdUnitId;
 
         public OrganizationalUnitEditViewModel(
@@ -375,7 +378,9 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         {
             get 
             {
-                var value = _workingParentUnitId ?? Model?.ParentUnitId;
+                // W trybie Add używaj WYŁĄCZNIE _workingParentUnitId (bez fallback)
+                // W trybie Edit można użyć fallback do Model?.ParentUnitId
+                var value = IsAddMode ? _workingParentUnitId : (_workingParentUnitId ?? Model?.ParentUnitId);
                 // Konwertuj null na pusty string dla ComboBox (opcja "Brak")
                 return value ?? string.Empty;
             }
@@ -392,6 +397,11 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                     if (IsAddMode)
                     {
                         _parentUnitSelectionMade = true;
+                    }
+                    else if (Mode == OrganizationalUnitEditMode.Edit)
+                    {
+                        // W trybie edycji oznacz że jednostka nadrzędna została zmieniona
+                        _parentUnitChanged = true;
                     }
                     
                     OnPropertyChanged();
@@ -495,6 +505,10 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                 SortOrder = 0,
                 ParentUnitId = parentUnitId
             };
+            
+            // KLUCZOWE: Ustaw working copy dla ParentUnitId
+            _workingParentUnitId = parentUnitId;
+            
             ClearMessages();
             StatusMessage = "Wprowadź dane nowej jednostki organizacyjnej";
             
@@ -503,6 +517,9 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             
             // Powiadom o zmianie właściwości
             RefreshAllProperties();
+            
+            // Wygeneruj kod na podstawie początkowych wartości
+            _ = GenerateAndValidateCodeAsync();
         }
 
         /// <summary>
@@ -525,6 +542,25 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             ResetViewModel();
             Mode = OrganizationalUnitEditMode.Edit;
             await LoadOrganizationalUnitAsync(unitId);
+            
+            // KLUCZOWE: Przeładuj listę jednostek nadrzędnych z filtrowaniem aktualnie edytowanej jednostki
+            await LoadAvailableParentUnitsAsync();
+            
+            // KLUCZOWE: Inicjalizuj _workingParentUnitId na podstawie aktualnej wartości Model.ParentUnitId
+            // To zapewni, że ComboBox pokaże aktualnie wybraną jednostkę nadrzędną
+            _workingParentUnitId = Model?.ParentUnitId;
+            
+            // KLUCZOWE: Inicjalizuj GeneratedCode na podstawie istniejącego kodu lub wygeneruj nowy
+            if (!string.IsNullOrEmpty(Model?.Code))
+            {
+                GeneratedCode = Model.Code;
+            }
+            else
+            {
+                // Jeśli jednostka nie ma kodu, wygeneruj go
+                _ = GenerateAndValidateCodeAsync();
+            }
+            
             StatusMessage = "Wprowadź zmiany w danych jednostki organizacyjnej";
             RefreshAllProperties();
         }
@@ -570,9 +606,6 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             {
                 var units = await _organizationalUnitService.GetAllOrganizationalUnitsAsync();
                 
-                // Filtruj jednostki - nie można wybrać siebie jako rodzica
-                var availableUnits = units.Where(u => u.Id != Model?.Id).ToList();
-                
                 AvailableParentUnits.Clear();
                 
                 // Dodaj opcję "Brak Jednostki nadrzędnej" na początku
@@ -584,16 +617,19 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                 };
                 AvailableParentUnits.Add(noneOption);
                 
-                // Dodaj pozostałe jednostki
-                foreach (var unit in availableUnits.OrderBy(u => u.FullPath))
+                // Dodaj wszystkie jednostki z filtrowaniem aktualnie edytowanej (jeśli w trybie edycji)
+                foreach (var unit in units)
                 {
+                    // KLUCZOWE: W trybie edycji pomiń aktualnie edytowaną jednostkę
+                    if (Mode == OrganizationalUnitEditMode.Edit && unit.Id == Model?.Id)
+                        continue;
+                        
                     AvailableParentUnits.Add(unit);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading available parent units");
-                ErrorMessage = "Błąd podczas ładowania dostępnych jednostek nadrzędnych";
+                await ShowErrorDialog("Błąd podczas ładowania jednostek nadrzędnych", ex.Message);
             }
         }
 
@@ -703,7 +739,21 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         {
             // Zastosuj zmiany z kopii roboczych do modelu
             if (_workingName != null) Model.Name = _workingName;
-            if (_workingParentUnitId != null) Model.ParentUnitId = _workingParentUnitId;
+            
+            // WAŻNE: W trybie Add zawsze używaj _workingParentUnitId (może być null dla "Brak Jednostki nadrzędnej")
+            // W trybie Edit używaj tylko gdy użytkownik faktycznie dokonał zmiany (flaga _parentUnitChanged)
+            if (IsAddMode)
+            {
+                // W trybie dodawania zawsze ustaw ParentUnitId na podstawie wyboru w ComboBoxie
+                // null oznacza "Brak Jednostki nadrzędnej", pusty string konwertuj na null
+                Model.ParentUnitId = string.IsNullOrEmpty(_workingParentUnitId) ? null : _workingParentUnitId;
+            }
+            else if (_parentUnitChanged)
+            {
+                // W trybie edycji ustaw tylko gdy została dokonana zmiana (nawet jeśli _workingParentUnitId jest null)
+                Model.ParentUnitId = string.IsNullOrEmpty(_workingParentUnitId) ? null : _workingParentUnitId;
+            }
+            
             if (_workingIsActive.HasValue) Model.IsActive = _workingIsActive.Value;
             if (_workingDescription != null) Model.Description = _workingDescription;
             if (_workingSortOrder.HasValue) Model.SortOrder = _workingSortOrder.Value;
@@ -722,6 +772,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             _workingIsActive = null;
             _workingDescription = null;
             _workingSortOrder = null;
+            _parentUnitChanged = false;
         }
 
         private void ResetViewModel()
@@ -833,13 +884,38 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
 
             var codeParts = new List<string>();
             
-            // Pobierz kod jednostki nadrzędnej
-            var workingParentUnitId = _workingParentUnitId ?? Model?.ParentUnitId;
-            if (!string.IsNullOrEmpty(workingParentUnitId))
+            // KLUCZOWE: Określ aktualną jednostkę nadrzędną na podstawie trybu i zmian użytkownika
+            string? currentParentUnitId;
+            
+            if (Mode == OrganizationalUnitEditMode.Add)
+            {
+                // W trybie Add zawsze używaj _workingParentUnitId
+                currentParentUnitId = _workingParentUnitId;
+            }
+            else if (Mode == OrganizationalUnitEditMode.Edit)
+            {
+                // W trybie Edit używaj _workingParentUnitId TYLKO jeśli użytkownik dokonał zmiany
+                if (_parentUnitChanged)
+                {
+                    currentParentUnitId = _workingParentUnitId;
+                }
+                else
+                {
+                    // Jeśli użytkownik nie dokonał zmiany, użyj oryginalnej wartości z modelu
+                    currentParentUnitId = Model?.ParentUnitId;
+                }
+            }
+            else
+            {
+                // Tryb View - użyj wartości z modelu
+                currentParentUnitId = Model?.ParentUnitId;
+            }
+            
+            if (!string.IsNullOrEmpty(currentParentUnitId))
             {
                 try
                 {
-                    var parentUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(workingParentUnitId);
+                    var parentUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(currentParentUnitId);
                     if (parentUnit != null && !string.IsNullOrEmpty(parentUnit.Code))
                     {
                         // Używamy kodu jednostki nadrzędnej jako prefiksu
