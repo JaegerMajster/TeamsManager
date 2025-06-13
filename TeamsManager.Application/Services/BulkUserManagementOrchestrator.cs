@@ -572,7 +572,7 @@ namespace TeamsManager.Application.Services
                 return (false, "Użytkownik o tym UPN już istnieje");
 
             // Sprawdź czy dział istnieje
-            var department = await _departmentService.GetDepartmentByIdAsync(plan.DepartmentId);
+            var department = await _departmentService.GetDepartmentByIdAsync(plan.DepartmentId, false, false, false);
             if (department == null)
                 return (false, "Dział o podanym ID nie istnieje");
 

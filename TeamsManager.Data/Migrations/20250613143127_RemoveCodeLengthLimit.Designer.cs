@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TeamsManager.Data;
 
@@ -10,9 +11,11 @@ using TeamsManager.Data;
 namespace TeamsManager.Data.Migrations
 {
     [DbContext(typeof(TeamsManagerDbContext))]
-    partial class TeamsManagerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250613143127_RemoveCodeLengthLimit")]
+    partial class RemoveCodeLengthLimit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");

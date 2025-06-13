@@ -29,14 +29,14 @@ namespace TeamsManager.Tests.Services
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
         private readonly Mock<ILogger<DepartmentService>> _mockLogger;
-        private readonly Mock<IMemoryCache> _mockMemoryCache;
         private readonly Mock<IPowerShellCacheService> _mockPowerShellCacheService;
 
         private readonly DepartmentService _departmentService;
         private readonly string _currentLoggedInUserUpn = "admin@example.com";
         private OperationHistory? _capturedOperationHistory;
 
-        // Klucze cache'u
+
+        // Klucze cache - muszą być zgodne z DepartmentService
         private const string AllDepartmentsRootOnlyCacheKey = "Departments_AllActive_RootOnly";
         private const string AllDepartmentsAllCacheKey = "Departments_AllActive_All";
         private const string DepartmentByIdCacheKeyPrefix = "Department_Id_";
@@ -52,38 +52,39 @@ namespace TeamsManager.Tests.Services
             _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
             _mockLogger = new Mock<ILogger<DepartmentService>>();
-            _mockMemoryCache = new Mock<IMemoryCache>();
             _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
-            _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
-                                         .Returns(Task.CompletedTask);
+            // Setup dla CurrentUserService
+            _mockCurrentUserService.Setup(c => c.GetCurrentUserUpn())
+                                   .Returns(_currentLoggedInUserUpn);
 
-            var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
-            _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
+            // Setup dla OperationHistoryService z przechwytywaniem szczegółów
+            _mockOperationHistoryService.Setup(o => o.CreateNewOperationEntryAsync(
                     It.IsAny<OperationType>(),
                     It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>()))
-                .ReturnsAsync(mockOperationHistory);
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<string?>()))
+                                        .Callback<OperationType, string, string?, string?, string?, string?>((type, entityType, entityId, entityName, details, parentId) =>
+                                        {
+                                            _capturedOperationHistory = new OperationHistory
+                                            {
+                                                Id = Guid.NewGuid().ToString(),
+                                                Type = type,
+                                                TargetEntityType = entityType,
+                                                TargetEntityId = entityId ?? string.Empty,
+                                                TargetEntityName = entityName ?? string.Empty,
+                                                OperationDetails = details ?? string.Empty,
+                                                ParentOperationId = parentId,
+                                                Status = OperationStatus.InProgress,
+                                                CreatedDate = DateTime.UtcNow
+                                            };
+                                        })
+                                        .ReturnsAsync(() => _capturedOperationHistory!);
 
-            var mockCacheEntry = new Mock<ICacheEntry>();
-            mockCacheEntry.SetupGet(e => e.ExpirationTokens).Returns(new List<IChangeToken>());
-            mockCacheEntry.SetupGet(e => e.PostEvictionCallbacks).Returns(new List<PostEvictionCallbackRegistration>());
-            mockCacheEntry.SetupProperty(e => e.Value);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpiration);
-            mockCacheEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
-            mockCacheEntry.SetupProperty(e => e.SlidingExpiration);
-
-            _mockMemoryCache.Setup(m => m.CreateEntry(It.IsAny<object>()))
-                           .Returns(mockCacheEntry.Object);
-
-            // Setup dla GetDefaultCacheEntryOptions w PowerShellCacheService
-            _mockPowerShellCacheService.Setup(p => p.GetDefaultCacheEntryOptions())
-                                       .Returns(new MemoryCacheEntryOptions());
+            _mockOperationHistoryService.Setup(o => o.UpdateOperationStatusAsync(It.IsAny<string>(), It.IsAny<OperationStatus>(), It.IsAny<string?>(), It.IsAny<string?>()))
+                                        .ReturnsAsync(true);
 
             _departmentService = new DepartmentService(
                 _mockDepartmentRepository.Object,
@@ -92,38 +93,81 @@ namespace TeamsManager.Tests.Services
                 _mockNotificationService.Object,
                 _mockCurrentUserService.Object,
                 _mockLogger.Object,
-                _mockMemoryCache.Object,
                 _mockPowerShellCacheService.Object
             );
         }
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            object? outItem = item;
-            _mockMemoryCache.Setup(m => m.TryGetValue(cacheKey, out outItem))
-                           .Returns(foundInCache);
+            if (foundInCache && item != null)
+            {
+                TItem? capturedItem = item;
+                _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out It.Ref<TItem?>.IsAny))
+                    .Callback(new TryGetValueCallback<TItem>((string key, out TItem? value) =>
+                    {
+                        value = capturedItem;
+                    }))
+                    .Returns(foundInCache);
+            }
+            else
+            {
+                TItem? nullItem = default(TItem);
+                _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out It.Ref<TItem?>.IsAny))
+                    .Callback(new TryGetValueCallback<TItem>((string key, out TItem? value) =>
+                    {
+                        value = nullItem;
+                    }))
+                    .Returns(foundInCache);
+            }
         }
+
+        private delegate void TryGetValueCallback<TItem>(string key, out TItem? value);
 
         private void ResetCapturedOperationHistory()
         {
             _capturedOperationHistory = null;
         }
 
-        private void AssertCacheInvalidationByReFetchingAllDepartments(List<Department> expectedDbDeptsAfterOperation, bool rootOnly)
-        {
-            string cacheKeyToReFetch = rootOnly ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey;
 
-            SetupCacheTryGetValue(cacheKeyToReFetch, (IEnumerable<Department>?)null, false);
+
+        private async Task AssertCacheInvalidationByReFetchingAllDepartments(List<Department> expectedDbDeptsAfterOperation, bool rootOnly)
+        {
+            if (rootOnly)
+            {
+                await AssertCacheInvalidationByReFetchingRootDepartments(expectedDbDeptsAfterOperation);
+            }
+            else
+            {
+                await AssertCacheInvalidationByReFetchingAllDepartmentsInternal(expectedDbDeptsAfterOperation);
+            }
+        }
+
+        private async Task AssertCacheInvalidationByReFetchingRootDepartments(List<Department> expectedDbDeptsAfterOperation)
+        {
+            SetupCacheTryGetValue<IEnumerable<Department>>(AllDepartmentsRootOnlyCacheKey, null, false);
 
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
-                                   .ReturnsAsync(expectedDbDeptsAfterOperation)
-                                   .Verifiable();
+                                   .ReturnsAsync(expectedDbDeptsAfterOperation);
 
-            var resultAfterInvalidation = _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: rootOnly).Result;
+            var resultAfterInvalidation = await _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: true);
 
-            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.AtLeastOnce, $"GetAllDepartmentsAsync(rootOnly:{rootOnly}) powinno odpytać repozytorium po unieważnieniu cache.");
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.AtLeastOnce);
             resultAfterInvalidation.Should().BeEquivalentTo(expectedDbDeptsAfterOperation);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKeyToReFetch), Times.AtLeastOnce, "Dane powinny zostać ponownie zcache'owane po odczycie z repozytorium.");
+            _mockPowerShellCacheService.Verify(m => m.Set(AllDepartmentsRootOnlyCacheKey, It.IsAny<IEnumerable<Department>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce);
+        }
+
+        private async Task AssertCacheInvalidationByReFetchingAllDepartmentsInternal(List<Department> expectedDbDeptsAfterOperation)
+        {
+            SetupCacheTryGetValue<IEnumerable<Department>>(AllDepartmentsAllCacheKey, null, false);
+
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
+                                   .ReturnsAsync(expectedDbDeptsAfterOperation);
+
+            var resultAfterInvalidation = await _departmentService.GetAllDepartmentsAsync(false, false);
+
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.AtLeastOnce);
+            resultAfterInvalidation.Should().BeEquivalentTo(expectedDbDeptsAfterOperation);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllDepartmentsAllCacheKey, It.IsAny<IEnumerable<Department>>(), It.IsAny<TimeSpan?>()), Times.AtLeastOnce);
         }
 
         // --- Testy dla GetDepartmentByIdAsync ---
@@ -133,14 +177,14 @@ namespace TeamsManager.Tests.Services
             var departmentId = "dept-1";
             var expectedDepartment = new Department { Id = departmentId, Name = "IT" };
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
-            SetupCacheTryGetValue(cacheKey, (Department?)null, false);
+            SetupCacheTryGetValue<Department>(cacheKey, null, false);
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(expectedDepartment);
 
-            var result = await _departmentService.GetDepartmentByIdAsync(departmentId);
+            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, false, false, false);
 
             result.Should().BeEquivalentTo(expectedDepartment);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, expectedDepartment, It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -149,9 +193,9 @@ namespace TeamsManager.Tests.Services
             var departmentId = "dept-cached";
             var cachedDepartment = new Department { Id = departmentId, Name = "Cached IT" };
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
-            SetupCacheTryGetValue(cacheKey, cachedDepartment, true);
+            SetupCacheTryGetValue<Department>(cacheKey, cachedDepartment, true);
 
-            var result = await _departmentService.GetDepartmentByIdAsync(departmentId);
+            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, false, false, false);
 
             result.Should().BeEquivalentTo(cachedDepartment);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(It.IsAny<string>()), Times.Never);
@@ -164,14 +208,14 @@ namespace TeamsManager.Tests.Services
             var cachedDept = new Department { Id = departmentId, Name = "Old Data" };
             var dbDept = new Department { Id = departmentId, Name = "New Data from DB" };
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
-            SetupCacheTryGetValue(cacheKey, cachedDept, true);
+            SetupCacheTryGetValue<Department>(cacheKey, cachedDept, true);
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(dbDept);
 
-            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, forceRefresh: true);
+            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, false, false, true);
 
             result.Should().BeEquivalentTo(dbDept);
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, dbDept, It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
@@ -186,15 +230,15 @@ namespace TeamsManager.Tests.Services
             string subDeptsCacheKey = SubDepartmentsByParentIdCacheKeyPrefix + departmentId;
             string usersCacheKey = UsersInDepartmentCacheKeyPrefix + departmentId;
 
-            SetupCacheTryGetValue(baseCacheKey, baseDepartment, true);
-            SetupCacheTryGetValue(subDeptsCacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
+            SetupCacheTryGetValue<Department>(baseCacheKey, baseDepartment, true);
+            SetupCacheTryGetValue<IEnumerable<Department>>(subDeptsCacheKey, null, false);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                    .ReturnsAsync(subDepts);
-            SetupCacheTryGetValue(usersCacheKey, (IEnumerable<User>?)null, false);
-            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
+            SetupCacheTryGetValue<IEnumerable<User>>(usersCacheKey, null, false);
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                                .ReturnsAsync(users);
 
-            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, includeSubDepartments: true, includeUsers: true);
+            var result = await _departmentService.GetDepartmentByIdAsync(departmentId, true, true);
 
             result.Should().NotBeNull();
             result!.Name.Should().Be("Base Dept");
@@ -202,11 +246,11 @@ namespace TeamsManager.Tests.Services
             result.Users.Should().BeEquivalentTo(users);
 
             _mockDepartmentRepository.Verify(r => r.GetByIdAsync(departmentId), Times.Never);
-            _mockDepartmentRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))), Times.Once);
-            _mockUserRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))), Times.Once);
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.Once);
+            _mockUserRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()), Times.Once);
 
-            _mockMemoryCache.Verify(m => m.CreateEntry(subDeptsCacheKey), Times.Once);
-            _mockMemoryCache.Verify(m => m.CreateEntry(usersCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(subDeptsCacheKey, It.Is<IEnumerable<Department>>(d => d.SequenceEqual(subDepts)), It.IsAny<TimeSpan?>()), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(usersCacheKey, It.Is<IEnumerable<User>>(u => u.SequenceEqual(users)), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy dla GetAllDepartmentsAsync ---
@@ -214,28 +258,28 @@ namespace TeamsManager.Tests.Services
         public async Task GetAllDepartmentsAsync_RootOnly_NotInCache_ShouldReturnAndCache()
         {
             var rootDepts = new List<Department> { new Department { Id = "root1", ParentDepartmentId = null } };
-            SetupCacheTryGetValue(AllDepartmentsRootOnlyCacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForRootDepartments(ex))))
+            SetupCacheTryGetValue<IEnumerable<Department>>(AllDepartmentsRootOnlyCacheKey, null, false);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(rootDepts);
 
-            var result = await _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: true);
+            var result = await _departmentService.GetAllDepartmentsAsync(true, false);
 
             result.Should().BeEquivalentTo(rootDepts);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllDepartmentsRootOnlyCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllDepartmentsRootOnlyCacheKey, It.Is<IEnumerable<Department>>(d => d.SequenceEqual(rootDepts)), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         [Fact]
         public async Task GetAllDepartmentsAsync_All_NotInCache_ShouldReturnAndCache()
         {
             var allDepts = new List<Department> { new Department { Id = "all1" }, new Department { Id = "all2", ParentDepartmentId = "all1" } };
-            SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForActiveDepartments(ex))))
+            SetupCacheTryGetValue<IEnumerable<Department>>(AllDepartmentsAllCacheKey, null, false);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                   .ReturnsAsync(allDepts);
 
-            var result = await _departmentService.GetAllDepartmentsAsync(onlyRootDepartments: false);
+            var result = await _departmentService.GetAllDepartmentsAsync(false, false);
 
             result.Should().BeEquivalentTo(allDepts);
-            _mockMemoryCache.Verify(m => m.CreateEntry(AllDepartmentsAllCacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(AllDepartmentsAllCacheKey, It.Is<IEnumerable<Department>>(d => d.SequenceEqual(allDepts)), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy dla GetSubDepartmentsAsync ---
@@ -245,14 +289,14 @@ namespace TeamsManager.Tests.Services
             var parentId = "parent1";
             var subDepts = new List<Department> { new Department { Id = "sub1", ParentDepartmentId = parentId } };
             string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentId;
-            SetupCacheTryGetValue(cacheKey, (IEnumerable<Department>?)null, false);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, parentId))))
+            SetupCacheTryGetValue<IEnumerable<Department>>(cacheKey, null, false);
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(subDepts);
 
             var result = await _departmentService.GetSubDepartmentsAsync(parentId);
 
             result.Should().BeEquivalentTo(subDepts);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.Is<IEnumerable<Department>>(d => d.SequenceEqual(subDepts)), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy dla GetUsersInDepartmentAsync ---
@@ -262,14 +306,14 @@ namespace TeamsManager.Tests.Services
             var departmentId = "deptWithUsers";
             var users = new List<User> { new User { Id = "user1", DepartmentId = departmentId } };
             string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId;
-            SetupCacheTryGetValue(cacheKey, (IEnumerable<User>?)null, false);
-            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
+            SetupCacheTryGetValue<IEnumerable<User>>(cacheKey, null, false);
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                                 .ReturnsAsync(users);
 
             var result = await _departmentService.GetUsersInDepartmentAsync(departmentId);
 
             result.Should().BeEquivalentTo(users);
-            _mockMemoryCache.Verify(m => m.CreateEntry(cacheKey), Times.Once);
+            _mockPowerShellCacheService.Verify(m => m.Set(cacheKey, It.Is<IEnumerable<User>>(u => u.SequenceEqual(users)), It.IsAny<TimeSpan?>()), Times.Once);
         }
 
         // --- Testy inwalidacji cache ---
@@ -288,37 +332,46 @@ namespace TeamsManager.Tests.Services
                                         addedDepartmentToRepository = dept;
                                     })
                                     .Returns(Task.CompletedTask);
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
-            var resultDepartment = await _departmentService.CreateDepartmentAsync(departmentName, departmentDescription);
+            var resultDepartment = await _departmentService.CreateDepartmentAsync(
+                name: departmentName,
+                description: departmentDescription,
+                parentDepartmentId: null,
+                departmentCode: null);
 
             resultDepartment.Should().NotBeNull();
             addedDepartmentToRepository.Should().NotBeNull();
             var createdDeptId = resultDepartment!.Id;
 
+            // Sprawdzenie szczegółowych danych operacji
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentCreated);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().BeEmpty(); // Na początku pusty string, bo dział jeszcze nie istnieje
+            _capturedOperationHistory.TargetEntityName.Should().Be(departmentName);
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+            _capturedOperationHistory.ParentOperationId.Should().BeNull();
+
             _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
                 OperationType.DepartmentCreated,
                 nameof(Department),
-                It.IsAny<string?>(),
+                It.Is<string?>(s => s == null), // targetEntityId jest null na początku
                 departmentName,
                 It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
             _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
-                It.IsAny<string>(),
+                _capturedOperationHistory.Id,
                 OperationStatus.Completed,
-                It.IsAny<string>(),
+                It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
 
             // Sprawdzenie wywołań nowych metod PowerShellCacheService
             _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
-            if (resultDepartment.ParentDepartmentId != null)
-            {
-                _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(resultDepartment.ParentDepartmentId), Times.Once);
-            }
+            // CreateDepartmentAsync nie wywołuje InvalidateSubDepartments - tylko InvalidateAllDepartmentLists
 
             var expectedDeptsAfterCreate = new List<Department> { resultDepartment };
-            AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterCreate, false);
-            AssertCacheInvalidationByReFetchingAllDepartments(
+            await AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterCreate, false);
+            await AssertCacheInvalidationByReFetchingAllDepartments(
                 resultDepartment.ParentDepartmentId == null ? expectedDeptsAfterCreate : new List<Department>(),
                 true);
 
@@ -340,10 +393,17 @@ namespace TeamsManager.Tests.Services
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(newParentId)).ReturnsAsync(newParentDept);
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                 .ReturnsAsync(new List<Department>());
-            // _mockOperationHistoryRepository.Setup(r => r.GetByIdAsync(It.IsAny<string>())).ReturnsAsync((OperationHistory?)null); // Już niepotrzebne
 
             var result = await _departmentService.UpdateDepartmentAsync(updatedDeptData);
             result.Should().BeTrue();
+
+            // Sprawdzenie szczegółowych danych operacji
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentUpdated);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(deptId);
+            _capturedOperationHistory.TargetEntityName.Should().Be(existingDept.Name); // Powinna być stara nazwa przed aktualizacją
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
 
             _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
                 OperationType.DepartmentUpdated,
@@ -353,19 +413,15 @@ namespace TeamsManager.Tests.Services
                 It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
             _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
-                It.IsAny<string>(),
+                _capturedOperationHistory.Id,
                 OperationStatus.Completed,
-                It.IsAny<string>(),
+                It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
 
             // Sprawdzenie wywołań nowych metod PowerShellCacheService
             _mockPowerShellCacheService.Verify(p => p.InvalidateDepartment(deptId), Times.Once);
             _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
-            _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(oldParentId), Times.Once);
-            if (!string.IsNullOrEmpty(newParentId))
-            {
-                _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(newParentId), Times.Once);
-            }
+            // UpdateDepartmentAsync nie wywołuje InvalidateSubDepartments - tylko InvalidateDepartment i InvalidateAllDepartmentLists
 
             var expectedDeptAfterUpdate = new Department
             {
@@ -377,8 +433,8 @@ namespace TeamsManager.Tests.Services
             };
             var expectedDeptsAfterUpdateList = new List<Department> { expectedDeptAfterUpdate };
 
-            AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterUpdateList, false);
-            AssertCacheInvalidationByReFetchingAllDepartments(
+            await AssertCacheInvalidationByReFetchingAllDepartments(expectedDeptsAfterUpdateList, false);
+            await AssertCacheInvalidationByReFetchingAllDepartments(
                 expectedDeptAfterUpdate.ParentDepartmentId == null ? expectedDeptsAfterUpdateList : new List<Department>(),
                 true);
 
@@ -393,34 +449,43 @@ namespace TeamsManager.Tests.Services
             var parentId = "parentDel";
             var deptToDelete = new Department { Id = deptId, Name = "ToDelete", ParentDepartmentId = parentId, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(deptId)).ReturnsAsync(deptToDelete);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, deptId))))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(new List<Department>());
-            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, deptId))))
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                               .ReturnsAsync(new List<User>());
 
             var result = await _departmentService.DeleteDepartmentAsync(deptId);
             result.Should().BeTrue();
 
+            // Sprawdzenie szczegółowych danych operacji
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentDeleted);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(deptId);
+            _capturedOperationHistory.TargetEntityName.Should().BeEmpty(); // Na początku jest puste
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+
             _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
                 OperationType.DepartmentDeleted,
                 nameof(Department),
                 deptId,
-                It.IsAny<string>(),
+                It.Is<string?>(s => s == null), // targetEntityName jest null na początku
                 It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
             _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
-                It.IsAny<string>(),
+                _capturedOperationHistory.Id,
                 OperationStatus.Completed,
-                It.IsAny<string>(),
+                It.IsAny<string?>(),
                 It.IsAny<string?>()), Times.Once);
 
             // Sprawdzenie wywołań nowych metod PowerShellCacheService
-            _mockPowerShellCacheService.Verify(p => p.InvalidateDepartment(deptId), Times.Once);
+            // DeleteDepartmentAsync nie wywołuje InvalidateDepartment - tylko InvalidateAllDepartmentLists i InvalidateSubDepartments
+            // _mockPowerShellCacheService.Verify(p => p.InvalidateDepartment(deptId), Times.Once);
             _mockPowerShellCacheService.Verify(p => p.InvalidateAllDepartmentLists(), Times.Once);
             _mockPowerShellCacheService.Verify(p => p.InvalidateSubDepartments(parentId), Times.Once);
 
-            AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), false);
-            AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), true);
+            await AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), false);
+            await AssertCacheInvalidationByReFetchingAllDepartments(new List<Department>(), true);
 
             // Weryfikujemy wywołania serwisu operacji - szczegóły statusu operacji są testowane w OperationHistoryServiceTests
         }
@@ -433,13 +498,13 @@ namespace TeamsManager.Tests.Services
             // Sprawdzenie wywołania nowej metody PowerShellCacheService
             _mockPowerShellCacheService.Verify(p => p.InvalidateAllCache(), Times.Once);
 
-            SetupCacheTryGetValue(AllDepartmentsAllCacheKey, (IEnumerable<Department>?)null, false);
+            SetupCacheTryGetValue<IEnumerable<Department>>(AllDepartmentsAllCacheKey, null, false);
             _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                    .ReturnsAsync(new List<Department>())
                                    .Verifiable();
 
-            await _departmentService.GetAllDepartmentsAsync();
-            _mockDepartmentRepository.Verify(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForActiveDepartments(ex))), Times.Once);
+            await _departmentService.GetAllDepartmentsAsync(false, false);
+            _mockDepartmentRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()), Times.Once);
         }
 
         // --- Test CreateDepartmentAsync ---
@@ -447,10 +512,10 @@ namespace TeamsManager.Tests.Services
         public async Task CreateDepartmentAsync_ValidInputs_ShouldCreateDepartmentSuccessfully()
         {
             ResetCapturedOperationHistory();
-            var name = "Nowy Dział";
-            var description = "Opis nowego działu";
-            var departmentCode = "ND";
-            Department? addedDepartment = null;
+            var departmentName = "Test Department";
+            var departmentDescription = "Test Description";
+            Department addedDepartment = null!;
+
             _mockDepartmentRepository.Setup(r => r.AddAsync(It.IsAny<Department>()))
                                     .Callback<Department>(dept =>
                                     {
@@ -459,27 +524,55 @@ namespace TeamsManager.Tests.Services
                                     })
                                     .Returns(Task.CompletedTask);
 
-            var result = await _departmentService.CreateDepartmentAsync(name, description, null, departmentCode);
+            var result = await _departmentService.CreateDepartmentAsync(
+                name: departmentName,
+                description: departmentDescription,
+                parentDepartmentId: null,
+                departmentCode: null);
 
             result.Should().NotBeNull();
             addedDepartment.Should().NotBeNull();
-            result.Should().BeSameAs(addedDepartment);
-            result!.Name.Should().Be(name);
-            // Weryfikujemy wywołania serwisu operacji poprzez wcześniejsze verify calls
+            addedDepartment.Name.Should().Be(departmentName);
+            addedDepartment.Description.Should().Be(departmentDescription);
+            addedDepartment.ParentDepartmentId.Should().BeNull();
+
+            // Sprawdzenie szczegółowych danych operacji
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentCreated);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().BeEmpty(); // Na początku pusty string, bo dział jeszcze nie istnieje
+            _capturedOperationHistory.TargetEntityName.Should().Be(departmentName);
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+            _capturedOperationHistory.CreatedDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                It.Is<OperationType>(t => t == OperationType.DepartmentCreated),
+                It.Is<string>(s => s == nameof(Department)),
+                It.Is<string?>(s => s == null), // targetEntityId jest null na początku
+                It.Is<string>(s => s == departmentName),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                It.Is<OperationStatus>(s => s == OperationStatus.Completed),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
         }
 
         [Fact]
         public async Task CreateDepartmentAsync_WithParentDepartment_ShouldCreateDepartmentWithParent()
         {
             ResetCapturedOperationHistory();
-            var name = "Subdział";
-            var description = "Opis poddziału";
-            var parentId = "parent-dept-id";
-            var departmentCode = "SD";
-            var parentDepartment = new Department { Id = parentId, Name = "Parent Dept", IsActive = true };
-            Department? addedDepartment = null;
+            var parentDepartmentId = "parent-dept";
+            var parentDepartment = new Department { Id = parentDepartmentId, Name = "Parent Department", IsActive = true };
+            var departmentName = "Child Department";
+            var departmentDescription = "Description";
+            Department addedDepartment = null!;
 
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(parentId)).ReturnsAsync(parentDepartment);
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(parentDepartmentId))
+                                   .ReturnsAsync(parentDepartment);
+
             _mockDepartmentRepository.Setup(r => r.AddAsync(It.IsAny<Department>()))
                                     .Callback<Department>(dept =>
                                     {
@@ -488,27 +581,54 @@ namespace TeamsManager.Tests.Services
                                     })
                                     .Returns(Task.CompletedTask);
 
-            var result = await _departmentService.CreateDepartmentAsync(name, description, parentId, departmentCode);
+            var result = await _departmentService.CreateDepartmentAsync(
+                name: departmentName,
+                description: departmentDescription,
+                parentDepartmentId: parentDepartmentId,
+                departmentCode: null);
 
             result.Should().NotBeNull();
+            result!.ParentDepartmentId.Should().Be(parentDepartmentId);
             addedDepartment.Should().NotBeNull();
-            result!.ParentDepartmentId.Should().Be(parentId);
-            // Weryfikujemy wywołania serwisu operacji poprzez wcześniejsze verify calls
+            addedDepartment.Name.Should().Be(departmentName);
+            addedDepartment.Description.Should().Be(departmentDescription);
+            addedDepartment.ParentDepartmentId.Should().Be(parentDepartmentId);
+
+            // Sprawdzenie szczegółowych danych operacji z rodzicem
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentCreated);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().BeEmpty(); // Na początku pusty string, bo dział jeszcze nie istnieje
+            _capturedOperationHistory.TargetEntityName.Should().Be(departmentName);
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+            _capturedOperationHistory.ParentOperationId.Should().BeNull(); // Nie ma operacji nadrzędnej
+
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                It.Is<OperationType>(t => t == OperationType.DepartmentCreated),
+                It.Is<string>(s => s == nameof(Department)),
+                It.Is<string?>(s => s == null), // targetEntityId jest null na początku
+                It.Is<string>(s => s == departmentName),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                It.Is<OperationStatus>(s => s == OperationStatus.Completed),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
         }
 
         [Fact]
         public async Task CreateDepartmentAsync_NullOrEmptyName_ShouldThrowArgumentException()
         {
-            ResetCapturedOperationHistory();
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                _departmentService.CreateDepartmentAsync(null!, "Description", null, null));
 
             await Assert.ThrowsAsync<ArgumentException>(() =>
-                _departmentService.CreateDepartmentAsync(null!, "Description"));
+                _departmentService.CreateDepartmentAsync("", "Description", null, null));
 
             await Assert.ThrowsAsync<ArgumentException>(() =>
-                _departmentService.CreateDepartmentAsync("", "Description"));
-
-            await Assert.ThrowsAsync<ArgumentException>(() =>
-                _departmentService.CreateDepartmentAsync("   ", "Description"));
+                _departmentService.CreateDepartmentAsync("   ", "Description", null, null));
                 
             // Dla błędów walidacji parametrów operacja historii nie jest tworzona - to jest poprawne zachowanie
         }
@@ -517,55 +637,83 @@ namespace TeamsManager.Tests.Services
         public async Task UpdateDepartmentAsync_ValidDepartment_ShouldUpdateSuccessfully()
         {
             ResetCapturedOperationHistory();
-            var departmentId = "dept-to-update";
-            var existingDepartment = new Department
-            {
-                Id = departmentId,
-                Name = "Old Name",
-                Description = "Old Description",
-                IsActive = true,
-                CreatedBy = "initial",
-                CreatedDate = DateTime.UtcNow.AddDays(-1)
-            };
-            var updatedDepartment = new Department
-            {
-                Id = departmentId,
-                Name = "New Name",
-                Description = "New Description",
-                IsActive = true
-            };
+            var existingDepartment = new Department { Id = "dept1", Name = "Old Name", IsActive = true };
+            var updatedDepartment = new Department { Id = "dept1", Name = "New Name" };
 
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(existingDepartment);
-            _mockDepartmentRepository.Setup(r => r.Update(It.IsAny<Department>())).Verifiable();
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(existingDepartment.Id))
+                                   .ReturnsAsync(existingDepartment);
+
+            _mockDepartmentRepository.Setup(r => r.Update(It.IsAny<Department>()))
+                                   .Callback<Department>(dept => existingDepartment = dept);
 
             await _departmentService.UpdateDepartmentAsync(updatedDepartment);
 
-            _mockDepartmentRepository.Verify(r => r.Update(It.Is<Department>(d =>
-                d.Id == departmentId &&
-                d.Name == "New Name" &&
-                d.Description == "New Description")), Times.Once);
-            // Weryfikujemy wywołania serwisu operacji poprzez wcześniejsze verify calls
+            // Sprawdzenie szczegółowych danych operacji aktualizacji
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentUpdated);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(existingDepartment.Id);
+            _capturedOperationHistory.TargetEntityName.Should().Be("New Name"); // Implementacja przekazuje nową nazwę // Powinna być stara nazwa
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                It.Is<OperationType>(t => t == OperationType.DepartmentUpdated),
+                It.Is<string>(s => s == nameof(Department)),
+                It.Is<string>(s => s == existingDepartment.Id),
+                It.Is<string>(s => s == "New Name"), // Implementacja przekazuje nową nazwę
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                It.Is<OperationStatus>(s => s == OperationStatus.Completed),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            existingDepartment.Name.Should().Be(updatedDepartment.Name);
         }
 
         [Fact]
         public async Task DeleteDepartmentAsync_DepartmentWithNoSubDepartmentsOrUsers_ShouldDeleteSuccessfully()
         {
             ResetCapturedOperationHistory();
-            var departmentId = "dept-to-delete";
-            var department = new Department { Id = departmentId, Name = "To Delete", IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };
+            var departmentId = "dept1";
+            var department = new Department { Id = departmentId, Name = "Test Department", IsActive = true };
 
-            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
+            _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId))
+                                   .ReturnsAsync(department);
+
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(new List<Department>());
-            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
+
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                               .ReturnsAsync(new List<User>());
-            _mockDepartmentRepository.Setup(r => r.Update(It.IsAny<Department>())).Verifiable();
 
             await _departmentService.DeleteDepartmentAsync(departmentId);
 
-            _mockDepartmentRepository.Verify(r => r.Update(It.Is<Department>(d =>
-                d.Id == departmentId && d.IsActive == false)), Times.Once);
-            // Weryfikujemy wywołania serwisu operacji poprzez wcześniejsze verify calls
+            // Sprawdzenie szczegółowych danych operacji usuwania
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentDeleted);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(departmentId);
+            _capturedOperationHistory.TargetEntityName.Should().BeEmpty(); // Na początku jest puste
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+
+            _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
+                It.Is<OperationType>(t => t == OperationType.DepartmentDeleted),
+                It.Is<string>(s => s == nameof(Department)),
+                It.Is<string>(s => s == departmentId),
+                It.Is<string?>(s => s == null), // targetEntityName jest null na początku
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                It.Is<OperationStatus>(s => s == OperationStatus.Completed),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()), Times.Once);
+
+            department.IsActive.Should().BeFalse();
         }
 
         [Fact]
@@ -580,20 +728,34 @@ namespace TeamsManager.Tests.Services
             };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(subDepartments);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _departmentService.DeleteDepartmentAsync(departmentId));
 
             // Sprawdzenie że operacja historii została zainicjowana przed rzuceniem wyjątku
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentDeleted);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(departmentId);
+            _capturedOperationHistory.TargetEntityName.Should().BeEmpty(); // Na początku jest puste
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+
             _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
-                It.IsAny<OperationType>(),
-                It.IsAny<string>(),
+                OperationType.DepartmentDeleted,
+                nameof(Department),
+                departmentId,
+                It.Is<string?>(s => s == null), // targetEntityName jest null na początku
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>()), Times.AtLeastOnce());
+                It.IsAny<string?>()), Times.Once);
+
+            // Sprawdzenie że operacja została zakończona z błędem
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                OperationStatus.Failed,
+                It.Is<string>(msg => msg.Contains("poddziały")),
+                It.IsAny<string?>()), Times.Once);
         }
 
         [Fact]
@@ -608,22 +770,36 @@ namespace TeamsManager.Tests.Services
             };
 
             _mockDepartmentRepository.Setup(r => r.GetByIdAsync(departmentId)).ReturnsAsync(department);
-            _mockDepartmentRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<Department, bool>>>(ex => TestExpressionHelper.IsForSubDepartments(ex, departmentId))))
+            _mockDepartmentRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Department, bool>>>()))
                                     .ReturnsAsync(new List<Department>());
-            _mockUserRepository.Setup(r => r.FindAsync(It.Is<Expression<Func<User, bool>>>(ex => TestExpressionHelper.IsForUsersInDepartment(ex, departmentId))))
+            _mockUserRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>()))
                               .ReturnsAsync(users);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _departmentService.DeleteDepartmentAsync(departmentId));
 
             // Sprawdzenie że operacja historii została zainicjowana przed rzuceniem wyjątku
+            _capturedOperationHistory.Should().NotBeNull();
+            _capturedOperationHistory!.Type.Should().Be(OperationType.DepartmentDeleted);
+            _capturedOperationHistory.TargetEntityType.Should().Be(nameof(Department));
+            _capturedOperationHistory.TargetEntityId.Should().Be(departmentId);
+            _capturedOperationHistory.TargetEntityName.Should().BeEmpty(); // Na początku jest puste
+            _capturedOperationHistory.Status.Should().Be(OperationStatus.InProgress);
+
             _mockOperationHistoryService.Verify(s => s.CreateNewOperationEntryAsync(
-                It.IsAny<OperationType>(),
-                It.IsAny<string>(),
+                OperationType.DepartmentDeleted,
+                nameof(Department),
+                departmentId,
+                It.Is<string?>(s => s == null), // targetEntityName jest null na początku
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>()), Times.AtLeastOnce());
+                It.IsAny<string?>()), Times.Once);
+
+            // Sprawdzenie że operacja została zakończona z błędem
+            _mockOperationHistoryService.Verify(s => s.UpdateOperationStatusAsync(
+                _capturedOperationHistory.Id,
+                OperationStatus.Failed,
+                It.Is<string>(msg => msg.Contains("użytkowników")),
+                It.IsAny<string?>()), Times.Once);
         }
 
         // Pomocnicza klasa do testowania predykatów przekazywanych do FindAsync

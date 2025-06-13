@@ -17,7 +17,31 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="includeUsers">Czy dołączyć użytkowników przypisanych do działu.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Obiekt Department lub null, jeśli nie znaleziono.</returns>
-        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments = false, bool includeUsers = false, bool forceRefresh = false);
+        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments, bool includeUsers, bool forceRefresh);
+
+        /// <summary>
+        /// Asynchronicznie pobiera dział na podstawie jego ID (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <returns>Obiekt Department lub null, jeśli nie znaleziono.</returns>
+        Task<Department?> GetDepartmentByIdAsync(string departmentId);
+
+        /// <summary>
+        /// Asynchronicznie pobiera dział na podstawie jego ID z poddziałami (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <param name="includeSubDepartments">Czy dołączyć poddziały.</param>
+        /// <returns>Obiekt Department lub null, jeśli nie znaleziono.</returns>
+        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments);
+
+        /// <summary>
+        /// Asynchronicznie pobiera dział na podstawie jego ID z poddziałami i użytkownikami (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <param name="includeSubDepartments">Czy dołączyć poddziały.</param>
+        /// <param name="includeUsers">Czy dołączyć użytkowników przypisanych do działu.</param>
+        /// <returns>Obiekt Department lub null, jeśli nie znaleziono.</returns>
+        Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments, bool includeUsers);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkie aktywne działy.
@@ -25,7 +49,20 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="onlyRootDepartments">Czy pobrać tylko działy najwyższego poziomu (bez rodzica).</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja wszystkich (lub głównych) aktywnych działów.</returns>
-        Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments = false, bool forceRefresh = false);
+        Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments, bool forceRefresh);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie aktywne działy (wygodne przeciążenie).
+        /// </summary>
+        /// <returns>Kolekcja wszystkich aktywnych działów.</returns>
+        Task<IEnumerable<Department>> GetAllDepartmentsAsync();
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie aktywne działy lub tylko główne (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="onlyRootDepartments">Czy pobrać tylko działy najwyższego poziomu (bez rodzica).</param>
+        /// <returns>Kolekcja wszystkich (lub głównych) aktywnych działów.</returns>
+        Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments);
 
         /// <summary>
         /// Asynchronicznie tworzy nowy dział.
@@ -38,8 +75,8 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<Department?> CreateDepartmentAsync(
             string name,
             string description,
-            string? parentDepartmentId = null,
-            string? departmentCode = null);
+            string? parentDepartmentId,
+            string? departmentCode);
 
         /// <summary>
         /// Asynchronicznie aktualizuje dane istniejącego działu.
@@ -61,7 +98,14 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="parentDepartmentId">Identyfikator działu nadrzędnego.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja poddziałów.</returns>
-        Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId, bool forceRefresh = false);
+        Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId, bool forceRefresh);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkie aktywne poddziały dla danego działu nadrzędnego (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="parentDepartmentId">Identyfikator działu nadrzędnego.</param>
+        /// <returns>Kolekcja poddziałów.</returns>
+        Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId);
 
         /// <summary>
         /// Asynchronicznie pobiera wszystkich aktywnych użytkowników przypisanych bezpośrednio do danego działu.
@@ -69,7 +113,14 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="departmentId">Identyfikator działu.</param>
         /// <param name="forceRefresh">Czy wymusić odświeżenie danych z pominięciem cache.</param>
         /// <returns>Kolekcja użytkowników.</returns>
-        Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId, bool forceRefresh = false);
+        Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId, bool forceRefresh);
+
+        /// <summary>
+        /// Asynchronicznie pobiera wszystkich aktywnych użytkowników przypisanych bezpośrednio do danego działu (wygodne przeciążenie).
+        /// </summary>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <returns>Kolekcja użytkowników.</returns>
+        Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId);
 
         /// <summary>
         /// Odświeża cache działów (jeśli jest używany).

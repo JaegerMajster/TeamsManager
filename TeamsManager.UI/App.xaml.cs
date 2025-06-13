@@ -282,13 +282,26 @@ namespace TeamsManager.UI
             services.AddScoped<IDepartmentService, TeamsManager.Core.Services.DepartmentService>();
             services.AddScoped<IGenericRepository<TeamsManager.Core.Models.Department>, TeamsManager.Data.Repositories.GenericRepository<TeamsManager.Core.Models.Department>>();
 
+            // --- REJESTRACJA ORGANIZATIONAL UNITS ---
+            // Core serwisy dla OrganizationalUnits
+            services.AddScoped<IOrganizationalUnitService, TeamsManager.Core.Services.OrganizationalUnitService>();
+            services.AddScoped<IGenericRepository<TeamsManager.Core.Models.OrganizationalUnit>, TeamsManager.Data.Repositories.GenericRepository<TeamsManager.Core.Models.OrganizationalUnit>>();
+            
+            // ViewModels dla Organizational Units
+            services.AddTransient<TeamsManager.UI.ViewModels.OrganizationalUnits.OrganizationalUnitEditViewModel>();
+            services.AddTransient<TeamsManager.UI.ViewModels.OrganizationalUnits.OrganizationalUnitsManagementViewModel>();
+
+            // Widoki Organizational Units
+            services.AddTransient<Views.OrganizationalUnits.OrganizationalUnitsManagementView>();
+            services.AddTransient<Views.OrganizationalUnits.OrganizationalUnitEditDialog>();
+
             // ViewModele dla Departments
             services.AddTransient<ViewModels.Departments.DepartmentsManagementViewModel>();
             services.AddTransient<ViewModels.Departments.DepartmentEditViewModel>();
-            
+
             // ViewModele dla dialogów
             services.AddTransient<ViewModels.Dialogs.UniversalDialogViewModel>();
-            
+
             // Widoki Departments
             services.AddTransient<Views.Departments.DepartmentsManagementView>();
             // --- KONIEC: REJESTRACJA DEPARTMENTS (ETAP 2.4) ---
@@ -622,6 +635,10 @@ namespace TeamsManager.UI
                 {
                     System.Diagnostics.Debug.WriteLine("[Database] Baza danych zawiera już dane.");
                 }
+
+                // Utwórz domyślną jednostkę organizacyjną i przypisz do niej wszystkie działy
+                System.Diagnostics.Debug.WriteLine("[Database] Sprawdzanie jednostek organizacyjnych...");
+                await Scripts.CreateDefaultOrganizationalUnit.ExecuteAsync(context);
             }
             catch (Exception ex)
             {
@@ -640,7 +657,7 @@ namespace TeamsManager.UI
 
             try
             {
-                // Przywr�� normalny ShutdownMode i uruchom g��wne okno
+                // Przywróć normalny ShutdownMode i uruchom główne okno
                 System.Windows.Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 
                 // Tworzenie MainShellWindow przez DI
@@ -650,11 +667,11 @@ namespace TeamsManager.UI
                 // Weryfikacja DI (debug)
                 System.Diagnostics.Debug.WriteLine($"[DI Test] MainShellWindow created via DI: {mainShellWindow != null}");
 
-                // Sprawdzenie serwis�w dla debugowania
+                // Sprawdzenie serwisów dla debugowania
                 var currentUserService = ServiceProvider.GetRequiredService<ICurrentUserService>();
                 System.Diagnostics.Debug.WriteLine($"[UI DI Test] Current User UPN: {currentUserService.GetCurrentUserUpn()}");
 
-                // Weryfikacja serwis�w z Etap�w 2-3
+                // Weryfikacja serwisów z Etapów 2-3
                 var httpClientFactory = ServiceProvider.GetService<IHttpClientFactory>();
                 System.Diagnostics.Debug.WriteLine($"[DI Test] IHttpClientFactory: {httpClientFactory != null}");
 
@@ -695,8 +712,8 @@ namespace TeamsManager.UI
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"B��d podczas tworzenia g��wnego okna:\n\n{ex.Message}\n\nSprawd� konfiguracj� serwis�w.",
-                    "B��d krytyczny",
+                    $"Błąd podczas tworzenia głównego okna:\n\n{ex.Message}\n\nSprawdż konfigurację serwisów.",
+                    "Błąd krytyczny",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
                 System.Windows.Application.Current.Shutdown();

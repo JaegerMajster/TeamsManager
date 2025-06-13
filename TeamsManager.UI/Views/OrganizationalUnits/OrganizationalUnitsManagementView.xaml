@@ -1,18 +1,17 @@
-<UserControl x:Class="TeamsManager.UI.Views.Departments.DepartmentsManagementView"
+<UserControl x:Class="TeamsManager.UI.Views.OrganizationalUnits.OrganizationalUnitsManagementView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-             xmlns:departments="clr-namespace:TeamsManager.UI.ViewModels.Departments"
              xmlns:organizationalUnits="clr-namespace:TeamsManager.UI.ViewModels.OrganizationalUnits"
              mc:Ignorable="d" 
              d:DesignHeight="800" d:DesignWidth="1200"
-             d:DataContext="{d:DesignInstance Type=departments:DepartmentsManagementViewModel}">
+             d:DataContext="{d:DesignInstance Type=organizationalUnits:OrganizationalUnitsManagementViewModel}">
 
     <UserControl.Resources>
         <!-- Style dla TreeViewItem -->
-        <Style x:Key="DepartmentTreeViewItemStyle" TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
+        <Style x:Key="OrganizationalUnitTreeViewItemStyle" TargetType="TreeViewItem" BasedOn="{StaticResource MaterialDesignTreeViewItem}">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
             <Setter Property="Margin" Value="0,2"/>
@@ -109,10 +108,10 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="Zarządzanie Działami"
+                    <TextBlock Text="Zarządzanie Jednostkami Organizacyjnymi"
                              Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                              Margin="0,0,0,8"/>
-                    <TextBlock Text="Hierarchiczny widok struktury organizacyjnej z jednostkami i działami"
+                    <TextBlock Text="Hierarchiczny widok struktury organizacyjnej z przypisanymi działami"
                              Style="{StaticResource MaterialDesignBody2TextBlock}"
                              Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
@@ -159,7 +158,7 @@
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource TextSecondary}"
                                                Margin="0,0,8,0"/>
-                        <TextBlock Text="{Binding ActiveDepartments}"
+                        <TextBlock Text="{Binding ActiveUnits}"
                                  Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                  Foreground="{DynamicResource TextSecondary}"
                                  VerticalAlignment="Center"/>
@@ -247,22 +246,8 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding MigrateDepartmentCodesCommand}"
-                          Style="{StaticResource MaterialDesignFlatButton}"
-                          Foreground="{DynamicResource AccentOrange}"
-                          Margin="0,0,8,0"
-                          ToolTip="Zaktualizuj kody działów zgodnie z nowym schematem">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="CodeBraces" 
-                                                   Width="16" Height="16"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,8,0"/>
-                            <TextBlock Text="Migruj Kody"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding AddDepartmentCommand}"
-                          ToolTip="Dodaj nowy dział">
+                    <Button Command="{Binding AddOrganizationalUnitCommand}"
+                          ToolTip="Dodaj nową jednostkę organizacyjną">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
                                 <Setter Property="Background" Value="{StaticResource HeaderGradient}"/>
@@ -288,7 +273,7 @@
                                                    Width="16" Height="16"
                                                    VerticalAlignment="Center"
                                                    Margin="0,0,8,0"/>
-                            <TextBlock Text="Dodaj Dział"/>
+                            <TextBlock Text="Dodaj Jednostkę"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -296,7 +281,7 @@
         </Border>
 
         <!-- Main Content -->
-        <Grid Grid.Row="2" Background="{DynamicResource MaterialDesignPaper}" Margin="16">
+        <Grid Grid.Row="2">
                 <!-- Loading Overlay -->
                 <Grid Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
                       Background="{DynamicResource MaterialDesignCardBackground}"
@@ -315,14 +300,14 @@
                 <!-- TreeView -->
                 <TreeView ItemsSource="{Binding OrganizationalUnits}"
                         SelectedItemChanged="TreeView_SelectedItemChanged"
-                        ItemContainerStyle="{StaticResource DepartmentTreeViewItemStyle}"
-                        Background="#2E2E2E"
+                        ItemContainerStyle="{StaticResource OrganizationalUnitTreeViewItemStyle}"
+                        Background="#323232"
                         BorderThickness="0"
-                        Padding="20"
+                        Padding="16"
                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
                         ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <TreeView.InputBindings>
-                        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewDepartmentCommand}"/>
+                        <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding ViewSelectedItemCommand}"/>
                     </TreeView.InputBindings>
                 </TreeView>
 
@@ -330,16 +315,16 @@
                 <StackPanel HorizontalAlignment="Center" 
                           VerticalAlignment="Center"
                           Visibility="{Binding OrganizationalUnits.Count, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=0}">
-                    <materialDesign:PackIcon Kind="Domain" 
+                    <materialDesign:PackIcon Kind="FolderOutline" 
                                            Width="64" Height="64"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="0,0,0,16"/>
-                    <TextBlock Text="Brak struktury organizacyjnej do wyświetlenia"
+                    <TextBlock Text="Brak jednostek organizacyjnych do wyświetlenia"
                              Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                              Foreground="{DynamicResource MaterialDesignBodyLight}"
                              HorizontalAlignment="Center"
                              Margin="0,0,0,8"/>
-                    <TextBlock Text="Struktura organizacyjna zostanie utworzona automatycznie przy pierwszym uruchomieniu"
+                    <TextBlock Text="Kliknij 'Dodaj Jednostkę' aby utworzyć pierwszą jednostkę organizacyjną"
                              Style="{StaticResource MaterialDesignBody2TextBlock}"
                              Foreground="{DynamicResource MaterialDesignBodyLight}"
                              HorizontalAlignment="Center"/>
@@ -360,23 +345,22 @@
 
                 <!-- Selected Item Info -->
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding SelectedItem.DisplayName, StringFormat='Wybrany element: {0}'}"
+                    <TextBlock Text="{Binding SelectedItem.DisplayName, StringFormat='Wybrano: {0}'}"
                              Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                              Margin="0,0,0,4"/>
-                    <TextBlock Text="{Binding SelectedItem.Description}"
+                    <TextBlock Text="{Binding SelectedItem.FullPath}"
                              Style="{StaticResource MaterialDesignCaptionTextBlock}"
                              Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
 
                 <!-- Action Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Command="{Binding ViewDepartmentCommand}"
+                    <Button Command="{Binding ViewSelectedItemCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource TextSecondary}"
                           BorderBrush="{DynamicResource TextSecondary}"
                           Margin="0,0,8,0"
-                          ToolTip="Podgląd działu"
-                          Visibility="{Binding SelectedItem.IsDepartment, Converter={StaticResource BooleanToVisibilityConverter}}">
+                          ToolTip="Podgląd">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Eye" 
                                                    Width="16" Height="16"
@@ -386,13 +370,12 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding EditDepartmentCommand}"
+                    <Button Command="{Binding EditSelectedItemCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource AccentBlue}"
                           BorderBrush="{DynamicResource AccentBlue}"
                           Margin="0,0,8,0"
-                          ToolTip="Edytuj dział"
-                          Visibility="{Binding SelectedItem.IsDepartment, Converter={StaticResource BooleanToVisibilityConverter}}">
+                          ToolTip="Edytuj">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Edit" 
                                                    Width="16" Height="16"
@@ -402,12 +385,11 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding DeleteDepartmentCommand}"
+                    <Button Command="{Binding DeleteSelectedItemCommand}"
                           Style="{StaticResource MaterialDesignOutlinedButton}"
                           Foreground="{DynamicResource AccentRed}"
                           BorderBrush="{DynamicResource AccentRed}"
-                          ToolTip="Usuń dział"
-                          Visibility="{Binding SelectedItem.IsDepartment, Converter={StaticResource BooleanToVisibilityConverter}}">
+                          ToolTip="Usuń">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Delete" 
                                                    Width="16" Height="16"
@@ -427,4 +409,4 @@
                                HorizontalAlignment="Center"
                                Margin="16"/>
     </Grid>
-</UserControl> 
+</UserControl>

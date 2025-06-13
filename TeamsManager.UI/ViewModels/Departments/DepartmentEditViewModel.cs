@@ -30,20 +30,21 @@ namespace TeamsManager.UI.ViewModels.Departments
     public class DepartmentEditViewModel : BaseViewModel
     {
         private readonly IDepartmentService _departmentService;
+        private readonly IOrganizationalUnitService _organizationalUnitService;
         private readonly ILogger<DepartmentEditViewModel> _logger;
         private readonly IUIDialogService _uiDialogService;
         private readonly ITeamService _teamService;
         
         private Department _model;
         private DepartmentEditMode _mode;
-        private ObservableCollection<Department> _availableParentDepartments;
+        private ObservableCollection<OrganizationalUnit> _availableOrganizationalUnits;
         private bool _isLoading;
         private string? _errorMessage;
         private string? _statusMessage;
         private string? _generatedCode;
         private bool _hasCodeConflict;
         private string? _codeConflictMessage;
-        private bool _parentDepartmentSelectionMade;
+        private bool _organizationalUnitSelectionMade;
         
         // Nowe właściwości dla ulepszonego error handlingu
         private bool _hasNameConflict;
@@ -54,7 +55,7 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         // Kopie robocze danych - nie modyfikują oryginalnego Model do momentu zapisania
         private string? _workingName;
-        private string? _workingParentDepartmentId;
+        private string? _workingOrganizationalUnitId;
         private bool _workingIsActive;
         private string? _workingDescription;
         private int? _workingSortOrder;
@@ -64,25 +65,27 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         public DepartmentEditViewModel(
             IDepartmentService departmentService,
+            IOrganizationalUnitService organizationalUnitService,
             ILogger<DepartmentEditViewModel> logger,
             IUIDialogService uiDialogService,
             ITeamService teamService)
         {
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
+            _organizationalUnitService = organizationalUnitService ?? throw new ArgumentNullException(nameof(organizationalUnitService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _uiDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
             _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
 
             _model = new Department();
             _mode = DepartmentEditMode.Add;
-            _availableParentDepartments = new ObservableCollection<Department>();
+            _availableOrganizationalUnits = new ObservableCollection<OrganizationalUnit>();
 
             SaveCommand = new AsyncRelayCommand(SaveAsync);
             CancelCommand = new RelayCommand(Cancel);
             EditCommand = new RelayCommand(SwitchToEditMode);
 
-            // Load available parent departments
-            _ = LoadAvailableParentDepartmentsAsync();
+            // Load available organizational units
+            _ = LoadAvailableOrganizationalUnitsAsync();
             
             // Nasłuchuj zmian w nazwie działu
             PropertyChanged += OnPropertyChanged;
@@ -132,12 +135,12 @@ namespace TeamsManager.UI.ViewModels.Departments
         }
 
         /// <summary>
-        /// Dostępne działy nadrzędne
+        /// Dostępne jednostki organizacyjne
         /// </summary>
-        public ObservableCollection<Department> AvailableParentDepartments
+        public ObservableCollection<OrganizationalUnit> AvailableOrganizationalUnits
         {
-            get => _availableParentDepartments;
-            set => SetProperty(ref _availableParentDepartments, value);
+            get => _availableOrganizationalUnits;
+            set => SetProperty(ref _availableOrganizationalUnits, value);
         }
 
         /// <summary>
@@ -217,9 +220,9 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         /// <summary>
         /// Czy pokazać informacje o hierarchii
-        /// Pokazuj tylko w trybie edycji dla działów które mają rodzica (nie są główne)
+        /// Pokazuj tylko w trybie edycji dla działów które mają przypisaną jednostkę organizacyjną
         /// </summary>
-        public bool ShowHierarchyInfo => Mode == DepartmentEditMode.Edit && !string.IsNullOrEmpty(Model?.Id) && !string.IsNullOrEmpty(Model?.ParentDepartmentId);
+        public bool ShowHierarchyInfo => Mode == DepartmentEditMode.Edit && !string.IsNullOrEmpty(Model?.Id) && !string.IsNullOrEmpty(Model?.OrganizationalUnitId);
 
         /// <summary>
         /// Czy można zapisać
@@ -229,13 +232,13 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// <summary>
         /// Czy można edytować pola
         /// </summary>
-        public bool CanEditFields => IsEditMode && (Mode != DepartmentEditMode.Add || IsParentDepartmentSelected);
+        public bool CanEditFields => IsEditMode && (Mode != DepartmentEditMode.Add || IsOrganizationalUnitSelected);
 
         /// <summary>
-        /// Czy dział nadrzędny został wybrany (w trybie dodawania)
-        /// W trybie dodawania sprawdzamy czy użytkownik dokonał wyboru - nawet jeśli wybrał "Brak"
+        /// Czy jednostka organizacyjna została wybrana (w trybie dodawania)
+        /// W trybie dodawania sprawdzamy czy użytkownik dokonał wyboru
         /// </summary>
-        public bool IsParentDepartmentSelected => !IsAddMode || _parentDepartmentSelectionMade;
+        public bool IsOrganizationalUnitSelected => !IsAddMode || _organizationalUnitSelectionMade;
 
         /// <summary>
         /// Automatycznie wygenerowany kod działu
@@ -358,32 +361,32 @@ namespace TeamsManager.UI.ViewModels.Departments
         }
 
         /// <summary>
-        /// Dział nadrzędny - wrapper z automatycznym generowaniem kodu
+        /// Jednostka organizacyjna - wrapper z automatycznym generowaniem kodu
         /// </summary>
-        public string? ParentDepartmentId
+        public string? OrganizationalUnitId
         {
-            get => _workingParentDepartmentId ?? Model?.ParentDepartmentId ?? string.Empty; // Zwróć pusty string dla UI jeśli null
+            get => _workingOrganizationalUnitId ?? Model?.OrganizationalUnitId ?? string.Empty; // Zwróć pusty string dla UI jeśli null
             set
             {
                 // Konwertuj pusty string na null dla bazy danych
                 var normalizedValue = string.IsNullOrEmpty(value) ? null : value;
                 
-                if (_workingParentDepartmentId != normalizedValue)
+                if (_workingOrganizationalUnitId != normalizedValue)
                 {
-                    _workingParentDepartmentId = normalizedValue;
+                    _workingOrganizationalUnitId = normalizedValue;
                     
-                    // Oznacz że użytkownik dokonał wyboru (nawet jeśli wybrał "Brak")
+                    // Oznacz że użytkownik dokonał wyboru
                     if (IsAddMode)
                     {
-                        _parentDepartmentSelectionMade = true;
+                        _organizationalUnitSelectionMade = true;
                     }
                     
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CanSave));
                     OnPropertyChanged(nameof(CanEditFields));
-                    OnPropertyChanged(nameof(IsParentDepartmentSelected));
+                    OnPropertyChanged(nameof(IsOrganizationalUnitSelected));
                     _ = GenerateAndValidateCodeAsync();
-                    _ = ValidateNameConflictAsync(); // Walidacja nazw po zmianie działu nadrzędnego
+                    _ = ValidateNameConflictAsync(); // Walidacja nazw po zmianie jednostki organizacyjnej
                 }
             }
         }
@@ -471,7 +474,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// <summary>
         /// Inicjalizuje formularz w trybie dodawania nowego działu
         /// </summary>
-        public void InitializeForAdd(string? parentDepartmentId = null)
+        public void InitializeForAdd(string? organizationalUnitId = null)
         {
             ResetViewModel();
             Mode = DepartmentEditMode.Add;
@@ -479,21 +482,14 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 IsActive = true,
                 SortOrder = 0,
-                ParentDepartmentId = parentDepartmentId
+                OrganizationalUnitId = organizationalUnitId
             };
             ClearMessages();
             StatusMessage = "Wprowadź dane nowego działu";
             
-            // Jeśli przekazano parentDepartmentId, oznacz że wybór został dokonany
-            // Jeśli nie, użytkownik będzie musiał wybrać z listy (w tym "Brak")
-            _parentDepartmentSelectionMade = !string.IsNullOrEmpty(parentDepartmentId);
-            
-            // Jeśli nie ma parentDepartmentId, ustaw domyślnie "Brak" (null)
-            if (string.IsNullOrEmpty(parentDepartmentId))
-            {
-                Model.ParentDepartmentId = null; // null oznacza dział główny
-                _parentDepartmentSelectionMade = true; // Domyślny wybór "Brak"
-            }
+            // Jeśli przekazano organizationalUnitId, oznacz że wybór został dokonany
+            // Jeśli nie, użytkownik będzie musiał wybrać z listy
+            _organizationalUnitSelectionMade = !string.IsNullOrEmpty(organizationalUnitId);
             
             // Powiadom o zmianie właściwości
             RefreshAllProperties();
@@ -561,35 +557,25 @@ namespace TeamsManager.UI.ViewModels.Departments
             }
         }
 
-        private async Task LoadAvailableParentDepartmentsAsync()
+        private async Task LoadAvailableOrganizationalUnitsAsync()
         {
             try
             {
-                var departments = await _departmentService.GetAllDepartmentsAsync();
+                var organizationalUnits = await _organizationalUnitService.GetAllOrganizationalUnitsAsync();
                 
-                // Filtruj działy - nie można wybrać siebie jako rodzica ani swoich potomków
-                var availableDepartments = departments.Where(d => 
-                    d.IsActive && 
-                    (IsAddMode || (d.Id != Model.Id && !Model.IsParentOf(d.Id)))
-                ).ToList();
+                // Filtruj tylko aktywne jednostki organizacyjne
+                var availableUnits = organizationalUnits.Where(ou => ou.IsActive).ToList();
 
-                AvailableParentDepartments.Clear();
-                
-                // Dodaj opcję "Brak" dla działów głównych
-                AvailableParentDepartments.Add(new Department 
-                { 
-                    Id = string.Empty, 
-                    Name = "-- Brak (dział główny) --" 
-                });
+                AvailableOrganizationalUnits.Clear();
 
-                foreach (var dept in availableDepartments.OrderBy(d => d.FullPath))
+                foreach (var unit in availableUnits.OrderBy(ou => ou.FullPath))
                 {
-                    AvailableParentDepartments.Add(dept);
+                    AvailableOrganizationalUnits.Add(unit);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading available parent departments");
+                _logger.LogError(ex, "Error loading available organizational units");
                 // Nie blokujemy formularza, tylko logujemy błąd
             }
         }
@@ -615,17 +601,20 @@ namespace TeamsManager.UI.ViewModels.Departments
                 
                 if (IsAddMode)
                 {
+                    // Tymczasowo używamy CreateDepartmentAsync z parentDepartmentId = null, 
+                    // a potem aktualizujemy OrganizationalUnitId
                     var createdDepartment = await _departmentService.CreateDepartmentAsync(
                         Model.Name, 
                         Model.Description ?? string.Empty, 
-                        Model.ParentDepartmentId, 
+                        null, // parentDepartmentId - nie używamy już hierarchii działów
                         Model.DepartmentCode);
                     
                     if (createdDepartment != null)
                     {
-                        // Aktualizuj dodatkowe pola, które nie są obsługiwane przez CreateDepartmentAsync
+                        // Aktualizuj wszystkie pola, które nie są obsługiwane przez CreateDepartmentAsync
                         createdDepartment.SortOrder = Model.SortOrder;
                         createdDepartment.IsActive = Model.IsActive;
+                        createdDepartment.OrganizationalUnitId = Model.OrganizationalUnitId; // Ustaw jednostkę organizacyjną
                         
                         await _departmentService.UpdateDepartmentAsync(createdDepartment);
                         
@@ -673,9 +662,9 @@ namespace TeamsManager.UI.ViewModels.Departments
                 Model.Name = _workingName;
             }
             
-            if (_workingParentDepartmentId != null)
+            if (_workingOrganizationalUnitId != null)
             {
-                Model.ParentDepartmentId = _workingParentDepartmentId;
+                Model.OrganizationalUnitId = _workingOrganizationalUnitId;
             }
             
             if (_workingIsActive != default)
@@ -733,7 +722,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         private void ResetViewModel()
         {
             // Resetuj wszystkie flagi i komunikaty
-            _parentDepartmentSelectionMade = false;
+            _organizationalUnitSelectionMade = false;
             _hasCodeConflict = false;
             _hasNameConflict = false;
             _hasTeamsAssigned = false;
@@ -741,7 +730,7 @@ namespace TeamsManager.UI.ViewModels.Departments
             
             // Wyczyść kopie robocze - powróć do oryginalnych wartości z Model
             _workingName = null;
-            _workingParentDepartmentId = null;
+            _workingOrganizationalUnitId = null;
             _workingIsActive = default;
             _workingDescription = null;
             _workingSortOrder = null;
@@ -758,9 +747,9 @@ namespace TeamsManager.UI.ViewModels.Departments
         private void RefreshAllProperties()
         {
             OnPropertyChanged(nameof(CanEditFields));
-            OnPropertyChanged(nameof(IsParentDepartmentSelected));
+            OnPropertyChanged(nameof(IsOrganizationalUnitSelected));
             OnPropertyChanged(nameof(DepartmentName));
-            OnPropertyChanged(nameof(ParentDepartmentId));
+            OnPropertyChanged(nameof(OrganizationalUnitId));
             OnPropertyChanged(nameof(DepartmentIsActive));
             OnPropertyChanged(nameof(Description));
             OnPropertyChanged(nameof(SortOrder));
@@ -838,34 +827,26 @@ namespace TeamsManager.UI.ViewModels.Departments
 
             var codeParts = new List<string>();
             
-            // Jeśli ma działu nadrzędnego, pobierz jego hierarchię
-            var workingParentId = _workingParentDepartmentId ?? Model?.ParentDepartmentId;
-            if (!string.IsNullOrEmpty(workingParentId))
+            // Pobierz kod jednostki organizacyjnej
+            var workingOrgUnitId = _workingOrganizationalUnitId ?? Model?.OrganizationalUnitId;
+            if (!string.IsNullOrEmpty(workingOrgUnitId))
             {
                 try
                 {
-                    var parentDepartment = await _departmentService.GetDepartmentByIdAsync(workingParentId);
-                    if (parentDepartment != null)
+                    var organizationalUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(workingOrgUnitId);
+                    if (organizationalUnit != null && !string.IsNullOrEmpty(organizationalUnit.Name))
                     {
-                        // Pobierz kod rodzica (który już zawiera pełną hierarchię)
-                        if (!string.IsNullOrEmpty(parentDepartment.DepartmentCode))
+                        // Używamy znormalizowanej nazwy jednostki organizacyjnej jako prefiksu
+                        var normalizedUnitName = NormalizeDepartmentName(organizationalUnit.Name);
+                        if (!string.IsNullOrEmpty(normalizedUnitName))
                         {
-                            codeParts.Add(parentDepartment.DepartmentCode);
-                        }
-                        else
-                        {
-                            // Jeśli rodzic nie ma kodu, wygeneruj go rekurencyjnie
-                            var parentCode = await GenerateCodeForDepartment(parentDepartment);
-                            if (!string.IsNullOrEmpty(parentCode))
-                            {
-                                codeParts.Add(parentCode);
-                            }
+                            codeParts.Add(normalizedUnitName);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Error getting parent department for code generation");
+                    _logger.LogWarning(ex, "Error getting organizational unit for code generation");
                 }
             }
 
@@ -879,46 +860,10 @@ namespace TeamsManager.UI.ViewModels.Departments
             return string.Join("-", codeParts);
         }
 
-        /// <summary>
-        /// Generuje kod dla konkretnego działu (metoda pomocnicza)
-        /// </summary>
-        private async Task<string> GenerateCodeForDepartment(Department department)
-        {
-            var codeParts = new List<string>();
-            
-            // Jeśli ma działu nadrzędnego, pobierz jego kod
-            if (!string.IsNullOrEmpty(department.ParentDepartmentId))
-            {
-                try
-                {
-                    var parentDepartment = await _departmentService.GetDepartmentByIdAsync(department.ParentDepartmentId);
-                    if (parentDepartment != null)
-                    {
-                        var parentCode = await GenerateCodeForDepartment(parentDepartment);
-                        if (!string.IsNullOrEmpty(parentCode))
-                        {
-                            codeParts.Add(parentCode);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error getting parent department for code generation");
-                }
-            }
 
-            // Dodaj znormalizowaną nazwę tego działu
-            var normalizedName = NormalizeDepartmentName(department.Name);
-            if (!string.IsNullOrEmpty(normalizedName))
-            {
-                codeParts.Add(normalizedName);
-            }
-
-            return string.Join("-", codeParts);
-        }
 
         /// <summary>
-        /// Sprawdza czy istnieje konflikt kodu na tym samym poziomie hierarchii
+        /// Sprawdza czy istnieje konflikt kodu w tej samej jednostce organizacyjnej
         /// </summary>
         private async Task<bool> CheckCodeConflictAsync(string code)
         {
@@ -929,10 +874,10 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 var allDepartments = await _departmentService.GetAllDepartmentsAsync();
                 
-                // Sprawdź czy istnieje inny dział z tym samym kodem na tym samym poziomie
+                // Sprawdź czy istnieje inny dział z tym samym kodem w tej samej jednostce organizacyjnej
                 var conflictingDepartments = allDepartments.Where(d => 
                     d.DepartmentCode == code && 
-                    d.ParentDepartmentId == Model.ParentDepartmentId &&
+                    d.OrganizationalUnitId == Model.OrganizationalUnitId &&
                     d.Id != Model.Id // Wyklucz siebie (w przypadku edycji)
                 ).ToList();
 
@@ -970,7 +915,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                     
                     if (hasConflict)
                     {
-                        CodeConflictMessage = $"Dział o kodzie '{code}' już istnieje na tym poziomie hierarchii";
+                        CodeConflictMessage = $"Dział o kodzie '{code}' już istnieje w tej jednostce organizacyjnej";
                     }
                     else
                     {
@@ -1005,10 +950,10 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 var allDepartments = await _departmentService.GetAllDepartmentsAsync();
                 
-                // Sprawdź konflikty na tym samym poziomie hierarchii (ten sam ParentDepartmentId)
+                // Sprawdź konflikty w tej samej jednostce organizacyjnej
                 var conflictingDepartments = allDepartments.Where(d => 
                     d.Name.Equals(Model.Name, StringComparison.OrdinalIgnoreCase) && 
-                    d.ParentDepartmentId == Model.ParentDepartmentId &&
+                    d.OrganizationalUnitId == Model.OrganizationalUnitId &&
                     d.Id != Model.Id // Wyklucz siebie (w przypadku edycji)
                 ).ToList();
 
@@ -1016,17 +961,23 @@ namespace TeamsManager.UI.ViewModels.Departments
                 {
                     HasNameConflict = true;
                     
-                    // Stwórz odpowiedni komunikat w zależności od poziomu hierarchii
-                    if (string.IsNullOrEmpty(Model.ParentDepartmentId))
+                    // Znajdź nazwę jednostki organizacyjnej
+                    if (!string.IsNullOrEmpty(Model.OrganizationalUnitId))
                     {
-                        NameConflictMessage = "Dział o podanej nazwie już istnieje";
+                        try
+                        {
+                            var organizationalUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(Model.OrganizationalUnitId);
+                            var unitName = organizationalUnit?.Name ?? "wybranej jednostce organizacyjnej";
+                            NameConflictMessage = $"Podana nazwa już istnieje w jednostce: {unitName}";
+                        }
+                        catch
+                        {
+                            NameConflictMessage = "Podana nazwa już istnieje w wybranej jednostce organizacyjnej";
+                        }
                     }
                     else
                     {
-                        // Znajdź nazwę działu nadrzędnego
-                        var parentDepartment = allDepartments.FirstOrDefault(d => d.Id == Model.ParentDepartmentId);
-                        var parentName = parentDepartment?.Name ?? "wybranej kategorii nadrzędnej";
-                        NameConflictMessage = $"Podana nazwa już istnieje w: {parentName}";
+                        NameConflictMessage = "Dział o podanej nazwie już istnieje";
                     }
                 }
                 else

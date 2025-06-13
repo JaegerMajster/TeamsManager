@@ -82,16 +82,16 @@
                                 </Border>
                             </Border>
                             
-                            <!-- Dział nadrzędny -->
+                            <!-- Jednostka organizacyjna -->
                             <ComboBox Grid.Row="1"
                                      Style="{StaticResource MaterialDesignOutlinedComboBox}"
-                                     ItemsSource="{Binding AvailableParentDepartments}"
+                                     ItemsSource="{Binding AvailableOrganizationalUnits}"
                                      SelectedValuePath="Id"
-                                     SelectedValue="{Binding ParentDepartmentId}"
+                                     SelectedValue="{Binding OrganizationalUnitId}"
                                      DisplayMemberPath="Name"
-                                     materialDesign:HintAssist.Hint="Dział nadrzędny"
+                                     materialDesign:HintAssist.Hint="Jednostka organizacyjna *"
                                      materialDesign:HintAssist.IsFloating="True"
-                                     materialDesign:HintAssist.HelperText="Pozostaw puste dla działu głównego"
+                                     materialDesign:HintAssist.HelperText="Wybierz jednostkę organizacyjną dla działu"
                                      IsEnabled="{Binding IsEditMode}"/>
                             
                             <!-- Nazwa działu -->
@@ -131,7 +131,7 @@
                                     Text="{Binding GeneratedCode, Mode=OneWay}"
                                     materialDesign:HintAssist.Hint="Kod działu (automatycznie generowany)"
                                     materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Kod generowany automatycznie na podstawie hierarchii działów"
+                                    materialDesign:HintAssist.HelperText="Kod generowany automatycznie na podstawie jednostki organizacyjnej i nazwy działu"
                                     IsReadOnly="True"
                                     IsEnabled="False"
                                     Background="{DynamicResource BackgroundMedium}"/>
@@ -211,13 +211,13 @@
                                 </StackPanel>
                             </Border>
                             
-                            <!-- Informacje o hierarchii -->
+                            <!-- Informacje o dziale -->
                             <Border Grid.Row="9"
                                    Margin="0,36,0,0"
                                    Style="{StaticResource InfoCardStyle}"
                                    Visibility="{Binding ShowHierarchyInfo, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="Informacje o hierarchii:"
+                                    <TextBlock Text="Informacje o dziale:"
                                              Style="{StaticResource SectionHeaderStyle}"
                                              Margin="0,0,0,8"/>
                                     
@@ -230,35 +230,26 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         
-                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Poziom w hierarchii:" 
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Kod działu:" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
                                                  Margin="0,0,8,4"/>
-                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Model.HierarchyLevel}" 
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Model.DepartmentCode}" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
                                                  Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,4"/>
                                         
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Pełna ścieżka:" 
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Data utworzenia:" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
                                                  Margin="0,0,8,4"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Model.FullPath}" 
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Model.CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
-                                                 Foreground="{DynamicResource TextSecondary}" 
-                                                 TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                                 Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
                                         
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Liczba poddziałów:" 
-                                                 Style="{StaticResource MaterialDesignBody2TextBlock}" 
-                                                 Margin="0,0,8,4"/>
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Model.SubDepartmentsCount}" 
-                                                 Style="{StaticResource MaterialDesignBody2TextBlock}" 
-                                                 Foreground="{DynamicResource AccentBlue}" Margin="0,0,0,4"/>
-                                        
-                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Liczba użytkowników:" 
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Liczba użytkowników:" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
                                                  Margin="0,0,8,0"/>
-                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Model.TotalUsersCount}" 
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Model.TotalUsersCount}" 
                                                  Style="{StaticResource MaterialDesignBody2TextBlock}" 
                                                  Foreground="{DynamicResource AccentBlue}"/>
                                     </Grid>

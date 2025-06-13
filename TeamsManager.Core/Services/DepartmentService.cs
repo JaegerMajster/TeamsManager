@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
@@ -27,7 +25,6 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<DepartmentService> _logger;
-        private readonly IMemoryCache _cache;
         private readonly IPowerShellCacheService _powerShellCacheService;
 
         // Klucze cache
@@ -36,7 +33,6 @@ namespace TeamsManager.Core.Services
         private const string DepartmentByIdCacheKeyPrefix = "Department_Id_";
         private const string SubDepartmentsByParentIdCacheKeyPrefix = "Department_Sub_ParentId_";
         private const string UsersInDepartmentCacheKeyPrefix = "Department_UsersIn_Id_";
-        private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromMinutes(30);
 
         /// <summary>
         /// Konstruktor serwisu działów.
@@ -48,7 +44,6 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<DepartmentService> logger,
-            IMemoryCache memoryCache,
             IPowerShellCacheService powerShellCacheService)
         {
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -57,50 +52,36 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
-        }
-
-        private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
-        {
-            return _powerShellCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
-        public async Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments = false, bool includeUsers = false, bool forceRefresh = false)
+        public async Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments, bool includeUsers, bool forceRefresh)
         {
-            _logger.LogInformation("Pobieranie działu o ID: {DepartmentId}. Dołączanie poddziałów: {IncludeSubDepartments}, Dołączanie użytkowników: {IncludeUsers}, Wymuszenie odświeżenia: {ForceRefresh}", //
-                                departmentId, includeSubDepartments, includeUsers, forceRefresh);
+            _logger.LogInformation("Pobieranie działu {DepartmentId}. Poddziały: {IncludeSubDepartments}, Użytkownicy: {IncludeUsers}, Wymuszenie odświeżenia: {ForceRefresh}", departmentId, includeSubDepartments, includeUsers, forceRefresh); //
+            string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId; //
 
-            if (string.IsNullOrWhiteSpace(departmentId))
+            if (!forceRefresh && _powerShellCacheService.TryGetValue<Department>(cacheKey, out Department? cachedDepartment) && cachedDepartment != null)
             {
-                _logger.LogWarning("Próba pobrania działu z pustym ID."); //
-                return null;
+                _logger.LogDebug("Dział {DepartmentId} znaleziony w cache.", departmentId); //
+                // Jeśli dział jest w cache, ale potrzebujemy dodatkowych danych, dociągnij je
+                if (includeSubDepartments && (cachedDepartment.SubDepartments == null || !cachedDepartment.SubDepartments.Any()))
+                {
+                    cachedDepartment.SubDepartments = (await GetSubDepartmentsAsync(departmentId, forceRefresh)).ToList(); //
+                }
+                if (includeUsers && (cachedDepartment.Users == null || !cachedDepartment.Users.Any()))
+                {
+                    cachedDepartment.Users = (await GetUsersInDepartmentAsync(departmentId, forceRefresh)).ToList(); //
+                }
+                return cachedDepartment;
             }
 
-            string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
-            Department? department;
-
-            // Pobieranie bazowego obiektu działu
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out department) && department != null)
+            var department = await _departmentRepository.GetByIdAsync(departmentId);
+            if (department != null)
             {
-                _logger.LogDebug("Dział ID: {DepartmentId} znaleziony w cache (tylko obiekt bazowy).", departmentId); //
-            }
-            else
-            {
-                _logger.LogDebug("Dział ID: {DepartmentId} nie znaleziony w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", departmentId); //
-                department = await _departmentRepository.GetByIdAsync(departmentId); //
-
-                if (department != null)
-                {
-                    _cache.Set(cacheKey, department, GetDefaultCacheEntryOptions());
-                    _logger.LogDebug("Dział ID: {DepartmentId} dodany do cache (obiekt bazowy).", departmentId); //
-                }
-                else
-                {
-                    _cache.Remove(cacheKey);
-                }
+                _powerShellCacheService.Set(cacheKey, department);
+                _logger.LogDebug("Dział {DepartmentId} zapisany w cache.", departmentId); //
             }
 
             // Jeśli dział istnieje, dociągnij opcjonalne powiązania
@@ -127,77 +108,54 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie wszystkich aktywnych działów. Tylko główne: {OnlyRoot}, Wymuszenie odświeżenia: {ForceRefresh}", onlyRootDepartments, forceRefresh); //
             string cacheKey = onlyRootDepartments ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey; //
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Department>? cachedDepartments) && cachedDepartments != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments) && cachedDepartments != null)
             {
                 _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) znaleziona w cache.", onlyRootDepartments); //
                 return cachedDepartments;
             }
 
-            _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) nie znaleziona w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", onlyRootDepartments); //
-            var departmentsFromDb = onlyRootDepartments
-                ? await _departmentRepository.FindAsync(d => d.IsActive && d.ParentDepartmentId == null) //
-                : await _departmentRepository.FindAsync(d => d.IsActive); //
-
-            _cache.Set(cacheKey, departmentsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) dodana do cache.", onlyRootDepartments); //
-
-            return departmentsFromDb;
+            var departments = await _departmentRepository.FindAsync(d => d.IsActive && (onlyRootDepartments ? d.ParentDepartmentId == null : true));
+            _powerShellCacheService.Set(cacheKey, departments);
+            _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) zapisana w cache. Znaleziono {Count} działów.", onlyRootDepartments, departments.Count()); //
+            return departments;
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie poddziałów dla działu ID: {ParentDepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", parentDepartmentId, forceRefresh); //
-            if (string.IsNullOrWhiteSpace(parentDepartmentId))
-            {
-                _logger.LogWarning("Próba pobrania poddziałów dla pustego ID rodzica."); //
-                return Enumerable.Empty<Department>();
-            }
-
+            _logger.LogInformation("Pobieranie poddziałów dla działu {ParentDepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", parentDepartmentId, forceRefresh); //
             string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentDepartmentId; //
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<Department>? cachedSubDepartments) && cachedSubDepartments != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedSubDepartments) && cachedSubDepartments != null)
             {
-                _logger.LogDebug("Poddziały dla rodzica ID: {ParentDepartmentId} znalezione w cache.", parentDepartmentId); //
+                _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} znalezione w cache.", parentDepartmentId); //
                 return cachedSubDepartments;
             }
 
-            _logger.LogDebug("Poddziały dla rodzica ID: {ParentDepartmentId} nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", parentDepartmentId); //
-            var subDepartmentsFromDb = await _departmentRepository.FindAsync(d => d.ParentDepartmentId == parentDepartmentId && d.IsActive); //
-
-            _cache.Set(cacheKey, subDepartmentsFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Poddziały dla rodzica ID: {ParentDepartmentId} dodane do cache.", parentDepartmentId); //
-
-            return subDepartmentsFromDb;
+            var subDepartments = await _departmentRepository.FindAsync(d => d.ParentDepartmentId == parentDepartmentId && d.IsActive);
+            _powerShellCacheService.Set(cacheKey, subDepartments);
+            _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} zapisane w cache. Znaleziono {Count} poddziałów.", parentDepartmentId, subDepartments.Count()); //
+            return subDepartments;
         }
 
         /// <inheritdoc />
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie użytkowników dla działu ID: {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh); //
-            if (string.IsNullOrWhiteSpace(departmentId))
-            {
-                _logger.LogWarning("Próba pobrania użytkowników dla pustego ID działu."); //
-                return Enumerable.Empty<User>();
-            }
-
+            _logger.LogInformation("Pobieranie użytkowników dla działu {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh); //
             string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId; //
 
-            if (!forceRefresh && _cache.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<User>>(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
-                _logger.LogDebug("Użytkownicy dla działu ID: {DepartmentId} znalezieni w cache.", departmentId); //
+                _logger.LogDebug("Użytkownicy dla działu {DepartmentId} znalezieni w cache.", departmentId); //
                 return cachedUsers;
             }
 
-            _logger.LogDebug("Użytkownicy dla działu ID: {DepartmentId} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", departmentId); //
-            var usersFromDb = await _userRepository.FindAsync(u => u.DepartmentId == departmentId && u.IsActive); //
-
-            _cache.Set(cacheKey, usersFromDb, GetDefaultCacheEntryOptions());
-            _logger.LogDebug("Użytkownicy dla działu ID: {DepartmentId} dodani do cache.", departmentId); //
-
-            return usersFromDb;
+            var users = await _userRepository.FindAsync(u => u.DepartmentId == departmentId && u.IsActive);
+            _powerShellCacheService.Set(cacheKey, users);
+            _logger.LogDebug("Użytkownicy dla działu {DepartmentId} zapisani w cache. Znaleziono {Count} użytkowników.", departmentId, users.Count()); //
+            return users;
         }
 
         /// <inheritdoc />
@@ -275,13 +233,6 @@ namespace TeamsManager.Core.Services
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _cache.Remove(AllDepartmentsAllCacheKey);
-                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
-                if (!string.IsNullOrEmpty(newDepartment.ParentDepartmentId))
-                {
-                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + newDepartment.ParentDepartmentId);
-                }
-
                 _powerShellCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
@@ -469,19 +420,6 @@ namespace TeamsManager.Core.Services
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _cache.Remove(AllDepartmentsAllCacheKey);
-                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
-                _cache.Remove(DepartmentByIdCacheKeyPrefix + existingDepartment.Id);
-                
-                if (!string.IsNullOrEmpty(oldParentId))
-                {
-                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + oldParentId);
-                }
-                if (!string.IsNullOrEmpty(existingDepartment.ParentDepartmentId))
-                {
-                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + existingDepartment.ParentDepartmentId);
-                }
-
                 _powerShellCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
@@ -567,7 +505,7 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
-                var subDepartments = await GetSubDepartmentsAsync(departmentId);
+                var subDepartments = await GetSubDepartmentsAsync(departmentId, false);
                 if (subDepartments.Any())
                 {
                     var message = "Nie można usunąć działu, ponieważ ma przypisane aktywne poddziały.";
@@ -602,15 +540,6 @@ namespace TeamsManager.Core.Services
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _cache.Remove(AllDepartmentsAllCacheKey);
-                _cache.Remove(AllDepartmentsRootOnlyCacheKey);
-                _cache.Remove(DepartmentByIdCacheKeyPrefix + departmentId);
-                if (!string.IsNullOrEmpty(department.ParentDepartmentId))
-                {
-                    _cache.Remove(SubDepartmentsByParentIdCacheKeyPrefix + department.ParentDepartmentId);
-                }
-
-                _powerShellCacheService.InvalidateDepartment(departmentId);
                 _powerShellCacheService.InvalidateAllDepartmentLists();
 
                 if (!string.IsNullOrEmpty(department.ParentDepartmentId))
@@ -648,21 +577,10 @@ namespace TeamsManager.Core.Services
 
         /// <inheritdoc />
         /// <remarks>Ta metoda unieważnia globalny cache dla działów.</remarks>
-        public Task RefreshCacheAsync()
+        public async Task RefreshCacheAsync()
         {
-            _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a działów.");
-            
-            // Invaliduj cache IMemoryCache
-            _cache.Remove(AllDepartmentsAllCacheKey);
-            _cache.Remove(AllDepartmentsRootOnlyCacheKey);
-            
-            // Invaliduj wszystkie cache'e dla poszczególnych działów i poddziałów
-            // Niestety IMemoryCache nie ma metody Clear(), więc nie możemy wyczyścić wszystkich kluczy z prefiksem
-            // Ale główne cache'e są już invalidowane powyżej
-            
             _powerShellCacheService.InvalidateAllCache();
-            _logger.LogInformation("Cache działów został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
-            return Task.CompletedTask;
+            _logger.LogInformation("Cache działów został odświeżony.");
         }
 
         private async Task<bool> IsDescendantAsync(string potentialAncestorId, string departmentIdToCheck)
@@ -676,5 +594,37 @@ namespace TeamsManager.Core.Services
 
             return await IsDescendantAsync(potentialAncestorId, department.ParentDepartmentId);
         }
+
+        #region Wygodne przeciążenia metod
+
+        /// <inheritdoc />
+        public Task<Department?> GetDepartmentByIdAsync(string departmentId)
+            => GetDepartmentByIdAsync(departmentId, false, false, false);
+
+        /// <inheritdoc />
+        public Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments)
+            => GetDepartmentByIdAsync(departmentId, includeSubDepartments, false, false);
+
+        /// <inheritdoc />
+        public Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments, bool includeUsers)
+            => GetDepartmentByIdAsync(departmentId, includeSubDepartments, includeUsers, false);
+
+        /// <inheritdoc />
+        public Task<IEnumerable<Department>> GetAllDepartmentsAsync()
+            => GetAllDepartmentsAsync(false, false);
+
+        /// <inheritdoc />
+        public Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments)
+            => GetAllDepartmentsAsync(onlyRootDepartments, false);
+
+        /// <inheritdoc />
+        public Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId)
+            => GetSubDepartmentsAsync(parentDepartmentId, false);
+
+        /// <inheritdoc />
+        public Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId)
+            => GetUsersInDepartmentAsync(departmentId, false);
+
+        #endregion
     }
 }

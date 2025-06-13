@@ -63,7 +63,7 @@ namespace TeamsManager.Core.Services
             };
 
             await _operationHistoryRepository.AddAsync(operation);
-            // SaveChangesAsync będzie wywołane na wyższym poziomie (np. w kontrolerze)
+            await _operationHistoryRepository.SaveChangesAsync(); // Zapisz od razu
 
             _logger.LogInformation("Nowy wpis historii operacji ID: {OperationId} został utworzony.", operation.Id);
             return operation;
@@ -120,7 +120,7 @@ namespace TeamsManager.Core.Services
 
             operation.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_status_update");
             _operationHistoryRepository.Update(operation);
-            // SaveChangesAsync na wyższym poziomie
+            await _operationHistoryRepository.SaveChangesAsync(); // Zapisz od razu
 
             _logger.LogInformation("Status operacji ID: {OperationId} zaktualizowany z {OldStatus} na {NewStatus}.", operationId, oldStatus, newStatus);
             return true;
@@ -150,7 +150,7 @@ namespace TeamsManager.Core.Services
             operation.UpdateProgress(processedItems, failedItems); // Metoda w modelu OperationHistory zaktualizuje status
             operation.MarkAsModified(_currentUserService.GetCurrentUserUpn() ?? "system_progress_update");
             _operationHistoryRepository.Update(operation);
-            // SaveChangesAsync na wyższym poziomie
+            await _operationHistoryRepository.SaveChangesAsync(); // Zapisz od razu
 
             _logger.LogInformation("Postęp operacji ID: {OperationId} zaktualizowany. Nowy status: {Status}, Przetworzone: {Processed}, Nieudane: {Failed}, Postęp: {Progress}%",
                 operationId, operation.Status, operation.ProcessedItems, operation.FailedItems, operation.ProgressPercentage);

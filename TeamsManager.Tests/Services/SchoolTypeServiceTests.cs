@@ -69,20 +69,9 @@ namespace TeamsManager.Tests.Services
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
-            if (foundInCache && item != null)
-            {
-                _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out It.Ref<TItem?>.IsAny))
-                    .Callback(new TryGetValueCallback<TItem>((string key, out TItem? value) =>
-                    {
-                        value = item;
-                    }))
-                    .Returns(foundInCache);
-            }
-            else
-            {
-                _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out It.Ref<TItem?>.IsAny))
-                    .Returns(foundInCache);
-            }
+            TItem? outValue = item;
+            _mockPowerShellCacheService.Setup(m => m.TryGetValue<TItem>(cacheKey, out outValue))
+                .Returns(foundInCache);
         }
 
         private void ResetCapturedOperationHistory()
@@ -102,7 +91,7 @@ namespace TeamsManager.Tests.Services
             _mockSchoolTypeRepository.Verify(r => r.FindAsync(It.IsAny<Expression<Func<SchoolType, bool>>>()), Times.AtLeastOnce, "GetAllActiveSchoolTypesAsync powinno odpytać repozytorium po unieważnieniu cache.");
         }
 
-        private delegate void TryGetValueCallback<TItem>(string key, out TItem? value);
+
 
         [Fact]
         public async Task GetSchoolTypeByIdAsync_ExistingSchoolType_NotInCache_ShouldReturnAndCacheSchoolType()

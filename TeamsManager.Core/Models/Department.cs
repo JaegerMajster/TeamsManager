@@ -30,6 +30,11 @@ namespace TeamsManager.Core.Models
         public string? ParentDepartmentId { get; set; }
 
         /// <summary>
+        /// Identyfikator jednostki organizacyjnej do której przypisany jest dział
+        /// </summary>
+        public string? OrganizationalUnitId { get; set; }
+
+        /// <summary>
         /// Kod działu używany w systemach zewnętrznych
         /// Np. kod z dziennika elektronicznego, systemu kadrowego
         /// </summary>
@@ -61,6 +66,11 @@ namespace TeamsManager.Core.Models
         /// Dział nadrzędny w hierarchii
         /// </summary>
         public Department? ParentDepartment { get; set; }
+
+        /// <summary>
+        /// Jednostka organizacyjna do której przypisany jest dział
+        /// </summary>
+        public OrganizationalUnit? OrganizationalUnit { get; set; }
 
         /// <summary>
         /// Poddziały (działy podrzędne)

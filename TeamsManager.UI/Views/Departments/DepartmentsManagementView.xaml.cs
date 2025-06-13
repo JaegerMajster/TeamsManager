@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using TeamsManager.UI.ViewModels.Departments;
+using TeamsManager.UI.ViewModels.OrganizationalUnits;
 
 namespace TeamsManager.UI.Views.Departments
 {
@@ -17,9 +18,9 @@ namespace TeamsManager.UI.Views.Departments
 
         private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (DataContext is DepartmentsManagementViewModel viewModel && e.NewValue is DepartmentTreeItemViewModel selectedItem)
+            if (DataContext is DepartmentsManagementViewModel viewModel && e.NewValue is OrganizationalUnitTreeItemViewModel selectedItem)
             {
-                viewModel.SelectedDepartment = selectedItem;
+                viewModel.SelectedItem = selectedItem;
             }
         }
     }

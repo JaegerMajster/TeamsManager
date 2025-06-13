@@ -275,6 +275,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         public ICommand NavigateToSchoolYearsCommand { get; private set; } = null!;
         public ICommand NavigateToSubjectsCommand { get; private set; } = null!;
         public ICommand NavigateToDepartmentsCommand { get; private set; } = null!;
+        public ICommand NavigateToOrganizationalUnitsCommand { get; private set; } = null!;
         public ICommand NavigateToOperationHistoryCommand { get; private set; } = null!;
         public ICommand NavigateToMonitoringCommand { get; private set; } = null!;
         public ICommand NavigateToSettingsCommand { get; private set; } = null!;
@@ -293,6 +294,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             NavigateToSchoolYearsCommand = new RelayCommand(ExecuteNavigateToSchoolYears);
             NavigateToSubjectsCommand = new RelayCommand(ExecuteNavigateToSubjects);
             NavigateToDepartmentsCommand = new RelayCommand(ExecuteNavigateToDepartments);
+            NavigateToOrganizationalUnitsCommand = new RelayCommand(ExecuteNavigateToOrganizationalUnits);
             NavigateToOperationHistoryCommand = new RelayCommand(ExecuteNavigateToOperationHistory);
             NavigateToMonitoringCommand = new RelayCommand(ExecuteNavigateToMonitoring);
             NavigateToSettingsCommand = new RelayCommand(ExecuteNavigateToSettings);
@@ -693,6 +695,27 @@ namespace TeamsManager.UI.ViewModels.Shell
             {
                 _logger.LogError(ex, "Błąd podczas nawigacji do Działów");
                 System.Windows.MessageBox.Show($"Błąd nawigacji do Działów:\n\n{ex.Message}\n\nInner: {ex.InnerException?.Message}", "Błąd Menu", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
+
+        private void ExecuteNavigateToOrganizationalUnits()
+        {
+            try
+            {
+                _logger.LogDebug("Nawigacja do Jednostek Organizacyjnych");
+                
+                // Utwórz OrganizationalUnitsManagementView z DI i przypisz ViewModel
+                var organizationalUnitsView = _serviceProvider.GetRequiredService<Views.OrganizationalUnits.OrganizationalUnitsManagementView>();
+                var organizationalUnitsViewModel = _serviceProvider.GetRequiredService<ViewModels.OrganizationalUnits.OrganizationalUnitsManagementViewModel>();
+                organizationalUnitsView.DataContext = organizationalUnitsViewModel;
+                
+                CurrentView = organizationalUnitsView;
+                CurrentViewTitle = "Zarządzanie Jednostkami Organizacyjnymi";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas nawigacji do Jednostek Organizacyjnych");
+                System.Windows.MessageBox.Show($"Błąd nawigacji do Jednostek Organizacyjnych:\n\n{ex.Message}\n\nInner: {ex.InnerException?.Message}", "Błąd Menu", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 

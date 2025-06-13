@@ -12,6 +12,7 @@
         xmlns:teams="clr-namespace:TeamsManager.UI.Views.Teams"
         xmlns:monitoring="clr-namespace:TeamsManager.UI.Views.Monitoring"
         xmlns:departments="clr-namespace:TeamsManager.UI.Views.Departments"
+        xmlns:organizationalUnits="clr-namespace:TeamsManager.UI.Views.OrganizationalUnits"
         xmlns:settings="clr-namespace:TeamsManager.UI.Views.Settings"
         xmlns:schoolYears="clr-namespace:TeamsManager.UI.Views.SchoolYears"
         mc:Ignorable="d"
@@ -408,6 +409,18 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Jednostki Organizacyjne -->
+                        <Button Command="{Binding NavigateToOrganizationalUnitsCommand}"
+                                Style="{StaticResource NavigationMenuButton}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="FileTree"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,16,0"/>
+                                <TextBlock Text="Jednostki Organizacyjne" 
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Historia Operacji -->
                         <Button Command="{Binding NavigateToOperationHistoryCommand}"
                                 Style="{StaticResource NavigationMenuButton}">
@@ -586,6 +599,11 @@
                         <!-- DataTemplate dla DepartmentsManagementView -->
                         <DataTemplate DataType="{x:Type departments:DepartmentsManagementView}">
                             <departments:DepartmentsManagementView />
+                        </DataTemplate>
+                        
+                        <!-- DataTemplate dla OrganizationalUnitsManagementView -->
+                        <DataTemplate DataType="{x:Type organizationalUnits:OrganizationalUnitsManagementView}">
+                            <organizationalUnits:OrganizationalUnitsManagementView />
                         </DataTemplate>
                         
                         <!-- DataTemplate dla OperationHistoryView -->

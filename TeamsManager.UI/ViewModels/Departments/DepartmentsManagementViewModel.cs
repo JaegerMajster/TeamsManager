@@ -13,6 +13,7 @@ using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.UI.ViewModels.Shell;
 using TeamsManager.UI.Services;
+using TeamsManager.UI.ViewModels.OrganizationalUnits;
 
 namespace TeamsManager.UI.ViewModels.Departments
 {
@@ -22,41 +23,44 @@ namespace TeamsManager.UI.ViewModels.Departments
     public class DepartmentsManagementViewModel : BaseViewModel
     {
         private readonly IDepartmentService _departmentService;
+        private readonly IOrganizationalUnitService _organizationalUnitService;
         private readonly ILogger<DepartmentsManagementViewModel> _logger;
         private readonly MainShellViewModel _mainShellViewModel;
         private readonly DepartmentCodeMigrationService _migrationService;
         
-        private ObservableCollection<DepartmentTreeItemViewModel> _departments;
-        private ICollectionView _departmentsView;
-        private DepartmentTreeItemViewModel? _selectedDepartment;
+        private ObservableCollection<OrganizationalUnitTreeItemViewModel> _organizationalUnits;
+        private ICollectionView _organizationalUnitsView;
+        private OrganizationalUnitTreeItemViewModel? _selectedItem;
         private string _searchText = string.Empty;
         private bool _isLoading;
         private string? _errorMessage;
 
         public DepartmentsManagementViewModel(
             IDepartmentService departmentService,
+            IOrganizationalUnitService organizationalUnitService,
             ILogger<DepartmentsManagementViewModel> logger,
             IUIDialogService uiDialogService,
             MainShellViewModel mainShellViewModel,
             DepartmentCodeMigrationService migrationService)
         {
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
+            _organizationalUnitService = organizationalUnitService ?? throw new ArgumentNullException(nameof(organizationalUnitService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             UIDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
             _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
             _migrationService = migrationService ?? throw new ArgumentNullException(nameof(migrationService));
 
-            _departments = new ObservableCollection<DepartmentTreeItemViewModel>();
-            _departmentsView = CollectionViewSource.GetDefaultView(_departments);
-            _departmentsView.Filter = FilterDepartments;
+            _organizationalUnits = new ObservableCollection<OrganizationalUnitTreeItemViewModel>();
+            _organizationalUnitsView = CollectionViewSource.GetDefaultView(_organizationalUnits);
+            _organizationalUnitsView.Filter = FilterOrganizationalUnits;
 
             // Initialize commands
             LoadDepartmentsCommand = new RelayCommand(async () => await LoadDepartmentsAsync(), () => !IsLoading);
             RefreshCommand = new RelayCommand(async () => await LoadDepartmentsAsync(forceRefresh: true), () => !IsLoading);
             AddDepartmentCommand = new RelayCommand(async () => await AddDepartmentAsync(), () => !IsLoading);
-            EditDepartmentCommand = new RelayCommand(async () => await EditDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
-            DeleteDepartmentCommand = new RelayCommand(async () => await DeleteDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
-            ViewDepartmentCommand = new RelayCommand(async () => await ViewDepartmentAsync(), () => SelectedDepartment != null && !IsLoading);
+            EditDepartmentCommand = new RelayCommand(async () => await EditDepartmentAsync(), () => SelectedItem?.IsDepartment == true && !IsLoading);
+            DeleteDepartmentCommand = new RelayCommand(async () => await DeleteDepartmentAsync(), () => SelectedItem?.IsDepartment == true && !IsLoading);
+            ViewDepartmentCommand = new RelayCommand(async () => await ViewDepartmentAsync(), () => SelectedItem?.IsDepartment == true && !IsLoading);
             ExpandAllCommand = new RelayCommand(ExpandAll);
             CollapseAllCommand = new RelayCommand(CollapseAll);
             ClearSearchCommand = new RelayCommand(ClearSearch, () => !string.IsNullOrEmpty(SearchText));
@@ -68,26 +72,47 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         #region Properties
 
-        public ObservableCollection<DepartmentTreeItemViewModel> Departments
+        public ObservableCollection<OrganizationalUnitTreeItemViewModel> OrganizationalUnits
         {
-            get => _departments;
-            set => SetProperty(ref _departments, value);
+            get => _organizationalUnits;
+            set => SetProperty(ref _organizationalUnits, value);
         }
 
-        public ICollectionView DepartmentsView
+        public ICollectionView OrganizationalUnitsView
         {
-            get => _departmentsView;
-            set => SetProperty(ref _departmentsView, value);
+            get => _organizationalUnitsView;
+            set => SetProperty(ref _organizationalUnitsView, value);
         }
 
-        public DepartmentTreeItemViewModel? SelectedDepartment
+        public OrganizationalUnitTreeItemViewModel? SelectedItem
         {
-            get => _selectedDepartment;
+            get => _selectedItem;
             set
             {
-                if (SetProperty(ref _selectedDepartment, value))
+                if (SetProperty(ref _selectedItem, value))
                 {
                     UpdateCommandStates();
+                }
+            }
+        }
+
+        // Kompatybilność z istniejącym kodem
+        public DepartmentTreeItemViewModel? SelectedDepartment
+        {
+            get => SelectedItem?.IsDepartment == true ? 
+                new DepartmentTreeItemViewModel(SelectedItem.Department!) : 
+                null;
+            set
+            {
+                // Znajdź odpowiadający OrganizationalUnitTreeItemViewModel
+                if (value != null)
+                {
+                    var item = FindItemById(value.Id);
+                    SelectedItem = item;
+                }
+                else
+                {
+                    SelectedItem = null;
                 }
             }
         }
@@ -99,7 +124,7 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 if (SetProperty(ref _searchText, value))
                 {
-                    DepartmentsView.Refresh();
+                    OrganizationalUnitsView.Refresh();
                     UpdateCommandStates();
                 }
             }
@@ -125,9 +150,11 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
-        public int TotalDepartments => CountAllDepartments(_departments);
+        public int TotalDepartments => CountAllDepartments(_organizationalUnits);
 
-        public int ActiveDepartments => CountActiveDepartments(_departments);
+        public int ActiveDepartments => CountActiveDepartments(_organizationalUnits);
+
+        public int TotalOrganizationalUnits => CountAllOrganizationalUnits(_organizationalUnits);
 
         #endregion
 
@@ -155,51 +182,59 @@ namespace TeamsManager.UI.ViewModels.Departments
 
             try
             {
-                _logger.LogDebug("Loading departments (forceRefresh: {ForceRefresh})", forceRefresh);
+                _logger.LogDebug("Loading organizational units and departments (forceRefresh: {ForceRefresh})", forceRefresh);
 
-                // Zapisz ID zaznaczonego działu przed odświeżeniem
-                string? selectedDepartmentId = SelectedDepartment?.Id;
+                // Zapisz ID zaznaczonego elementu przed odświeżeniem
+                string? selectedItemId = SelectedItem?.Id;
 
-                var departments = await _departmentService.GetAllDepartmentsAsync(forceRefresh: forceRefresh);
+                // Pobierz hierarchię jednostek organizacyjnych
+                var hierarchy = await _organizationalUnitService.GetOrganizationalUnitsHierarchyAsync();
                 
-                // Build hierarchy
-                var rootDepartments = departments.Where(d => d.IsRootDepartment).OrderBy(d => d.SortOrder).ThenBy(d => d.Name);
+                // Pobierz wszystkie działy z przypisanymi jednostkami
+                var allDepartments = await _departmentService.GetAllDepartmentsAsync();
+
+                // Konwertuj na ViewModels
+                var unitViewModels = new ObservableCollection<OrganizationalUnitTreeItemViewModel>();
                 
-                _departments.Clear();
-                
-                foreach (var rootDept in rootDepartments)
+                foreach (var rootUnit in hierarchy)
                 {
-                    var rootItem = new DepartmentTreeItemViewModel(rootDept);
-                    BuildDepartmentTree(rootItem, departments);
-                    _departments.Add(rootItem);
+                    var unitViewModel = CreateOrganizationalUnitTreeItem(rootUnit, null);
+                    await LoadDepartmentsForUnit(unitViewModel, allDepartments);
+                    unitViewModels.Add(unitViewModel);
                 }
 
-                // Przywróć zaznaczony element, rozwiń ścieżkę do niego i ustaw wizualne zaznaczenie
-                if (!string.IsNullOrEmpty(selectedDepartmentId))
+                _organizationalUnits.Clear();
+                foreach (var unit in unitViewModels)
                 {
-                    var selectedItem = FindDepartmentById(selectedDepartmentId);
+                    _organizationalUnits.Add(unit);
+                }
+
+                // Przywróć zaznaczony element
+                if (!string.IsNullOrEmpty(selectedItemId))
+                {
+                    var selectedItem = FindItemById(selectedItemId);
                     if (selectedItem != null)
                     {
                         ExpandPathToItem(selectedItem);
-                        SelectedDepartment = selectedItem;
-                        UpdateTreeViewSelection(selectedItem);
-                        _logger.LogDebug("Restored selected department: {DepartmentName}", selectedItem.Name);
+                        SelectedItem = selectedItem;
+                        _logger.LogDebug("Restored selected item: {ItemName}", selectedItem.DisplayName);
                     }
                 }
 
                 // Refresh the view
-                _departmentsView?.Refresh();
+                _organizationalUnitsView?.Refresh();
                 
                 // Odśwież właściwości liczników
                 OnPropertyChanged(nameof(TotalDepartments));
                 OnPropertyChanged(nameof(ActiveDepartments));
+                OnPropertyChanged(nameof(TotalOrganizationalUnits));
                 
-                _logger.LogInformation("Loaded {Count} departments", _departments.Count);
+                _logger.LogInformation("Loaded {Count} organizational units with departments", _organizationalUnits.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading departments");
-                ErrorMessage = $"Błąd podczas ładowania działów: {ex.Message}";
+                _logger.LogError(ex, "Error loading organizational units and departments");
+                ErrorMessage = $"Błąd podczas ładowania struktury organizacyjnej: {ex.Message}";
             }
             finally
             {
@@ -451,38 +486,28 @@ namespace TeamsManager.UI.ViewModels.Departments
 
         private void ExpandAll()
         {
-            SetExpansionState(_departments, true);
+            SetExpansionState(_organizationalUnits, true);
         }
 
         private void CollapseAll()
         {
-            SetExpansionState(_departments, false);
+            SetExpansionState(_organizationalUnits, false);
         }
 
-        private void SetExpansionState(ObservableCollection<DepartmentTreeItemViewModel> departments, bool isExpanded)
+        private void SetExpansionState(ObservableCollection<OrganizationalUnitTreeItemViewModel> units, bool isExpanded)
         {
-            foreach (var dept in departments)
+            foreach (var unit in units)
             {
-                dept.IsExpanded = isExpanded;
-                SetExpansionState(dept.Children, isExpanded);
+                unit.IsExpanded = isExpanded;
+                SetExpansionState(unit.Children, isExpanded);
             }
         }
 
         private DepartmentTreeItemViewModel? FindDepartmentById(string id)
         {
-            foreach (var dept in _departments)
-            {
-                if (dept.Id == id)
-                {
-                    return dept;
-                }
-                var found = FindDepartmentById(id, dept.Children);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
+            // Ta metoda nie jest już używana - zastąpiona przez FindItemById
+            var item = FindItemById(id);
+            return item?.IsDepartment == true ? new DepartmentTreeItemViewModel(item.Department!) : null;
         }
 
         private DepartmentTreeItemViewModel? FindDepartmentById(string id, ObservableCollection<DepartmentTreeItemViewModel> children)
@@ -606,11 +631,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         private void UpdateTreeViewSelection(DepartmentTreeItemViewModel selectedItem)
         {
-            // Najpierw wyczyść wszystkie zaznaczenia
-            ClearAllSelections(_departments);
-            
-            // Następnie ustaw zaznaczenie na wybranym elemencie
-            selectedItem.IsSelected = true;
+            // Ta metoda nie jest już używana - zaznaczenie obsługiwane przez SelectedItem
         }
 
         /// <summary>
@@ -618,10 +639,129 @@ namespace TeamsManager.UI.ViewModels.Departments
         /// </summary>
         private void ClearAllSelections(ObservableCollection<DepartmentTreeItemViewModel> departments)
         {
-            foreach (var dept in departments)
+            // Ta metoda nie jest już używana
+        }
+
+        // Nowe metody dla OrganizationalUnitTreeItemViewModel
+
+        private OrganizationalUnitTreeItemViewModel CreateOrganizationalUnitTreeItem(
+            OrganizationalUnit unit, 
+            OrganizationalUnitTreeItemViewModel? parent)
+        {
+            return new OrganizationalUnitTreeItemViewModel(unit, parent);
+        }
+
+        private async Task LoadDepartmentsForUnit(
+            OrganizationalUnitTreeItemViewModel unitViewModel, 
+            IEnumerable<Department> allDepartments)
+        {
+            // Znajdź działy przypisane do tej jednostki organizacyjnej
+            var departmentsForUnit = allDepartments
+                .Where(d => d.OrganizationalUnitId == unitViewModel.Id)
+                .OrderBy(d => d.SortOrder)
+                .ThenBy(d => d.Name);
+
+            // Dodaj działy jako dzieci jednostki organizacyjnej
+            foreach (var department in departmentsForUnit)
             {
-                dept.IsSelected = false;
-                ClearAllSelections(dept.Children);
+                var departmentViewModel = new OrganizationalUnitTreeItemViewModel(department, unitViewModel);
+                unitViewModel.Children.Add(departmentViewModel);
+            }
+
+            // Rekurencyjnie załaduj działy dla pod-jednostek
+            foreach (var childUnit in unitViewModel.Children.Where(c => !c.IsDepartment))
+            {
+                await LoadDepartmentsForUnit(childUnit, allDepartments);
+            }
+        }
+
+        private bool FilterOrganizationalUnits(object item)
+        {
+            if (item is not OrganizationalUnitTreeItemViewModel unit) return false;
+            if (string.IsNullOrWhiteSpace(SearchText)) return true;
+
+            var searchLower = SearchText.ToLowerInvariant();
+            return ContainsSearchText(unit, searchLower) || HasMatchingChild(unit, searchLower);
+        }
+
+        private bool ContainsSearchText(OrganizationalUnitTreeItemViewModel unit, string searchText)
+        {
+            return unit.DisplayName.ToLowerInvariant().Contains(searchText) ||
+                   (unit.Description?.ToLowerInvariant().Contains(searchText) == true);
+        }
+
+        private bool HasMatchingChild(OrganizationalUnitTreeItemViewModel parent, string searchLower)
+        {
+            return parent.Children.Any(child => 
+                ContainsSearchText(child, searchLower) || HasMatchingChild(child, searchLower));
+        }
+
+        private int CountAllDepartments(ObservableCollection<OrganizationalUnitTreeItemViewModel> units)
+        {
+            int count = 0;
+            foreach (var unit in units)
+            {
+                // Policz działy w tej jednostce (dzieci które są działami)
+                count += unit.Children.Count(child => child.IsDepartment);
+                // Rekurencyjnie policz działy w pod-jednostkach
+                count += CountAllDepartments(unit.Children);
+            }
+            return count;
+        }
+
+        private int CountActiveDepartments(ObservableCollection<OrganizationalUnitTreeItemViewModel> units)
+        {
+            int count = 0;
+            foreach (var unit in units)
+            {
+                // Policz aktywne działy w tej jednostce
+                count += unit.Children.Count(child => child.IsDepartment && child.IsActive);
+                // Rekurencyjnie policz aktywne działy w pod-jednostkach
+                count += CountActiveDepartments(unit.Children);
+            }
+            return count;
+        }
+
+        private int CountAllOrganizationalUnits(ObservableCollection<OrganizationalUnitTreeItemViewModel> units)
+        {
+            int count = 0;
+            foreach (var unit in units)
+            {
+                if (!unit.IsDepartment) count++; // Policz tylko jednostki organizacyjne, nie działy
+                count += CountAllOrganizationalUnits(unit.Children);
+            }
+            return count;
+        }
+
+        private OrganizationalUnitTreeItemViewModel? FindItemById(string id)
+        {
+            return FindItemById(id, _organizationalUnits);
+        }
+
+        private OrganizationalUnitTreeItemViewModel? FindItemById(string id, ObservableCollection<OrganizationalUnitTreeItemViewModel> children)
+        {
+            foreach (var item in children)
+            {
+                if (item.Id == id)
+                {
+                    return item;
+                }
+                var found = FindItemById(id, item.Children);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        private void ExpandPathToItem(OrganizationalUnitTreeItemViewModel item)
+        {
+            var current = item.Parent;
+            while (current != null)
+            {
+                current.IsExpanded = true;
+                current = current.Parent;
             }
         }
 

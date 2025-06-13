@@ -31,6 +31,7 @@ namespace TeamsManager.Data
         // Podstawowe encje
         public DbSet<User> Users { get; set; }
         public DbSet<Department> Departments { get; set; }
+        public DbSet<OrganizationalUnit> OrganizationalUnits { get; set; }
         public DbSet<SchoolType> SchoolTypes { get; set; }
         public DbSet<SchoolYear> SchoolYears { get; set; }
         public DbSet<Subject> Subjects { get; set; }
@@ -54,6 +55,7 @@ namespace TeamsManager.Data
             // ===== KONFIGURACJA WSPÓLNA DLA WSZYSTKICH ENCJI BASEENTITY =====
             ConfigureBaseEntity<User>(modelBuilder);
             ConfigureBaseEntity<Department>(modelBuilder);
+            ConfigureBaseEntity<OrganizationalUnit>(modelBuilder);
             ConfigureBaseEntity<SchoolType>(modelBuilder);
             ConfigureBaseEntity<SchoolYear>(modelBuilder);
             ConfigureBaseEntity<Team>(modelBuilder);
@@ -125,6 +127,11 @@ namespace TeamsManager.Data
                       .HasForeignKey(d => d.ParentDepartmentId)
                       .OnDelete(DeleteBehavior.Restrict);
 
+                entity.HasOne(d => d.OrganizationalUnit)
+                      .WithMany(ou => ou.Departments)
+                      .HasForeignKey(d => d.OrganizationalUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
                 entity.Ignore(d => d.IsRootDepartment);
                 entity.Ignore(d => d.HierarchyLevel);
                 entity.Ignore(d => d.FullPath);
@@ -134,6 +141,25 @@ namespace TeamsManager.Data
                 entity.Ignore(d => d.HasSubDepartments);
                 entity.Ignore(d => d.AllUsers);
                 entity.Ignore(d => d.AllSubDepartments);
+            });
+
+            // ===== KONFIGURACJA JEDNOSTEK ORGANIZACYJNYCH =====
+            modelBuilder.Entity<OrganizationalUnit>(entity =>
+            {
+                entity.HasKey(ou => ou.Id);
+                entity.Property(ou => ou.Name).IsRequired().HasMaxLength(100);
+                entity.Property(ou => ou.Description).HasMaxLength(500);
+
+                entity.HasIndex(ou => ou.Name);
+
+                entity.HasOne(ou => ou.ParentUnit)
+                      .WithMany(ou => ou.SubUnits)
+                      .HasForeignKey(ou => ou.ParentUnitId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Ignore(ou => ou.IsRootUnit);
+                entity.Ignore(ou => ou.Level);
+                entity.Ignore(ou => ou.FullPath);
             });
 
             // ===== KONFIGURACJA TYPÓW SZKÓŁ =====

@@ -21,7 +21,6 @@ namespace TeamsManager.Tests.Services
     public class ApplicationSettingServiceTests
     {
         private readonly Mock<IApplicationSettingRepository> _mockSettingsRepository;
-        private readonly Mock<IOperationHistoryRepository> _mockOperationHistoryRepository;
         private readonly Mock<IOperationHistoryService> _mockOperationHistoryService;
         private readonly Mock<INotificationService> _mockNotificationService;
         private readonly Mock<ICurrentUserService> _mockCurrentUserService;
@@ -31,7 +30,6 @@ namespace TeamsManager.Tests.Services
         private readonly IApplicationSettingService _applicationSettingService;
 
         private readonly string _currentLoggedInUserUpn = "test.configadmin@example.com";
-        private OperationHistory? _capturedOperationHistory;
 
         // Klucze cache
         private const string AllSettingsCacheKey = "ApplicationSettings_AllActive";
@@ -47,7 +45,6 @@ namespace TeamsManager.Tests.Services
         public ApplicationSettingServiceTests()
         {
             _mockSettingsRepository = new Mock<IApplicationSettingRepository>();
-            _mockOperationHistoryRepository = new Mock<IOperationHistoryRepository>();
             _mockOperationHistoryService = new Mock<IOperationHistoryService>();
             _mockNotificationService = new Mock<INotificationService>();
             _mockCurrentUserService = new Mock<ICurrentUserService>();
@@ -55,9 +52,6 @@ namespace TeamsManager.Tests.Services
             _mockPowerShellCacheService = new Mock<IPowerShellCacheService>();
 
             _mockCurrentUserService.Setup(s => s.GetCurrentUserUpn()).Returns(_currentLoggedInUserUpn);
-            _mockOperationHistoryRepository.Setup(r => r.AddAsync(It.IsAny<OperationHistory>()))
-                                         .Callback<OperationHistory>(op => _capturedOperationHistory = op!)
-                                         .Returns(Task.CompletedTask);
 
             var mockOperationHistory = new OperationHistory { Id = "test-id", Status = OperationStatus.Completed };
             _mockOperationHistoryService.Setup(s => s.CreateNewOperationEntryAsync(
@@ -79,10 +73,7 @@ namespace TeamsManager.Tests.Services
             );
         }
 
-        private void ResetCapturedOperationHistory()
-        {
-            _capturedOperationHistory = null;
-        }
+
 
         private void SetupCacheTryGetValue<TItem>(string cacheKey, TItem? item, bool foundInCache)
         {
@@ -210,7 +201,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task SaveSettingAsync_NewSetting_ShouldCreateAndInvalidateCache()
         {
-            ResetCapturedOperationHistory();
             var key = "NewKeyToSave";
             var value = "NewValue";
             var type = SettingType.String;
@@ -253,7 +243,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task UpdateSettingAsync_ExistingSetting_ShouldUpdateAndInvalidateCache()
         {
-            ResetCapturedOperationHistory();
             var settingId = "setting-to-update-001";
             var oldKey = "OldKey";
             var oldCategory = "CategoryOld";
@@ -305,7 +294,6 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public async Task DeleteSettingAsync_ExistingSetting_ShouldSoftDeleteAndInvalidateCache()
         {
-            ResetCapturedOperationHistory();
             var key = "KeyToDelete";
             var category = "CatToDelete";
             var settingToDelete = new ApplicationSetting { Id = "setting-del-1", Key = key, Value = "Val", Category = category, IsActive = true, CreatedBy = "initial", CreatedDate = DateTime.UtcNow.AddDays(-1) };

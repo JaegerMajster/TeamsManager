@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TeamsManager.Data;
 
@@ -10,9 +11,11 @@ using TeamsManager.Data;
 namespace TeamsManager.Data.Migrations
 {
     [DbContext(typeof(TeamsManagerDbContext))]
-    partial class TeamsManagerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250613140716_AddOrganizationalUnitCode")]
+    partial class AddOrganizationalUnitCode
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
@@ -442,6 +445,7 @@ namespace TeamsManager.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Code")
+                        .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("CreatedBy")

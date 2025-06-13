@@ -14,11 +14,17 @@ namespace TeamsManager.Data
         {
             var optionsBuilder = new DbContextOptionsBuilder<TeamsManagerDbContext>();
             
-            // Ścieżka do bazy danych - w tym samym katalogu co w aplikacji UI
-            var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "TeamsManager.UI", "bin", "Debug", "net9.0-windows", "teamsmanager_ui.db");
+            // UŻYWAMY TEJ SAMEJ ŚCIEŻKI CO W APLIKACJI UI
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var appFolderPath = Path.Combine(appDataPath, "TeamsManager");
             
             // Upewnij się że katalog istnieje
-            Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+            if (!Directory.Exists(appFolderPath))
+            {
+                Directory.CreateDirectory(appFolderPath);
+            }
+            
+            var dbPath = Path.Combine(appFolderPath, "teamsmanager.db");
             
             optionsBuilder.UseSqlite($"Data Source={dbPath}");
             
