@@ -9,6 +9,7 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Services.Abstractions;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.ViewModels.OrganizationalUnits
 {
@@ -617,11 +618,22 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                 };
                 AvailableParentUnits.Add(noneOption);
                 
-                // Dodaj wszystkie jednostki z filtrowaniem aktualnie edytowanej (jeśli w trybie edycji)
+                // W trybie edycji - pobierz wszystkie jednostki potomne (dzieci) aktualnie edytowanej jednostki
+                HashSet<string> childUnitIds = new HashSet<string>();
+                if (Mode == OrganizationalUnitEditMode.Edit && !string.IsNullOrEmpty(Model?.Id))
+                {
+                    childUnitIds = await GetAllChildUnitIdsRecursivelyAsync(Model.Id);
+                }
+                
+                // Dodaj wszystkie jednostki z filtrowaniem
                 foreach (var unit in units)
                 {
                     // KLUCZOWE: W trybie edycji pomiń aktualnie edytowaną jednostkę
                     if (Mode == OrganizationalUnitEditMode.Edit && unit.Id == Model?.Id)
+                        continue;
+                        
+                    // KLUCZOWE: W trybie edycji pomiń wszystkie jednostki potomne (dzieci) aktualnie edytowanej jednostki
+                    if (Mode == OrganizationalUnitEditMode.Edit && childUnitIds.Contains(unit.Id))
                         continue;
                         
                     AvailableParentUnits.Add(unit);
@@ -631,6 +643,43 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             {
                 await ShowErrorDialog("Błąd podczas ładowania jednostek nadrzędnych", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Rekurencyjnie pobiera wszystkie ID jednostek potomnych dla danej jednostki
+        /// </summary>
+        /// <param name="parentUnitId">ID jednostki nadrzędnej</param>
+        /// <returns>HashSet zawierający wszystkie ID jednostek potomnych</returns>
+        private async Task<HashSet<string>> GetAllChildUnitIdsRecursivelyAsync(string parentUnitId)
+        {
+            var childIds = new HashSet<string>();
+            
+            try
+            {
+                // Pobierz bezpośrednie dzieci
+                var directChildren = await _organizationalUnitService.GetSubUnitsAsync(parentUnitId);
+                
+                foreach (var child in directChildren)
+                {
+                    if (!string.IsNullOrEmpty(child.Id))
+                    {
+                        childIds.Add(child.Id);
+                        
+                        // Rekurencyjnie pobierz dzieci tego dziecka
+                        var grandChildren = await GetAllChildUnitIdsRecursivelyAsync(child.Id);
+                        foreach (var grandChildId in grandChildren)
+                        {
+                            childIds.Add(grandChildId);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania jednostek potomnych dla jednostki {ParentUnitId}", parentUnitId);
+            }
+            
+            return childIds;
         }
 
         private async Task LoadAssignedDepartmentsAsync()
