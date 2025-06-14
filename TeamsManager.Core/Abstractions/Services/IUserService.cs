@@ -112,6 +112,16 @@ namespace TeamsManager.Core.Abstractions.Services
         Task<bool> ActivateUserAsync(string userId, string accessToken, bool activateM365Account = true);
 
         /// <summary>
+        /// Asynchronicznie trwale usuwa użytkownika (hard delete) z systemu i M365.
+        /// UWAGA: Można usuwać tylko dezaktywowanych użytkowników (IsActive = false).
+        /// </summary>
+        /// <param name="userId">Identyfikator użytkownika do usunięcia.</param>
+        /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
+        /// <param name="deleteM365Account">Czy usunąć konto użytkownika z M365.</param>
+        /// <returns>True, jeśli usunięcie się powiodło.</returns>
+        Task<bool> DeleteUserAsync(string userId, string accessToken, bool deleteM365Account = true);
+
+        /// <summary>
         /// Asynchronicznie przypisuje użytkownika do typu szkoły.
         /// </summary>
         /// <param name="userId">Identyfikator użytkownika.</param>

@@ -94,6 +94,11 @@ namespace TeamsManager.UI.Services.Dashboard
             return Task.FromResult(true);
         }
 
+        public Task<bool> DeleteUserAsync(string userId, string accessToken, bool deleteM365Account = true)
+        {
+            return Task.FromResult(true);
+        }
+
         public Task<UserSchoolType?> AssignUserToSchoolTypeAsync(string userId, string schoolTypeId, DateTime assignedDate, DateTime? endDate = null, decimal? workloadPercentage = null, string? notes = null)
         {
             return Task.FromResult<UserSchoolType?>(null);

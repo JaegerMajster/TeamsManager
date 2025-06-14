@@ -144,7 +144,8 @@ namespace TeamsManager.Core.Services.PowerShell
             string password,
             string? usageLocation = null,
             List<string>? licenseSkuIds = null,
-            bool accountEnabled = true)
+            bool accountEnabled = true,
+            string? department = null)
         {
             // [ETAP6] Walidacja parametrów z PSParameterValidator
             var validatedDisplayName = PSParameterValidator.ValidateAndSanitizeString(displayName, nameof(displayName), maxLength: 256);
@@ -163,14 +164,24 @@ namespace TeamsManager.Core.Services.PowerShell
             {
                 var mailNickname = validatedUserPrincipalName.Split('@')[0];
                 
-                var parameters = PSParameterValidator.CreateSafeParameters(
+                var parametersBuilder = new List<(string, object)>
+                {
                     ("DisplayName", validatedDisplayName),
                     ("UserPrincipalName", validatedUserPrincipalName),
                     ("MailNickname", mailNickname),
                     ("PasswordProfile", new { password = validatedPassword, forceChangePasswordNextSignIn = false }),
                     ("AccountEnabled", accountEnabled),
                     ("UsageLocation", validatedUsageLocation)
-                );
+                };
+
+                // Dodaj department jeśli został podany
+                if (!string.IsNullOrWhiteSpace(department))
+                {
+                    var validatedDepartment = PSParameterValidator.ValidateAndSanitizeString(department, nameof(department), maxLength: 64);
+                    parametersBuilder.Add(("Department", validatedDepartment));
+                }
+
+                var parameters = PSParameterValidator.CreateSafeParameters(parametersBuilder.ToArray());
 
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("New-MgUser", parameters);
                 var userIdObject = results?.FirstOrDefault();
@@ -247,6 +258,88 @@ namespace TeamsManager.Core.Services.PowerShell
             {
                 _logger.LogError(ex, "Błąd zmiany stanu konta {UserPrincipalName}", userPrincipalName);
                 return false;
+            }
+        }
+
+        public async Task<bool> DeleteM365UserAsync(string userPrincipalName)
+        {
+            var validatedUpn = PSParameterValidator.ValidateEmail(userPrincipalName, nameof(userPrincipalName));
+            
+            if (!_connectionService.ValidateRunspaceState())
+            {
+                throw new PowerShellConnectionException("PowerShell runspace is not ready");
+            }
+
+            _logger.LogInformation("Rozpoczynanie trwałego usuwania użytkownika M365: {UserPrincipalName}", validatedUpn);
+
+            try
+            {
+                // 1. Najpierw sprawdź czy użytkownik istnieje i czy jest dezaktywowany
+                var userCheckParameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", validatedUpn),
+                    ("Properties", new[] { "Id", "AccountEnabled", "DisplayName" })
+                );
+
+                var userResults = await _connectionService.ExecuteCommandWithRetryAsync("Get-MgUser", userCheckParameters);
+                var userObject = userResults?.FirstOrDefault();
+
+                if (userObject == null)
+                {
+                    _logger.LogWarning("Użytkownik {UserPrincipalName} nie istnieje w M365", validatedUpn);
+                    return false;
+                }
+
+                // 2. Sprawdź czy konto jest dezaktywowane
+                var accountEnabled = userObject.Properties["AccountEnabled"]?.Value as bool? ?? true;
+                if (accountEnabled)
+                {
+                    var displayName = userObject.Properties["DisplayName"]?.Value?.ToString() ?? validatedUpn;
+                    _logger.LogError("Nie można usunąć użytkownika {UserPrincipalName} ({DisplayName}) - konto jest nadal aktywne. Najpierw dezaktywuj użytkownika.", 
+                        validatedUpn, displayName);
+                    
+                    throw new UserOperationException(
+                        $"Cannot delete active user {validatedUpn}. User must be deactivated first.",
+                        new PowerShellCommandExecutionException($"User {validatedUpn} is still active (AccountEnabled = true)", "DeleteM365UserAsync", null));
+                }
+
+                // 3. Wykonaj trwałe usunięcie
+                var deleteParameters = PSParameterValidator.CreateSafeParameters(
+                    ("UserId", validatedUpn)
+                );
+
+                var deleteResults = await _connectionService.ExecuteCommandWithRetryAsync("Remove-MgUser", deleteParameters);
+
+                if (deleteResults != null)
+                {
+                    // 4. Kompleksowa inwalidacja cache
+                    _cacheService.InvalidateUserCache(userUpn: validatedUpn);
+                    _cacheService.InvalidateUserListCache();
+                    _cacheService.InvalidateAllActiveUsersList();
+                    
+                    // Inwalidacja cache PowerShell
+                    _cacheService.Remove($"PowerShell_M365User_{validatedUpn}");
+                    _cacheService.Remove($"PowerShell_UserId_{validatedUpn}");
+                    
+                    _logger.LogInformation("Użytkownik {UserPrincipalName} został trwale usunięty z M365", validatedUpn);
+                    return true;
+                }
+
+                return false;
+            }
+            catch (PowerShellCommandExecutionException)
+            {
+                throw; // Re-throw PowerShell exceptions
+            }
+            catch (UserOperationException)
+            {
+                throw; // Re-throw user operation exceptions
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas trwałego usuwania użytkownika {UserPrincipalName}", validatedUpn);
+                throw new UserOperationException(
+                    $"Failed to delete user {validatedUpn}",
+                    ex);
             }
         }
 
@@ -413,12 +506,8 @@ namespace TeamsManager.Core.Services.PowerShell
 
             try
             {
-                // Sprawdź uprawnienia
-                var hasPermission = await CheckGraphPermissionAsync("AuditLog.Read.All");
-                if (!hasPermission)
-                {
-                    _logger.LogWarning("Brak uprawnień AuditLog.Read.All. SignInActivity może być niedostępne.");
-                }
+                // Sprawdź uprawnienia - TODO: Implementacja sprawdzania uprawnień
+                _logger.LogInformation("Pobieranie nieaktywnych użytkowników - wymagane uprawnienia AuditLog.Read.All");
 
                 var script = $@"
                     $inactiveThreshold = (Get-Date).AddDays(-{daysInactive})
@@ -917,11 +1006,6 @@ namespace TeamsManager.Core.Services.PowerShell
                     
                     _logger.LogInformation("Cache członków zespołu {TeamId} unieważniony po usunięciu {UserUpn}", teamId, userUpn);
                 }
-                else
-                {
-                    _logger.LogError("Nie udało się usunąć użytkownika {UserUpn} z zespołu {TeamId}",
-                        userUpn, teamId);
-                }
 
                 return success;
             }
@@ -1323,20 +1407,6 @@ namespace TeamsManager.Core.Services.PowerShell
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd przypisywania licencji do użytkownika {UserId}", userId);
-                return false;
-            }
-        }
-
-        private async Task<bool> CheckGraphPermissionAsync(string permission)
-        {
-            try
-            {
-                var script = "(Get-MgContext).Scopes -contains '" + permission + "'";
-                var results = await _connectionService.ExecuteScriptAsync(script);
-                return results?.FirstOrDefault()?.BaseObject as bool? ?? false;
-            }
-            catch
-            {
                 return false;
             }
         }

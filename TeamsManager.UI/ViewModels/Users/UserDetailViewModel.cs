@@ -341,17 +341,23 @@ namespace TeamsManager.UI.ViewModels.Users
                 {
                     StatusMessage = "Tworzenie użytkownika...";
                     
-                    // For new users, we need a password (in real app, this might be auto-generated or set separately)
-                    var tempPassword = GenerateTemporaryPassword();
-                    
                     var newUser = await _userService.CreateUserAsync(
                         Model.FirstName,
                         Model.LastName,
                         Model.Upn,
                         Model.Role,
                         Model.DepartmentId,
-                        tempPassword,
-                        accessToken
+                        Model.Password, // Używamy hasła z formularza
+                        accessToken,
+                        sendWelcomeEmail: false,
+                        phone: Model.Phone,
+                        alternateEmail: Model.AlternateEmail,
+                        externalId: null,
+                        birthDate: Model.BirthDate,
+                        employmentDate: Model.EmploymentDate,
+                        position: Model.Position,
+                        notes: Model.Notes,
+                        isSystemAdmin: Model.IsSystemAdmin
                     );
 
                     if (newUser != null)
@@ -429,21 +435,7 @@ namespace TeamsManager.UI.ViewModels.Users
             UpdateCommandStates();
         }
 
-        private string GenerateTemporaryPassword()
-        {
-            // Simple temporary password generation
-            // In real app, this should be more sophisticated
-            var random = new Random();
-            var chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-            var password = new char[12];
-            
-            for (int i = 0; i < password.Length; i++)
-            {
-                password[i] = chars[random.Next(chars.Length)];
-            }
-            
-            return new string(password) + "!";
-        }
+
 
         private string[] GetValidationErrors()
         {

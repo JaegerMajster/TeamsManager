@@ -27,6 +27,7 @@ public class AzureAdUiConfig
     public string Instance { get; set; } = "https://login.microsoftonline.com/";
     public string? TenantId { get; set; }
     public string? ClientId { get; set; }
+    public string? ClientSecret { get; set; }
     public string? RedirectUri { get; set; }
     public string? ApiScope { get; set; }
     public string? ApiBaseUrl { get; set; }

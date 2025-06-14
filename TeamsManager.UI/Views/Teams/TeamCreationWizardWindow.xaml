@@ -8,8 +8,9 @@
         xmlns:enums="clr-namespace:TeamsManager.Core.Enums;assembly=TeamsManager.Core"
         mc:Ignorable="d"
         Title="Tworzenie nowego zespołu" 
-        Width="900" Height="700"
-        MinWidth="800" MinHeight="600"
+        SizeToContent="WidthAndHeight"
+        MinWidth="900" MinHeight="700"
+        MaxWidth="1400" MaxHeight="1000"
         WindowStartupLocation="CenterOwner"
         Style="{StaticResource BaseWindowStyle}"
         Background="{StaticResource BackgroundDark}">
@@ -157,8 +158,8 @@
         <Border Grid.Row="1" Background="{StaticResource BackgroundDark}">
             <Grid>
                 <!-- Step 1: Basic Info -->
-                <ScrollViewer Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=0}">
-                    <StackPanel Margin="60,40">
+                <StackPanel Margin="60,40" 
+                           Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=0}">
                         <TextBlock Text="Informacje podstawowe" 
                                    Style="{StaticResource PageTitleStyle}"
                                    Margin="0,0,0,30"/>
@@ -200,11 +201,10 @@
                             </StackPanel>
                         </materialDesign:Card>
                     </StackPanel>
-                </ScrollViewer>
 
                 <!-- Step 2: Template Selection -->
-                <ScrollViewer Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=1}">
-                    <StackPanel Margin="60,40">
+                <StackPanel Margin="60,40" 
+                           Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=1}">
                         <TextBlock Text="Wybór szablonu" 
                                    Style="{StaticResource PageTitleStyle}"
                                    Margin="0,0,0,30"/>
@@ -300,11 +300,10 @@
                             </StackPanel>
                         </materialDesign:Card>
                     </StackPanel>
-                </ScrollViewer>
 
                 <!-- Step 3: Owner & Members -->
-                <ScrollViewer Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=2}">
-                    <StackPanel Margin="60,40">
+                <StackPanel Margin="60,40" 
+                           Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=2}">
                         <TextBlock Text="Właściciel i członkowie" 
                                    Style="{StaticResource PageTitleStyle}"
                                    Margin="0,0,0,30"/>
@@ -413,11 +412,10 @@
                             </StackPanel>
                         </materialDesign:Card>
                     </StackPanel>
-                </ScrollViewer>
 
                 <!-- Step 4: Summary -->
-                <ScrollViewer Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=3}">
-                    <StackPanel Margin="60,40">
+                <StackPanel Margin="60,40" 
+                           Visibility="{Binding CurrentStep, Converter={StaticResource EqualToVisibilityConverter}, ConverterParameter=3}">
                         <TextBlock Text="Podsumowanie" 
                                    Style="{StaticResource PageTitleStyle}"
                                    Margin="0,0,0,30"/>
@@ -521,7 +519,6 @@
                             </StackPanel>
                         </materialDesign:Card>
                     </StackPanel>
-                </ScrollViewer>
             </Grid>
         </Border>
 

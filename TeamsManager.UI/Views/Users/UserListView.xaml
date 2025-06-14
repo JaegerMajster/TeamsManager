@@ -338,7 +338,7 @@
                         </DataGridTextColumn>
                         
                         <!-- Actions -->
-                        <DataGridTemplateColumn Header="Akcje" Width="120" MinWidth="120" MaxWidth="120" CanUserResize="False">
+                        <DataGridTemplateColumn Header="Akcje" Width="160" MinWidth="160" MaxWidth="160" CanUserResize="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="5,0">
@@ -351,9 +351,22 @@
                                             <materialDesign:PackIcon Kind="Eye"/>
                                         </Button>
                                         <Button Style="{StaticResource IconButton}"
+                                                Command="{Binding DataContext.ViewUserDetailsCommand, 
+                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
                                                 ToolTip="Edytuj"
                                                 Margin="2,0">
                                             <materialDesign:PackIcon Kind="Pencil"/>
+                                        </Button>
+                                        <Button Style="{StaticResource IconButton}"
+                                                Command="{Binding DataContext.DeleteUserCommand, 
+                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Usuń (tylko dezaktywowani)"
+                                                Margin="2,0"
+                                                IsEnabled="{Binding IsActive, Converter={StaticResource InverseBooleanConverter}}"
+                                                Opacity="{Binding IsActive, Converter={StaticResource BooleanToOpacityConverter}}">
+                                            <materialDesign:PackIcon Kind="Delete" Foreground="#F44336"/>
                                         </Button>
                                     </StackPanel>
                                 </DataTemplate>

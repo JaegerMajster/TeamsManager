@@ -6,7 +6,9 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="Edytor Szablonów Zespołów" 
-        Height="800" Width="1200"
+        SizeToContent="WidthAndHeight"
+        MinWidth="1200" MinHeight="800"
+        MaxWidth="1600" MaxHeight="1200"
         WindowStartupLocation="CenterScreen"
         Style="{StaticResource BaseWindowStyle}">
     
@@ -77,8 +79,7 @@
 
                 <!-- Left Panel - Editor -->
                 <Border Grid.Column="0" Style="{StaticResource InfoCardStyle}" Margin="0,0,10,0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="20">
+                    <StackPanel Margin="20">
                             <!-- Basic Info Section -->
                             <TextBlock Text="Informacje podstawowe" 
                                      Style="{StaticResource SectionHeaderStyle}"
@@ -240,7 +241,6 @@
                                 </StackPanel>
                             </Expander>
                         </StackPanel>
-                    </ScrollViewer>
                 </Border>
 
                 <!-- Right Panel - Preview & Tokens -->
@@ -294,9 +294,8 @@
                                      Style="{StaticResource SectionHeaderStyle}"
                                      Margin="20,20,20,16"/>
 
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding AvailableTokens}"
-                                            Margin="20,0,20,20">
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding AvailableTokens}"
+                                        Margin="20,0,20,20">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border Background="{StaticResource BackgroundLight}"
@@ -367,7 +366,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
                         </Grid>
                     </Border>
                 </Grid>

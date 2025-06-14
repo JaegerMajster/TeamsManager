@@ -45,6 +45,7 @@ namespace TeamsManager.UI.Models.Configuration
                     ClientId = legacy.AzureAd.ClientId,
                     TenantId = legacy.AzureAd.TenantId,
                     Instance = legacy.AzureAd.Instance ?? "https://login.microsoftonline.com/",
+                    ClientSecret = legacy.AzureAd.ClientSecret,
                     RedirectUri = legacy.AzureAd.RedirectUri,
                     ApiScope = legacy.AzureAd.ApiScope,
                     ApiBaseUrl = legacy.AzureAd.ApiBaseUrl
@@ -73,6 +74,11 @@ namespace TeamsManager.UI.Models.Configuration
         /// Identyfikator klienta aplikacji
         /// </summary>
         public string? ClientId { get; set; }
+        
+        /// <summary>
+        /// Sekret klienta aplikacji
+        /// </summary>
+        public string? ClientSecret { get; set; }
         
         /// <summary>
         /// URI przekierowania po autentykacji

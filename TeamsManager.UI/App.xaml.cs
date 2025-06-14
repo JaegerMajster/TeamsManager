@@ -203,8 +203,29 @@ namespace TeamsManager.UI
             services.AddScoped<IOperationHistoryService, TeamsManager.Core.Services.OperationHistoryService>();
             services.AddScoped<IOperationHistoryRepository, TeamsManager.Data.Repositories.OperationHistoryRepository>();
             
+            // === DODATKOWE ZALEŻNOŚCI DLA USERSERVICE ===
+            // PowerShell Services
+            services.AddScoped<IPowerShellService, TeamsManager.Core.Services.PowerShell.PowerShellService>();
+            services.AddScoped<IPowerShellUserManagementService, TeamsManager.Core.Services.PowerShell.PowerShellUserManagementService>();
+            services.AddScoped<IPowerShellCacheService, TeamsManager.Core.Services.PowerShell.PowerShellCacheService>();
+            
+            // Current User Service
+            services.AddScoped<ICurrentUserService, TeamsManager.Core.Services.UserContext.CurrentUserService>();
+            
+            // Notification Services
+            services.AddScoped<IAdminNotificationService, TeamsManager.Core.Services.StubAdminNotificationService>();
+            
+            // Graph Synchronizer (tymczasowo mock - do implementacji później)
+            services.AddScoped<TeamsManager.Core.Abstractions.Services.Synchronization.IGraphSynchronizer<User>, TeamsManager.Core.Services.Synchronization.UserSynchronizer>();
+            
+            // Unit of Work
+            services.AddScoped<IUnitOfWork, TeamsManager.Data.UnitOfWork.EfUnitOfWork>();
+            
+            // Additional Repositories
+            services.AddScoped<IGenericRepository<UserSchoolType>, TeamsManager.Data.Repositories.GenericRepository<UserSchoolType>>();
+            
             // Prosta implementacja IUserService korzystająca z bazy danych
-            services.AddScoped<IUserService, SimpleUserService>();
+            services.AddScoped<IUserService, UserService>();
             
             // Serwis danych początkowych (Seed Data)
             services.AddScoped<SeedDataService>();
@@ -466,13 +487,36 @@ namespace TeamsManager.UI
             // Rejestracja Authentication Services wymaganych przez PowerShell
             services.AddScoped<TeamsManager.Core.Abstractions.Services.Auth.ITokenManager, TeamsManager.Core.Services.Auth.TokenManager>();
             
-            // Mock IConfidentialClientApplication dla TokenManager (nie używane w UI, ale wymagane przez DI)
+            // Prawdziwy IConfidentialClientApplication dla TokenManager z konfiguracji MSAL
             services.AddScoped<Microsoft.Identity.Client.IConfidentialClientApplication>(provider =>
             {
-                return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder.Create("mock-client-id")
-                    .WithClientSecret("mock-secret")
-                    .WithAuthority(new Uri("https://login.microsoftonline.com/mock-tenant"))
-                    .Build();
+                var configProvider = provider.GetRequiredService<TeamsManager.UI.Services.Configuration.IMsalConfigurationProvider>();
+                var config = configProvider.GetConfiguration();
+                
+                if (!config.IsValid())
+                {
+                    throw new InvalidOperationException("Konfiguracja MSAL jest nieprawidłowa. Sprawdź plik oauth_config.json w %APPDATA%\\TeamsManager\\");
+                }
+                
+                var builder = Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                    .Create(config.AzureAd.ClientId)
+                    .WithAuthority(new Uri($"{config.AzureAd.Instance}{config.AzureAd.TenantId}"));
+                
+                // Sprawdź czy używamy certyfikatu czy client secret
+                if (!string.IsNullOrEmpty(config.AzureAd.ClientSecret))
+                {
+                    builder = builder.WithClientSecret(config.AzureAd.ClientSecret);
+                }
+                else
+                {
+                    // Obsługa certyfikatu - dla aplikacji UI używamy client credentials flow
+                    // W rzeczywistości dla UI powinniśmy używać PublicClientApplication, ale TokenManager wymaga ConfidentialClient
+                    // Tymczasowo używamy pustego client secret - to nie będzie działać dla prawdziwego uwierzytelniania
+                    System.Diagnostics.Debug.WriteLine("[MSAL] Uwaga: Brak ClientSecret, używam pustego - to może nie działać poprawnie");
+                    builder = builder.WithClientSecret("placeholder-secret");
+                }
+                
+                return builder.Build();
             });
             
             services.AddPowerShellServices(); // Rejestruje IPowerShellConnectionService i inne serwisy PowerShell

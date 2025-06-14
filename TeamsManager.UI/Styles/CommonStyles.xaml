@@ -282,6 +282,22 @@
 		</Style.Triggers>
 	</Style>
 
+	<Style x:Key="CriticalDangerButton" TargetType="Button" BasedOn="{StaticResource BaseModernButton}">
+		<Setter Property="Background" Value="#FFB71C1C"/>
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="BorderBrush" Value="#FFD32F2F"/>
+		<Setter Property="BorderThickness" Value="2"/>
+		<Style.Triggers>
+			<Trigger Property="IsMouseOver" Value="True">
+				<Setter Property="Background" Value="#FFD32F2F"/>
+				<Setter Property="BorderBrush" Value="#FFFF5252"/>
+			</Trigger>
+			<Trigger Property="IsPressed" Value="True">
+				<Setter Property="Background" Value="#FF8E0000"/>
+			</Trigger>
+		</Style.Triggers>
+	</Style>
+
 	<Style x:Key="SuccessButton" TargetType="Button" BasedOn="{StaticResource BaseModernButton}">
 		<Setter Property="Background" Value="{StaticResource SuccessGreen}"/>
 		<Setter Property="Foreground" Value="White"/>

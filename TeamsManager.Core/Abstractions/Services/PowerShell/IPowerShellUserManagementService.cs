@@ -21,6 +21,7 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="usageLocation">Lokalizacja użytkownika (domyślnie PL)</param>
         /// <param name="licenseSkuIds">Lista ID licencji do przypisania</param>
         /// <param name="accountEnabled">Czy konto ma być aktywne</param>
+        /// <param name="department">Nazwa działu (opcjonalna)</param>
         /// <returns>ID utworzonego użytkownika lub null w przypadku błędu</returns>
         Task<string?> CreateM365UserAsync(
             string displayName,
@@ -28,7 +29,8 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
             string password,
             string? usageLocation = null,
             List<string>? licenseSkuIds = null,
-            bool accountEnabled = true);
+            bool accountEnabled = true,
+            string? department = null);
 
         /// <summary>
         /// Ustawia stan konta użytkownika (włączone/wyłączone)
@@ -37,6 +39,14 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="isEnabled">Czy konto ma być włączone</param>
         /// <returns>True jeśli operacja się powiodła</returns>
         Task<bool> SetM365UserAccountStateAsync(string userPrincipalName, bool isEnabled);
+
+        /// <summary>
+        /// Trwale usuwa użytkownika z Microsoft 365 (hard delete)
+        /// UWAGA: Można usuwać tylko dezaktywowanych użytkowników (AccountEnabled = false)
+        /// </summary>
+        /// <param name="userPrincipalName">UPN użytkownika do usunięcia</param>
+        /// <returns>True jeśli usunięcie się powiodło</returns>
+        Task<bool> DeleteM365UserAsync(string userPrincipalName);
 
         /// <summary>
         /// Aktualizuje UPN użytkownika
@@ -152,8 +162,6 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// <param name="userUpn">UPN użytkownika</param>
         /// <returns>Obiekt PSObject z danymi członka lub null</returns>
         Task<PSObject?> GetTeamMemberAsync(string teamId, string userUpn);
-
-
 
         #endregion
 

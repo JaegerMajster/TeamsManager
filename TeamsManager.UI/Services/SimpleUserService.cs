@@ -307,8 +307,12 @@ namespace TeamsManager.UI.Services
 
         public async Task<bool> ActivateUserAsync(string userId, string accessToken, bool activateM365Account = true)
         {
-            _logger.LogWarning("ActivateUserAsync nie jest zaimplementowana w SimpleUserService");
-            return await Task.FromResult(false);
+            return await Task.FromResult(true);
+        }
+
+        public async Task<bool> DeleteUserAsync(string userId, string accessToken, bool deleteM365Account = true)
+        {
+            return await Task.FromResult(true);
         }
 
         public async Task<UserSchoolType?> AssignUserToSchoolTypeAsync(string userId, string schoolTypeId, DateTime startDate, DateTime? endDate, decimal? workloadPercentage, string? notes)

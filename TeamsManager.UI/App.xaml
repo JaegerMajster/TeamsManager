@@ -47,6 +47,7 @@
             <converters:EnumDescriptionConverter x:Key="EnumDescriptionConverter"/>
             <converters:UserRoleToPolishConverter x:Key="UserRoleToPolishConverter"/>
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+            <converters:BooleanToOpacityConverter x:Key="BooleanToOpacityConverter"/>
             
             <!-- User School Type Assignment konwertery -->
             <converters:GreaterThanConverter x:Key="GreaterThanConverter"/>

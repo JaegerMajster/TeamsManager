@@ -77,10 +77,12 @@ namespace TeamsManager.UI.ViewModels.Users
             DeselectAllCommand = new RelayCommand(DeselectAll);
             ActivateSelectedCommand = new RelayCommand(async () => await ActivateSelectedAsync(), () => SelectedUsers.Any());
             DeactivateSelectedCommand = new RelayCommand(async () => await DeactivateSelectedAsync(), () => SelectedUsers.Any());
+            DeleteSelectedCommand = new RelayCommand(async () => await DeleteSelectedAsync(), () => SelectedUsers.Any(u => !u.IsActive));
             
             // Navigation commands
             ViewUserDetailsCommand = new RelayCommand<UserListItemViewModel>(ViewUserDetails);
             CreateNewUserCommand = new RelayCommand(CreateNewUser);
+            DeleteUserCommand = new RelayCommand<UserListItemViewModel>(async (user) => await DeleteUserAsync(user));
 
             // Inicjalizacja będzie wywołana przez View w event handlerze Loaded
         }
@@ -269,10 +271,12 @@ namespace TeamsManager.UI.ViewModels.Users
         public ICommand DeselectAllCommand { get; }
         public ICommand ActivateSelectedCommand { get; }
         public ICommand DeactivateSelectedCommand { get; }
+        public ICommand DeleteSelectedCommand { get; }
         
         // Navigation
         public ICommand ViewUserDetailsCommand { get; }
         public ICommand CreateNewUserCommand { get; }
+        public ICommand DeleteUserCommand { get; }
 
         #endregion
 
@@ -503,6 +507,115 @@ namespace TeamsManager.UI.ViewModels.Users
             }
         }
 
+        private async Task DeleteSelectedAsync()
+        {
+            try
+            {
+                IsLoading = true;
+                var selectedInactiveUsers = SelectedUsers.Where(u => !u.IsActive).ToList();
+                
+                if (!selectedInactiveUsers.Any())
+                {
+                    ErrorMessage = "Można usuwać tylko dezaktywowanych użytkowników.";
+                    return;
+                }
+
+                // Potwierdzenie usunięcia
+                var userNames = string.Join(", ", selectedInactiveUsers.Select(u => u.FullName));
+                var confirmMessage = $"Czy na pewno chcesz TRWALE usunąć {selectedInactiveUsers.Count} użytkowników?\n\n{userNames}\n\nTa operacja jest nieodwracalna!";
+                
+                var result = System.Windows.MessageBox.Show(
+                    confirmMessage,
+                    "Potwierdzenie usunięcia",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning,
+                    System.Windows.MessageBoxResult.No
+                );
+
+                if (result != System.Windows.MessageBoxResult.Yes)
+                {
+                    return;
+                }
+                
+                // TODO: Pobierz token dostępu z odpowiedniego serwisu
+                var accessToken = "mock-token"; // W rzeczywistej implementacji pobierz z auth service
+                
+                foreach (var user in selectedInactiveUsers)
+                {
+                    await _userService.DeleteUserAsync(user.Id, accessToken);
+                }
+
+                await LoadUsersAsync(forceRefresh: true);
+                ErrorMessage = null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas usuwania wybranych użytkowników");
+                ErrorMessage = "Wystąpił błąd podczas usuwania wybranych użytkowników.";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        private async Task DeleteUserAsync(UserListItemViewModel? user)
+        {
+            if (user == null) return;
+
+            try
+            {
+                // Sprawdź czy użytkownik jest dezaktywowany
+                if (user.IsActive)
+                {
+                    ErrorMessage = "Można usuwać tylko dezaktywowanych użytkowników. Najpierw dezaktywuj użytkownika.";
+                    return;
+                }
+
+                // Potwierdzenie usunięcia
+                var confirmMessage = $"Czy na pewno chcesz TRWALE usunąć użytkownika?\n\n{user.FullName} ({user.Email})\n\nTa operacja jest nieodwracalna!";
+                
+                var result = System.Windows.MessageBox.Show(
+                    confirmMessage,
+                    "Potwierdzenie usunięcia",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning,
+                    System.Windows.MessageBoxResult.No
+                );
+
+                if (result != System.Windows.MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                IsLoading = true;
+                
+                // TODO: Pobierz token dostępu z odpowiedniego serwisu
+                var accessToken = "mock-token"; // W rzeczywistej implementacji pobierz z auth service
+                
+                var success = await _userService.DeleteUserAsync(user.Id, accessToken);
+                
+                if (success)
+                {
+                    await LoadUsersAsync(forceRefresh: true);
+                    ErrorMessage = null;
+                }
+                else
+                {
+                    ErrorMessage = "Nie udało się usunąć użytkownika.";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas usuwania użytkownika {UserId}", user?.Id);
+                ErrorMessage = "Wystąpił błąd podczas usuwania użytkownika.";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
         private async void ViewUserDetails(UserListItemViewModel? user)
         {
             if (user == null) return;
@@ -615,6 +728,7 @@ namespace TeamsManager.UI.ViewModels.Users
                 // Update command states
                 (ActivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeactivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (DeleteSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 

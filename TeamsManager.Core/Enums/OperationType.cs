@@ -31,6 +31,7 @@
         UserImported = 32,      // Import użytkownika z CSV
         UserDeactivated = 33,   // Dezaktywacja użytkownika
         UserActivated = 34,     // Aktywacja użytkownika
+        UserDeleted = 35,       // Trwałe usunięcie użytkownika
 
         // Operacje wsadowe
         BulkTeamCreation = 40,  // Masowe tworzenie zespołów

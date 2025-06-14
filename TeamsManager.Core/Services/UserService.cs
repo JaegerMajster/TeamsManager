@@ -347,7 +347,12 @@ namespace TeamsManager.Core.Services
                 // Używamy ExecuteWithAutoConnectAsync dla utworzenia użytkownika w M365
                 string? externalUserId = await _powerShellService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellService.Users.CreateM365UserAsync($"{firstName} {lastName}", upn, password, accountEnabled: true),
+                    async () => await _powerShellService.Users.CreateM365UserAsync(
+                        $"{firstName} {lastName}", 
+                        upn, 
+                        password, 
+                        accountEnabled: true, 
+                        department: department.Name), // Przekazujemy nazwę departmentu do M365
                     $"Tworzenie użytkownika M365: {firstName} {lastName} ({upn})"
                 );
                 
@@ -1533,6 +1538,157 @@ namespace TeamsManager.Core.Services
                 await _notificationService.SendNotificationToUserAsync(
                     currentUserUpn ?? "system",
                     $"Wystąpił błąd podczas aktywacji użytkownika: {ex.Message}",
+                    "error"
+                );
+                
+                return false; 
+            }
+        }
+
+        public async Task<bool> DeleteUserAsync(string userId, string apiAccessToken, bool deleteM365Account = true)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_delete";
+            _logger.LogInformation("Rozpoczynanie trwałego usuwania użytkownika ID: {UserId}", userId);
+
+            // 1. Inicjalizacja operacji historii na początku
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.UserDeleted,
+                nameof(User),
+                targetEntityId: userId
+            );
+
+            User? user = null;
+            try
+            {
+                var foundUsers = await _userRepository.FindAsync(u => u.Id == userId);
+                user = foundUsers.FirstOrDefault();
+                if (user == null) 
+                { 
+                    _logger.LogError("Nie można usunąć użytkownika: Użytkownik o ID {UserId} nie istnieje.", userId); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik o ID '{userId}' nie został znaleziony."
+                    );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        "Nie udało się usunąć użytkownika: Użytkownik nie został znaleziony.",
+                        "error"
+                    );
+                    
+                    return false; 
+                }
+                
+                // 2. Sprawdź czy użytkownik jest dezaktywowany
+                if (user.IsActive) 
+                { 
+                    _logger.LogError("Nie można usunąć użytkownika {FullName} (ID: {UserId}) - użytkownik jest nadal aktywny. Najpierw dezaktywuj użytkownika.", 
+                        user.FullName, userId); 
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        $"Użytkownik '{user.FullName}' jest nadal aktywny. Najpierw dezaktywuj użytkownika."
+                    );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można usunąć użytkownika {user.FullName} - użytkownik jest nadal aktywny. Najpierw dezaktywuj użytkownika.",
+                        "error"
+                    );
+                    
+                    return false; 
+                }
+
+                // 3. Usuń z Microsoft 365 jeśli wymagane
+                if (deleteM365Account)
+                {
+                    // Używamy ExecuteWithAutoConnectAsync dla usunięcia konta M365
+                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _powerShellService.Users.DeleteM365UserAsync(user.UPN),
+                        $"Trwałe usunięcie konta M365 użytkownika: {user.UPN}"
+                    );
+                    
+                    if (psSuccess != true) 
+                    { 
+                        _logger.LogError("Nie udało się usunąć konta użytkownika {UPN} z Microsoft 365.", user.UPN); 
+                        
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Failed,
+                            $"Nie udało się usunąć konta użytkownika '{user.UPN}' z Microsoft 365."
+                        );
+                        
+                        await _notificationService.SendNotificationToUserAsync(
+                            currentUserUpn,
+                            $"Nie udało się usunąć konta użytkownika {user.FullName} z Microsoft 365.",
+                            "error"
+                        );
+                        
+                        return false; 
+                    }
+                }
+
+                // 4. Usuń z lokalnej bazy danych (hard delete)
+                _userRepository.Delete(user);
+                await _userRepository.SaveChangesAsync();
+                _logger.LogInformation("Użytkownik ID: {UserId} ({FullName}) został trwale usunięty.", userId, user.FullName);
+                
+                // 5. Kompleksowa inwalidacja cache
+                InvalidateUserCache(userId: user.Id, upn: user.UPN, role: user.Role, invalidateAllGlobalLists: true, invalidateAll: true);
+                
+                // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Completed,
+                    "Użytkownik trwale usunięty lokalnie i opcjonalnie z M365."
+                );
+                
+                // Wysłanie powiadomienia o sukcesie
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Trwale usunięto użytkownika: {user.FullName} ({user.UPN})",
+                    "success"
+                );
+                
+                // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendCriticalErrorNotificationAsync(
+                            "Trwałe usunięcie użytkownika",
+                            $"Użytkownik {user.FullName} ({user.UPN}) został trwale usunięty przez {currentUserUpn}",
+                            "Operacja nieodwracalna",
+                            $"Usunięcie użytkownika {user.FullName}"
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o usunięciu użytkownika");
+                    }
+                });
+                
+                return true;
+            }
+            catch (Exception ex) 
+            { 
+                _logger.LogError(ex, "Krytyczny błąd podczas trwałego usuwania użytkownika ID {UserId}.", userId); 
+                
+                // 3. Aktualizacja statusu na błąd w przypadku wyjątku
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn ?? "system",
+                    $"Wystąpił błąd podczas trwałego usuwania użytkownika: {ex.Message}",
                     "error"
                 );
                 

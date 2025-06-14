@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Extensions;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.Models.ViewModels
 {
@@ -25,18 +26,39 @@ namespace TeamsManager.UI.Models.ViewModels
         private string? _notes;
         private bool _isSystemAdmin;
         private byte[]? _avatarData;
+        private string _password = string.Empty;
 
         // Properties with validation
         public string FirstName
         {
             get => _firstName;
-            set => SetProperty(ref _firstName, value);
+            set 
+            { 
+                if (SetProperty(ref _firstName, value))
+                {
+                    // Automatycznie generuj UPN tylko dla nowych użytkowników (gdy UPN jest pusty lub ma domyślną domenę)
+                    if (string.IsNullOrEmpty(Upn) || Upn.EndsWith("@ckziumm.edu.pl"))
+                    {
+                        GenerateUpnFromName();
+                    }
+                }
+            }
         }
 
         public string LastName
         {
             get => _lastName;
-            set => SetProperty(ref _lastName, value);
+            set 
+            { 
+                if (SetProperty(ref _lastName, value))
+                {
+                    // Automatycznie generuj UPN tylko dla nowych użytkowników (gdy UPN jest pusty lub ma domyślną domenę)
+                    if (string.IsNullOrEmpty(Upn) || Upn.EndsWith("@ckziumm.edu.pl"))
+                    {
+                        GenerateUpnFromName();
+                    }
+                }
+            }
         }
 
         public string Upn
@@ -125,6 +147,50 @@ namespace TeamsManager.UI.Models.ViewModels
             }
         }
 
+        public string Password
+        {
+            get => _password;
+            set => SetProperty(ref _password, value);
+        }
+
+        /// <summary>
+        /// Automatycznie generuje UPN na podstawie imienia i nazwiska
+        /// </summary>
+        public void GenerateUpnFromName()
+        {
+            if (!string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(LastName))
+            {
+                var firstName = RemovePolishCharacters(FirstName.Trim().ToLowerInvariant());
+                var lastName = RemovePolishCharacters(LastName.Trim().ToLowerInvariant());
+                Upn = $"{firstName}.{lastName}@ckziumm.edu.pl";
+            }
+        }
+
+        /// <summary>
+        /// Usuwa polskie znaki diakrytyczne z tekstu
+        /// </summary>
+        private static string RemovePolishCharacters(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            var polishChars = new Dictionary<char, char>
+            {
+                {'ą', 'a'}, {'ć', 'c'}, {'ę', 'e'}, {'ł', 'l'}, {'ń', 'n'},
+                {'ó', 'o'}, {'ś', 's'}, {'ź', 'z'}, {'ż', 'z'},
+                {'Ą', 'A'}, {'Ć', 'C'}, {'Ę', 'E'}, {'Ł', 'L'}, {'Ń', 'N'},
+                {'Ó', 'O'}, {'Ś', 'S'}, {'Ź', 'Z'}, {'Ż', 'Z'}
+            };
+
+            var result = new System.Text.StringBuilder(input.Length);
+            foreach (char c in input)
+            {
+                result.Append(polishChars.TryGetValue(c, out char replacement) ? replacement : c);
+            }
+
+            return result.ToString();
+        }
+
         // Computed properties for UI
         public bool HasAvatar => _avatarData != null && _avatarData.Length > 0;
 
@@ -184,6 +250,7 @@ namespace TeamsManager.UI.Models.ViewModels
                     nameof(FirstName) => ValidateFirstName(),
                     nameof(LastName) => ValidateLastName(),
                     nameof(Upn) => ValidateUpn(),
+                    nameof(Password) => ValidatePassword(),
                     nameof(DepartmentId) => ValidateDepartmentId(),
                     nameof(Phone) => ValidatePhone(),
                     nameof(AlternateEmail) => ValidateAlternateEmail(),
@@ -313,6 +380,25 @@ namespace TeamsManager.UI.Models.ViewModels
             if (BirthDate.HasValue && EmploymentDate.Value < BirthDate.Value.AddYears(16))
                 return "Data zatrudnienia musi być co najmniej 16 lat po dacie urodzenia";
             
+            return string.Empty;
+        }
+
+        private string ValidatePassword()
+        {
+            if (string.IsNullOrWhiteSpace(Password))
+                return "Hasło jest wymagane";
+            if (Password.Length < 8)
+                return "Hasło musi mieć co najmniej 8 znaków";
+            if (Password.Length > 50)
+                return "Hasło może mieć maksymalnie 50 znaków";
+            
+            // Sprawdź czy hasło zawiera przynajmniej jedną cyfrę i jedną literę
+            bool hasDigit = Password.Any(char.IsDigit);
+            bool hasLetter = Password.Any(char.IsLetter);
+            
+            if (!hasDigit || !hasLetter)
+                return "Hasło musi zawierać przynajmniej jedną literę i jedną cyfrę";
+                
             return string.Empty;
         }
 
