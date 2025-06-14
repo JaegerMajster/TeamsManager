@@ -97,6 +97,22 @@ namespace TeamsManager.Core.Common
             }
         }
 
+        /// <summary>
+        /// Rejestruje niepowodzenie operacji
+        /// </summary>
+        public void RecordFailure()
+        {
+            OnFailure();
+        }
+
+        /// <summary>
+        /// Rejestruje sukces operacji
+        /// </summary>
+        public void RecordSuccess()
+        {
+            OnSuccess();
+        }
+
         public void Reset()
         {
             var oldState = _state;

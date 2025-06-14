@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Abstractions.Services
 {
@@ -46,5 +47,17 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Serwis zarządzający operacjami masowymi
         /// </summary>
         IPowerShellBulkOperationsService BulkOperations { get; }
+
+        /// <summary>
+        /// Serwis zarządzający połączeniem PowerShell/Graph
+        /// </summary>
+        IPowerShellConnectionService Connection { get; }
+
+        /// <summary>
+        /// Testuje połączenie i uprawnienia PowerShell/Graph
+        /// </summary>
+        /// <param name="apiAccessToken">Token dostępu API</param>
+        /// <returns>Informacje diagnostyczne o połączeniu</returns>
+        Task<PowerShellDiagnosticInfo> DiagnoseConnectionAsync(string apiAccessToken);
     }
 }

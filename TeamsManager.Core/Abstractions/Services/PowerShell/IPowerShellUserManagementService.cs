@@ -13,6 +13,12 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         #region User Operations
 
         /// <summary>
+        /// Sprawdza czy system ma odpowiednie uprawnienia do tworzenia użytkowników
+        /// </summary>
+        /// <returns>True jeśli ma uprawnienia, false w przeciwnym razie</returns>
+        Task<bool> ValidateUserCreationPermissionsAsync();
+
+        /// <summary>
         /// Tworzy nowego użytkownika w Microsoft 365
         /// </summary>
         /// <param name="displayName">Nazwa wyświetlana użytkownika</param>

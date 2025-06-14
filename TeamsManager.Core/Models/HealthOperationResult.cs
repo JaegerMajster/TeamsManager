@@ -249,6 +249,11 @@ namespace TeamsManager.Core.Models
         /// Status połączenia PowerShell
         /// </summary>
         public string? PowerShellConnectionStatus { get; set; }
+
+        /// <summary>
+        /// Metryki specyficzne dla TeamsManager
+        /// </summary>
+        public Dictionary<string, object> TeamsManagerSpecificMetrics { get; set; } = new();
     }
 
     /// <summary>

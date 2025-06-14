@@ -87,6 +87,11 @@ namespace TeamsManager.Core.Abstractions.Services
         public bool SendAdminNotifications { get; set; } = true;
 
         /// <summary>
+        /// Czy odświeżać tokeny uwierzytelniania
+        /// </summary>
+        public bool RefreshAuthentication { get; set; } = false;
+
+        /// <summary>
         /// Czy symulować operacje (dry run) bez rzeczywistych zmian
         /// </summary>
         public bool DryRun { get; set; } = false;

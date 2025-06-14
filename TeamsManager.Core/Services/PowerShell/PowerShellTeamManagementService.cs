@@ -79,93 +79,94 @@ namespace TeamsManager.Core.Services.PowerShell
             var validatedDescription = PSParameterValidator.ValidateAndSanitizeString(description, nameof(description), maxLength: 1024, allowEmpty: true);
             var validatedOwnerUpn = PSParameterValidator.ValidateEmail(ownerUpn, nameof(ownerUpn));
             
-            if (!_connectionService.ValidateRunspaceState())
-            {
-                throw new PowerShellConnectionException("PowerShell runspace is not ready");
-            }
-
-            // Pobierz ID właściciela z cache lub Graph
-            var ownerId = await _userResolver.GetUserIdAsync(validatedOwnerUpn);
-            if (string.IsNullOrEmpty(ownerId))
-            {
-                throw new PowerShellCommandExecutionException(
-                    $"Owner user not found: {validatedOwnerUpn}",
-                    command: "UserResolver.GetUserIdAsync",
-                    innerException: null);
-            }
-
             _logger.LogInformation("Tworzenie zespołu '{DisplayName}' dla właściciela {OwnerUpn}",
                 validatedDisplayName, validatedOwnerUpn);
 
-            try
+            // Użyj ExecuteWithDiagnosticsAsync dla lepszego logowania i walidacji
+            return await _connectionService.ExecuteWithDiagnosticsAsync(async () =>
             {
-                // [ETAP3] Używam zwalidowanych i zsanityzowanych parametrów
-                var scriptBuilder = new StringBuilder();
-                scriptBuilder.AppendLine("$teamBody = @{");
-                scriptBuilder.AppendLine($"    displayName = '{validatedDisplayName}'");
-                scriptBuilder.AppendLine($"    description = '{validatedDescription}'");
-                scriptBuilder.AppendLine($"    visibility = '{visibility.ToString()}'");
-                scriptBuilder.AppendLine("    members = @(");
-                scriptBuilder.AppendLine("        @{");
-                scriptBuilder.AppendLine("            '@odata.type' = '#microsoft.graph.aadUserConversationMember'");
-                scriptBuilder.AppendLine("            roles = @('owner')");
-                scriptBuilder.AppendLine($"            'user@odata.bind' = 'https://graph.microsoft.com/v1.0/users(''{ownerId}'')'");
-                scriptBuilder.AppendLine("        }");
-                scriptBuilder.AppendLine("    )");
-
-                if (!string.IsNullOrEmpty(template))
-                {
-                    var graphTemplateId = MapTeamTemplate(template);
-                    scriptBuilder.AppendLine($"    'template@odata.bind' = 'https://graph.microsoft.com/v1.0/teamsTemplates(''{graphTemplateId}'')'");
-                    _logger.LogInformation("Używanie szablonu '{GraphTemplateId}'", graphTemplateId);
-                }
-
-                scriptBuilder.AppendLine("}");
-                scriptBuilder.AppendLine();
-                scriptBuilder.AppendLine("$newTeam = New-MgTeam -BodyParameter $teamBody -ErrorAction Stop");
-                scriptBuilder.AppendLine("$newTeam.Id");
-
-                var results = await _connectionService.ExecuteScriptAsync(scriptBuilder.ToString());
-                var teamId = results?.FirstOrDefault()?.BaseObject?.ToString();
-
-                if (!string.IsNullOrEmpty(teamId))
-                {
-                    _logger.LogInformation("Utworzono zespół '{DisplayName}' o ID: {TeamId}",
-                        validatedDisplayName, teamId);
-
-                    // [ETAP3] Granularna inwalidacja cache po utworzeniu zespołu
-                    _cacheService.InvalidateAllActiveTeamsList();
-                    _cacheService.InvalidateTeamsByOwner(validatedOwnerUpn);
-                    _cacheService.Remove(AllTeamsCacheKey); // lista wszystkich zespołów
-                    
-                    _logger.LogInformation("Cache unieważniony po utworzeniu zespołu {TeamId}", teamId);
-
-                    return teamId;
-                }
-                else
+                // Pobierz ID właściciela z cache lub Graph
+                var ownerId = await _userResolver.GetUserIdAsync(validatedOwnerUpn);
+                if (string.IsNullOrEmpty(ownerId))
                 {
                     throw new PowerShellCommandExecutionException(
-                        $"Failed to create team '{validatedDisplayName}' - no ID returned",
-                        command: "New-MgTeam",
+                        $"Owner user not found: {validatedOwnerUpn}",
+                        command: "UserResolver.GetUserIdAsync",
                         innerException: null);
                 }
-            }
-            catch (PowerShellCommandExecutionException)
-            {
-                throw; // Re-throw PowerShell exceptions
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd tworzenia zespołu '{DisplayName}'", validatedDisplayName);
-                throw new PowerShellCommandExecutionException(
-                    $"Failed to create team '{validatedDisplayName}'",
-                    command: "New-MgTeam",
-                    parameters: null,
-                    executionTime: null,
-                    exitCode: null,
-                    errorRecords: null,
-                    innerException: ex);
-            }
+
+                try
+                {
+                    // [ETAP3] Używam zwalidowanych i zsanityzowanych parametrów
+                    var scriptBuilder = new StringBuilder();
+                    scriptBuilder.AppendLine("$teamBody = @{");
+                    scriptBuilder.AppendLine($"    displayName = '{validatedDisplayName}'");
+                    scriptBuilder.AppendLine($"    description = '{validatedDescription}'");
+                    scriptBuilder.AppendLine($"    visibility = '{visibility.ToString()}'");
+                    scriptBuilder.AppendLine("    members = @(");
+                    scriptBuilder.AppendLine("        @{");
+                    scriptBuilder.AppendLine("            '@odata.type' = '#microsoft.graph.aadUserConversationMember'");
+                    scriptBuilder.AppendLine("            roles = @('owner')");
+                    scriptBuilder.AppendLine($"            'user@odata.bind' = 'https://graph.microsoft.com/v1.0/users(''{ownerId}'')'");
+                    scriptBuilder.AppendLine("        }");
+                    scriptBuilder.AppendLine("    )");
+
+                    if (!string.IsNullOrEmpty(template))
+                    {
+                        var graphTemplateId = MapTeamTemplate(template);
+                        scriptBuilder.AppendLine($"    'template@odata.bind' = 'https://graph.microsoft.com/v1.0/teamsTemplates(''{graphTemplateId}'')'");
+                        _logger.LogInformation("Używanie szablonu '{GraphTemplateId}'", graphTemplateId);
+                    }
+
+                    scriptBuilder.AppendLine("}");
+                    scriptBuilder.AppendLine();
+                    scriptBuilder.AppendLine("$newTeam = New-MgTeam -BodyParameter $teamBody -ErrorAction Stop");
+                    scriptBuilder.AppendLine("$newTeam.Id");
+
+                    var results = await _connectionService.ExecuteScriptAsync(scriptBuilder.ToString());
+                    var teamId = results?.FirstOrDefault()?.BaseObject?.ToString();
+
+                    if (!string.IsNullOrEmpty(teamId))
+                    {
+                        _logger.LogInformation("Utworzono zespół '{DisplayName}' o ID: {TeamId}",
+                            validatedDisplayName, teamId);
+
+                        // [ETAP3] Granularna inwalidacja cache po utworzeniu zespołu
+                        _cacheService.InvalidateAllActiveTeamsList();
+                        _cacheService.InvalidateTeamsByOwner(validatedOwnerUpn);
+                        _cacheService.Remove(AllTeamsCacheKey); // lista wszystkich zespołów
+                        
+                        _logger.LogInformation("Cache unieważniony po utworzeniu zespołu {TeamId}", teamId);
+
+                        return teamId;
+                    }
+                    else
+                    {
+                        throw new PowerShellCommandExecutionException(
+                            $"Failed to create team '{validatedDisplayName}' - no ID returned",
+                            command: "New-MgTeam",
+                            innerException: null);
+                    }
+                }
+                catch (PowerShellCommandExecutionException)
+                {
+                    throw; // Re-throw PowerShell exceptions
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Błąd tworzenia zespołu '{DisplayName}'", validatedDisplayName);
+                    throw new PowerShellCommandExecutionException(
+                        $"Failed to create team '{validatedDisplayName}'",
+                        command: "New-MgTeam",
+                        parameters: null,
+                        executionTime: null,
+                        exitCode: null,
+                        errorRecords: null,
+                        innerException: ex);
+                }
+            }, 
+            $"CreateTeam: {validatedDisplayName}",
+            new[] { "Group.ReadWrite.All", "Directory.ReadWrite.All" });
         }
 
         public async Task<bool> UpdateTeamPropertiesAsync(

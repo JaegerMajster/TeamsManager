@@ -138,6 +138,48 @@ namespace TeamsManager.Core.Services.PowerShell
 
         #region User Operations
 
+        /// <summary>
+        /// Sprawdza czy system ma odpowiednie uprawnienia do tworzenia użytkowników
+        /// </summary>
+        /// <returns>True jeśli ma uprawnienia, false w przeciwnym razie</returns>
+        public async Task<bool> ValidateUserCreationPermissionsAsync()
+        {
+            try
+            {
+                _logger.LogDebug("Sprawdzanie uprawnień do tworzenia użytkowników");
+                
+                var requiredPermissions = new[] 
+                { 
+                    "User.ReadWrite.All", 
+                    "Directory.ReadWrite.All" 
+                };
+
+                var permissionInfo = await _connectionService.ValidatePermissionsAsync(requiredPermissions);
+                
+                if (!permissionInfo.IsValid)
+                {
+                    _logger.LogWarning("Brak wymaganych uprawnień do tworzenia użytkowników. Dostępne: {AvailableScopes}", 
+                        string.Join(", ", permissionInfo.AvailableScopes ?? new List<string>()));
+                    
+                    if (!string.IsNullOrEmpty(permissionInfo.ErrorMessage))
+                    {
+                        _logger.LogError("Błąd sprawdzania uprawnień: {Error}", permissionInfo.ErrorMessage);
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("System ma wymagane uprawnienia do tworzenia użytkowników");
+                }
+
+                return permissionInfo.IsValid;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania uprawnień do tworzenia użytkowników");
+                return false;
+            }
+        }
+
         public async Task<string?> CreateM365UserAsync(
             string displayName,
             string userPrincipalName,
@@ -160,8 +202,24 @@ namespace TeamsManager.Core.Services.PowerShell
 
             _logger.LogInformation("Tworzenie użytkownika M365: {UserPrincipalName}", validatedUserPrincipalName);
 
-            try
+            // NOWE: Użyj ExecuteWithDiagnosticsAsync dla lepszego logowania i diagnostyki
+            return await _connectionService.ExecuteWithDiagnosticsAsync(async () =>
             {
+                // Sprawdź czy użytkownik już istnieje
+                _logger.LogDebug("Sprawdzanie czy użytkownik {UserPrincipalName} już istnieje w M365", validatedUserPrincipalName);
+                var existingUser = await GetM365UserAsync(validatedUserPrincipalName);
+                if (existingUser != null)
+                {
+                    var existingUserId = existingUser.Properties["Id"]?.Value?.ToString();
+                    _logger.LogWarning("Użytkownik {UserPrincipalName} już istnieje w M365 z ID: {UserId}", validatedUserPrincipalName, existingUserId);
+                    throw new UserOperationException(
+                        $"User {validatedUserPrincipalName} already exists in Microsoft 365",
+                        validatedUserPrincipalName,
+                        existingUserId,
+                        validatedDisplayName,
+                        "CreateUser");
+                }
+
                 var mailNickname = validatedUserPrincipalName.Split('@')[0];
                 
                 var parametersBuilder = new List<(string, object)>
@@ -183,19 +241,35 @@ namespace TeamsManager.Core.Services.PowerShell
 
                 var parameters = PSParameterValidator.CreateSafeParameters(parametersBuilder.ToArray());
 
+                // NOWE: Loguj parametry (bez hasła)
+                var logParameters = parameters.Where(p => p.Key != "PasswordProfile").ToDictionary(p => p.Key, p => p.Value);
+                _logger.LogDebug("Wykonywanie New-MgUser z parametrami: {Parameters}", 
+                    System.Text.Json.JsonSerializer.Serialize(logParameters));
+
                 var results = await _connectionService.ExecuteCommandWithRetryAsync("New-MgUser", parameters);
                 var userIdObject = results?.FirstOrDefault();
                 
                 if (userIdObject?.Properties["Id"]?.Value?.ToString() is not string userId || string.IsNullOrEmpty(userId))
                 {
+                    // NOWE: Lepsze logowanie błędu
+                    _logger.LogError("New-MgUser nie zwrócił prawidłowego ID użytkownika. Results count: {ResultsCount}, First result: {FirstResult}", 
+                        results?.Count ?? 0, 
+                        userIdObject?.ToString() ?? "null");
+                    
                     throw new UserOperationException(
                         $"Failed to create user {validatedUserPrincipalName} - no user ID returned",
+                        validatedUserPrincipalName,
+                        null,
+                        validatedDisplayName,
+                        "CreateUser",
+                        null,
                         new PowerShellCommandExecutionException("New-MgUser returned null or empty user ID", "New-MgUser", null));
                 }
 
                 // Przypisz licencje jeśli podano
                 if (licenseSkuIds?.Count > 0)
                 {
+                    _logger.LogDebug("Przypisywanie {LicenseCount} licencji do użytkownika {UserId}", licenseSkuIds.Count, userId);
                     await AssignLicensesToUserAsync(userId, licenseSkuIds);
                 }
 
@@ -208,22 +282,9 @@ namespace TeamsManager.Core.Services.PowerShell
                     validatedUserPrincipalName, userId);
 
                 return userId;
-            }
-            catch (PowerShellCommandExecutionException)
-            {
-                throw; // Re-throw PowerShell exceptions
-            }
-            catch (UserOperationException)
-            {
-                throw; // Re-throw user operation exceptions
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd tworzenia użytkownika {UserPrincipalName}", validatedUserPrincipalName);
-                throw new UserOperationException(
-                    $"Failed to create user {validatedUserPrincipalName}",
-                    ex);
-            }
+            }, 
+            $"CreateM365User: {validatedUserPrincipalName}",
+            new[] { "User.ReadWrite.All", "Directory.ReadWrite.All" });
         }
 
         public async Task<bool> SetM365UserAccountStateAsync(string userPrincipalName, bool isEnabled)

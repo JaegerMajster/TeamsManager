@@ -43,7 +43,8 @@ namespace TeamsManager.Core.Services.PowerShell
 
             _logger.LogDebug("ID użytkownika {UserUpn} nie znalezione w cache lub wymuszono odświeżenie.", userUpn);
 
-            try
+            // Użyj ExecuteWithDiagnosticsAsync dla lepszego logowania i walidacji
+            return await _connectionService.ExecuteWithDiagnosticsAsync(async () =>
             {
                 // Pobierz z Graph API
                 var script = $@"
@@ -67,16 +68,9 @@ namespace TeamsManager.Core.Services.PowerShell
                 }
 
                 return userId;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd podczas pobierania ID użytkownika {UserUpn}", userUpn);
-                
-                // Cache negatywny wynik na krótko
-                _cacheService.Set($"PowerShell_UserId_{userUpn}", (string?)null, TimeSpan.FromMinutes(1));
-                
-                return null;
-            }
+            }, 
+            $"GetUserId: {userUpn}",
+            new[] { "User.Read.All" });
         }
 
         public async Task<string?> GetCachedUserIdAsync(string userUpn)

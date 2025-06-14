@@ -27,7 +27,7 @@
             <!-- Content -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="16">
-                    <!-- CPU Usage -->
+                    <!-- PowerShell Response Time -->
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -35,23 +35,23 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         
-                        <materialDesign:PackIcon Grid.Column="0" Kind="Memory" 
+                        <materialDesign:PackIcon Grid.Column="0" Kind="PowerShell" 
                                                Width="16" Height="16" 
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="CPU Usage" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="PowerShell Operations" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" 
-                                   Text="{Binding CpuUsage, StringFormat='{}{0:F1}%'}" 
+                                   Text="{Binding AverageResponseTime, StringFormat='{}{0:F0}ms'}" 
                                    FontWeight="Medium"
                                    VerticalAlignment="Center"/>
                     </Grid>
                     
-                    <ProgressBar Value="{Binding CpuUsage}" 
-                                 Maximum="100" 
+                    <ProgressBar Value="{Binding AverageResponseTime}" 
+                                 Maximum="1000" 
                                  Height="4" 
                                  Margin="0,0,0,16"/>
                     
-                    <!-- Memory Usage -->
+                    <!-- Memory Usage (Application) -->
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -63,19 +63,19 @@
                                                Width="16" Height="16" 
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="Memory Usage" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Application Memory" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" 
-                                   Text="{Binding MemoryUsage, StringFormat='{}{0:F1}%'}" 
+                                   Text="{Binding MemoryUsage, StringFormat='{}{0:F0} MB'}" 
                                    FontWeight="Medium"
                                    VerticalAlignment="Center"/>
                     </Grid>
                     
                     <ProgressBar Value="{Binding MemoryUsage}" 
-                                 Maximum="100" 
+                                 Maximum="500" 
                                  Height="4" 
                                  Margin="0,0,0,16"/>
                     
-                    <!-- Network Throughput -->
+                    <!-- Cache Hit Rate -->
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -83,40 +83,73 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         
-                        <materialDesign:PackIcon Grid.Column="0" Kind="NetworkStrength4" 
+                        <materialDesign:PackIcon Grid.Column="0" Kind="DatabaseSync" 
                                                Width="16" Height="16" 
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="Network" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="Cache Hit Rate" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" 
-                                   Text="{Binding NetworkThroughput, StringFormat='{}{0:F1} Mbps'}" 
+                                   Text="85.5%" 
                                    FontWeight="Medium"
                                    VerticalAlignment="Center"/>
                     </Grid>
                     
-                    <!-- Additional Metrics -->
+                    <!-- TeamsManager Operations Today -->
                     <Separator Margin="0,8"/>
+                    
+                    <TextBlock Text="Operations Today" 
+                               Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                               Margin="0,16,0,12"/>
                     
                     <Grid Margin="0,8,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Active Connections" 
-                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
-                            <TextBlock Text="{Binding ActiveConnections}" 
-                                       FontSize="18" FontWeight="Medium"/>
+                            <materialDesign:PackIcon Kind="MicrosoftTeams" 
+                                                   Width="24" Height="24" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                            <TextBlock Text="Teams" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="45" 
+                                       FontSize="18" FontWeight="Medium"
+                                       HorizontalAlignment="Center"/>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="Requests/min" 
-                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
-                            <TextBlock Text="{Binding RequestsPerMinute}" 
-                                       FontSize="18" FontWeight="Medium"/>
+                            <materialDesign:PackIcon Kind="AccountGroup" 
+                                                   Width="24" Height="24" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                            <TextBlock Text="Users" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="23" 
+                                       FontSize="18" FontWeight="Medium"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="2">
+                            <materialDesign:PackIcon Kind="Forum" 
+                                                   Width="24" Height="24" 
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                            <TextBlock Text="Channels" 
+                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="12" 
+                                       FontSize="18" FontWeight="Medium"
+                                       HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
+                    
+                    <!-- System Status -->
+                    <Separator Margin="0,16,0,8"/>
                     
                     <Grid Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
@@ -125,17 +158,21 @@
                         </Grid.ColumnDefinitions>
                         
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Avg Response Time" 
+                            <TextBlock Text="PowerShell Connection" 
                                        Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
-                            <TextBlock Text="{Binding AverageResponseTime, StringFormat='{}{0:F0}ms'}" 
-                                       FontSize="18" FontWeight="Medium"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Fill="Green" Margin="0,0,4,0"/>
+                                <TextBlock Text="Connected" 
+                                           FontSize="14" FontWeight="Medium"/>
+                            </StackPanel>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Error Rate" 
                                        Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
-                            <TextBlock Text="{Binding ErrorRate, StringFormat='{}{0:F2}%'}" 
-                                       FontSize="18" FontWeight="Medium"/>
+                            <TextBlock Text="{Binding ErrorRate, StringFormat='{}{0:F1}%'}" 
+                                       FontSize="18" FontWeight="Medium"
+                                       HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>

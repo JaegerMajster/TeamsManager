@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management.Automation;
@@ -1000,18 +1001,20 @@ namespace TeamsManager.Core.Services.PowerShell
                    message.Contains("disconnected");
         }
 
+        /// <summary>
+        /// Pobiera informacje o stanie połączenia i odporności systemu
+        /// </summary>
+        /// <returns>Szczegółowe informacje o stanie połączenia</returns>
         public async Task<ConnectionHealthInfo> GetConnectionHealthAsync()
         {
             return new ConnectionHealthInfo
             {
                 IsConnected = _sharedIsConnected,
-                RunspaceState = _sharedRunspace?.RunspaceStateInfo.State.ToString() ?? "Not initialized",
+                RunspaceState = _sharedRunspace?.RunspaceStateInfo.State.ToString() ?? "Unknown",
                 CircuitBreakerState = _connectionCircuitBreaker.State.ToString(),
                 LastConnectionAttempt = _lastConnectionAttempt,
                 LastSuccessfulConnection = _lastSuccessfulConnection,
-                TokenValid = _lastConnectedUserUpn != null && _lastApiAccessToken != null 
-                    ? _tokenManager.HasValidToken(_lastConnectedUserUpn)
-                    : false
+                TokenValid = !string.IsNullOrEmpty(_lastApiAccessToken)
             };
         }
 
@@ -1096,6 +1099,305 @@ namespace TeamsManager.Core.Services.PowerShell
                 // W event handlerze nie możemy rzucić wyjątku, tylko zalogować
                 _logger.LogError(ex, "Błąd w obsłudze zapisu błędu Circuit Breaker");
             }
+        }
+
+        /// <summary>
+        /// Sprawdza czy system ma odpowiednie uprawnienia do wykonania operacji
+        /// </summary>
+        /// <param name="requiredPermissions">Lista wymaganych uprawnień</param>
+        /// <returns>Informacje o dostępnych uprawnieniach</returns>
+        public async Task<PowerShellPermissionInfo> ValidatePermissionsAsync(params string[] requiredPermissions)
+        {
+            var permissionInfo = new PowerShellPermissionInfo();
+            
+            if (!ValidateRunspaceState())
+            {
+                _logger.LogWarning("Nie można sprawdzić uprawnień - PowerShell runspace nie jest gotowy");
+                permissionInfo.IsValid = false;
+                permissionInfo.ErrorMessage = "PowerShell runspace not ready";
+                return permissionInfo;
+            }
+
+            try
+            {
+                _logger.LogDebug("Sprawdzanie uprawnień PowerShell/Graph: {Permissions}", string.Join(", ", requiredPermissions));
+                
+                // Sprawdź kontekst Graph
+                var contextScript = @"
+                    try {
+                        $context = Get-MgContext -ErrorAction Stop
+                        if ($context) {
+                            @{
+                                IsConnected = $true
+                                Account = $context.Account
+                                Scopes = $context.Scopes -join ','
+                                TenantId = $context.TenantId
+                                AppName = $context.AppName
+                            }
+                        } else {
+                            @{ IsConnected = $false }
+                        }
+                    } catch {
+                        @{ 
+                            IsConnected = $false
+                            Error = $_.Exception.Message 
+                        }
+                    }
+                ";
+
+                var contextResults = await ExecuteScriptAsync(contextScript);
+                var contextData = contextResults?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                if (contextData != null)
+                {
+                    permissionInfo.IsConnected = (bool)(contextData["IsConnected"] ?? false);
+                    permissionInfo.Account = contextData["Account"]?.ToString();
+                    permissionInfo.TenantId = contextData["TenantId"]?.ToString();
+                    permissionInfo.AppName = contextData["AppName"]?.ToString();
+                    
+                    var scopesString = contextData["Scopes"]?.ToString();
+                    if (!string.IsNullOrEmpty(scopesString))
+                    {
+                        permissionInfo.AvailableScopes = scopesString.Split(',').ToList();
+                    }
+
+                    if (contextData.ContainsKey("Error"))
+                    {
+                        permissionInfo.ErrorMessage = contextData["Error"]?.ToString();
+                    }
+                }
+
+                // Sprawdź konkretne uprawnienia
+                if (permissionInfo.IsConnected && requiredPermissions.Any())
+                {
+                    foreach (var permission in requiredPermissions)
+                    {
+                        var hasPermission = permissionInfo.AvailableScopes?.Any(s => 
+                            s.Contains(permission, StringComparison.OrdinalIgnoreCase)) ?? false;
+                        
+                        permissionInfo.PermissionResults[permission] = hasPermission;
+                        
+                        if (!hasPermission)
+                        {
+                            _logger.LogWarning("Brak wymaganego uprawnienia: {Permission}", permission);
+                        }
+                    }
+                    
+                    permissionInfo.IsValid = permissionInfo.PermissionResults.Values.All(v => v);
+                }
+                else
+                {
+                    permissionInfo.IsValid = permissionInfo.IsConnected;
+                }
+
+                _logger.LogDebug("Sprawdzenie uprawnień zakończone. IsValid: {IsValid}, IsConnected: {IsConnected}", 
+                    permissionInfo.IsValid, permissionInfo.IsConnected);
+
+                return permissionInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania uprawnień PowerShell");
+                permissionInfo.IsValid = false;
+                permissionInfo.ErrorMessage = ex.Message;
+                return permissionInfo;
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje kompleksową diagnostykę połączenia PowerShell/Graph
+        /// </summary>
+        /// <param name="includePermissionCheck">Czy sprawdzić uprawnienia</param>
+        /// <param name="testCommands">Lista komend do przetestowania</param>
+        /// <returns>Szczegółowe informacje diagnostyczne</returns>
+        public async Task<PowerShellDiagnosticInfo> DiagnoseConnectionAsync(
+            bool includePermissionCheck = true, 
+            params string[] testCommands)
+        {
+            var diagnostic = new PowerShellDiagnosticInfo();
+            var userUpn = await GetCurrentUserUpnSafeAsync();
+
+            try
+            {
+                diagnostic.UserUpn = userUpn;
+                diagnostic.HasApiToken = !string.IsNullOrEmpty(_lastApiAccessToken);
+                diagnostic.ApiTokenLength = _lastApiAccessToken?.Length ?? 0;
+                diagnostic.RunspaceState = _sharedRunspace?.RunspaceStateInfo.State.ToString() ?? "Unknown";
+                diagnostic.IsConnected = _sharedIsConnected;
+                diagnostic.CircuitBreakerState = _connectionCircuitBreaker.State.ToString();
+                diagnostic.LastConnectionAttempt = _lastConnectionAttempt;
+                diagnostic.LastSuccessfulConnection = _lastSuccessfulConnection;
+
+                // Test podstawowego połączenia
+                if (ValidateRunspaceState())
+                {
+                    diagnostic.RunspaceReady = true;
+                    
+                    // Test prostej komendy
+                    try
+                    {
+                        var testResult = await ExecuteScriptAsync("Get-Date");
+                        diagnostic.BasicCommandTest = testResult != null;
+                    }
+                    catch (Exception ex)
+                    {
+                        diagnostic.BasicCommandTest = false;
+                        diagnostic.Errors.Add($"Basic command test failed: {ex.Message}");
+                    }
+
+                    // Test połączenia Graph
+                    try
+                    {
+                        var graphTest = await ExecuteScriptAsync("Get-MgContext");
+                        diagnostic.GraphConnectionTest = graphTest != null;
+                    }
+                    catch (Exception ex)
+                    {
+                        diagnostic.GraphConnectionTest = false;
+                        diagnostic.Errors.Add($"Graph connection test failed: {ex.Message}");
+                    }
+
+                    // Test uprawnień jeśli wymagany
+                    if (includePermissionCheck)
+                    {
+                        var permissionInfo = await ValidatePermissionsAsync("User.Read", "Group.Read.All");
+                        diagnostic.HasRequiredPermissions = permissionInfo.IsValid;
+                        diagnostic.AvailableScopes = permissionInfo.AvailableScopes ?? new List<string>();
+                        
+                        if (!string.IsNullOrEmpty(permissionInfo.ErrorMessage))
+                        {
+                            diagnostic.Errors.Add($"Permission check: {permissionInfo.ErrorMessage}");
+                        }
+                    }
+
+                    // Test dodatkowych komend
+                    if (testCommands.Any())
+                    {
+                        foreach (var command in testCommands)
+                        {
+                            try
+                            {
+                                var result = await ExecuteCommandWithRetryAsync(command);
+                                diagnostic.TestResults[command] = result != null;
+                            }
+                            catch (Exception ex)
+                            {
+                                diagnostic.TestResults[command] = false;
+                                diagnostic.Errors.Add($"Command '{command}' failed: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    diagnostic.RunspaceReady = false;
+                    diagnostic.Errors.Add("PowerShell runspace is not ready");
+                }
+
+                // Ogólna ocena stanu
+                diagnostic.OverallHealth = DetermineOverallHealth(diagnostic);
+
+                _logger.LogDebug("Diagnostyka PowerShell zakończona. Overall health: {Health}, Errors: {ErrorCount}", 
+                    diagnostic.OverallHealth, diagnostic.Errors.Count);
+
+                return diagnostic;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Krytyczny błąd podczas diagnostyki PowerShell");
+                diagnostic.Errors.Add($"Critical diagnostic error: {ex.Message}");
+                diagnostic.OverallHealth = PowerShellHealthStatus.Critical;
+                return diagnostic;
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje operację z pełną diagnostyką i logowaniem
+        /// </summary>
+        /// <typeparam name="T">Typ wyniku operacji</typeparam>
+        /// <param name="operation">Operacja do wykonania</param>
+        /// <param name="operationName">Nazwa operacji do logowania</param>
+        /// <param name="requiredPermissions">Wymagane uprawnienia</param>
+        /// <param name="validateBefore">Czy wykonać walidację przed operacją</param>
+        /// <returns>Wynik operacji</returns>
+        public async Task<T?> ExecuteWithDiagnosticsAsync<T>(
+            Func<Task<T>> operation,
+            string operationName,
+            string[]? requiredPermissions = null,
+            bool validateBefore = true) where T : class
+        {
+            var startTime = DateTime.UtcNow;
+            _logger.LogInformation("Rozpoczynanie operacji PowerShell: {OperationName}", operationName);
+
+            try
+            {
+                // Pre-validation jeśli wymagana
+                if (validateBefore)
+                {
+                    if (!ValidateRunspaceState())
+                    {
+                        _logger.LogError("Operacja {OperationName} przerwana - PowerShell runspace nie jest gotowy", operationName);
+                        return null;
+                    }
+
+                    if (requiredPermissions?.Any() == true)
+                    {
+                        var permissionCheck = await ValidatePermissionsAsync(requiredPermissions);
+                        if (!permissionCheck.IsValid)
+                        {
+                            _logger.LogError("Operacja {OperationName} przerwana - brak wymaganych uprawnień: {Permissions}", 
+                                operationName, string.Join(", ", requiredPermissions));
+                            return null;
+                        }
+                    }
+                }
+
+                // Wykonaj operację
+                var result = await operation();
+                var duration = DateTime.UtcNow - startTime;
+
+                _logger.LogInformation("Operacja PowerShell {OperationName} zakończona pomyślnie w {Duration}ms", 
+                    operationName, duration.TotalMilliseconds);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                var duration = DateTime.UtcNow - startTime;
+                _logger.LogError(ex, "Operacja PowerShell {OperationName} nie powiodła się po {Duration}ms: {Error}", 
+                    operationName, duration.TotalMilliseconds, ex.Message);
+
+                // Record failure for circuit breaker
+                _connectionCircuitBreaker.RecordFailure();
+                
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Określa ogólny stan zdrowia systemu na podstawie diagnostyki
+        /// </summary>
+        private PowerShellHealthStatus DetermineOverallHealth(PowerShellDiagnosticInfo diagnostic)
+        {
+            if (!diagnostic.RunspaceReady)
+                return PowerShellHealthStatus.Critical;
+
+            if (!diagnostic.IsConnected)
+                return PowerShellHealthStatus.Critical;
+
+            if (!diagnostic.BasicCommandTest)
+                return PowerShellHealthStatus.Critical;
+
+            if (!diagnostic.GraphConnectionTest)
+                return PowerShellHealthStatus.Degraded;
+
+            if (diagnostic.HasRequiredPermissions == false)
+                return PowerShellHealthStatus.Degraded;
+
+            if (diagnostic.Errors.Any())
+                return PowerShellHealthStatus.Warning;
+
+            return PowerShellHealthStatus.Healthy;
         }
     }
 }

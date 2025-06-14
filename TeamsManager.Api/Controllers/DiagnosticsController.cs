@@ -1,220 +1,349 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TeamsManager.Core.Abstractions;
-using TeamsManager.Core.Abstractions.Services;
+using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.PowerShell;
-using TeamsManager.Core.Abstractions.Data;
-using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models;
+using TeamsManager.Api.Extensions;
 
 namespace TeamsManager.Api.Controllers
 {
     /// <summary>
-    /// Kontroler diagnostyczny do weryfikacji konfiguracji systemu
+    /// Kontroler do diagnostyki systemu PowerShell/Graph
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
-    [ApiExplorerSettings(IgnoreApi = true)] // Ukryj w Swagger
+    [Authorize]
     public class DiagnosticsController : ControllerBase
     {
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IPowerShellConnectionService _powerShellConnectionService;
         private readonly ILogger<DiagnosticsController> _logger;
 
         public DiagnosticsController(
-            IServiceProvider serviceProvider,
+            IPowerShellConnectionService powerShellConnectionService,
             ILogger<DiagnosticsController> logger)
         {
-            _serviceProvider = serviceProvider;
-            _logger = logger;
+            _powerShellConnectionService = powerShellConnectionService ?? throw new ArgumentNullException(nameof(powerShellConnectionService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
-        /// Weryfikuje poprawność konfiguracji Dependency Injection
+        /// Wykonuje podstawową diagnostykę połączenia PowerShell/Graph
         /// </summary>
-        /// <returns>Status wszystkich krytycznych serwisów</returns>
-        [HttpGet("verify-di")]
-        public IActionResult VerifyDependencyInjection()
-        {
-            var results = new Dictionary<string, bool>();
-            
-            // Lista wszystkich krytycznych serwisów do sprawdzenia
-            var servicesToCheck = new Dictionary<string, Type>
-            {
-                // Serwisy infrastrukturalne
-                ["IOperationHistoryService"] = typeof(IOperationHistoryService),
-                ["INotificationService"] = typeof(INotificationService),
-                ["ICurrentUserService"] = typeof(ICurrentUserService),
-                
-                // PowerShell Services
-                ["IPowerShellConnectionService"] = typeof(IPowerShellConnectionService),
-                ["IPowerShellCacheService"] = typeof(IPowerShellCacheService),
-                ["IPowerShellTeamManagementService"] = typeof(IPowerShellTeamManagementService),
-                ["IPowerShellUserManagementService"] = typeof(IPowerShellUserManagementService),
-                ["IPowerShellBulkOperationsService"] = typeof(IPowerShellBulkOperationsService),
-                ["IPowerShellService"] = typeof(IPowerShellService),
-                
-                // Serwisy aplikacyjne
-                ["ITeamService"] = typeof(ITeamService),
-                ["IUserService"] = typeof(IUserService),
-                ["IDepartmentService"] = typeof(IDepartmentService),
-                ["IChannelService"] = typeof(IChannelService),
-                ["ISubjectService"] = typeof(ISubjectService),
-                ["IApplicationSettingService"] = typeof(IApplicationSettingService),
-                ["ISchoolTypeService"] = typeof(ISchoolTypeService),
-                ["ISchoolYearService"] = typeof(ISchoolYearService),
-                ["ITeamTemplateService"] = typeof(ITeamTemplateService),
-                
-                // Repozytoria
-                ["IOperationHistoryRepository"] = typeof(IOperationHistoryRepository),
-                ["IUserRepository"] = typeof(IUserRepository),
-                ["ITeamRepository"] = typeof(ITeamRepository)
-            };
-
-            foreach (var kvp in servicesToCheck)
-            {
-                try
-                {
-                    var service = _serviceProvider.GetService(kvp.Value);
-                    results[kvp.Key] = service != null;
-                    
-                    if (service == null)
-                    {
-                        _logger.LogWarning($"Service {kvp.Key} is not registered");
-                    }
-                    else
-                    {
-                        _logger.LogDebug($"Service {kvp.Key} successfully resolved");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    results[kvp.Key] = false;
-                    _logger.LogError(ex, $"Error resolving {kvp.Key}");
-                }
-            }
-
-            var allServicesRegistered = results.All(r => r.Value);
-            var successCount = results.Count(r => r.Value);
-            var totalCount = results.Count;
-            
-            _logger.LogInformation($"DI Verification: {successCount}/{totalCount} services registered successfully");
-            
-            return Ok(new
-            {
-                AllServicesRegistered = allServicesRegistered,
-                SuccessfulServices = successCount,
-                TotalServices = totalCount,
-                SuccessRate = Math.Round((double)successCount / totalCount * 100, 2),
-                Results = results,
-                Timestamp = DateTime.UtcNow
-            });
-        }
-
-        /// <summary>
-        /// Testuje kompletny przepływ operacji z audytem i powiadomieniami
-        /// </summary>
-        /// <returns>Wynik testu przepływu</returns>
-        [HttpGet("test-flow")]
-        public async Task<IActionResult> TestCompleteFlow()
+        /// <returns>Informacje diagnostyczne</returns>
+        [HttpGet("connection")]
+        public async Task<ActionResult<PowerShellDiagnosticInfo>> DiagnoseConnectionAsync()
         {
             try
             {
-                _logger.LogInformation("Starting complete flow test");
-
-                // Test tworzenia wpisu historii operacji
-                var historyService = _serviceProvider.GetRequiredService<IOperationHistoryService>();
-                var operation = await historyService.CreateNewOperationEntryAsync(
-                    OperationType.TeamCreated,
-                    "Team",
-                    "test-team-id",
-                    "Test Team"
-                );
-
-                _logger.LogInformation($"Created operation entry with ID: {operation.Id}");
-
-                // Test powiadomień
-                var notificationService = _serviceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendNotificationToUserAsync(
-                    "test@user.com",
-                    "Test operation completed",
-                    "success"
-                );
-
-                _logger.LogInformation("Sent test notification");
-
-                // Aktualizacja statusu
-                await historyService.UpdateOperationStatusAsync(
-                    operation.Id,
-                    OperationStatus.Completed,
-                    "Test completed successfully"
-                );
-
-                _logger.LogInformation($"Updated operation {operation.Id} status to Completed");
-
-                return Ok(new
-                {
-                    Success = true,
-                    OperationId = operation.Id,
-                    Message = "Complete flow test successful",
-                    Steps = new[]
-                    {
-                        "✅ Created operation history entry",
-                        "✅ Sent notification",
-                        "✅ Updated operation status"
-                    },
-                    Timestamp = DateTime.UtcNow
-                });
+                _logger.LogInformation("Rozpoczynanie diagnostyki połączenia PowerShell/Graph");
+                
+                var diagnostic = await _powerShellConnectionService.DiagnoseConnectionAsync();
+                
+                _logger.LogInformation("Diagnostyka zakończona. Stan: {OverallHealth}", diagnostic.OverallHealth);
+                
+                return Ok(diagnostic);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during flow test");
-                return StatusCode(500, new
-                {
-                    Success = false,
-                    Error = ex.Message,
-                    StackTrace = ex.StackTrace,
-                    Timestamp = DateTime.UtcNow
-                });
+                _logger.LogError(ex, "Błąd podczas diagnostyki połączenia");
+                return StatusCode(500, new { error = "Błąd podczas diagnostyki połączenia", details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Sprawdza stan systemu i kluczowych komponentów
+        /// Wykonuje rozszerzoną diagnostykę z testowaniem konkretnych komend
         /// </summary>
-        /// <returns>Stan systemu</returns>
-        [HttpGet("system-status")]
-        public IActionResult SystemStatus()
+        /// <param name="testCommands">Lista komend do przetestowania</param>
+        /// <param name="includePermissions">Czy sprawdzić uprawnienia</param>
+        /// <returns>Szczegółowe informacje diagnostyczne</returns>
+        [HttpPost("connection/extended")]
+        public async Task<ActionResult<PowerShellDiagnosticInfo>> DiagnoseConnectionExtendedAsync(
+            [FromBody] string[]? testCommands = null,
+            [FromQuery] bool includePermissions = true)
         {
             try
             {
-                var systemInfo = new
+                _logger.LogInformation("Rozpoczynanie rozszerzonej diagnostyki PowerShell/Graph");
+                
+                var commands = testCommands ?? new[] { "Get-MgUser -Top 1", "Get-MgGroup -Top 1" };
+                var diagnostic = await _powerShellConnectionService.DiagnoseConnectionAsync(includePermissions, commands);
+                
+                _logger.LogInformation("Rozszerzona diagnostyka zakończona. Stan: {OverallHealth}", diagnostic.OverallHealth);
+                
+                return Ok(diagnostic);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas rozszerzonej diagnostyki");
+                return StatusCode(500, new { error = "Błąd podczas rozszerzonej diagnostyki", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza uprawnienia dla konkretnych operacji
+        /// </summary>
+        /// <param name="permissions">Lista uprawnień do sprawdzenia</param>
+        /// <returns>Informacje o uprawnieniach</returns>
+        [HttpPost("permissions")]
+        public async Task<ActionResult<PowerShellPermissionInfo>> ValidatePermissionsAsync([FromBody] string[] permissions)
+        {
+            try
+            {
+                if (permissions == null || !permissions.Any())
                 {
-                    Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown",
-                    MachineName = Environment.MachineName,
-                    ProcessorCount = Environment.ProcessorCount,
-                    WorkingSet = Environment.WorkingSet,
-                    TickCount = Environment.TickCount64,
-                    ClrVersion = Environment.Version.ToString(),
-                    OsVersion = Environment.OSVersion.ToString(),
-                    UserDomainName = Environment.UserDomainName,
-                    Timestamp = DateTime.UtcNow
+                    return BadRequest(new { error = "Lista uprawnień nie może być pusta" });
+                }
+
+                _logger.LogInformation("Sprawdzanie uprawnień: {Permissions}", string.Join(", ", permissions));
+                
+                var permissionInfo = await _powerShellConnectionService.ValidatePermissionsAsync(permissions);
+                
+                _logger.LogInformation("Sprawdzenie uprawnień zakończone. IsValid: {IsValid}", permissionInfo.IsValid);
+                
+                return Ok(permissionInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania uprawnień");
+                return StatusCode(500, new { error = "Błąd podczas sprawdzania uprawnień", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Pobiera podstawowe informacje o stanie połączenia
+        /// </summary>
+        /// <returns>Informacje o stanie połączenia</returns>
+        [HttpGet("health")]
+        public async Task<ActionResult<ConnectionHealthInfo>> GetConnectionHealthAsync()
+        {
+            try
+            {
+                var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
+                return Ok(healthInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania informacji o stanie połączenia");
+                return StatusCode(500, new { error = "Błąd podczas pobierania stanu połączenia", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza uprawnienia wymagane do tworzenia użytkowników
+        /// </summary>
+        /// <returns>Informacje o uprawnieniach do tworzenia użytkowników</returns>
+        [HttpGet("permissions/user-creation")]
+        public async Task<ActionResult<PowerShellPermissionInfo>> ValidateUserCreationPermissionsAsync()
+        {
+            try
+            {
+                var requiredPermissions = new[] 
+                { 
+                    "User.ReadWrite.All", 
+                    "Directory.ReadWrite.All",
+                    "Group.ReadWrite.All"
                 };
 
+                var permissionInfo = await _powerShellConnectionService.ValidatePermissionsAsync(requiredPermissions);
+                return Ok(permissionInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania uprawnień do tworzenia użytkowników");
+                return StatusCode(500, new { error = "Błąd podczas sprawdzania uprawnień", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza uprawnienia wymagane do zarządzania zespołami
+        /// </summary>
+        /// <returns>Informacje o uprawnieniach do zarządzania zespołami</returns>
+        [HttpGet("permissions/team-management")]
+        public async Task<ActionResult<PowerShellPermissionInfo>> ValidateTeamManagementPermissionsAsync()
+        {
+            try
+            {
+                var requiredPermissions = new[] 
+                { 
+                    "Group.ReadWrite.All", 
+                    "Directory.ReadWrite.All",
+                    "TeamMember.ReadWrite.All"
+                };
+
+                var permissionInfo = await _powerShellConnectionService.ValidatePermissionsAsync(requiredPermissions);
+                return Ok(permissionInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania uprawnień do zarządzania zespołami");
+                return StatusCode(500, new { error = "Błąd podczas sprawdzania uprawnień", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Testuje wykonanie konkretnej operacji PowerShell
+        /// </summary>
+        /// <param name="operationName">Nazwa operacji do przetestowania</param>
+        /// <param name="requiredPermissions">Wymagane uprawnienia</param>
+        /// <returns>Wynik testu operacji</returns>
+        [HttpPost("test-operation")]
+        public async Task<ActionResult<object>> TestOperationAsync(
+            [FromQuery] string operationName,
+            [FromBody] string[]? requiredPermissions = null)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(operationName))
+                {
+                    return BadRequest(new { error = "Nazwa operacji jest wymagana" });
+                }
+
+                _logger.LogInformation("Testowanie operacji PowerShell: {OperationName}", operationName);
+
+                var permissions = requiredPermissions ?? Array.Empty<string>();
+                
+                // Sprawdź uprawnienia jeśli podano
+                PowerShellPermissionInfo? permissionInfo = null;
+                if (permissions.Any())
+                {
+                    permissionInfo = await _powerShellConnectionService.ValidatePermissionsAsync(permissions);
+                    if (!permissionInfo.IsValid)
+                    {
+                        return Ok(new
+                        {
+                            OperationName = operationName,
+                            CanExecute = false,
+                            Reason = "Insufficient permissions",
+                            PermissionInfo = permissionInfo
+                        });
+                    }
+                }
+
+                // Sprawdź podstawowy stan połączenia
+                var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
+                if (!healthInfo.IsConnected)
+                {
+                    return Ok(new
+                    {
+                        OperationName = operationName,
+                        CanExecute = false,
+                        Reason = "Not connected to Microsoft Graph",
+                        HealthInfo = healthInfo
+                    });
+                }
+
+                // Wykonaj test operacji
+                var testResult = await _powerShellConnectionService.ExecuteScriptAsync("Get-Date");
+
+                var canExecute = testResult != null;
+
                 return Ok(new
                 {
-                    Status = "Healthy",
-                    Message = "System is operational",
-                    SystemInformation = systemInfo
+                    OperationName = operationName,
+                    CanExecute = canExecute,
+                    Reason = canExecute ? "Operation can be executed" : "Operation failed",
+                    PermissionInfo = permissionInfo,
+                    HealthInfo = healthInfo,
+                    TestTimestamp = DateTime.UtcNow
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting system status");
-                return StatusCode(500, new
-                {
-                    Status = "Unhealthy",
-                    Error = ex.Message,
-                    Timestamp = DateTime.UtcNow
-                });
+                _logger.LogError(ex, "Błąd podczas testowania operacji {OperationName}", operationName);
+                return StatusCode(500, new { error = "Błąd podczas testowania operacji", details = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// Pobiera pełny raport diagnostyczny systemu
+        /// </summary>
+        /// <returns>Kompleksowy raport diagnostyczny</returns>
+        [HttpGet("full-report")]
+        public async Task<ActionResult<object>> GetFullDiagnosticReportAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Generowanie pełnego raportu diagnostycznego");
+
+                var healthTask = _powerShellConnectionService.GetConnectionHealthAsync();
+                var diagnosticTask = _powerShellConnectionService.DiagnoseConnectionAsync(true, "Get-MgUser -Top 1", "Get-MgGroup -Top 1");
+                var permissionTask = _powerShellConnectionService.ValidatePermissionsAsync("User.ReadWrite.All", "Group.ReadWrite.All", "Directory.ReadWrite.All");
+
+                await Task.WhenAll(healthTask, diagnosticTask, permissionTask);
+
+                var healthInfo = await healthTask;
+                var diagnostic = await diagnosticTask;
+                var permissionInfo = await permissionTask;
+
+                var report = new
+                {
+                    GeneratedAt = DateTime.UtcNow,
+                    OverallStatus = diagnostic.OverallHealth.ToString(),
+                    Summary = new
+                    {
+                        IsHealthy = diagnostic.OverallHealth == PowerShellHealthStatus.Healthy,
+                        HasCriticalIssues = diagnostic.OverallHealth == PowerShellHealthStatus.Critical,
+                        ErrorCount = diagnostic.Errors.Count,
+                        PermissionsValid = permissionInfo.IsValid
+                    },
+                    ConnectionHealth = healthInfo,
+                    DetailedDiagnostic = diagnostic,
+                    Permissions = permissionInfo,
+                    Recommendations = GenerateRecommendations(diagnostic, permissionInfo)
+                };
+
+                return Ok(report);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas generowania pełnego raportu diagnostycznego");
+                return StatusCode(500, new { error = "Błąd podczas generowania raportu", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Generuje rekomendacje na podstawie diagnostyki
+        /// </summary>
+        private List<string> GenerateRecommendations(PowerShellDiagnosticInfo diagnostic, PowerShellPermissionInfo permissionInfo)
+        {
+            var recommendations = new List<string>();
+
+            if (!diagnostic.RunspaceReady)
+            {
+                recommendations.Add("Sprawdź konfigurację środowiska PowerShell");
+            }
+
+            if (!diagnostic.IsConnected)
+            {
+                recommendations.Add("Sprawdź połączenie z Microsoft Graph");
+            }
+
+            if (!diagnostic.BasicCommandTest)
+            {
+                recommendations.Add("Sprawdź podstawową funkcjonalność PowerShell");
+            }
+
+            if (!diagnostic.GraphConnectionTest)
+            {
+                recommendations.Add("Sprawdź moduł Microsoft Graph PowerShell");
+            }
+
+            if (!permissionInfo.IsValid)
+            {
+                recommendations.Add("Sprawdź uprawnienia aplikacji w Azure AD");
+            }
+
+            if (diagnostic.Errors.Any())
+            {
+                recommendations.Add("Przejrzyj szczegóły błędów w sekcji diagnostycznej");
+            }
+
+            if (recommendations.Count == 0)
+            {
+                recommendations.Add("System działa prawidłowo");
+            }
+
+            return recommendations;
         }
     }
 } 

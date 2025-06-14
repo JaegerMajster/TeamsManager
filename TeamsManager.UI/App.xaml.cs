@@ -146,6 +146,39 @@ namespace TeamsManager.UI
                 options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
             });
 
+            // HttpClient dla TeamsManager API
+            services.AddHttpClient<ITeamsManagerApiService, TeamsManagerApiService>(client =>
+            {
+                // Domyślnie localhost - można skonfigurować przez appsettings
+                client.BaseAddress = new Uri("https://localhost:7037/");
+                client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager-UI/1.0");
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .AddStandardResilienceHandler(options =>
+            {
+                // Retry Policy dla API
+                options.Retry.ShouldHandle = args => args.Outcome switch
+                {
+                    { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
+                    { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.TooManyRequests => PredicateResult.True(),
+                    { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.RequestTimeout => PredicateResult.True(),
+                    _ => PredicateResult.False()
+                };
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.UseJitter = true;
+                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                options.Retry.Delay = TimeSpan.FromSeconds(1);
+                
+                // Circuit Breaker
+                options.CircuitBreaker.FailureRatio = 0.5;
+                options.CircuitBreaker.MinimumThroughput = 5;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+
+                // Timeout
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
+            });
+
             // Default HttpClient bez specjalnej konfiguracji
             services.AddHttpClient();
             // --- KONIEC: KONFIGURACJA HTTPCLIENT ---
@@ -526,8 +559,12 @@ namespace TeamsManager.UI
             
             // Serwisy monitoringu dla UI
             services.AddSingleton<ISignalRService, SignalRService>();
+            services.AddScoped<ITeamsManagerApiService, TeamsManagerApiService>();
             services.AddScoped<IMonitoringDataService, MonitoringDataService>();
             services.AddSingleton<IMonitoringPerformanceOptimizer, MonitoringPerformanceOptimizer>();
+            
+            // Nowy serwis monitorowania specjalnie dla TeamsManager
+            // services.AddScoped<ITeamsManagerMonitoringService, TeamsManagerMonitoringService>();
             
             // ViewModele dla monitoringu
             services.AddTransient<ViewModels.Monitoring.MonitoringDashboardViewModel>();

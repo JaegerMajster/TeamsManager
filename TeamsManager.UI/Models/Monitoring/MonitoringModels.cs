@@ -20,15 +20,21 @@ namespace TeamsManager.UI.Models.Monitoring
     
     public class SystemMetrics
     {
+        // Zachowane dla kompatybilności wstecznej, ale nie używane dla TeamsManager
         public double CpuUsagePercent { get; set; }
         public double MemoryUsagePercent { get; set; }
         public double DiskUsagePercent { get; set; }
         public double NetworkThroughputMbps { get; set; }
+        
+        // Sensowne metryki dla TeamsManager
         public int ActiveConnections { get; set; }
         public int RequestsPerMinute { get; set; }
         public double AverageResponseTimeMs { get; set; }
         public double ErrorRate { get; set; }
         public DateTime Timestamp { get; set; }
+        
+        // Właściwości specyficzne dla TeamsManager
+        public Dictionary<string, object> TeamsManagerSpecific { get; set; } = new();
     }
     
     public class ActiveOperationData

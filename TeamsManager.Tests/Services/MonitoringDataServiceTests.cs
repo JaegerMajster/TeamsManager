@@ -10,6 +10,7 @@ using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 using TeamsManager.UI.Models.Monitoring;
 using TeamsManager.UI.Services;
+using TeamsManager.UI.Services.Abstractions;
 using Xunit;
 using FluentAssertions;
 
@@ -23,6 +24,7 @@ namespace TeamsManager.Tests.Services
     {
         private readonly Mock<IHealthMonitoringOrchestrator> _healthOrchestratorMock;
         private readonly Mock<IOperationHistoryService> _operationHistoryServiceMock;
+        private readonly Mock<ITeamsManagerApiService> _apiServiceMock;
         private readonly Mock<ILogger<MonitoringDataService>> _loggerMock;
         private readonly MonitoringDataService _service;
 
@@ -30,11 +32,13 @@ namespace TeamsManager.Tests.Services
         {
             _healthOrchestratorMock = new Mock<IHealthMonitoringOrchestrator>();
             _operationHistoryServiceMock = new Mock<IOperationHistoryService>();
+            _apiServiceMock = new Mock<ITeamsManagerApiService>();
             _loggerMock = new Mock<ILogger<MonitoringDataService>>();
 
             _service = new MonitoringDataService(
                 _healthOrchestratorMock.Object,
                 _operationHistoryServiceMock.Object,
+                _apiServiceMock.Object,
                 _loggerMock.Object);
         }
 
@@ -337,6 +341,7 @@ namespace TeamsManager.Tests.Services
             var service = new MonitoringDataService(
                 _healthOrchestratorMock.Object,
                 _operationHistoryServiceMock.Object,
+                _apiServiceMock.Object,
                 _loggerMock.Object);
 
             service.Should().NotBeNull();
@@ -349,6 +354,7 @@ namespace TeamsManager.Tests.Services
             var action = () => new MonitoringDataService(
                 null!,
                 _operationHistoryServiceMock.Object,
+                _apiServiceMock.Object,
                 _loggerMock.Object);
 
             action.Should().Throw<ArgumentNullException>()
@@ -362,10 +368,25 @@ namespace TeamsManager.Tests.Services
             var action = () => new MonitoringDataService(
                 _healthOrchestratorMock.Object,
                 null!,
+                _apiServiceMock.Object,
                 _loggerMock.Object);
 
             action.Should().Throw<ArgumentNullException>()
                 .WithParameterName("operationHistoryService");
+        }
+
+        [Fact]
+        public void Constructor_WithNullApiService_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            var action = () => new MonitoringDataService(
+                _healthOrchestratorMock.Object,
+                _operationHistoryServiceMock.Object,
+                null!,
+                _loggerMock.Object);
+
+            action.Should().Throw<ArgumentNullException>()
+                .WithParameterName("apiService");
         }
 
         [Fact]
@@ -375,6 +396,7 @@ namespace TeamsManager.Tests.Services
             var action = () => new MonitoringDataService(
                 _healthOrchestratorMock.Object,
                 _operationHistoryServiceMock.Object,
+                _apiServiceMock.Object,
                 null!);
 
             action.Should().Throw<ArgumentNullException>()

@@ -344,6 +344,30 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
+                // NOWE: Sprawdź diagnostykę przed tworzeniem użytkownika - używamy nowej metody z PowerShellConnectionService
+                _logger.LogDebug("Sprawdzanie diagnostyki PowerShell przed tworzeniem użytkownika {UPN}", upn);
+                var diagnostic = await _powerShellService.Connection.DiagnoseConnectionAsync(true, "Get-MgUser -Top 1");
+                if (diagnostic.OverallHealth == PowerShellHealthStatus.Critical)
+                {
+                    var diagnosticMessage = $"System PowerShell nie jest gotowy do tworzenia użytkowników: {diagnostic.OverallHealth}";
+                    _logger.LogError("Nie można utworzyć użytkownika {UPN}: {DiagnosticMessage}. Błędy: {Errors}", 
+                        upn, diagnosticMessage, string.Join("; ", diagnostic.Errors));
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        diagnosticMessage
+                    );
+                    
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        $"Nie można utworzyć użytkownika: {diagnosticMessage}",
+                        "error"
+                    );
+                    
+                    return null;
+                }
+
                 // Używamy ExecuteWithAutoConnectAsync dla utworzenia użytkownika w M365
                 string? externalUserId = await _powerShellService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,

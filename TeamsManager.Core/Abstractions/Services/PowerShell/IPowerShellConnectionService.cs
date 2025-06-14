@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Management.Automation;
 using System.Threading.Tasks;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Abstractions.Services.PowerShell
 {
@@ -67,6 +68,38 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
         /// </summary>
         /// <returns>Szczegółowe informacje o stanie połączenia</returns>
         Task<ConnectionHealthInfo> GetConnectionHealthAsync();
+
+        /// <summary>
+        /// Sprawdza czy system ma odpowiednie uprawnienia do wykonania operacji
+        /// </summary>
+        /// <param name="requiredPermissions">Lista wymaganych uprawnień</param>
+        /// <returns>Informacje o dostępnych uprawnieniach</returns>
+        Task<PowerShellPermissionInfo> ValidatePermissionsAsync(params string[] requiredPermissions);
+
+        /// <summary>
+        /// Wykonuje kompleksową diagnostykę połączenia PowerShell/Graph
+        /// </summary>
+        /// <param name="includePermissionCheck">Czy sprawdzić uprawnienia</param>
+        /// <param name="testCommands">Lista komend do przetestowania</param>
+        /// <returns>Szczegółowe informacje diagnostyczne</returns>
+        Task<PowerShellDiagnosticInfo> DiagnoseConnectionAsync(
+            bool includePermissionCheck = true, 
+            params string[] testCommands);
+
+        /// <summary>
+        /// Wykonuje operację z pełną diagnostyką i logowaniem
+        /// </summary>
+        /// <typeparam name="T">Typ wyniku operacji</typeparam>
+        /// <param name="operation">Operacja do wykonania</param>
+        /// <param name="operationName">Nazwa operacji do logowania</param>
+        /// <param name="requiredPermissions">Wymagane uprawnienia</param>
+        /// <param name="validateBefore">Czy wykonać walidację przed operacją</param>
+        /// <returns>Wynik operacji</returns>
+        Task<T?> ExecuteWithDiagnosticsAsync<T>(
+            Func<Task<T>> operation,
+            string operationName,
+            string[]? requiredPermissions = null,
+            bool validateBefore = true) where T : class;
     }
 
     /// <summary>

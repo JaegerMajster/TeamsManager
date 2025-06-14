@@ -58,12 +58,6 @@ namespace TeamsManager.Core.Services.PowerShell
             List<string> userUpns,
             string role = "Member")
         {
-            if (!_connectionService.ValidateRunspaceState())
-            {
-                _logger.LogError("Środowisko PowerShell nie jest gotowe.");
-                return new Dictionary<string, bool>();
-            }
-
             if (!userUpns?.Any() ?? true)
             {
                 _logger.LogWarning("Lista użytkowników jest pusta.");
@@ -73,87 +67,93 @@ namespace TeamsManager.Core.Services.PowerShell
             _logger.LogInformation("Masowe dodawanie {Count} użytkowników do zespołu {TeamId}",
                 userUpns!.Count, teamId);
 
-            // 1. Utwórz główny wpis operacji
-            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
-                OperationType.BulkUserAddToTeam,
-                "Team", 
-                targetEntityId: teamId,
-                targetEntityName: $"Bulk add {userUpns.Count} users to team"
-            );
-
-            var results = new Dictionary<string, bool>();
-            var processedCount = 0;
-            var failedCount = 0;
-
-            try
+            // Użyj ExecuteWithDiagnosticsAsync dla lepszego logowania i walidacji
+            return await _connectionService.ExecuteWithDiagnosticsAsync(async () =>
             {
-                // 2. Przetwarzaj partie
-                var batches = userUpns
-                    .Select((upn, index) => new { upn, index })
-                    .GroupBy(x => x.index / BatchSize)
-                    .Select(g => g.Select(x => x.upn).ToList())
-                    .ToList();
+                // 1. Utwórz główny wpis operacji
+                var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                    OperationType.BulkUserAddToTeam,
+                    "Team", 
+                    targetEntityId: teamId,
+                    targetEntityName: $"Bulk add {userUpns.Count} users to team"
+                );
 
-                foreach (var batch in batches)
+                var results = new Dictionary<string, bool>();
+                var processedCount = 0;
+                var failedCount = 0;
+
+                try
                 {
-                    await _semaphore.WaitAsync(); // Kontrola współbieżności
-                    try
+                    // 2. Przetwarzaj partie
+                    var batches = userUpns
+                        .Select((upn, index) => new { upn, index })
+                        .GroupBy(x => x.index / BatchSize)
+                        .Select(g => g.Select(x => x.upn).ToList())
+                        .ToList();
+
+                    foreach (var batch in batches)
                     {
-                        var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
-                        
-                        foreach (var result in batchResults)
+                        await _semaphore.WaitAsync(); // Kontrola współbieżności
+                        try
                         {
-                            results[result.Key] = result.Value;
-                            if (result.Value) processedCount++;
-                            else failedCount++;
+                            var batchResults = await ProcessUserBatchAsync(teamId, batch, role);
+                            
+                            foreach (var result in batchResults)
+                            {
+                                results[result.Key] = result.Value;
+                                if (result.Value) processedCount++;
+                                else failedCount++;
+                            }
+
+                            // 3. Aktualizuj postęp
+                            await _operationHistoryService.UpdateOperationProgressAsync(
+                                operation.Id,
+                                processedItems: processedCount,
+                                failedItems: failedCount,
+                                totalItems: userUpns.Count
+                            );
+                        }
+                        finally
+                        {
+                            _semaphore.Release();
                         }
 
-                        // 3. Aktualizuj postęp
-                        await _operationHistoryService.UpdateOperationProgressAsync(
-                            operation.Id,
-                            processedItems: processedCount,
-                            failedItems: failedCount,
-                            totalItems: userUpns.Count
-                        );
-                    }
-                    finally
-                    {
-                        _semaphore.Release();
+                        // Krótka przerwa między partiami
+                        if (batch != batches.Last())
+                        {
+                            await Task.Delay(1000);
+                        }
                     }
 
-                    // Krótka przerwa między partiami
-                    if (batch != batches.Last())
-                    {
-                        await Task.Delay(1000);
-                    }
+                    // 4. Ustaw końcowy status
+                    var status = failedCount == 0 ? OperationStatus.Completed 
+                        : failedCount == userUpns.Count ? OperationStatus.Failed
+                        : OperationStatus.PartialSuccess;
+
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id, status,
+                        $"Processed: {processedCount}, Failed: {failedCount}"
+                    );
+
+                    _logger.LogInformation("Zakończono masowe dodawanie. Sukcesy: {Success}, Błędy: {Failed}",
+                        processedCount, failedCount);
+
+                    // Invalidate cache dla zespołu
+                    _cacheService.InvalidateTeamCache(teamId);
+
+                    return results;
                 }
-
-                // 4. Ustaw końcowy status
-                var status = failedCount == 0 ? OperationStatus.Completed 
-                    : failedCount == userUpns.Count ? OperationStatus.Failed
-                    : OperationStatus.PartialSuccess;
-
-                await _operationHistoryService.UpdateOperationStatusAsync(
-                    operation.Id, status,
-                    $"Processed: {processedCount}, Failed: {failedCount}"
-                );
-
-                _logger.LogInformation("Zakończono masowe dodawanie. Sukcesy: {Success}, Błędy: {Failed}",
-                    processedCount, failedCount);
-
-                // Invalidate cache dla zespołu
-                _cacheService.InvalidateTeamCache(teamId);
-
-                return results;
-            }
-            catch (Exception ex)
-            {
-                await _operationHistoryService.UpdateOperationStatusAsync(
-                    operation.Id, OperationStatus.Failed,
-                    $"Critical error: {ex.Message}", ex.StackTrace
-                );
-                throw;
-            }
+                catch (Exception ex)
+                {
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id, OperationStatus.Failed,
+                        $"Critical error: {ex.Message}", ex.StackTrace
+                    );
+                    throw;
+                }
+            }, 
+            $"BulkAddUsersToTeam: {teamId} ({userUpns.Count} users)",
+            new[] { "Group.ReadWrite.All", "TeamMember.ReadWrite.All" }) ?? new Dictionary<string, bool>();
         }
 
         public async Task<Dictionary<string, bool>> BulkRemoveUsersFromTeamAsync(
