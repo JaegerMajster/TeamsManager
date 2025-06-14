@@ -70,23 +70,46 @@
         <!-- Główna zawartość -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="30">
-                <!-- Nagłówek -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,30">
-                    <materialDesign:PackIcon Kind="ViewDashboard" 
-                                           Width="40" Height="40" 
-                                           Foreground="{StaticResource AccentBlue}"/>
-                    <StackPanel Margin="15,0,0,0">
-                        <TextBlock x:Name="WelcomeText" 
-                                   Text="Witaj ponownie!" 
-                                   Style="{StaticResource MaterialDesignHeadline4TextBlock}"
-                                   Foreground="{StaticResource TextPrimary}"/>
-                        <TextBlock x:Name="DateText" 
-                                   Text="{Binding CurrentDate}"
-                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
-                                   Foreground="{StaticResource TextSecondary}"
-                                   Opacity="0.8"/>
-                    </StackPanel>
-                </StackPanel>
+                <!-- Header -->
+                <Border Grid.Row="0" 
+                        Background="{DynamicResource BackgroundMedium}" 
+                        Padding="24,16"
+                        Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Ikona -->
+                        <materialDesign:PackIcon Grid.Column="0" 
+                                               Kind="ViewDashboard" 
+                                               Width="40" Height="40" 
+                                               Foreground="White"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,16,0"/>
+
+                        <!-- Tytuł i podtytuł -->
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Dashboard"
+                                     Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                                     Margin="0,0,0,8"/>
+                            <TextBlock Text="Przegląd aktywności systemu i najważniejsze statystyki"
+                                     Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                     Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                        </StackPanel>
+
+                        <!-- Data -->
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock x:Name="DateText" 
+                                       Text="{Binding CurrentDate}"
+                                       Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
                 <!-- Karty ze statystykami -->
                 <UniformGrid Rows="1" Columns="4" Margin="0,0,0,30">

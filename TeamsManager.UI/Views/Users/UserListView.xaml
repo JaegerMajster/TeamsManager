@@ -33,24 +33,34 @@
         <!-- Header with title and actions -->
         <Border Grid.Row="0" 
                 Background="{DynamicResource BackgroundMedium}" 
-                Padding="20,15">
+                Padding="24,16"
+                Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="Użytkownicy" 
-                               Style="{StaticResource MaterialDesignHeadline4TextBlock}"
-                               Foreground="{DynamicResource TextPrimary}"/>
-                    <TextBlock Text="Zarządzaj użytkownikami systemu TeamsManager" 
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                               Foreground="{DynamicResource TextSecondary}"
-                               Margin="0,5,0,0"/>
+                <!-- Ikona -->
+                <materialDesign:PackIcon Grid.Column="0" 
+                                       Kind="AccountMultiple" 
+                                       Width="40" Height="40" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0"/>
+
+                <!-- Tytuł i podtytuł -->
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Użytkownicy"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Zarządzaj użytkownikami systemu TeamsManager"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
                 
-                <StackPanel Grid.Column="1" 
+                <StackPanel Grid.Column="2" 
                             Orientation="Horizontal" 
                             VerticalAlignment="Center">
                     <Button Style="{StaticResource SecondaryActionButton}"

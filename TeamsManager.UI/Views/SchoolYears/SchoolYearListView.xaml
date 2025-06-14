@@ -71,38 +71,41 @@
         </Grid.RowDefinitions>
 
         <!-- Nagłówek z tytułem i statystykami -->
-        <Border Grid.Row="0" Style="{StaticResource InfoCardStyle}" Margin="0,0,0,20">
+        <Border Grid.Row="0" 
+                Background="{DynamicResource BackgroundMedium}" 
+                Padding="24,16"
+                Margin="0,0,0,16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Tytuł i opis -->
-                <StackPanel Grid.Row="0" Grid.Column="0">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <materialDesign:PackIcon Kind="CalendarRange" 
-                                               Width="28" Height="28" 
-                                               Foreground="{StaticResource AccentBlue}"
-                                               VerticalAlignment="Center"/>
-                        <TextBlock Text="📅 Lata szkolne" 
-                                   Style="{StaticResource PageTitleStyle}"
-                                   FontSize="28" 
-                                   VerticalAlignment="Center" 
-                                   Margin="12,0,0,0"/>
-                    </StackPanel>
-                    <TextBlock Text="Zarządzaj latami szkolnymi i ich okresami - definiuj semestry, ustaw aktualny rok i śledzij postępy" 
-                               Style="{StaticResource InstructionTextStyle}"
-                               FontSize="14" 
-                               Opacity="0.8"/>
+                <!-- Ikona -->
+                <materialDesign:PackIcon Grid.Row="0" Grid.Column="0" 
+                                       Kind="CalendarMultiple" 
+                                       Width="40" Height="40" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0"/>
+
+                <!-- Tytuł i podtytuł -->
+                <StackPanel Grid.Row="0" Grid.Column="1">
+                    <TextBlock Text="Lata szkolne"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Zarządzaj latami szkolnymi i ich okresami - definiuj semestry, ustaw aktualny rok i śledzij postępy"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
 
                 <!-- Przyciski akcji -->
-                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource IconButton}" 
                             Command="{Binding RefreshCommand}"
                             ToolTip="Odśwież dane"
@@ -122,7 +125,7 @@
                 </StackPanel>
 
                 <!-- Statystyki -->
-                <UniformGrid Grid.Row="1" Grid.ColumnSpan="2" Columns="4" Margin="0,20,0,0">
+                <UniformGrid Grid.Row="1" Grid.ColumnSpan="3" Columns="4" Margin="0,20,0,0">
                     <Border Style="{StaticResource ChipStyle}" Margin="0,0,10,0">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="CalendarToday" Width="16" Height="16" Margin="0,0,8,0"/>

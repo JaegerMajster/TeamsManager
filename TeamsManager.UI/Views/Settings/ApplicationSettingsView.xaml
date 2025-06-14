@@ -185,7 +185,10 @@
         </Grid.RowDefinitions>
 
         <!-- Nagłówek -->
-                        <Border Grid.Row="0" Background="{DynamicResource BackgroundMedium}" Padding="20,15">
+        <Border Grid.Row="0" 
+                Background="{DynamicResource BackgroundMedium}" 
+                Padding="24,16"
+                Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -193,34 +196,46 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="Cog" 
-                                             Width="32" Height="32"
-                                             VerticalAlignment="Center"
-                                             Margin="0,0,15,0"/>
-                    <TextBlock Text="Ustawienia Aplikacji" 
-                               Style="{StaticResource PageTitleStyle}"/>
-                </StackPanel>
+                <!-- Ikona -->
+                <materialDesign:PackIcon Grid.Column="0" 
+                                       Kind="Settings" 
+                                       Width="40" Height="40" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0"/>
 
-                <!-- Statystyki -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource InstructionTextStyle}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,20,0">
-                        <TextBlock.Text>
-                            <MultiBinding StringFormat="Wyświetlono {0} z {1} ustawień">
-                                <Binding Path="VisibleSettings"/>
-                                <Binding Path="TotalSettings"/>
-                            </MultiBinding>
-                        </TextBlock.Text>
-                    </TextBlock>
-                    
+                <!-- Tytuł i podtytuł -->
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Ustawienia Aplikacji"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Konfiguruj parametry systemu i ustawienia aplikacji"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                </StackPanel>
+                
+                <!-- Przyciski akcji -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource SecondaryActionButton}"
                             Command="{Binding RefreshCommand}"
-                            Width="120">
+                            Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Refresh" Margin="0,0,8,0"/>
-                            <TextBlock Text="Odśwież"/>
+                            <materialDesign:PackIcon Kind="Refresh" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Odśwież" 
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Style="{StaticResource PrimaryActionButton}"
+                            Command="{Binding AddNewSettingCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Plus" 
+                                                   VerticalAlignment="Center" 
+                                                   Margin="0,0,8,0"/>
+                            <TextBlock Text="Dodaj ustawienie" 
+                                     VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

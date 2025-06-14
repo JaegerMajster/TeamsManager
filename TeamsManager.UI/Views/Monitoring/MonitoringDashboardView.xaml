@@ -45,119 +45,90 @@
         </Grid.RowDefinitions>
         
         <!-- Header -->
-        <materialDesign:Card Grid.Row="0" Margin="16" Padding="16" Background="{DynamicResource PrimaryHueMidBrush}">
+        <Border Grid.Row="0" 
+                Background="{DynamicResource BackgroundMedium}" 
+                Padding="24,16"
+                Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <!-- Title and Status -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <materialDesign:PackIcon Kind="MonitorDashboard" 
-                                           Width="32" Height="32" 
-                                           Foreground="White" 
-                                           Margin="0,0,12,0" 
-                                           VerticalAlignment="Center"/>
-                    <StackPanel>
-                        <TextBlock Text="System Monitoring Dashboard" 
-                                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
-                                   FontSize="24" FontWeight="Bold"
-                                   Foreground="White"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock Text="{Binding LastUpdateTime, StringFormat='Last update: {0:HH:mm:ss}'}"
-                                       Style="{StaticResource MaterialDesignBody1TextBlock}"
+                <!-- Ikona -->
+                <materialDesign:PackIcon Grid.Column="0" 
+                                       Kind="MonitorDashboard" 
+                                       Width="40" Height="40" 
                                        Foreground="White"
-                                       Opacity="0.8"
+                                       VerticalAlignment="Center"
                                        Margin="0,0,16,0"/>
-                            <ContentPresenter Content="{Binding}" 
-                                            ContentTemplate="{StaticResource ConnectionStatusTemplate}"/>
-                        </StackPanel>
+
+                <!-- Tytuł i podtytuł -->
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Monitoring Systemu"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding LastUpdateTime, StringFormat='Ostatnia aktualizacja: {0:HH:mm:ss}'}"
+                                 Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                 Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                 Margin="0,0,16,0"/>
+                        <ContentPresenter Content="{Binding}" 
+                                        ContentTemplate="{StaticResource ConnectionStatusTemplate}"/>
                     </StackPanel>
                 </StackPanel>
                 
-                <!-- Auto-refresh Toggle -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0">
-                    <TextBlock Text="Auto-refresh" 
-                               Foreground="White" 
-                               VerticalAlignment="Center" 
-                               Margin="0,0,8,0"/>
-                    <ToggleButton IsChecked="{Binding IsAutoRefreshEnabled}"
-                                  Style="{StaticResource MaterialDesignSwitchToggleButton}"
-                                  Foreground="White"
-                                  ToolTip="Enable/Disable automatic refresh every 30 seconds"/>
-                </StackPanel>
-                
-                <!-- Quick Actions -->
+                <!-- Przyciski akcji -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Auto-refresh Toggle -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Auto-refresh" 
+                                   Foreground="{DynamicResource TextPrimary}" 
+                                   VerticalAlignment="Center" 
+                                   Margin="0,0,8,0"/>
+                        <ToggleButton IsChecked="{Binding IsAutoRefreshEnabled}"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Enable/Disable automatic refresh every 30 seconds"/>
+                    </StackPanel>
+                    
                     <Button Style="{StaticResource SecondaryActionButton}"
                             Command="{Binding RefreshCommand}"
-                            Content="Refresh"
-                            Margin="4,0"
+                            Margin="0,0,8,0"
                             ToolTip="Refresh all dashboard data">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="White" 
-                                        CornerRadius="4" 
-                                        Padding="12,8">
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="Refresh" 
-                                                               Width="16" Height="16" 
-                                                               Margin="0,0,4,0"/>
-                                        <TextBlock Text="Refresh"/>
-                                    </StackPanel>
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Refresh" 
+                                                   Width="16" Height="16" 
+                                                   Margin="0,0,4,0"/>
+                            <TextBlock Text="Refresh"/>
+                        </StackPanel>
                     </Button>
                     
                     <Button Style="{StaticResource PrimaryActionButton}"
                             Command="{Binding RunHealthCheckCommand}"
-                            Content="Health Check"
-                            Margin="4,0"
+                            Margin="0,0,8,0"
                             ToolTip="Run comprehensive system health check">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="#4CAF50" 
-                                        CornerRadius="4" 
-                                        Padding="12,8">
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="HeartPulse" 
-                                                               Width="16" Height="16" 
-                                                               Margin="0,0,4,0"
-                                                               Foreground="White"/>
-                                        <TextBlock Text="Health Check" Foreground="White"/>
-                                    </StackPanel>
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="HeartPulse" 
+                                                   Width="16" Height="16" 
+                                                   Margin="0,0,4,0"/>
+                            <TextBlock Text="Health Check"/>
+                        </StackPanel>
                     </Button>
                     
                     <Button Style="{StaticResource SuccessButton}"
                             Command="{Binding AutoRepairCommand}"
-                            Content="Auto Repair"
-                            Margin="4,0"
                             ToolTip="Automatically repair common system issues">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="#FF9800" 
-                                        CornerRadius="4" 
-                                        Padding="12,8">
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="Wrench" 
-                                                               Width="16" Height="16" 
-                                                               Margin="0,0,4,0"
-                                                               Foreground="White"/>
-                                        <TextBlock Text="Auto Repair" Foreground="White"/>
-                                    </StackPanel>
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Wrench" 
+                                                   Width="16" Height="16" 
+                                                   Margin="0,0,4,0"/>
+                            <TextBlock Text="Auto Repair"/>
+                        </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
-        </materialDesign:Card>
+        </Border>
         
         <!-- Dashboard Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,0,16,16">

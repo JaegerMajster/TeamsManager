@@ -17,21 +17,33 @@
         </Grid.RowDefinitions>
         
         <!-- Header with gradient background -->
-        <Border Grid.Row="0" Background="{DynamicResource HeaderGradient}" 
-                Height="80" Effect="{DynamicResource ShadowMedium}">
-            <Grid Margin="24,16">
+        <Border Grid.Row="0" 
+                Background="{DynamicResource BackgroundMedium}" 
+                Padding="24,16"
+                Margin="0,0,0,16">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <materialDesign:PackIcon Kind="School" Width="32" Height="32" 
-                                           Foreground="White" VerticalAlignment="Center"/>
-                    <TextBlock Text="Zarządzanie przedmiotami" 
-                             Style="{StaticResource PageTitleStyle}"
-                             Foreground="White" FontSize="24" Margin="16,0,0,0"/>
+                <!-- Ikona -->
+                <materialDesign:PackIcon Grid.Column="0" 
+                                       Kind="BookOpenPageVariant" 
+                                       Width="40" Height="40" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0"/>
+
+                <!-- Tytuł i podtytuł -->
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Zarządzanie przedmiotami"
+                             Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                             Margin="0,0,0,8"/>
+                    <TextBlock Text="Definiuj przedmioty szkolne, kategorie i przypisania do typów szkół"
+                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                             Foreground="{DynamicResource MaterialDesignBodyLight}"/>
                 </StackPanel>
                 
                 <!-- Action buttons -->
@@ -50,8 +62,7 @@
                     </Button>
                     <Button Style="{StaticResource PrimaryActionButton}"
                             Command="{Binding AddSubjectCommand}"
-                            Content="DODAJ PRZEDMIOT"
-                            Margin="0,0,0,0"/>
+                            Content="DODAJ PRZEDMIOT"/>
                 </StackPanel>
             </Grid>
         </Border>
