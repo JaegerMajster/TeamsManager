@@ -1399,5 +1399,607 @@ namespace TeamsManager.Core.Services.PowerShell
 
             return PowerShellHealthStatus.Healthy;
         }
+
+        #region Module Management
+
+        /// <summary>
+        /// Lista wymaganych modułów Microsoft Graph
+        /// </summary>
+        private static readonly Dictionary<string, string> RequiredModules = new()
+        {
+            { "Microsoft.Graph.Authentication", "Uwierzytelnianie Microsoft Graph" },
+            { "Microsoft.Graph.Users", "Zarządzanie użytkownikami" },
+            { "Microsoft.Graph.Teams", "Zarządzanie zespołami Teams" },
+            { "Microsoft.Graph.Groups", "Zarządzanie grupami" }
+        };
+
+        /// <summary>
+        /// Sprawdza status instalacji wymaganych modułów PowerShell
+        /// </summary>
+        /// <returns>Informacje o statusie modułów</returns>
+        public async Task<PowerShellModuleStatus> CheckModuleInstallationAsync()
+        {
+            var moduleStatus = new PowerShellModuleStatus();
+            var userUpn = await GetCurrentUserUpnSafeAsync();
+
+            _logger.LogInformation("Sprawdzanie statusu modułów PowerShell dla użytkownika {UserUpn}", userUpn);
+
+            try
+            {
+                // Sprawdź czy runspace jest zainicjalizowany (nie musi być połączony z Graph)
+                if (_sharedRunspace == null)
+                {
+                    _logger.LogWarning("PowerShell runspace nie jest zainicjalizowany - inicjalizuję...");
+                    InitializeRunspace();
+                }
+
+                if (_sharedRunspace == null)
+                {
+                    moduleStatus.OverallStatus = "Critical";
+                    moduleStatus.ErrorMessage = "Nie można zainicjalizować PowerShell runspace";
+                    return moduleStatus;
+                }
+
+                var script = @"
+$moduleResults = @()
+$requiredModules = @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Users', 'Microsoft.Graph.Teams', 'Microsoft.Graph.Groups')
+
+foreach ($moduleName in $requiredModules) {
+    try {
+        # Sprawdź czy moduł jest zainstalowany
+        $installedModule = Get-Module -Name $moduleName -ListAvailable | Select-Object -First 1
+        
+        # Sprawdź czy moduł jest zaimportowany
+        $importedModule = Get-Module -Name $moduleName
+        
+        $moduleInfo = @{
+            Name = $moduleName
+            IsInstalled = $installedModule -ne $null
+            IsImported = $importedModule -ne $null
+            InstalledVersion = if ($installedModule) { $installedModule.Version.ToString() } else { $null }
+            ImportedVersion = if ($importedModule) { $importedModule.Version.ToString() } else { $null }
+            ModulePath = if ($installedModule) { $installedModule.ModuleBase } else { $null }
+            Author = if ($installedModule) { $installedModule.Author } else { $null }
+            Description = if ($installedModule) { $installedModule.Description } else { $null }
+            Error = $null
+        }
+        
+        $moduleResults += $moduleInfo
+    }
+    catch {
+        $moduleInfo = @{
+            Name = $moduleName
+            IsInstalled = $false
+            IsImported = $false
+            InstalledVersion = $null
+            ImportedVersion = $null
+            ModulePath = $null
+            Author = $null
+            Description = $null
+            Error = $_.Exception.Message
+        }
+        
+        $moduleResults += $moduleInfo
+    }
+}
+
+# Sprawdź wersję PowerShell
+$psInfo = @{
+    PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+    PowerShellEdition = $PSVersionTable.PSEdition
+    ExecutionPolicy = Get-ExecutionPolicy
+    OSVersion = [System.Environment]::OSVersion.ToString()
+}
+
+@{
+    Modules = $moduleResults
+    PowerShellInfo = $psInfo
+}
+";
+
+                var results = await ExecuteScriptAsync(script);
+                var resultData = results?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                if (resultData != null)
+                {
+                    // Przetwórz informacje o PowerShell
+                    if (resultData["PowerShellInfo"] is Hashtable psInfo)
+                    {
+                        moduleStatus.PowerShellVersion = psInfo["PowerShellVersion"]?.ToString() ?? "Unknown";
+                        moduleStatus.PowerShellEdition = psInfo["PowerShellEdition"]?.ToString() ?? "Unknown";
+                        moduleStatus.ExecutionPolicy = psInfo["ExecutionPolicy"]?.ToString() ?? "Unknown";
+                        moduleStatus.OSVersion = psInfo["OSVersion"]?.ToString() ?? "Unknown";
+                    }
+
+                    // Przetwórz informacje o modułach
+                    if (resultData["Modules"] is object[] modules)
+                    {
+                        foreach (var moduleObj in modules)
+                        {
+                            if (moduleObj is Hashtable moduleInfo)
+                            {
+                                var module = new ModuleInfo
+                                {
+                                    Name = moduleInfo["Name"]?.ToString() ?? "Unknown",
+                                    IsInstalled = Convert.ToBoolean(moduleInfo["IsInstalled"]),
+                                    IsImported = Convert.ToBoolean(moduleInfo["IsImported"]),
+                                    InstalledVersion = moduleInfo["InstalledVersion"]?.ToString(),
+                                    ImportedVersion = moduleInfo["ImportedVersion"]?.ToString(),
+                                    ModulePath = moduleInfo["ModulePath"]?.ToString(),
+                                    Author = moduleInfo["Author"]?.ToString(),
+                                    Description = RequiredModules.GetValueOrDefault(moduleInfo["Name"]?.ToString() ?? "", ""),
+                                    ErrorMessage = moduleInfo["Error"]?.ToString()
+                                };
+
+                                moduleStatus.Modules.Add(module);
+                            }
+                        }
+                    }
+                }
+
+                // Oblicz ogólny status
+                var installedCount = moduleStatus.Modules.Count(m => m.IsInstalled);
+                var importedCount = moduleStatus.Modules.Count(m => m.IsImported);
+                var totalRequired = RequiredModules.Count;
+
+                if (installedCount == totalRequired && importedCount == totalRequired)
+                {
+                    moduleStatus.OverallStatus = "Healthy";
+                }
+                else if (installedCount == totalRequired)
+                {
+                    moduleStatus.OverallStatus = "Warning"; // Zainstalowane ale nie zaimportowane
+                }
+                else if (installedCount > 0)
+                {
+                    moduleStatus.OverallStatus = "Degraded"; // Częściowo zainstalowane
+                }
+                else
+                {
+                    moduleStatus.OverallStatus = "Critical"; // Nic nie zainstalowane
+                }
+
+                moduleStatus.InstalledModulesCount = installedCount;
+                moduleStatus.ImportedModulesCount = importedCount;
+                moduleStatus.RequiredModulesCount = totalRequired;
+
+                _logger.LogInformation("Status modułów: {InstalledCount}/{TotalRequired} zainstalowanych, {ImportedCount} zaimportowanych. Status: {OverallStatus}",
+                    installedCount, totalRequired, importedCount, moduleStatus.OverallStatus);
+
+                return moduleStatus;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania statusu modułów PowerShell");
+                moduleStatus.OverallStatus = "Critical";
+                moduleStatus.ErrorMessage = ex.Message;
+                return moduleStatus;
+            }
+        }
+
+        /// <summary>
+        /// Instaluje wymagane moduły Microsoft Graph PowerShell
+        /// </summary>
+        /// <param name="forceReinstall">Czy wymusić reinstalację istniejących modułów</param>
+        /// <returns>Wynik instalacji modułów</returns>
+        public async Task<PowerShellModuleInstallationResult> InstallRequiredModulesAsync(bool forceReinstall = false)
+        {
+            var result = new PowerShellModuleInstallationResult();
+            var userUpn = await GetCurrentUserUpnSafeAsync();
+
+            _logger.LogInformation("Rozpoczynanie instalacji modułów PowerShell (Force: {ForceReinstall}) dla użytkownika {UserUpn}", 
+                forceReinstall, userUpn);
+
+            // Utwórz operację w historii
+            var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
+                OperationType.ConfigurationChanged,
+                "PowerShellModuleInstallation",
+                targetEntityName: "Microsoft Graph PowerShell Modules"
+            );
+
+            try
+            {
+                // Sprawdź czy runspace jest zainicjalizowany (nie musi być połączony z Graph)
+                if (_sharedRunspace == null)
+                {
+                    _logger.LogWarning("PowerShell runspace nie jest zainicjalizowany - inicjalizuję...");
+                    InitializeRunspace();
+                }
+
+                if (_sharedRunspace == null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = "Nie można zainicjalizować PowerShell runspace";
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        result.ErrorMessage
+                    );
+                    
+                    return result;
+                }
+
+                // Powiadomienie o rozpoczęciu
+                await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                {
+                    await notificationService.SendNotificationToUserAsync(
+                        userUpn,
+                        "Rozpoczynanie instalacji modułów Microsoft Graph PowerShell...",
+                        "info"
+                    );
+                });
+
+                var installScript = @"
+param(
+    [bool]$ForceReinstall = $false
+)
+
+# Ustawienia instalacji
+$ProgressPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
+
+$installResults = @()
+$requiredModules = @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Users', 'Microsoft.Graph.Teams', 'Microsoft.Graph.Groups')
+
+Write-Host ""Rozpoczynanie instalacji modułów Microsoft Graph PowerShell...""
+
+foreach ($moduleName in $requiredModules) {
+    $moduleResult = @{
+        Name = $moduleName
+        Success = $false
+        AlreadyInstalled = $false
+        InstalledVersion = $null
+        Error = $null
+        Action = 'None'
+    }
+    
+    try {
+        Write-Host ""Sprawdzanie modułu: $moduleName""
+        
+        # Sprawdź czy moduł jest już zainstalowany
+        $existingModule = Get-Module -Name $moduleName -ListAvailable | Select-Object -First 1
+        
+        if ($existingModule -and -not $ForceReinstall) {
+            $moduleResult.AlreadyInstalled = $true
+            $moduleResult.Success = $true
+            $moduleResult.InstalledVersion = $existingModule.Version.ToString()
+            $moduleResult.Action = 'Skipped'
+            Write-Host ""Moduł $moduleName już zainstalowany (wersja: $($existingModule.Version))""
+        } else {
+            if ($existingModule -and $ForceReinstall) {
+                Write-Host ""Wymuszanie reinstalacji modułu: $moduleName""
+                $moduleResult.Action = 'Reinstalled'
+            } else {
+                Write-Host ""Instalowanie modułu: $moduleName""
+                $moduleResult.Action = 'Installed'
+            }
+            
+            # Instaluj moduł
+            Install-Module -Name $moduleName -Scope CurrentUser -Force -AllowClobber -Repository PSGallery
+            
+            # Sprawdź czy instalacja się powiodła
+            $installedModule = Get-Module -Name $moduleName -ListAvailable | Select-Object -First 1
+            if ($installedModule) {
+                $moduleResult.Success = $true
+                $moduleResult.InstalledVersion = $installedModule.Version.ToString()
+                Write-Host ""Pomyślnie zainstalowano $moduleName (wersja: $($installedModule.Version))""
+            } else {
+                $moduleResult.Error = ""Moduł nie został znaleziony po instalacji""
+                Write-Host ""BŁĄD: Moduł $moduleName nie został znaleziony po instalacji""
+            }
+        }
+    }
+    catch {
+        $moduleResult.Error = $_.Exception.Message
+        Write-Host ""BŁĄD podczas instalacji $moduleName : $($_.Exception.Message)""
+    }
+    
+    $installResults += $moduleResult
+}
+
+Write-Host ""Instalacja modułów zakończona.""
+
+# Zwróć wyniki
+@{
+    Results = $installResults
+    Timestamp = Get-Date
+    PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+}
+";
+
+                // Przekaż parametr forceReinstall do skryptu
+                var parameters = new Dictionary<string, object>
+                {
+                    { "ForceReinstall", forceReinstall }
+                };
+
+                var installResults = await ExecuteScriptAsync(installScript, parameters);
+                var installData = installResults?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                if (installData != null && installData["Results"] is object[] results)
+                {
+                    foreach (var moduleResultObj in results)
+                    {
+                        if (moduleResultObj is Hashtable moduleResult)
+                        {
+                            var moduleInstallResult = new ModuleInstallationResult
+                            {
+                                ModuleName = moduleResult["Name"]?.ToString() ?? "Unknown",
+                                Success = Convert.ToBoolean(moduleResult["Success"]),
+                                AlreadyInstalled = Convert.ToBoolean(moduleResult["AlreadyInstalled"]),
+                                InstalledVersion = moduleResult["InstalledVersion"]?.ToString(),
+                                ErrorMessage = moduleResult["Error"]?.ToString(),
+                                Action = moduleResult["Action"]?.ToString() ?? "Unknown"
+                            };
+
+                            result.ModuleResults.Add(moduleInstallResult);
+                        }
+                    }
+                }
+
+                // Oblicz ogólny wynik
+                result.Success = result.ModuleResults.All(m => m.Success);
+                result.InstalledCount = result.ModuleResults.Count(m => m.Success && m.Action != "Skipped");
+                result.SkippedCount = result.ModuleResults.Count(m => m.AlreadyInstalled && m.Action == "Skipped");
+                result.FailedCount = result.ModuleResults.Count(m => !m.Success);
+
+                if (result.Success)
+                {
+                    result.Message = $"Pomyślnie zainstalowano {result.InstalledCount} modułów, pominięto {result.SkippedCount}";
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Completed,
+                        result.Message
+                    );
+
+                    await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            userUpn,
+                            result.Message,
+                            "success"
+                        );
+                    });
+                }
+                else
+                {
+                    result.ErrorMessage = $"Instalacja nie powiodła się: {result.FailedCount} modułów nie zostało zainstalowanych";
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        result.ErrorMessage
+                    );
+
+                    await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            userUpn,
+                            result.ErrorMessage,
+                            "error"
+                        );
+                    });
+                }
+
+                _logger.LogInformation("Instalacja modułów zakończona. Sukces: {Success}, Zainstalowano: {InstalledCount}, Pominięto: {SkippedCount}, Błędy: {FailedCount}",
+                    result.Success, result.InstalledCount, result.SkippedCount, result.FailedCount);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Krytyczny błąd podczas instalacji modułów PowerShell");
+                
+                result.Success = false;
+                result.ErrorMessage = ex.Message;
+
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Krytyczny błąd: {ex.Message}",
+                    ex.StackTrace
+                );
+
+                await ExecuteWithScopedServicesAsync(async (currentUserService, notificationService) =>
+                {
+                    await notificationService.SendNotificationToUserAsync(
+                        userUpn,
+                        $"Błąd instalacji modułów: {ex.Message}",
+                        "error"
+                    );
+                });
+
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje test połączenia z Microsoft Graph (prosty test read-only)
+        /// </summary>
+        /// <returns>Wynik testu połączenia</returns>
+        public async Task<PowerShellConnectionTestResult> TestGraphConnectionAsync()
+        {
+            var testResult = new PowerShellConnectionTestResult();
+            var userUpn = await GetCurrentUserUpnSafeAsync();
+
+            _logger.LogInformation("Rozpoczynanie testu połączenia Microsoft Graph dla użytkownika {UserUpn}", userUpn);
+
+            try
+            {
+                testResult.TestStartTime = DateTime.UtcNow;
+
+                // Test 1: Sprawdź runspace
+                if (!ValidateRunspaceState())
+                {
+                    testResult.RunspaceTest = false;
+                    testResult.ErrorMessages.Add("PowerShell runspace nie jest gotowy");
+                    testResult.OverallResult = "Failed";
+                    return testResult;
+                }
+                testResult.RunspaceTest = true;
+
+                // Test 2: Sprawdź kontekst Graph
+                var contextScript = @"
+try {
+    $context = Get-MgContext -ErrorAction Stop
+    if ($context) {
+        @{
+            Success = $true
+            Account = $context.Account
+            TenantId = $context.TenantId
+            Scopes = $context.Scopes -join ','
+            AppName = $context.AppName
+        }
+    } else {
+        @{ Success = $false; Error = 'Brak kontekstu Graph' }
+    }
+} catch {
+    @{ Success = $false; Error = $_.Exception.Message }
+}
+";
+
+                var contextResults = await ExecuteScriptAsync(contextScript);
+                var contextData = contextResults?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                if (contextData != null && Convert.ToBoolean(contextData["Success"]))
+                {
+                    testResult.GraphContextTest = true;
+                    testResult.ConnectedAccount = contextData["Account"]?.ToString();
+                    testResult.TenantId = contextData["TenantId"]?.ToString();
+                    testResult.AvailableScopes = contextData["Scopes"]?.ToString()?.Split(',').ToList() ?? new List<string>();
+                }
+                else
+                {
+                    testResult.GraphContextTest = false;
+                    testResult.ErrorMessages.Add($"Brak kontekstu Graph: {contextData?["Error"]}");
+                }
+
+                // Test 3: Prosty test odczytu (Get-MgUser -Top 1)
+                if (testResult.GraphContextTest)
+                {
+                    try
+                    {
+                        var userTestScript = @"
+try {
+    $user = Get-MgUser -Top 1 -ErrorAction Stop
+    if ($user) {
+        @{
+            Success = $true
+            UserCount = 1
+            TestUser = $user.DisplayName
+        }
+    } else {
+        @{ Success = $false; Error = 'Brak użytkowników w wyniku' }
+    }
+} catch {
+    @{ Success = $false; Error = $_.Exception.Message }
+}
+";
+
+                        var userTestResults = await ExecuteScriptAsync(userTestScript);
+                        var userTestData = userTestResults?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                        if (userTestData != null && Convert.ToBoolean(userTestData["Success"]))
+                        {
+                            testResult.UserReadTest = true;
+                            testResult.TestUserName = userTestData["TestUser"]?.ToString();
+                        }
+                        else
+                        {
+                            testResult.UserReadTest = false;
+                            testResult.ErrorMessages.Add($"Test odczytu użytkowników: {userTestData?["Error"]}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        testResult.UserReadTest = false;
+                        testResult.ErrorMessages.Add($"Błąd testu użytkowników: {ex.Message}");
+                    }
+                }
+
+                // Test 4: Test odczytu grup (Get-MgGroup -Top 1)
+                if (testResult.GraphContextTest)
+                {
+                    try
+                    {
+                        var groupTestScript = @"
+try {
+    $group = Get-MgGroup -Top 1 -ErrorAction Stop
+    if ($group) {
+        @{
+            Success = $true
+            GroupCount = 1
+            TestGroup = $group.DisplayName
+        }
+    } else {
+        @{ Success = $false; Error = 'Brak grup w wyniku' }
+    }
+} catch {
+    @{ Success = $false; Error = $_.Exception.Message }
+}
+";
+
+                        var groupTestResults = await ExecuteScriptAsync(groupTestScript);
+                        var groupTestData = groupTestResults?.FirstOrDefault()?.BaseObject as Hashtable;
+
+                        if (groupTestData != null && Convert.ToBoolean(groupTestData["Success"]))
+                        {
+                            testResult.GroupReadTest = true;
+                            testResult.TestGroupName = groupTestData["TestGroup"]?.ToString();
+                        }
+                        else
+                        {
+                            testResult.GroupReadTest = false;
+                            testResult.ErrorMessages.Add($"Test odczytu grup: {groupTestData?["Error"]}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        testResult.GroupReadTest = false;
+                        testResult.ErrorMessages.Add($"Błąd testu grup: {ex.Message}");
+                    }
+                }
+
+                // Oblicz ogólny wynik
+                testResult.TestEndTime = DateTime.UtcNow;
+                testResult.TestDuration = testResult.TestEndTime - testResult.TestStartTime;
+
+                var passedTests = new[] { testResult.RunspaceTest, testResult.GraphContextTest, testResult.UserReadTest, testResult.GroupReadTest }
+                    .Count(t => t);
+
+                if (passedTests == 4)
+                {
+                    testResult.OverallResult = "Passed";
+                }
+                else if (passedTests >= 2)
+                {
+                    testResult.OverallResult = "Partial";
+                }
+                else
+                {
+                    testResult.OverallResult = "Failed";
+                }
+
+                _logger.LogInformation("Test połączenia Graph zakończony. Wynik: {OverallResult}, Testy przeszły: {PassedTests}/4, Czas: {Duration}ms",
+                    testResult.OverallResult, passedTests, testResult.TestDuration.TotalMilliseconds);
+
+                return testResult;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Krytyczny błąd podczas testu połączenia Graph");
+                
+                testResult.TestEndTime = DateTime.UtcNow;
+                testResult.TestDuration = testResult.TestEndTime - testResult.TestStartTime;
+                testResult.OverallResult = "Failed";
+                testResult.ErrorMessages.Add($"Krytyczny błąd: {ex.Message}");
+
+                return testResult;
+            }
+        }
+
+        #endregion
     }
 }

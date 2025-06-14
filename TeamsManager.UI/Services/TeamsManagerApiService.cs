@@ -22,6 +22,11 @@ namespace TeamsManager.UI.Services
         Task<ConnectionHealthInfo?> GetConnectionHealthAsync();
         Task<PowerShellDiagnosticInfo?> TestOperationAsync(string operationType, Dictionary<string, object>? parameters = null);
         Task<object?> GetFullDiagnosticReportAsync();
+        
+        // Nowe metody zarządzania modułami
+        Task<PowerShellModuleStatus?> GetModuleStatusAsync();
+        Task<PowerShellModuleInstallationResult?> InstallModulesAsync(bool forceReinstall = false);
+        Task<PowerShellConnectionTestResult?> TestConnectionAsync();
     }
 
     public class TeamsManagerApiService : ITeamsManagerApiService
@@ -213,6 +218,92 @@ namespace TeamsManager.UI.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania pełnego raportu");
+                return null;
+            }
+        }
+
+        public async Task<PowerShellModuleStatus?> GetModuleStatusAsync()
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Pobieranie statusu modułów PowerShell");
+                
+                await EnsureAuthenticatedAsync();
+                var response = await _httpClient.GetAsync("api/diagnostics/modules/status");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<PowerShellModuleStatus>();
+                    _logger.LogDebug("[API-SERVICE] Status modułów pobrany pomyślnie");
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd pobierania statusu modułów: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania statusu modułów");
+                return null;
+            }
+        }
+
+        public async Task<PowerShellModuleInstallationResult?> InstallModulesAsync(bool forceReinstall = false)
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Instalowanie modułów PowerShell (Force: {ForceReinstall})", forceReinstall);
+                
+                await EnsureAuthenticatedAsync();
+                var response = await _httpClient.PostAsync($"api/diagnostics/modules/install?forceReinstall={forceReinstall}", null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<PowerShellModuleInstallationResult>();
+                    _logger.LogDebug("[API-SERVICE] Instalacja modułów zakończona pomyślnie");
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd instalacji modułów: {StatusCode}", response.StatusCode);
+                    // Spróbuj odczytać błąd z odpowiedzi
+                    var errorResult = await response.Content.ReadFromJsonAsync<PowerShellModuleInstallationResult>();
+                    return errorResult;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas instalacji modułów");
+                return null;
+            }
+        }
+
+        public async Task<PowerShellConnectionTestResult?> TestConnectionAsync()
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Testowanie połączenia Microsoft Graph");
+                
+                await EnsureAuthenticatedAsync();
+                var response = await _httpClient.PostAsync("api/diagnostics/connection/test", null);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<PowerShellConnectionTestResult>();
+                    _logger.LogDebug("[API-SERVICE] Test połączenia zakończony pomyślnie");
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd testu połączenia: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas testu połączenia");
                 return null;
             }
         }

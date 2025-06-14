@@ -100,6 +100,25 @@ namespace TeamsManager.Core.Abstractions.Services.PowerShell
             string operationName,
             string[]? requiredPermissions = null,
             bool validateBefore = true) where T : class;
+
+        /// <summary>
+        /// Sprawdza status instalacji wymaganych modułów PowerShell
+        /// </summary>
+        /// <returns>Informacje o statusie modułów</returns>
+        Task<PowerShellModuleStatus> CheckModuleInstallationAsync();
+
+        /// <summary>
+        /// Instaluje wymagane moduły Microsoft Graph PowerShell
+        /// </summary>
+        /// <param name="forceReinstall">Czy wymusić reinstalację istniejących modułów</param>
+        /// <returns>Wynik instalacji modułów</returns>
+        Task<PowerShellModuleInstallationResult> InstallRequiredModulesAsync(bool forceReinstall = false);
+
+        /// <summary>
+        /// Wykonuje test połączenia z Microsoft Graph (prosty test read-only)
+        /// </summary>
+        /// <returns>Wynik testu połączenia</returns>
+        Task<PowerShellConnectionTestResult> TestGraphConnectionAsync();
     }
 
     /// <summary>

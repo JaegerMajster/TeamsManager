@@ -20,8 +20,8 @@ namespace TeamsManager.UI.ViewModels.Monitoring
         private readonly CompositeDisposable _disposables = new();
         
         // Widget ViewModels
-        public SystemHealthWidgetViewModel SystemHealthViewModel { get; }
-        public PerformanceMetricsWidgetViewModel PerformanceMetricsViewModel { get; }
+        public TeamsManagerHealthWidgetViewModel TeamsManagerHealthViewModel { get; }
+        public TeamsManagerMetricsWidgetViewModel TeamsManagerMetricsViewModel { get; }
         public ActiveOperationsWidgetViewModel ActiveOperationsViewModel { get; }
         public AlertsWidgetViewModel AlertsViewModel { get; }
         
@@ -71,8 +71,8 @@ namespace TeamsManager.UI.ViewModels.Monitoring
         public MonitoringDashboardViewModel(
             ISignalRService signalRService,
             IMonitoringDataService dataService,
-            SystemHealthWidgetViewModel systemHealthViewModel,
-            PerformanceMetricsWidgetViewModel performanceMetricsViewModel,
+            TeamsManagerHealthWidgetViewModel teamsManagerHealthViewModel,
+            TeamsManagerMetricsWidgetViewModel teamsManagerMetricsViewModel,
             ActiveOperationsWidgetViewModel activeOperationsViewModel,
             AlertsWidgetViewModel alertsViewModel,
             ILogger<MonitoringDashboardViewModel> logger)
@@ -81,8 +81,8 @@ namespace TeamsManager.UI.ViewModels.Monitoring
             _dataService = dataService ?? throw new ArgumentNullException(nameof(dataService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            SystemHealthViewModel = systemHealthViewModel ?? throw new ArgumentNullException(nameof(systemHealthViewModel));
-            PerformanceMetricsViewModel = performanceMetricsViewModel ?? throw new ArgumentNullException(nameof(performanceMetricsViewModel));
+            TeamsManagerHealthViewModel = teamsManagerHealthViewModel ?? throw new ArgumentNullException(nameof(teamsManagerHealthViewModel));
+            TeamsManagerMetricsViewModel = teamsManagerMetricsViewModel ?? throw new ArgumentNullException(nameof(teamsManagerMetricsViewModel));
             ActiveOperationsViewModel = activeOperationsViewModel ?? throw new ArgumentNullException(nameof(activeOperationsViewModel));
             AlertsViewModel = alertsViewModel ?? throw new ArgumentNullException(nameof(alertsViewModel));
             
@@ -160,7 +160,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                 .Subscribe(update =>
                 {
                     _logger.LogDebug("[MONITORING-DASHBOARD] Health update received");
-                    SystemHealthViewModel.ProcessHealthUpdate(update);
+                    TeamsManagerHealthViewModel.ProcessHealthUpdate(update);
                     LastUpdateTime = DateTime.Now;
                 })
                 .DisposeWith(_disposables);
@@ -182,7 +182,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                 .Subscribe(metrics =>
                 {
                     _logger.LogDebug("[MONITORING-DASHBOARD] Metrics update received");
-                    PerformanceMetricsViewModel.ProcessMetricsUpdate(metrics);
+                    TeamsManagerMetricsViewModel.ProcessMetricsUpdate(metrics);
                     LastUpdateTime = DateTime.Now;
                 })
                 .DisposeWith(_disposables);
@@ -211,8 +211,8 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                 // Refresh all widgets in parallel
                 var tasks = new[]
                 {
-                    SystemHealthViewModel.RefreshAsync(),
-                    PerformanceMetricsViewModel.RefreshAsync(),
+                    TeamsManagerHealthViewModel.RefreshAsync(),
+                    TeamsManagerMetricsViewModel.RefreshAsync(),
                     ActiveOperationsViewModel.RefreshAsync(),
                     AlertsViewModel.RefreshAsync()
                 };

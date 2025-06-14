@@ -568,16 +568,16 @@ namespace TeamsManager.UI
             
             // ViewModele dla monitoringu
             services.AddTransient<ViewModels.Monitoring.MonitoringDashboardViewModel>();
-            services.AddTransient<ViewModels.Monitoring.Widgets.SystemHealthWidgetViewModel>();
-            services.AddTransient<ViewModels.Monitoring.Widgets.PerformanceMetricsWidgetViewModel>();
+            services.AddTransient<ViewModels.Monitoring.Widgets.TeamsManagerHealthWidgetViewModel>();
+            services.AddTransient<ViewModels.Monitoring.Widgets.TeamsManagerMetricsWidgetViewModel>();
             services.AddTransient<ViewModels.Monitoring.Widgets.ActiveOperationsWidgetViewModel>();
             services.AddTransient<ViewModels.Monitoring.Widgets.AlertsWidgetViewModel>();
             services.AddTransient<ViewModels.Monitoring.Widgets.AdvancedPerformanceChartWidgetViewModel>();
             
             // Widoki monitoringu
             services.AddTransient<Views.Monitoring.MonitoringDashboardView>();
-            services.AddTransient<Views.Monitoring.Widgets.SystemHealthWidget>();
-            services.AddTransient<Views.Monitoring.Widgets.PerformanceMetricsWidget>();
+            services.AddTransient<Views.Monitoring.Widgets.TeamsManagerHealthWidget>();
+            services.AddTransient<Views.Monitoring.Widgets.TeamsManagerMetricsWidget>();
             services.AddTransient<Views.Monitoring.Widgets.ActiveOperationsWidget>();
             services.AddTransient<Views.Monitoring.Widgets.AlertsWidget>();
             services.AddTransient<Views.Monitoring.Widgets.AdvancedPerformanceChartWidget>();

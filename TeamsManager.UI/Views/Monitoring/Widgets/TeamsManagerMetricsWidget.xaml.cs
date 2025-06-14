@@ -3,11 +3,11 @@ using System.Windows.Controls;
 namespace TeamsManager.UI.Views.Monitoring.Widgets
 {
     /// <summary>
-    /// Interaction logic for PerformanceMetricsWidget.xaml
+    /// Interaction logic for TeamsManagerMetricsWidget.xaml
     /// </summary>
-    public partial class PerformanceMetricsWidget : UserControl
+    public partial class TeamsManagerMetricsWidget : UserControl
     {
-        public PerformanceMetricsWidget()
+        public TeamsManagerMetricsWidget()
         {
             InitializeComponent();
         }

@@ -78,7 +78,7 @@ namespace TeamsManager.UI.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _hubConnection = new HubConnectionBuilder()
-                .WithUrl("https://localhost:5001/monitoringHub", options =>
+                .WithUrl("https://localhost:7037/monitoringHub", options =>
                 {
                     options.AccessTokenProvider = async () => 
                     {

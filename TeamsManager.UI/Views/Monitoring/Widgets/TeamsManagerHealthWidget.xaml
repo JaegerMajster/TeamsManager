@@ -181,6 +181,84 @@
                         </Button>
                     </UniformGrid>
                     
+                    <!-- Module Management Actions -->
+                    <UniformGrid Columns="2" Margin="0,4,0,8">
+                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Command="{Binding CheckModulesCommand}"
+                                Margin="0,0,4,0"
+                                ToolTip="Sprawdź status modułów PowerShell">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="PackageVariant" 
+                                                       Width="16" Height="16" 
+                                                       Margin="0,0,4,0"/>
+                                <TextBlock Text="Sprawdź Moduły"/>
+                            </StackPanel>
+                        </Button>
+                        
+                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Command="{Binding InstallModulesCommand}"
+                                Margin="4,0,0,0"
+                                ToolTip="Zainstaluj wymagane moduły PowerShell">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Download" 
+                                                       Width="16" Height="16" 
+                                                       Margin="0,0,4,0"/>
+                                <TextBlock Text="Zainstaluj Moduły"/>
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                    
+                    <!-- Connection Test Action -->
+                    <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                            Command="{Binding TestConnectionCommand}"
+                            Margin="0,4,0,8"
+                            ToolTip="Wykonaj test połączenia z Microsoft Graph">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="TestTube" 
+                                                   Width="16" Height="16" 
+                                                   Margin="0,0,4,0"/>
+                            <TextBlock Text="Test Połączenia Graph"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <!-- Status Notification -->
+                    <Border Background="{DynamicResource MaterialDesignCardBackground}"
+                            BorderBrush="{DynamicResource MaterialDesignDivider}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="12"
+                            Margin="0,8,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Notification Icon -->
+                            <TextBlock Grid.Column="0" 
+                                       Text="{Binding NotificationIcon}" 
+                                       FontSize="16"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"/>
+                            
+                            <!-- Notification Message -->
+                            <TextBlock Grid.Column="1" 
+                                       Text="{Binding LastNotification}" 
+                                       FontWeight="Medium"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                            
+                            <!-- Loading Indicator -->
+                            <ProgressBar Grid.Column="2"
+                                         Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                         Width="20" Height="20"
+                                         IsIndeterminate="True"
+                                         Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                         Margin="8,0,0,0"/>
+                        </Grid>
+                    </Border>
+                    
                     <!-- PowerShell Diagnostics -->
                     <Expander Header="PowerShell Diagnostics" 
                               Margin="0,8,0,0"

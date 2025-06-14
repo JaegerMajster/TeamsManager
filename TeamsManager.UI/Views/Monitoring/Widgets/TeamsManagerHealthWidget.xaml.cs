@@ -3,11 +3,11 @@ using System.Windows.Controls;
 namespace TeamsManager.UI.Views.Monitoring.Widgets
 {
     /// <summary>
-    /// Interaction logic for SystemHealthWidget.xaml
+    /// Interaction logic for TeamsManagerHealthWidget.xaml
     /// </summary>
-    public partial class SystemHealthWidget : UserControl
+    public partial class TeamsManagerHealthWidget : UserControl
     {
-        public SystemHealthWidget()
+        public TeamsManagerHealthWidget()
         {
             InitializeComponent();
         }

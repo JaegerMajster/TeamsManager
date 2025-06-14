@@ -58,7 +58,7 @@
                 
                 <!-- Ikona -->
                 <materialDesign:PackIcon Grid.Column="0" 
-                                       Kind="MonitorDashboard" 
+                                       Kind="MicrosoftTeams" 
                                        Width="40" Height="40" 
                                        Foreground="White"
                                        VerticalAlignment="Center"
@@ -66,7 +66,7 @@
 
                 <!-- Tytuł i podtytuł -->
                 <StackPanel Grid.Column="1">
-                    <TextBlock Text="Monitoring Systemu"
+                    <TextBlock Text="TeamsManager - Monitoring"
                              Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                              Margin="0,0,0,8"/>
                     <StackPanel Orientation="Horizontal">
@@ -89,41 +89,41 @@
                                    Margin="0,0,8,0"/>
                         <ToggleButton IsChecked="{Binding IsAutoRefreshEnabled}"
                                       Style="{StaticResource MaterialDesignSwitchToggleButton}"
-                                      ToolTip="Enable/Disable automatic refresh every 30 seconds"/>
+                                      ToolTip="Włącz/wyłącz automatyczne odświeżanie co 30 sekund"/>
                     </StackPanel>
                     
                     <Button Style="{StaticResource SecondaryActionButton}"
                             Command="{Binding RefreshCommand}"
                             Margin="0,0,8,0"
-                            ToolTip="Refresh all dashboard data">
+                            ToolTip="Odśwież dane monitorowania">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Refresh" 
                                                    Width="16" Height="16" 
                                                    Margin="0,0,4,0"/>
-                            <TextBlock Text="Refresh"/>
+                            <TextBlock Text="Odśwież"/>
                         </StackPanel>
                     </Button>
                     
                     <Button Style="{StaticResource PrimaryActionButton}"
                             Command="{Binding RunHealthCheckCommand}"
                             Margin="0,0,8,0"
-                            ToolTip="Run comprehensive system health check">
+                            ToolTip="Uruchom pełne sprawdzenie zdrowia TeamsManager">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="HeartPulse" 
                                                    Width="16" Height="16" 
                                                    Margin="0,0,4,0"/>
-                            <TextBlock Text="Health Check"/>
+                            <TextBlock Text="Diagnostyka"/>
                         </StackPanel>
                     </Button>
                     
                     <Button Style="{StaticResource SuccessButton}"
                             Command="{Binding AutoRepairCommand}"
-                            ToolTip="Automatically repair common system issues">
+                            ToolTip="Automatyczna naprawa problemów PowerShell i Graph API">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Wrench" 
                                                    Width="16" Height="16" 
                                                    Margin="0,0,4,0"/>
-                            <TextBlock Text="Auto Repair"/>
+                            <TextBlock Text="Naprawa"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -139,22 +139,22 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="400"/>
-                    <ColumnDefinition Width="*" MinWidth="400"/>
+                    <ColumnDefinition Width="*" MinWidth="500"/>
+                    <ColumnDefinition Width="*" MinWidth="500"/>
                 </Grid.ColumnDefinitions>
                 
-                <!-- System Health Widget -->
+                <!-- TeamsManager Health Widget -->
                 <materialDesign:Card Grid.Row="0" Grid.Column="0" 
                                    Margin="0,0,8,16"
                                    Padding="0">
-                    <widgets:SystemHealthWidget DataContext="{Binding SystemHealthViewModel}"/>
+                    <widgets:TeamsManagerHealthWidget DataContext="{Binding TeamsManagerHealthViewModel}"/>
                 </materialDesign:Card>
                 
-                <!-- Performance Metrics Widget -->
+                <!-- TeamsManager Metrics Widget -->
                 <materialDesign:Card Grid.Row="0" Grid.Column="1"
                                    Margin="8,0,0,16"
                                    Padding="0">
-                    <widgets:PerformanceMetricsWidget DataContext="{Binding PerformanceMetricsViewModel}"/>
+                    <widgets:TeamsManagerMetricsWidget DataContext="{Binding TeamsManagerMetricsViewModel}"/>
                 </materialDesign:Card>
                 
                 <!-- Active Operations Widget -->
@@ -164,7 +164,7 @@
                     <widgets:ActiveOperationsWidget DataContext="{Binding ActiveOperationsViewModel}"/>
                 </materialDesign:Card>
                 
-                <!-- Alerts Widget -->
+                <!-- System Alerts Widget -->
                 <materialDesign:Card Grid.Row="2" Grid.ColumnSpan="2"
                                    Padding="0">
                     <widgets:AlertsWidget DataContext="{Binding AlertsViewModel}"/>
@@ -185,7 +185,7 @@
                                  IsIndeterminate="True"
                                  Width="40" Height="40"
                                  Margin="0,0,0,16"/>
-                    <TextBlock Text="Loading dashboard..."
+                    <TextBlock Text="Ładowanie monitoringu..."
                                HorizontalAlignment="Center"
                                Style="{StaticResource MaterialDesignBody1TextBlock}"/>
                 </StackPanel>

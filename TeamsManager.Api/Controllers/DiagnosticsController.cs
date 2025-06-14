@@ -345,5 +345,83 @@ namespace TeamsManager.Api.Controllers
 
             return recommendations;
         }
+
+        /// <summary>
+        /// Sprawdza status instalacji wymaganych modułów PowerShell
+        /// </summary>
+        /// <returns>Status modułów PowerShell</returns>
+        [HttpGet("modules/status")]
+        [AllowAnonymous]
+        public async Task<ActionResult<PowerShellModuleStatus>> GetModuleStatusAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Sprawdzanie statusu modułów PowerShell");
+                
+                var moduleStatus = await _powerShellConnectionService.CheckModuleInstallationAsync();
+                
+                _logger.LogInformation("Status modułów sprawdzony. Status: {OverallStatus}, Zainstalowane: {InstalledCount}/{RequiredCount}",
+                    moduleStatus.OverallStatus, moduleStatus.InstalledModulesCount, moduleStatus.RequiredModulesCount);
+                
+                return Ok(moduleStatus);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas sprawdzania statusu modułów");
+                return StatusCode(500, new { error = "Błąd podczas sprawdzania statusu modułów", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Instaluje wymagane moduły PowerShell
+        /// </summary>
+        /// <param name="forceReinstall">Czy wymusić reinstalację istniejących modułów</param>
+        /// <returns>Wynik instalacji modułów</returns>
+        [HttpPost("modules/install")]
+        [AllowAnonymous]
+        public async Task<ActionResult<PowerShellModuleInstallationResult>> InstallModulesAsync([FromQuery] bool forceReinstall = false)
+        {
+            try
+            {
+                _logger.LogInformation("Rozpoczynanie instalacji modułów PowerShell (Force: {ForceReinstall})", forceReinstall);
+                
+                var installationResult = await _powerShellConnectionService.InstallRequiredModulesAsync(forceReinstall);
+                
+                _logger.LogInformation("Instalacja modułów zakończona. Sukces: {Success}", installationResult.Success);
+                
+                return Ok(installationResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas instalacji modułów");
+                return StatusCode(500, new { error = "Błąd podczas instalacji modułów", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje kompleksowy test połączenia z Microsoft Graph
+        /// </summary>
+        /// <returns>Wynik testu połączenia</returns>
+        [HttpPost("connection/test")]
+        [AllowAnonymous]
+        public async Task<ActionResult<PowerShellConnectionTestResult>> TestConnectionAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Rozpoczynanie testu połączenia Graph");
+                
+                var testResult = await _powerShellConnectionService.TestGraphConnectionAsync();
+                
+                _logger.LogInformation("Test połączenia zakończony. Wynik: {OverallResult}, Testy przeszły: {PassedTests}/{TotalTests}",
+                    testResult.OverallResult, testResult.PassedTestsCount, testResult.TotalTestsCount);
+                
+                return Ok(testResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas testu połączenia");
+                return StatusCode(500, new { error = "Błąd podczas testu połączenia", details = ex.Message });
+            }
+        }
     }
 } 
