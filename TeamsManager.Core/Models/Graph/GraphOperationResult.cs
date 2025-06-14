@@ -6,10 +6,11 @@ using System.Net;
 namespace TeamsManager.Core.Models.Graph
 {
     /// <summary>
-    /// Wynik operacji masowej Microsoft Graph API z zaawansowaną funkcjonalnością.
+    /// Wynik operacji Microsoft Graph API z zaawansowaną funkcjonalnością.
     /// Zachowuje kompatybilność z BulkOperationResult.
     /// </summary>
-    public class GraphBulkResult
+    /// <typeparam name="T">Typ danych zwracanych przez operację</typeparam>
+    public class GraphOperationResult<T>
     {
         /// <summary>
         /// Czy operacja zakończyła się sukcesem.
@@ -27,14 +28,9 @@ namespace TeamsManager.Core.Models.Graph
         public string? ErrorMessage { get; set; }
 
         /// <summary>
-        /// ID żądania Graph API.
+        /// Dane zwrócone przez operację.
         /// </summary>
-        public string? RequestId { get; set; }
-
-        /// <summary>
-        /// ID batcha Graph API.
-        /// </summary>
-        public string? BatchId { get; set; }
+        public T? Data { get; set; }
 
         /// <summary>
         /// Endpoint Graph API.
@@ -50,6 +46,21 @@ namespace TeamsManager.Core.Models.Graph
         /// Kod statusu HTTP.
         /// </summary>
         public HttpStatusCode? HttpStatusCode { get; set; }
+
+        /// <summary>
+        /// ID żądania Graph API.
+        /// </summary>
+        public string? RequestId { get; set; }
+
+        /// <summary>
+        /// Kod błędu Graph API.
+        /// </summary>
+        public string? ErrorCode { get; set; }
+
+        /// <summary>
+        /// Szczegóły błędu Graph API.
+        /// </summary>
+        public string? ErrorDetails { get; set; }
 
         /// <summary>
         /// Czy dane pochodzą z cache.
@@ -84,17 +95,12 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Lista pomyślnych operacji.
         /// </summary>
-        public List<GraphBulkOperationSuccess> SuccessfulOperations { get; set; } = new List<GraphBulkOperationSuccess>();
+        public List<GraphOperationSuccess> SuccessfulOperations { get; set; } = new List<GraphOperationSuccess>();
 
         /// <summary>
         /// Lista błędów operacji.
         /// </summary>
-        public List<GraphBulkOperationError> Errors { get; set; } = new List<GraphBulkOperationError>();
-
-        /// <summary>
-        /// Wyniki operacji batch (dla Graph Batch API).
-        /// </summary>
-        public List<GraphBatchOperationResult> BatchResults { get; set; } = new List<GraphBatchOperationResult>();
+        public List<GraphOperationError> Errors { get; set; } = new List<GraphOperationError>();
 
         /// <summary>
         /// Informacje o rate limiting.
@@ -109,7 +115,7 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Czy występują problemy z wydajnością.
         /// </summary>
-        public bool HasPerformanceIssues => ExecutionTimeMs > 5000; // > 5 sekund dla bulk
+        public bool HasPerformanceIssues => ExecutionTimeMs > 2000; // > 2 sekundy
 
         /// <summary>
         /// Czy występują problemy z rate limiting.
@@ -128,30 +134,21 @@ namespace TeamsManager.Core.Models.Graph
                                     HttpStatusCode == System.Net.HttpStatusCode.GatewayTimeout);
 
         /// <summary>
-        /// Całkowita liczba operacji.
-        /// </summary>
-        public int TotalOperations => SuccessfulOperations.Count + Errors.Count;
-
-        /// <summary>
-        /// Wskaźnik sukcesu (0-100%).
-        /// </summary>
-        public double SuccessRate => TotalOperations > 0 ? 
-            (double)SuccessfulOperations.Count / TotalOperations * 100.0 : 0.0;
-
-        /// <summary>
         /// Tworzy wynik sukcesu.
         /// </summary>
+        /// <param name="data">Dane zwrócone przez operację</param>
         /// <param name="endpoint">Endpoint Graph API</param>
         /// <param name="method">Metoda HTTP</param>
         /// <param name="executionTimeMs">Czas wykonania</param>
         /// <returns>Wynik sukcesu</returns>
-        public static GraphBulkResult CreateSuccess(string? endpoint = null, string? method = null, 
-            long executionTimeMs = 0)
+        public static GraphOperationResult<T> CreateSuccess(T? data = default, string? endpoint = null, 
+            string? method = null, long executionTimeMs = 0)
         {
-            return new GraphBulkResult
+            return new GraphOperationResult<T>
             {
                 Success = true,
                 IsSuccess = true,
+                Data = data,
                 GraphEndpoint = endpoint,
                 HttpMethod = method,
                 ExecutionTimeMs = executionTimeMs,
@@ -166,12 +163,14 @@ namespace TeamsManager.Core.Models.Graph
         /// <param name="endpoint">Endpoint Graph API</param>
         /// <param name="method">Metoda HTTP</param>
         /// <param name="statusCode">Kod statusu HTTP</param>
+        /// <param name="errorCode">Kod błędu Graph API</param>
         /// <param name="executionTimeMs">Czas wykonania</param>
         /// <returns>Wynik błędu</returns>
-        public static GraphBulkResult CreateError(string errorMessage, string? endpoint = null,
-            string? method = null, HttpStatusCode? statusCode = null, long executionTimeMs = 0)
+        public static GraphOperationResult<T> CreateError(string errorMessage, string? endpoint = null,
+            string? method = null, HttpStatusCode? statusCode = null, string? errorCode = null, 
+            long executionTimeMs = 0)
         {
-            return new GraphBulkResult
+            return new GraphOperationResult<T>
             {
                 Success = false,
                 IsSuccess = false,
@@ -179,6 +178,7 @@ namespace TeamsManager.Core.Models.Graph
                 GraphEndpoint = endpoint,
                 HttpMethod = method,
                 HttpStatusCode = statusCode,
+                ErrorCode = errorCode,
                 ExecutionTimeMs = executionTimeMs
             };
         }
@@ -186,15 +186,17 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Tworzy wynik z cache.
         /// </summary>
+        /// <param name="data">Dane z cache</param>
         /// <param name="endpoint">Endpoint Graph API</param>
         /// <param name="etag">ETag</param>
         /// <returns>Wynik z cache</returns>
-        public static GraphBulkResult CreateFromCache(string? endpoint = null, string? etag = null)
+        public static GraphOperationResult<T> CreateFromCache(T? data, string? endpoint = null, string? etag = null)
         {
-            return new GraphBulkResult
+            return new GraphOperationResult<T>
             {
                 Success = true,
                 IsSuccess = true,
+                Data = data,
                 GraphEndpoint = endpoint,
                 FromCache = true,
                 ETag = etag,
@@ -205,74 +207,29 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Tworzy wynik operacji batch.
         /// </summary>
-        /// <param name="batchResults">Wyniki batch</param>
+        /// <param name="successfulOperations">Pomyślne operacje</param>
+        /// <param name="errors">Błędy operacji</param>
         /// <param name="batchId">ID batcha</param>
         /// <returns>Wynik batch</returns>
-        public static GraphBulkResult CreateBatchResult(List<GraphBatchOperationResult> batchResults, 
-            string? batchId = null)
+        public static GraphOperationResult<T> CreateBatchResult(List<GraphOperationSuccess> successfulOperations,
+            List<GraphOperationError> errors, string? batchId = null)
         {
-            var successCount = batchResults.Count(r => r.IsSuccessful);
-            var result = new GraphBulkResult
+            var result = new GraphOperationResult<T>
             {
-                Success = successCount == batchResults.Count,
-                IsSuccess = successCount == batchResults.Count,
-                BatchResults = batchResults,
+                Success = errors.Count == 0,
+                IsSuccess = errors.Count == 0,
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
                 GraphEndpoint = "/v1.0/$batch",
                 HttpMethod = "POST"
             };
 
             if (!string.IsNullOrEmpty(batchId))
             {
-                result.BatchId = batchId;
                 result.AddMetadata("BatchId", batchId);
             }
 
             return result;
-        }
-
-        /// <summary>
-        /// Dodaje pomyślną operację.
-        /// </summary>
-        /// <param name="operation">Operacja</param>
-        public void AddSuccess(GraphBulkOperationSuccess operation)
-        {
-            SuccessfulOperations.Add(operation);
-            UpdateSuccessStatus();
-        }
-
-        /// <summary>
-        /// Dodaje błąd operacji.
-        /// </summary>
-        /// <param name="error">Błąd</param>
-        public void AddError(GraphBulkOperationError error)
-        {
-            Errors.Add(error);
-            UpdateSuccessStatus();
-        }
-
-        /// <summary>
-        /// Dodaje metadane do wyniku.
-        /// </summary>
-        /// <param name="key">Klucz</param>
-        /// <param name="value">Wartość</param>
-        public void AddMetadata(string key, object value)
-        {
-            Metadata[key] = value;
-        }
-
-        /// <summary>
-        /// Pobiera metadane o określonym kluczu.
-        /// </summary>
-        /// <typeparam name="T">Typ metadanych</typeparam>
-        /// <param name="key">Klucz</param>
-        /// <returns>Metadane lub default</returns>
-        public T? GetMetadata<T>(string key)
-        {
-            if (Metadata.TryGetValue(key, out var value) && value is T metadata)
-            {
-                return metadata;
-            }
-            return default;
         }
 
         /// <summary>
@@ -283,22 +240,15 @@ namespace TeamsManager.Core.Models.Graph
         {
             var report = new List<string>
             {
-                "=== WYNIK OPERACJI MASOWEJ MICROSOFT GRAPH API ===",
+                "=== WYNIK OPERACJI MICROSOFT GRAPH API ===",
                 $"Status: {(Success ? "SUKCES" : "BŁĄD")}",
                 $"Endpoint: {GraphEndpoint ?? "Nieznany"}",
                 $"Metoda HTTP: {HttpMethod ?? "Nieznana"}",
+                $"Kod statusu: {HttpStatusCode?.ToString() ?? "Nieznany"}",
                 $"Czas wykonania: {ExecutionTimeMs} ms",
                 $"Data: {ProcessedAt:yyyy-MM-dd HH:mm:ss} UTC",
-                $"Operacje: {SuccessfulOperations.Count} sukces / {Errors.Count} błąd / {TotalOperations} razem",
-                $"Wskaźnik sukcesu: {SuccessRate:F1}%",
                 ""
             };
-
-            if (!string.IsNullOrEmpty(BatchId))
-            {
-                report.Add($"Batch ID: {BatchId}");
-                report.Add("");
-            }
 
             if (FromCache)
             {
@@ -310,6 +260,47 @@ namespace TeamsManager.Core.Models.Graph
             if (WasRetried)
             {
                 report.Add($"🔄 Operacja powtarzana {RetryCount} razy");
+                report.Add("");
+            }
+
+            if (!string.IsNullOrEmpty(RequestId))
+            {
+                report.Add($"Request ID: {RequestId}");
+                report.Add("");
+            }
+
+            if (!Success)
+            {
+                report.Add("=== BŁĄD ===");
+                report.Add($"Komunikat: {ErrorMessage ?? "Nieznany"}");
+                if (!string.IsNullOrEmpty(ErrorCode))
+                {
+                    report.Add($"Kod błędu: {ErrorCode}");
+                }
+                if (!string.IsNullOrEmpty(ErrorDetails))
+                {
+                    report.Add($"Szczegóły: {ErrorDetails}");
+                }
+                report.Add("");
+            }
+
+            if (SuccessfulOperations.Count > 0)
+            {
+                report.Add("=== POMYŚLNE OPERACJE ===");
+                foreach (var op in SuccessfulOperations)
+                {
+                    report.Add($"✓ {op.Operation}: {op.EntityName ?? op.EntityId}");
+                }
+                report.Add("");
+            }
+
+            if (Errors.Count > 0)
+            {
+                report.Add("=== BŁĘDY OPERACJI ===");
+                foreach (var error in Errors)
+                {
+                    report.Add($"❌ {error.Operation}: {error.Message}");
+                }
                 report.Add("");
             }
 
@@ -325,6 +316,16 @@ namespace TeamsManager.Core.Models.Graph
                 report.Add("");
             }
 
+            if (Metadata.Count > 0)
+            {
+                report.Add("=== METADANE ===");
+                foreach (var meta in Metadata)
+                {
+                    report.Add($"{meta.Key}: {meta.Value}");
+                }
+                report.Add("");
+            }
+
             report.Add("=== KONIEC RAPORTU ===");
             return string.Join(Environment.NewLine, report);
         }
@@ -337,35 +338,50 @@ namespace TeamsManager.Core.Models.Graph
         {
             var status = Success ? "SUKCES" : "BŁĄD";
             var endpoint = GraphEndpoint ?? "Nieznany";
-            var operations = $"{SuccessfulOperations.Count}/{TotalOperations}";
             var time = ExecutionTimeMs;
             var cache = FromCache ? " (z cache)" : "";
 
-            return $"{status}: {endpoint} - {operations} operacji - {time}ms{cache}";
+            return $"{status}: {endpoint} - {time}ms{cache}";
+        }
+
+        /// <summary>
+        /// Dodaje metadane do wyniku.
+        /// </summary>
+        /// <param name="key">Klucz</param>
+        /// <param name="value">Wartość</param>
+        public void AddMetadata(string key, object value)
+        {
+            Metadata[key] = value;
+        }
+
+        /// <summary>
+        /// Pobiera metadane o określonym kluczu.
+        /// </summary>
+        /// <typeparam name="TMetadata">Typ metadanych</typeparam>
+        /// <param name="key">Klucz</param>
+        /// <returns>Metadane lub default</returns>
+        public TMetadata? GetMetadata<TMetadata>(string key)
+        {
+            if (Metadata.TryGetValue(key, out var value) && value is TMetadata metadata)
+            {
+                return metadata;
+            }
+            return default;
         }
 
         /// <summary>
         /// Kompatybilność z istniejącym API - konwersja do bool.
         /// </summary>
-        public static implicit operator bool(GraphBulkResult result)
+        public static implicit operator bool(GraphOperationResult<T> result)
         {
             return result.Success;
-        }
-
-        /// <summary>
-        /// Aktualizuje status sukcesu na podstawie operacji.
-        /// </summary>
-        private void UpdateSuccessStatus()
-        {
-            Success = Errors.Count == 0 && TotalOperations > 0;
-            IsSuccess = Success;
         }
     }
 
     /// <summary>
-    /// Reprezentuje pomyślną operację bulk Graph API.
+    /// Reprezentuje pomyślną operację Graph API.
     /// </summary>
-    public class GraphBulkOperationSuccess
+    public class GraphOperationSuccess
     {
         /// <summary>
         /// Nazwa operacji.
@@ -414,9 +430,9 @@ namespace TeamsManager.Core.Models.Graph
     }
 
     /// <summary>
-    /// Reprezentuje błąd operacji bulk Graph API.
+    /// Reprezentuje błąd operacji Graph API.
     /// </summary>
-    public class GraphBulkOperationError
+    public class GraphOperationError
     {
         /// <summary>
         /// Nazwa operacji która się nie powiodła.
@@ -480,64 +496,100 @@ namespace TeamsManager.Core.Models.Graph
     }
 
     /// <summary>
-    /// Wynik pojedynczej operacji w ramach Graph Batch API.
-    /// Pełne wsparcie dla POST /v1.0/$batch.
+    /// Metryki serwisu Graph API.
     /// </summary>
-    public class GraphBatchOperationResult
+    public class GraphServiceMetrics
     {
         /// <summary>
-        /// ID operacji w batch.
+        /// Całkowita liczba żądań.
         /// </summary>
-        public string? Id { get; set; }
+        public long TotalRequests { get; set; }
 
         /// <summary>
-        /// URL żądania.
+        /// Liczba pomyślnych żądań.
         /// </summary>
-        public string? Url { get; set; }
+        public long SuccessfulRequests { get; set; }
 
         /// <summary>
-        /// Metoda HTTP.
+        /// Liczba nieudanych żądań.
         /// </summary>
-        public string? Method { get; set; }
+        public long FailedRequests { get; set; }
 
         /// <summary>
-        /// Kod statusu HTTP.
+        /// Średni czas odpowiedzi w milisekundach.
         /// </summary>
-        public int? Status { get; set; }
+        public double AverageResponseTimeMs { get; set; }
 
         /// <summary>
-        /// Nagłówki odpowiedzi.
+        /// Wskaźnik sukcesu (0-100%).
         /// </summary>
-        public Dictionary<string, string>? Headers { get; set; }
+        public double SuccessRate => TotalRequests > 0 ? (double)SuccessfulRequests / TotalRequests * 100.0 : 0.0;
 
         /// <summary>
-        /// Treść odpowiedzi.
+        /// Ostatnia aktualizacja metryk.
         /// </summary>
-        public object? Body { get; set; }
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Opcje cache warming dla Graph API.
+    /// </summary>
+    public class GraphCacheWarmupOptions
+    {
+        /// <summary>
+        /// Czy warming jest włączony.
+        /// </summary>
+        public bool Enabled { get; set; } = true;
 
         /// <summary>
-        /// Kod błędu (jeśli wystąpił).
+        /// Timeout dla operacji warming w sekundach.
         /// </summary>
-        public string? ErrorCode { get; set; }
+        public int TimeoutSeconds { get; set; } = 30;
 
         /// <summary>
-        /// Komunikat błędu.
+        /// Maksymalna liczba równoczesnych operacji.
         /// </summary>
-        public string? ErrorMessage { get; set; }
+        public int MaxConcurrency { get; set; } = 5;
 
         /// <summary>
-        /// Szczegóły błędu.
+        /// Lista endpointów do warming.
         /// </summary>
-        public string? ErrorDetails { get; set; }
+        public List<string> Endpoints { get; set; } = new List<string>();
+    }
+
+    /// <summary>
+    /// Wynik operacji cache warming.
+    /// </summary>
+    public class GraphCacheWarmupResult
+    {
+        /// <summary>
+        /// Czy warming zakończył się sukcesem.
+        /// </summary>
+        public bool Success { get; set; }
 
         /// <summary>
-        /// Czy operacja zakończyła się sukcesem.
+        /// Liczba endpointów, które zostały przygotowane.
         /// </summary>
-        public bool IsSuccessful => Status >= 200 && Status < 300;
+        public int WarmedEndpoints { get; set; }
 
         /// <summary>
-        /// Czy wystąpił błąd.
+        /// Całkowita liczba endpointów.
         /// </summary>
-        public bool HasError => !IsSuccessful;
+        public int TotalEndpoints { get; set; }
+
+        /// <summary>
+        /// Czas trwania warming w milisekundach.
+        /// </summary>
+        public long DurationMs { get; set; }
+
+        /// <summary>
+        /// Lista błędów podczas warming.
+        /// </summary>
+        public List<string> Errors { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Wskaźnik sukcesu (0-100%).
+        /// </summary>
+        public double SuccessRate => TotalEndpoints > 0 ? (double)WarmedEndpoints / TotalEndpoints * 100.0 : 0.0;
     }
 } 

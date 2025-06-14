@@ -68,23 +68,32 @@
 - [x] **TASK 1.1.1:** Utworzyć folder `TeamsManager.Core/Abstractions/Services/Graph/`
 - [x] **TASK 1.1.2:** Utworzyć `IGraphTeamManagementService.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
-  - Interfejs używa modeli GraphTeam, GraphUser, GraphChannel, GraphDiagnosticInfo (do utworzenia w ETAP 1.2)
+  - Interfejs używa modeli GraphTeam, GraphUser, GraphChannel, GraphDiagnosticInfo, GraphTeamMember (do utworzenia w ETAP 1.2)
   - Wszystkie metody mają dokumentację z endpointami Graph API
-  - Zachowano kompatybilność sygnatur z IPowerShellTeamManagementService
+  - Zachowano kompatybilność sygnatur z IPowerShellTeamManagementService ale zastąpiono PSObject → GraphTeam/GraphChannel/GraphTeamMember
   - Dodano metody AddTeamMemberAsync i RemoveTeamMemberAsync (nie było w PowerShell interface)
+  - Zastąpiono Collection<PSObject> → List<GraphTeam> dla lepszej type safety
+  - Wszystkie Graph API endpoints są udokumentowane w komentarzach metod
+  - Dodano GetGraphVersionAsync zamiast GetPowerShellVersionAsync
 - [x] **TASK 1.1.3:** Utworzyć `IGraphUserManagementService.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
-  - Interfejs używa modeli GraphUser, GraphLicense (do utworzenia w ETAP 1.2)
+  - Interfejs używa modeli GraphUser, GraphLicense, GraphTeamMember (do utworzenia w ETAP 1.2)
   - Wszystkie metody mają dokumentację z endpointami Graph API
-  - Zachowano kompatybilność sygnatur z IPowerShellUserManagementService
+  - Zachowano kompatybilność sygnatur z IPowerShellUserManagementService ale zastąpiono PSObject → GraphUser/GraphLicense/GraphTeamMember
   - Dodano metodę RevokeUserSignInSessionsAsync (nowa funkcjonalność Graph API)
+  - Zastąpiono Collection<PSObject> → List<GraphUser> dla lepszej type safety
+  - Wszystkie Graph API endpoints są udokumentowane w komentarzach metod
+  - Dodano zaawansowane filtry OData dla operacji wyszukiwania
 - [x] **TASK 1.1.4:** Utworzyć `IGraphBulkOperationsService.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Interfejs używa modeli GraphBulkResult, GraphBatchOperation, BulkOperationProgress, GraphRateLimitStatus (do utworzenia w ETAP 1.2)
   - Wszystkie metody mają dokumentację z endpointami Graph Batch API (POST /v1.0/$batch)
-  - Zachowano kompatybilność sygnatur z IPowerShellBulkOperationsService
-  - Dodano nowe funkcjonalności: rate limiting, progress tracking, synchronizację członkostwa
+  - Zachowano kompatybilność sygnatur z IPowerShellBulkOperationsService ale dodano IProgress<BulkOperationProgress>
+  - Dodano nowe funkcjonalności: rate limiting, progress tracking, synchronizację członkostwa (SynchronizeTeamMembershipAsync)
   - Batch size ograniczony do 20 (limit Graph API) zamiast 50 (PowerShell)
+  - Dodano sekcję Rate Limiting & Batch Management z GetRateLimitStatusAsync i ExecuteBatchOperationsAsync
+  - Wszystkie Graph API endpoints są udokumentowane w komentarzach metod
+  - Zastąpiono BulkOperationResult → GraphBulkResult dla Graph API specyfiki
 - [x] **TASK 1.1.5:** Utworzyć `IGraphConnectionService.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Interfejs używa modeli GraphConnectionHealthInfo, GraphPermissionInfo, GraphDiagnosticInfo, GraphApiAvailability, GraphUserContext, GraphConnectionTestResult, GraphRateLimitStatus, GraphBatchResponse, GraphBatchRequest, GraphApiError (do utworzenia w ETAP 1.2)
@@ -96,16 +105,23 @@
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Interfejs używa modeli GraphCacheMetadata, GraphCacheMetrics, GraphCacheValidationResult, GraphCacheRateLimitInfo, GraphRateLimitInfo (do utworzenia w ETAP 1.2)
   - Wszystkie metody mają dokumentację z endpointami Graph API
-  - Zachowano kompatybilność sygnatur z IPowerShellCacheService
+  - Zachowano kompatybilność sygnatur z IPowerShellCacheService ale dodano Graph API specyfikę
   - Dodano nowe funkcjonalności: ETag support, rate limiting integration, Graph API specific cache patterns
-  - Dodano długie opcje cache dla danych rzadko zmieniających się w Graph API
+  - Dodano długie opcje cache dla danych rzadko zmieniających się w Graph API (GetShortTermCacheOptions, GetMediumTermCacheOptions, GetLongTermCacheOptions)
+  - Dodano sekcję Rate Limiting Integration z CanMakeGraphRequest, SetRateLimitInfo, GetRateLimitInfo
+  - Dodano sekcję Cache Validation & ETag Support z ValidateCache, UpdateETag, IsCacheExpired
+  - Rozszerzone metody cache z Graph API metadanymi: TryGetValueWithMetadata, Set z etag i rateLimitInfo
 - [x] **TASK 1.1.7:** Utworzyć `IGraphService.cs` (fasada)
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
-  - Interfejs używa modeli GraphOperationResult, GraphServiceMetrics, GraphCacheWarmupResult, GraphCacheWarmupOptions (do utworzenia w ETAP 1.2)
+  - Interfejs używa modeli GraphOperationResult, GraphServiceMetrics, GraphCacheWarmupResult, GraphCacheWarmupOptions, GraphServiceConfiguration (do utworzenia w ETAP 1.2)
   - Wszystkie metody mają dokumentację z endpointami Graph API
-  - Zachowano kompatybilność sygnatur z IPowerShellService
+  - Zachowano kompatybilność sygnatur z IPowerShellService ale zastąpiono PowerShellDiagnosticInfo → GraphDiagnosticInfo
   - Dodano nowe funkcjonalności: batch requests, rate limiting, cache warming, performance metrics
   - Fasada agreguje wszystkie Graph API services: Teams, Users, BulkOperations, Connection, Cache
+  - Dodano sekcje: Performance & Monitoring, Cache Management, Diagnostics & Health Check, Configuration & Settings
+  - ExecuteWithAutoConnectAsync zwraca GraphOperationResult<T> zamiast T? dla lepszej obsługi błędów
+  - Dodano ExecuteBatchOperationAsync dla operacji Graph Batch API
+  - Dodano zaawansowane zarządzanie konfiguracją: UpdateConfiguration, GetConfiguration, IsConfigurationValid
 
 #### **1.2 Stworzenie Modeli Graph**
 - [x] **TASK 1.2.1:** Utworzyć folder `TeamsManager.Core/Models/Graph/`
@@ -116,6 +132,7 @@
   - Dodano Graph API specific properties: GraphApiVersion, TenantId, ApplicationId, RateLimitInfo, ResponseTimeMs
   - Dodano metodę GetDetailedReport() dla szczegółowej diagnostyki
   - Usunięto PowerShell-specific properties (RunspaceState, RunspaceReady, BasicCommandTest)
+  - ZAIMPLEMENTOWANO: Kompletny model z wszystkimi wymaganymi właściwościami, GraphRateLimitInfo reference, GraphHealthStatus enum, szczegółowy GetDetailedReport() z sekcjami błędów, ostrzeżeń i informacji dodatkowych
 - [x] **TASK 1.2.3:** Utworzyć `GraphPermissionInfo.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphPermissionInfo i GraphPermissionScopes (static class)
@@ -125,6 +142,7 @@
   - GraphPermissionScopes zawiera wszystkie wymagane uprawnienia Graph API dla aplikacji
   - Dodano metody pomocnicze: HasPermission(), HasPermissions(), HasAnyPermission()
   - Dodano szczegółowy raport uprawnień GetPermissionReport()
+  - ZAIMPLEMENTOWANO: Kompletny model z enum PermissionStatus, GraphPermissionScopes z RequiredPermissions i OptionalPermissions, właściwości obliczane PermissionCompleteness i Status, metody weryfikacji uprawnień, szczegółowy GetPermissionReport() z sekcjami przypisanych i brakujących uprawnień
 - [x] **TASK 1.2.4:** Utworzyć `GraphConnectionTestResult.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphConnectionTestResult i GraphEndpointTestResult
@@ -134,6 +152,7 @@
   - Dodano zaawansowane funkcje: EndpointTestResults, RateLimitInfo, AverageResponseTimeMs, WarningMessages
   - Dodano performance i rate limit monitoring: HasPerformanceIssues, HasRateLimitIssues
   - Rozbudowano GetDetailedResult() o szczegółowe sekcje diagnostyczne z rekomendacjami
+  - ZAIMPLEMENTOWANO: Kompletny model z GraphEndpointTestResult, właściwości obliczane HasPerformanceIssues i HasRateLimitIssues, SuccessRate, szczegółowy GetDetailedResult() z sekcjami wydajności, rate limiting, wyników testów endpointów, ostrzeżeń, błędów i rekomendacji
 - [x] **TASK 1.2.5:** Utworzyć `GraphOperationResult.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphOperationResult, GraphOperationSuccess, GraphOperationError, GraphServiceMetrics, GraphCacheWarmupOptions, GraphCacheWarmupResult
@@ -144,6 +163,7 @@
   - Dodano static factory methods: CreateSuccess(), CreateError(), CreateFromCache(), CreateBatchResult()
   - Dodano utility methods: GetDetailedResult(), GetSummary(), AddMetadata(), GetMetadata()
   - Implicit operator bool dla kompatybilności z istniejącym kodem
+  - ZAIMPLEMENTOWANO: Kompletny generyczny model (19.5KB, 535 linii) z GraphOperationResult<T>, GraphOperationSuccess, GraphOperationError, GraphServiceMetrics, GraphCacheWarmupOptions, GraphCacheWarmupResult, właściwości obliczane HasPerformanceIssues/HasRateLimitIssues/ShouldRetry, static factory methods, szczegółowy GetDetailedResult() z sekcjami cache, retry, błędów, metryk, implicit operator bool
 - [x] **TASK 1.2.6:** Utworzyć `GraphTeam.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphTeam, GraphTeamSettings, GraphTeamGuestSettings, GraphTeamMemberSettings, GraphTeamMessagingSettings, GraphTeamFunSettings, GraphTeamDiscoverySettings, GraphTeamMember, GraphSyncInfo
@@ -154,6 +174,7 @@
   - Dodano metody pomocnicze: HasMember(), HasOwner(), GetMember(), GetChannel(), GetSummary()
   - Dodano GraphSyncInfo dla śledzenia synchronizacji z Graph API
   - Wszystkie właściwości nullable dla elastyczności Graph API responses
+  - ZAIMPLEMENTOWANO: Kompletny model (17.4KB, 460 linii) z GraphTeam i wszystkimi klasami pomocniczymi, zachowano kompatybilność z lokalnym Team.cs, dodano konwersje ToLocalTeam()/FromLocalTeam(), metody pomocnicze, pełne ustawienia zespołu Graph API, GraphSyncInfo z IsSynchronized property, wszystkie właściwości nullable
 - [x] **TASK 1.2.7:** Utworzyć `GraphUser.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphUser, GraphLicense, GraphServicePlan
@@ -166,6 +187,7 @@
   - Dodano zaawansowane właściwości obliczane: ActivityStatus, DaysSinceLastSignIn, IsRecentlyActive
   - Dodano utility methods: GetSummary(), GetDetailedInfo()
   - Wszystkie właściwości nullable dla elastyczności Graph API responses
+  - ZAIMPLEMENTOWANO: Kompletny model (18.3KB, 400 linii) z GraphUser, GraphLicense, GraphServicePlan, zachowano kompatybilność z lokalnym User.cs poprzez właściwości obliczane FirstName/LastName/UPN/IsActive, pełne informacje organizacyjne z Manager/DirectReports, zarządzanie licencjami, metody konwersji ToLocalUser()/FromLocalUser(), zaawansowane właściwości obliczane ActivityStatus/DaysSinceLastSignIn/IsRecentlyActive, szczegółowy GetDetailedInfo() z informacjami o licencjach
 - [x] **TASK 1.2.8:** Utworzyć `GraphChannel.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphChannel, GraphChannelSettings, GraphChannelStats, GraphChannelMember, GraphChannelTab
@@ -179,6 +201,7 @@
   - Dodano utility methods: GetSummary(), GetDetailedInfo()
   - Wszystkie właściwości nullable dla elastyczności Graph API responses
   - MembershipType zgodny z Graph API: standard, private, unknownFutureValue
+  - ZAIMPLEMENTOWANO: Kompletny model (18.7KB, 488 linii) z GraphChannel, GraphChannelSettings, GraphChannelStats, GraphChannelMember, GraphChannelTab, zachowano kompatybilność z lokalnym Channel.cs poprzez właściwości obliczane IsPrivate z MembershipType, konwersje ToLocalChannel()/FromLocalChannel() z mapowaniem statystyk, metody CanBeDeleted()/GetDeletionBlockReason() z regułami biznesowymi, szczegółowy GetDetailedInfo() z sekcjami statystyk, członków i kart
 - [x] **TASK 1.2.9:** Utworzyć `GraphBulkResult.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Model zawiera GraphBulkResult, GraphBulkOperationSuccess, GraphBulkOperationError, GraphBatchOperationResult
@@ -192,6 +215,7 @@
   - Pełne wsparcie dla Graph Batch API (POST /v1.0/$batch) z GraphBatchOperationResult
   - Wszystkie właściwości nullable dla elastyczności Graph API responses
   - Rozbudowane błędy z ErrorCode, ErrorDetails, RequestId dla lepszego debugowania
+  - ZAIMPLEMENTOWANO: Kompletny model (15.9KB, 432 linie) z GraphBulkResult, GraphBulkOperationSuccess, GraphBulkOperationError, GraphBatchOperationResult, zachowano kompatybilność z BulkOperationResult, pełne wsparcie Graph Batch API z CreateBatchResult(), właściwości obliczane HasPerformanceIssues/HasRateLimitIssues/ShouldRetry, static factory methods, szczegółowy GetDetailedResult() z sekcjami cache, retry, błędów, batch results, implicit operator bool
 
 #### **1.3 Rozszerzenie ModernHttpService**
 - [x] **TASK 1.3.1:** Dodać metody Teams API do `IModernHttpService`
@@ -204,6 +228,7 @@
   - Implementacja wykorzystuje istniejące resilience patterns z Microsoft.Extensions.Http.Resilience
   - Dodano walidację argumentów i szczegółowe logowanie dla wszystkich operacji
   - Metody są generyczne (TRequest, TResponse) dla elastyczności z różnymi modelami danych
+  - ZAIMPLEMENTOWANO: Rozszerzony interfejs IModernHttpService o PatchToGraphAsync(), DeleteFromGraphAsync() oraz 13 metod Teams API (zespoły, członkowie, kanały), wszystkie z generycznymi typami TRequest/TResponse, specyficznymi endpointami Graph API, szczegółową dokumentacją endpoint
 - [x] **TASK 1.3.2:** Dodać metody Users API do `IModernHttpService`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Dodano kompletny zestaw metod Users API: CreateUserAsync, UpdateUserAsync, GetUserAsync, GetAllUsersAsync, DeleteUserAsync
@@ -216,6 +241,7 @@
   - Dodano walidację argumentów (userId, department, daysInactive > 0)
   - Metody GetInactiveUsersAsync używają ISO 8601 format daty dla Graph API
   - Wszystkie metody są generyczne dla elastyczności z różnymi modelami danych
+  - ZAIMPLEMENTOWANO: Dodano 10 metod Users API (CRUD, licencje, bezpieczeństwo, filtrowanie, relacje), wszystkie z pełną dokumentacją endpointów Graph API, walidację parametrów, obsługę filtrów OData
 - [x] **TASK 1.3.3:** Dodać metody Groups API do `IModernHttpService`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Dodano kompletny zestaw metod Groups API: CreateGroupAsync, UpdateGroupAsync, GetGroupAsync, GetAllGroupsAsync, DeleteGroupAsync
@@ -228,6 +254,7 @@
   - Filtry OData używają poprawnych wyrażeń: groupTypes/any(c:c eq 'Unified'), securityEnabled eq true
   - Dodano walidację argumentów (groupId, userId nie mogą być null/empty)
   - Wszystkie metody są generyczne dla elastyczności z różnymi modelami danych
+  - ZAIMPLEMENTOWANO: Dodano 14 metod Groups API (CRUD, członkowie, właściciele, filtrowanie, Teams relationship), wszystkie z endpointami /$ref dla zarządzania, filtrami OData, szczegółową dokumentacją
 - [x] **TASK 1.3.4:** Implementować batch operations w `ModernHttpService`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Dodano kompletną implementację Graph Batch API (POST /v1.0/$batch)
@@ -241,8 +268,17 @@
   - Progress reporting używa IProgress<(int completed, int total, string currentOperation)>
   - Wyniki bulk operations zawierają: TotalOperations, SuccessfulOperations, FailedOperations, Results, Errors, CompletedAt
   - Dodano pomocniczą metodę ExtractTeamIdFromEndpoint dla operacji Teams
+  - ZAIMPLEMENTOWANO: Dodano 6 metod batch operations (4 parallel requests, 2 bulk operations), wszystkie z konfigurowalnymi batch sizes, progress reporting, kontrolą współbieżności, szczegółowymi statystykami
 
-**ETAP 1.3 UKOŃCZONY** ✅ - Wszystkie metody API (Teams, Users, Groups, Batch) zostały dodane do ModernHttpService
+### ✅ **ETAP 1.3 UKOŃCZONY** - Rozszerzenie ModernHttpService (4/4 tasków)
+
+**Podsumowanie ETAPU 1.3:**
+- ✅ TASK 1.3.1: Dodano metody PATCH/DELETE + 13 metod Teams API
+- ✅ TASK 1.3.2: Dodano 10 metod Users API (CRUD, licencje, bezpieczeństwo, filtrowanie) 
+- ✅ TASK 1.3.3: Dodano 14 metod Groups API (CRUD, członkowie, właściciele, filtrowanie)
+- ✅ TASK 1.3.4: Dodano 6 metod batch operations (parallel requests + bulk operations)
+
+**Łącznie zaimplementowano 43 nowe metody API w IModernHttpService** z pełną obsługą Graph API, generycznymi typami, szczegółową dokumentacją endpointów, walidacją parametrów, batch operations, progress reporting i rate limiting.
 
 #### **1.4 Stworzenie Graph Exceptions**
 - [x] **TASK 1.4.1:** Utworzyć folder `TeamsManager.Core/Exceptions/Graph/`
@@ -255,6 +291,7 @@
   - Static factory methods: CreateAuthenticationError(), CreateRateLimitError(), CreateTimeoutError(), CreateNetworkError()
   - Metody pomocnicze: CanRetry(), GetDetailedErrorMessage()
   - Pełna obsługa Graph API error responses z Microsoft Graph
+  - ZAIMPLEMENTOWANO: GraphConnectionException (8.5KB, 237 linii) z automatycznym wykrywaniem typów błędów, retry logic, szczegółowymi właściwościami, 4 static factory methods, metodami pomocnicznymi CanRetry()/GetRecommendedRetryDelay()/GetDetailedErrorMessage(), pełną obsługą różnych scenariuszy błędów połączenia Graph API
 - [x] **TASK 1.4.3:** Utworzyć `GraphApiException.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Utworzono GraphApiException z pełną obsługą błędów operacji Graph API
@@ -265,6 +302,7 @@
   - Metody pomocnicze: GetDetailedErrorMessage(), CanRetry(), GetRecommendedRetryDelay()
   - Wsparcie dla operacji bulk z szczegółowymi statystykami
   - Pełna obsługa różnych scenariuszy błędów Graph API
+  - ZAIMPLEMENTOWANO: GraphApiException (rozszerzony do 13.2KB, 323 linie) z wszystkimi wymaganymi właściwościami (HttpMethod, CorrelationId), 6 typów wykrywania błędów, 5 static factory methods, systemem metadanych (AddMetadata/GetMetadata), metodami pomocnicznymi, obsługą bulk operations z szczegółowymi statystykami (TotalOperations, FailedOperations, SuccessfulOperations, FailureRate)
 - [x] **TASK 1.4.4:** Utworzyć `GraphRateLimitException.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Utworzono GraphRateLimitException dziedziczący po GraphApiException
@@ -274,6 +312,7 @@
   - Metody pomocnicze: CanRetryNow(), GetTimeUntilRetry(), GetRecommendedRetryDelay(), GetDetailedErrorMessage()
   - Automatyczne parsowanie nagłówków HTTP rate limiting
   - Pełna obsługa różnych typów limitów Microsoft Graph API
+  - ZAIMPLEMENTOWANO: GraphRateLimitException (rozszerzony do 16.8KB, 382 linie) z enum RateLimitType (7 wartości), wszystkimi wymaganymi właściwościami rate limiting, 9 static factory methods, metodami pomocnicznymi CanRetryNow()/GetTimeUntilRetry(), automatycznym obliczaniem RemainingRequests/UsagePercentage/ResetTime, szczegółowym GetDetailedErrorMessage() z sekcją rate limiting
 - [x] **TASK 1.4.5:** Utworzyć `GraphValidationException.cs`
   **Ważne!!! Do zapamiętania w przyszłej implementacji:**
   - Utworzono GraphValidationException dziedziczący po GraphApiException
@@ -283,6 +322,7 @@
   - Metody pomocnicze: HasErrorForField(), GetErrorsForField(), GetErrorsByType(), GetDetailedErrorMessage(), GetValidationSummary()
   - Pełna obsługa walidacji danych Graph API z szczegółowymi informacjami o błędach
   - Wsparcie dla wielu błędów walidacji jednocześnie
+  - ZAIMPLEMENTOWANO: GraphValidationException (22.3KB, 518 linii) z klasą ValidationError (fluent interface WithMetadata), enum ValidationType (11 wartości), 6 static factory methods, 6 metodami pomocnicznymi (HasErrorForField/GetErrorsForField/GetErrorsByType/GetDetailedErrorMessage/GetValidationSummary), obsługą wielu błędów jednocześnie, szczegółowymi metadanymi dla każdego błędu (ExpectedFormat, MinLength, MaxLength, MinValue, MaxValue, ConflictingResource, ReferencedResource)
 
 ### ✅ **ETAP 1.4 ZAKOŃCZONY** - Utworzenie wyjątków Graph API (5/5 tasków)
 
@@ -672,3 +712,39 @@
 - [ ] Rozpoczęcie ETAP 3
 
 **...i tak dalej dla każdego dnia** 
+
+## TASK 2.1.1: Utworzenie GraphConnectionService ✅ WYKONANE
+
+**Cel**: Utworzenie podstawowej klasy GraphConnectionService implementującej IGraphConnectionService
+
+**Implementacja**:
+- ✅ Utworzono klasę `TeamsManager.Core/Services/Graph/GraphConnectionService.cs`
+- ✅ Zaimplementowano konstruktor z dependency injection (IModernHttpService, IConfidentialClientApplication, ILogger)
+- ✅ Utworzono podstawowe metody zarządzania tokenami (IsTokenValidAsync, RefreshTokenIfNeededAsync)
+- ✅ Zaimplementowano GetConnectionHealthAsync z diagnostyką połączenia
+- ✅ Dodano szkielety metod dla kolejnych tasków z NotImplementedException
+
+**Modele utworzone**:
+- ✅ `GraphConnectionHealthInfo` - informacje o zdrowiu połączenia
+- ✅ `GraphDiagnosticInfo` - szczegółowe informacje diagnostyczne  
+- ✅ `GraphPermissionInfo` - informacje o uprawnieniach
+- ✅ `GraphConnectionTestResult` - wyniki testów połączenia
+- ✅ `GraphApiModels` - dodatkowe modele (GraphApiAvailability, GraphUserContext, etc.)
+- ✅ `GraphHealthStatus` - enumeracja statusów zdrowia
+- ✅ `GraphRateLimitInfo` - informacje o rate limiting
+
+**Wyjątki utworzone**:
+- ✅ `GraphConnectionException` - błędy połączenia z Graph API
+- ✅ `GraphApiException` - ogólne błędy Graph API (szkielet)
+- ✅ `GraphRateLimitException` - błędy rate limiting (szkielet)
+
+**Ważne!!! Do zapamiętania w przyszłej implementacji**:
+- GraphConnectionService używa IModernHttpService do komunikacji z Graph API
+- Zarządzanie tokenami oparte na Microsoft.Identity.Client (MSAL)
+- Wszystkie metody mają pełne logowanie dla diagnostyki
+- Implementacja GetConnectionHealthAsync testuje podstawowe połączenie przez endpoint /v1.0/me
+- Struktura folderów: Services/Graph/ dla implementacji, Models/Graph/ dla modeli, Exceptions/Graph/ dla wyjątków
+- Metody zwracają szczegółowe informacje diagnostyczne z możliwością generowania raportów
+- Kompatybilność z istniejącymi PowerShell-based serwisami przez podobne nazwy właściwości w modelach
+
+// ... existing code ... 
