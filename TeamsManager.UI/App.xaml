@@ -45,6 +45,7 @@
             
             <!-- User Detail Form konwertery -->
             <converters:EnumDescriptionConverter x:Key="EnumDescriptionConverter"/>
+            <converters:UserRoleToPolishConverter x:Key="UserRoleToPolishConverter"/>
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
             
             <!-- User School Type Assignment konwertery -->
@@ -70,6 +71,9 @@
             
             <!-- Operations konwertery -->
             <converters:OperationTypeToIconConverter x:Key="OperationTypeToIconConverter"/>
+            
+            <!-- Monitoring konwertery -->
+            <converters:HealthCheckToPolishConverter x:Key="HealthCheckToPolishConverter"/>
 
             <!-- Globalne ustawienia czcionek -->
             <FontFamily x:Key="DefaultFontFamily">Segoe UI</FontFamily>

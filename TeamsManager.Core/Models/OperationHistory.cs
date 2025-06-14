@@ -2,6 +2,7 @@
 using System.Text.Json;
 using TeamsManager.Core.Enums;
 using System.Text.Encodings.Web;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.Core.Models
 {
@@ -157,16 +158,7 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Czytelny opis statusu operacji
         /// </summary>
-        public string StatusDescription => Status switch
-        {
-            OperationStatus.Pending => "Oczekująca",
-            OperationStatus.InProgress => "W trakcie",
-            OperationStatus.Completed => "Zakończona sukcesem",
-            OperationStatus.Failed => "Nieudana",
-            OperationStatus.Cancelled => "Anulowana",
-            OperationStatus.PartialSuccess => "Częściowy sukces",
-            _ => "Nieznany"
-        };
+        public string StatusDescription => Status.ToPolishString();
 
         /// <summary>
         /// Krótki opis operacji do wyświetlenia w interfejsie
@@ -293,32 +285,6 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Zwraca czytelny opis typu operacji
         /// </summary>
-        private string GetOperationTypeDescription() => Type switch
-        {
-            OperationType.TeamCreated => "Utworzenie zespołu",
-            OperationType.TeamUpdated => "Aktualizacja zespołu",
-            OperationType.TeamArchived => "Archiwizacja zespołu",
-            OperationType.TeamUnarchived => "Przywrócenie zespołu",
-            OperationType.TeamDeleted => "Usunięcie zespołu",
-            OperationType.MemberAdded => "Dodanie członka",
-            OperationType.MemberRemoved => "Usunięcie członka",
-            OperationType.MemberRoleChanged => "Zmiana roli członka",
-            OperationType.TeamMembersAdded => "Masowe dodawanie członków",
-            OperationType.TeamMembersRemoved => "Masowe usuwanie członków",
-            OperationType.ChannelCreated => "Utworzenie kanału",
-            OperationType.ChannelUpdated => "Aktualizacja kanału",
-            OperationType.ChannelDeleted => "Usunięcie kanału",
-            OperationType.UserCreated => "Utworzenie użytkownika",
-            OperationType.UserUpdated => "Aktualizacja użytkownika",
-            OperationType.UserImported => "Import użytkownika",
-            OperationType.UserDeactivated => "Dezaktywacja użytkownika",
-            OperationType.BulkTeamCreation => "Masowe tworzenie zespołów",
-            OperationType.BulkUserImport => "Masowy import użytkowników",
-            OperationType.BulkArchiving => "Masowa archiwizacja",
-            OperationType.SystemBackup => "Kopia zapasowa systemu",
-            OperationType.SystemRestore => "Przywracanie systemu",
-            OperationType.ConfigurationChanged => "Zmiana konfiguracji",
-            _ => "Nieznana operacja"
-        };
+        private string GetOperationTypeDescription() => Type.ToPolishString();
     }
 }

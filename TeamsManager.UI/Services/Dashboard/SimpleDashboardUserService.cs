@@ -74,7 +74,7 @@ namespace TeamsManager.UI.Services.Dashboard
             return Task.FromResult<IEnumerable<User>>(new List<User>());
         }
 
-        public Task<User?> CreateUserAsync(string firstName, string lastName, string upn, UserRole role, string departmentId, string password, string accessToken, bool sendWelcomeEmail = false)
+        public Task<User?> CreateUserAsync(string firstName, string lastName, string upn, UserRole role, string departmentId, string password, string accessToken, bool sendWelcomeEmail = false, string? phone = null, string? alternateEmail = null, string? externalId = null, DateTime? birthDate = null, DateTime? employmentDate = null, string? position = null, string? notes = null, bool isSystemAdmin = false)
         {
             return Task.FromResult<User?>(null);
         }

@@ -14,6 +14,44 @@ using System.Collections.Generic;
 namespace TeamsManager.UI.ViewModels.OrganizationalUnits
 {
     /// <summary>
+    /// Element do wyświetlania w hierarchicznym ComboBox z wcięciami
+    /// </summary>
+    public class OrganizationalUnitDisplayItem
+    {
+        public OrganizationalUnit Unit { get; set; }
+        public int Level { get; set; } // Poziom w hierarchii (0 = root, 1 = child, etc.)
+        
+        public OrganizationalUnitDisplayItem(OrganizationalUnit unit, int level = 0)
+        {
+            Unit = unit;
+            Level = level;
+        }
+        
+        /// <summary>
+        /// Nazwa z wcięciem na podstawie poziomu hierarchii
+        /// </summary>
+        public string DisplayName 
+        { 
+            get 
+            {
+                // Używamy non-breaking spaces dla wcięcia
+                var indent = new string('\u00A0', Level * 4);
+                return indent + Unit.Name;
+            } 
+        }
+        
+        /// <summary>
+        /// ID jednostki
+        /// </summary>
+        public string Id => Unit.Id;
+        
+        /// <summary>
+        /// Czy jednostka jest aktywna
+        /// </summary>
+        public bool IsActive => Unit.IsActive;
+    }
+
+    /// <summary>
     /// Tryby pracy formularza jednostki organizacyjnej
     /// </summary>
     public enum OrganizationalUnitEditMode
@@ -36,6 +74,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         private OrganizationalUnit _model;
         private OrganizationalUnitEditMode _mode;
         private ObservableCollection<OrganizationalUnit> _availableParentUnits;
+        private ObservableCollection<OrganizationalUnitDisplayItem> _hierarchicalParentUnits;
         private ObservableCollection<Department> _assignedDepartments;
         private bool _isLoading;
         private string? _errorMessage;
@@ -77,6 +116,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             _model = new OrganizationalUnit();
             _mode = OrganizationalUnitEditMode.Add;
             _availableParentUnits = new ObservableCollection<OrganizationalUnit>();
+            _hierarchicalParentUnits = new ObservableCollection<OrganizationalUnitDisplayItem>();
             _assignedDepartments = new ObservableCollection<Department>();
 
             SaveCommand = new AsyncRelayCommand(SaveAsync);
@@ -143,6 +183,15 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         {
             get => _availableParentUnits;
             set => SetProperty(ref _availableParentUnits, value);
+        }
+
+        /// <summary>
+        /// Hierarchiczna lista jednostek nadrzędnych z wcięciami
+        /// </summary>
+        public ObservableCollection<OrganizationalUnitDisplayItem> HierarchicalParentUnits
+        {
+            get => _hierarchicalParentUnits;
+            set => SetProperty(ref _hierarchicalParentUnits, value);
         }
 
         /// <summary>
@@ -608,6 +657,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                 var units = await _organizationalUnitService.GetAllOrganizationalUnitsAsync();
                 
                 AvailableParentUnits.Clear();
+                HierarchicalParentUnits.Clear();
                 
                 // Dodaj opcję "Brak Jednostki nadrzędnej" na początku
                 var noneOption = new OrganizationalUnit
@@ -617,6 +667,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                     IsActive = true
                 };
                 AvailableParentUnits.Add(noneOption);
+                HierarchicalParentUnits.Add(new OrganizationalUnitDisplayItem(noneOption, 0));
                 
                 // W trybie edycji - pobierz wszystkie jednostki potomne (dzieci) aktualnie edytowanej jednostki
                 HashSet<string> childUnitIds = new HashSet<string>();
@@ -625,19 +676,24 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                     childUnitIds = await GetAllChildUnitIdsRecursivelyAsync(Model.Id);
                 }
                 
-                // Dodaj wszystkie jednostki z filtrowaniem
-                foreach (var unit in units)
+                // Filtruj jednostki
+                var filteredUnits = units.Where(u => u.IsActive).ToList();
+                
+                // Usuń aktualnie edytowaną jednostkę i jej potomne w trybie edycji
+                if (Mode == OrganizationalUnitEditMode.Edit)
                 {
-                    // KLUCZOWE: W trybie edycji pomiń aktualnie edytowaną jednostkę
-                    if (Mode == OrganizationalUnitEditMode.Edit && unit.Id == Model?.Id)
-                        continue;
-                        
-                    // KLUCZOWE: W trybie edycji pomiń wszystkie jednostki potomne (dzieci) aktualnie edytowanej jednostki
-                    if (Mode == OrganizationalUnitEditMode.Edit && childUnitIds.Contains(unit.Id))
-                        continue;
-                        
+                    filteredUnits = filteredUnits.Where(unit => 
+                        unit.Id != Model?.Id && !childUnitIds.Contains(unit.Id)).ToList();
+                }
+                
+                // Dodaj jednostki do standardowej listy
+                foreach (var unit in filteredUnits.OrderBy(u => u.SortOrder).ThenBy(u => u.Name))
+                {
                     AvailableParentUnits.Add(unit);
                 }
+                
+                // Buduj hierarchiczną strukturę z wcięciami
+                BuildHierarchicalStructure(filteredUnits);
             }
             catch (Exception ex)
             {
@@ -680,6 +736,52 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             }
             
             return childIds;
+        }
+
+        /// <summary>
+        /// Buduje hierarchiczną strukturę jednostek z wcięciami
+        /// </summary>
+        /// <param name="units">Lista jednostek do uporządkowania</param>
+        private void BuildHierarchicalStructure(List<OrganizationalUnit> units)
+        {
+            // Utwórz słownik dla szybkiego wyszukiwania
+            var unitDict = units.ToDictionary(u => u.Id, u => u);
+            
+            // Znajdź jednostki główne (bez rodzica)
+            var rootUnits = units.Where(u => string.IsNullOrEmpty(u.ParentUnitId))
+                                .OrderBy(u => u.SortOrder)
+                                .ThenBy(u => u.Name)
+                                .ToList();
+            
+            // Dodaj jednostki główne i ich dzieci rekurencyjnie
+            foreach (var rootUnit in rootUnits)
+            {
+                AddUnitHierarchically(rootUnit, unitDict, 0); // Poziom 0 (taki sam jak "Brak Jednostki nadrzędnej")
+            }
+        }
+
+        /// <summary>
+        /// Rekurencyjnie dodaje jednostkę i jej dzieci do hierarchicznej listy
+        /// </summary>
+        /// <param name="unit">Jednostka do dodania</param>
+        /// <param name="unitDict">Słownik wszystkich jednostek</param>
+        /// <param name="level">Poziom wcięcia</param>
+        private void AddUnitHierarchically(OrganizationalUnit unit, Dictionary<string, OrganizationalUnit> unitDict, int level)
+        {
+            // Dodaj aktualną jednostkę
+            HierarchicalParentUnits.Add(new OrganizationalUnitDisplayItem(unit, level));
+            
+            // Znajdź i dodaj dzieci
+            var children = unitDict.Values
+                .Where(u => u.ParentUnitId == unit.Id)
+                .OrderBy(u => u.SortOrder)
+                .ThenBy(u => u.Name)
+                .ToList();
+            
+            foreach (var child in children)
+            {
+                AddUnitHierarchically(child, unitDict, level + 1);
+            }
         }
 
         private async Task LoadAssignedDepartmentsAsync()

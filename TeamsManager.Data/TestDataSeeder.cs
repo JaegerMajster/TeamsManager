@@ -221,6 +221,36 @@ namespace TeamsManager.Data
                 CreatedBy = "System"
             };
 
+            var administrativeWorker = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Barbara",
+                LastName = "Sekretarska",
+                UPN = "barbara.sekretarska@school.edu.pl",
+                Role = UserRole.PracownikAdministracyjny,
+                DepartmentId = itDepartment.Id,
+                Position = "Sekretarz szkoły",
+                Phone = "+48 123 456 799",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
+            var systemAdmin = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                FirstName = "Michał",
+                LastName = "Administrator",
+                UPN = "michal.administrator@school.edu.pl",
+                Role = UserRole.Administrator,
+                DepartmentId = itDepartment.Id,
+                Position = "Administrator systemu",
+                Phone = "+48 123 456 800",
+                IsActive = true,
+                CreatedDate = DateTime.Now,
+                CreatedBy = "System"
+            };
+
             var student3 = new User
             {
                 Id = Guid.NewGuid().ToString(),
@@ -267,7 +297,8 @@ namespace TeamsManager.Data
             };
 
             context.Users.AddRange(adminUser, teacherUser, student1, teacher2, assistantUser, 
-                                 student2, teacher3, viceDirector, student3, teacher4, inactiveUser);
+                                 student2, teacher3, viceDirector, administrativeWorker, systemAdmin, 
+                                 student3, teacher4, inactiveUser);
 
             // Dodaj zespół
             var mathTeam = new Team

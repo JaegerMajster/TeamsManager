@@ -242,7 +242,7 @@
                                  materialDesign:HintAssist.IsFloating="True">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Converter={StaticResource EnumDescriptionConverter}}"/>
+                                    <TextBlock Text="{Binding Converter={StaticResource UserRoleToPolishConverter}}"/>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>

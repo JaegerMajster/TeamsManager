@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Abstractions;
+using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.ViewModels;
@@ -17,12 +19,14 @@ namespace TeamsManager.UI.Views
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
             ILogger<LoginViewModel> logger,
-            Services.ConditionalAccessAnalyzer conditionalAccessAnalyzer)
+            Services.ConditionalAccessAnalyzer conditionalAccessAnalyzer,
+            ICurrentUserService currentUserService,
+            IUserSynchronizationService userSynchronizationService)
         {
             InitializeComponent();
             
             // Utwórz ViewModel z wstrzykniętymi zależnościami
-            _viewModel = new LoginViewModel(msalAuthService, configManager, logger, conditionalAccessAnalyzer);
+            _viewModel = new LoginViewModel(msalAuthService, configManager, logger, conditionalAccessAnalyzer, currentUserService, userSynchronizationService);
             DataContext = _viewModel;
             
             // Subskrybuj zdarzenia

@@ -56,7 +56,7 @@
                                             Width="120"/>
                         
                         <DataGridTextColumn Header="Status" 
-                                            Binding="{Binding Status}" 
+                                            Binding="{Binding PolishStatus}" 
                                             Width="100"/>
                         
                         <DataGridTemplateColumn Header="Progress" Width="150">

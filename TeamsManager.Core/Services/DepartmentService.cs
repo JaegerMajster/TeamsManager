@@ -505,6 +505,27 @@ namespace TeamsManager.Core.Services
                     return true;
                 }
 
+                // NOWE: Sprawdź czy to nie jest domyślny dział systemu
+                if (department.IsSystemDefault)
+                {
+                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+                    var message = $"Nie można usunąć działu '{department.Name}': jest to domyślny dział systemu.";
+                    _logger.LogWarning("Próba usunięcia domyślnego działu systemu: {DepartmentName} (ID: {DepartmentId})", department.Name, departmentId);
+                    
+                    await _operationHistoryService.UpdateOperationStatusAsync(
+                        operation.Id,
+                        OperationStatus.Failed,
+                        message
+                    );
+
+                    await _notificationService.SendNotificationToUserAsync(
+                        currentUserUpn,
+                        message,
+                        "error"
+                    );
+                    throw new InvalidOperationException(message);
+                }
+
                 var subDepartments = await GetSubDepartmentsAsync(departmentId, false);
                 if (subDepartments.Any())
                 {

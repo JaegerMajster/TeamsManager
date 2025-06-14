@@ -54,6 +54,11 @@ namespace TeamsManager.Core.Models
         public int SortOrder { get; set; } = 0;
 
         /// <summary>
+        /// Czy jest to domyślna jednostka organizacyjna systemu (nie może być usunięta)
+        /// </summary>
+        public bool IsSystemDefault { get; set; } = false;
+
+        /// <summary>
         /// Czy jest jednostką główną (bez rodzica)
         /// </summary>
         [NotMapped]

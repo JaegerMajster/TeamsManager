@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Abstractions;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Models;
 using TeamsManager.UI.Services;
@@ -19,6 +20,8 @@ namespace TeamsManager.UI.ViewModels
         private readonly ConfigurationManager _configManager;
         private readonly ILogger<LoginViewModel> _logger;
         private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IUserSynchronizationService _userSynchronizationService;
         
         private bool _isLoading;
         // Usunięte checkboxy - WAM automatycznie zarządza tokenami
@@ -32,12 +35,19 @@ namespace TeamsManager.UI.ViewModels
             IMsalAuthService msalAuthService,
             ConfigurationManager configManager,
             ILogger<LoginViewModel> logger,
-            ConditionalAccessAnalyzer conditionalAccessAnalyzer)
+            ConditionalAccessAnalyzer conditionalAccessAnalyzer,
+            ICurrentUserService currentUserService,
+            IUserSynchronizationService userSynchronizationService)
         {
             _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
             _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _conditionalAccessAnalyzer = conditionalAccessAnalyzer ?? throw new ArgumentNullException(nameof(conditionalAccessAnalyzer));
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _userSynchronizationService = userSynchronizationService ?? throw new ArgumentNullException(nameof(userSynchronizationService));
+            
+            // Test czy serwis synchronizacji jest poprawnie wstrzyknięty
+            Console.WriteLine($"=== LOGINVIEWMODEL: UserSynchronizationService wstrzyknięty: {_userSynchronizationService != null} ===");
             
             // Inicjalizacja komend
             LoginCommand = new RelayCommand(async _ => await LoginAsync(), _ => CanLogin);
@@ -186,6 +196,41 @@ namespace TeamsManager.UI.ViewModels
                     
                     StatusMessage = $"Logowanie zakończone! {SecuritySummary}";
                     await Task.Delay(1000); // Dłuższa pauza żeby użytkownik widział security info
+                    
+                    // Ustaw UPN po pomyślnym zalogowaniu
+                    var userUpn = authResult.Account?.Username;
+                    _logger.LogInformation("Próba ustawienia UPN użytkownika: {UserUpn} (Account: {Account})", 
+                        userUpn, authResult.Account?.ToString());
+                    
+                    _currentUserService.SetCurrentUserUpn(userUpn);
+                    
+                    // Sprawdź czy UPN został poprawnie ustawiony
+                    var currentUpn = _currentUserService.GetCurrentUserUpn();
+                    _logger.LogInformation("UPN po ustawieniu: {CurrentUpn}", currentUpn);
+                    
+                    if (currentUpn != userUpn)
+                    {
+                        _logger.LogWarning("UPN nie został poprawnie ustawiony! Oczekiwano: {Expected}, Otrzymano: {Actual}", 
+                            userUpn, currentUpn);
+                    }
+                    
+                    // Synchronizuj użytkownika z lokalną bazą danych
+                    if (!string.IsNullOrEmpty(userUpn))
+                    {
+                        StatusMessage = "Synchronizacja użytkownika...";
+                        _logger.LogInformation("=== WYWOŁANIE SYNCHRONIZACJI W LOGIN: {UserUpn} ===", userUpn);
+                        Console.WriteLine($"=== WYWOŁANIE SYNCHRONIZACJI W LOGIN: {userUpn} ===");
+                        
+                        var syncResult = await _userSynchronizationService.SynchronizeLoggedUserAsync(authResult.AccessToken, userUpn);
+                        if (syncResult)
+                        {
+                            _logger.LogInformation("Synchronizacja użytkownika {UserUpn} zakończona pomyślnie", userUpn);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Synchronizacja użytkownika {UserUpn} nie powiodła się", userUpn);
+                        }
+                    }
                     
                     // Zgłoś sukces
                     LoginCompleted?.Invoke(this, true);

@@ -26,16 +26,17 @@
                                            Width="24" Height="24" 
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource PrimaryHueMidBrush}"/>
-                    <TextBlock Text="Historia Operacji" 
-                               Style="{StaticResource MaterialDesignHeadline5TextBlock}"
-                               VerticalAlignment="Center"
-                               Margin="10,0,0,0"/>
+                    <TextBlock Text="Historia Działań" 
+                               FontSize="20" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="10,0,0,0"
+                               Foreground="{DynamicResource MaterialDesignBody}"/>
                 </StackPanel>
                 
                 <Button Grid.Column="1" 
-                        Style="{StaticResource MaterialDesignRaisedButton}"
-                        Content="Odśwież"
-                        Command="{Binding RefreshCommand}"/>
+                        Content="Odśwież" 
+                        Command="{Binding RefreshCommand}"
+                        Style="{StaticResource MaterialDesignOutlinedButton}"
+                        Foreground="#B0B0B0"/>
             </Grid>
         </Border>
         
@@ -49,106 +50,231 @@
             <!-- Filters -->
             <Border Grid.Row="0" 
                     Background="{DynamicResource MaterialDesignCardBackground}"
-                    Margin="0,0,0,20" Padding="20">
-                <materialDesign:Card>
+                    Margin="0,0,0,20" Padding="20,15,20,10">
+                <materialDesign:Card Padding="0,5,0,5" materialDesign:ElevationAssist.Elevation="Dp0">
                     <StackPanel Orientation="Horizontal">
-                        <ComboBox materialDesign:HintAssist.Hint="Typ operacji"
-                                  MinWidth="150"
-                                  ItemsSource="{Binding OperationTypes}"
-                                  SelectedItem="{Binding SelectedOperationType}"
-                                  Margin="0,0,15,0"/>
+                        <ComboBox materialDesign:HintAssist.Hint="Kategoria"
+                                  MinWidth="180"
+                                  ItemsSource="{Binding AvailableEntityTypes}"
+                                  SelectedItem="{Binding SelectedEntityType}"
+                                  Margin="0,0,20,0"/>
+                        
+                        <ComboBox materialDesign:HintAssist.Hint="Operacja"
+                                  MinWidth="200"
+                                  ItemsSource="{Binding AvailableOperations}"
+                                  SelectedItem="{Binding SelectedOperationFilter}"
+                                  Margin="0,0,20,0"/>
                         
                         <ComboBox materialDesign:HintAssist.Hint="Status"
-                                  MinWidth="120"
-                                  ItemsSource="{Binding StatusTypes}"
+                                  MinWidth="150"
+                                  ItemsSource="{Binding AvailableStatuses}"
                                   SelectedItem="{Binding SelectedStatus}"
-                                  Margin="0,0,15,0"/>
+                                  Margin="0,0,20,0"/>
                         
                         <DatePicker materialDesign:HintAssist.Hint="Data od"
-                                   SelectedDate="{Binding DateFrom}"
-                                   Margin="0,0,15,0"/>
+                                   MinWidth="160"
+                                   SelectedDate="{Binding StartDate}"
+                                   Margin="0,0,20,0"/>
                         
                         <DatePicker materialDesign:HintAssist.Hint="Data do"
-                                   SelectedDate="{Binding DateTo}"
-                                   Margin="0,0,15,0"/>
+                                   MinWidth="160"
+                                   SelectedDate="{Binding EndDate}"
+                                   Margin="0,0,20,0"/>
                         
-                        <Button Content="Filtruj" 
-                                Command="{Binding FilterCommand}"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
-                                Margin="0,0,15,0"/>
-                        
-                        <Button Content="Wyczyść" 
+                        <Button Content="Wyczyść filtry" 
                                 Command="{Binding ClearFiltersCommand}"
-                                Style="{StaticResource MaterialDesignFlatButton}"/>
+                                Style="{StaticResource MaterialDesignOutlinedButton}"/>
                     </StackPanel>
                 </materialDesign:Card>
             </Border>
             
             <!-- Operations List -->
             <DataGrid Grid.Row="1"
-                      ItemsSource="{Binding Operations}"
+                      ItemsSource="{Binding FilteredOperations}"
                       AutoGenerateColumns="False"
                       CanUserAddRows="False"
                       CanUserDeleteRows="False"
                       IsReadOnly="True"
                       GridLinesVisibility="None"
                       HeadersVisibility="Column"
-                      Style="{StaticResource MaterialDesignDataGrid}">
+                      Style="{StaticResource MaterialDesignDataGrid}"
+                      RowHeight="40">
+                
+                <DataGrid.Resources>
+                    <!-- Style dla wyśrodkowania w pionie i poziomie z paddingiem -->
+                    <Style TargetType="DataGridCell" BasedOn="{StaticResource MaterialDesignDataGridCell}">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="DataGridCell">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            SnapsToDevicePixels="True"
+                                            Padding="5,0">
+                                        <ContentPresenter VerticalAlignment="Center" 
+                                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                    
+                    <!-- Style dla ikony oczka - zmiana koloru na biały gdy wiersz zaznaczony -->
+                    <Style x:Key="EyeIconStyle" TargetType="materialDesign:PackIcon">
+                        <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBodyLight}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                                <Setter Property="Foreground" Value="White"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.Resources>
                 
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Typ" Width="50">
+                    <DataGridTemplateColumn Header="Typ" Width="60" MinWidth="60">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <materialDesign:PackIcon Kind="{Binding Type, Converter={StaticResource OperationTypeToIconConverter}}" 
-                                                       Width="16" Height="16"/>
+                                <materialDesign:PackIcon Kind="{Binding OperationType, Converter={StaticResource OperationTypeToIconConverter}}" 
+                                                       Width="16" Height="16"
+                                                       HorizontalAlignment="Center"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTemplateColumn.HeaderStyle>
                     </DataGridTemplateColumn>
                     
                     <DataGridTextColumn Header="Operacja" 
-                                      Binding="{Binding DisplayName}" 
-                                      Width="200"/>
+                                      Binding="{Binding OperationDescription}" 
+                                      Width="3*" MinWidth="200">
+                        <DataGridTextColumn.CellStyle>
+                            <Style TargetType="DataGridCell" BasedOn="{StaticResource MaterialDesignDataGridCell}">
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="DataGridCell">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    SnapsToDevicePixels="True"
+                                                    Padding="5,0">
+                                                <ContentPresenter VerticalAlignment="Center" 
+                                                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </DataGridTextColumn.CellStyle>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
                     <DataGridTextColumn Header="Status" 
-                                      Binding="{Binding Status}" 
-                                      Width="100"/>
+                                      Binding="{Binding PolishStatus}" 
+                                      Width="1*" MinWidth="100">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
                     <DataGridTextColumn Header="Rozpoczęto" 
-                                      Binding="{Binding StartedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" 
-                                      Width="130"/>
+                                      Binding="{Binding FormattedStartTime}" 
+                                      Width="2*" MinWidth="140">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
                     <DataGridTextColumn Header="Ukończono" 
-                                      Binding="{Binding CompletedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" 
-                                      Width="130"/>
+                                      Binding="{Binding FormattedEndTime}" 
+                                      Width="2*" MinWidth="140">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
                     <DataGridTextColumn Header="Czas trwania" 
-                                      Binding="{Binding Duration}" 
-                                      Width="100"/>
+                                      Binding="{Binding FormattedDuration}" 
+                                      Width="1*" MinWidth="80">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
-                    <DataGridTextColumn Header="Utworzył" 
-                                      Binding="{Binding CreatedBy}" 
-                                      Width="150"/>
+                    <DataGridTextColumn Header="Wykonał" 
+                                      Binding="{Binding DisplayUser}" 
+                                      Width="1.5*" MinWidth="100">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                        <DataGridTextColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.HeaderStyle>
+                    </DataGridTextColumn>
                     
-                    <DataGridTemplateColumn Header="Akcje" Width="120">
+                    <DataGridTemplateColumn Header="Szczegóły" Width="100" MinWidth="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Style="{StaticResource MaterialDesignIconButton}"
-                                            Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            ToolTip="Pokaż szczegóły">
-                                        <materialDesign:PackIcon Kind="Eye" Width="16" Height="16"/>
-                                    </Button>
-                                    
-                                    <Button Style="{StaticResource MaterialDesignIconButton}"
-                                            Command="{Binding DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            ToolTip="Eksportuj">
-                                        <materialDesign:PackIcon Kind="FileDocument" Width="16" Height="16" Margin="0,0,8,0" />
-                                    </Button>
-                                </StackPanel>
+                                <Button Style="{StaticResource MaterialDesignIconButton}"
+                                        Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip="Pokaż szczegóły"
+                                        HorizontalAlignment="Center"
+                                        Width="35"
+                                        Height="35">
+                                    <materialDesign:PackIcon Kind="Eye" Width="16" Height="16" Style="{StaticResource EyeIconStyle}"/>
+                                </Button>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTemplateColumn.HeaderStyle>
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>

@@ -7,31 +7,23 @@ using TeamsManager.Core.Extensions;
 namespace TeamsManager.UI.Converters
 {
     /// <summary>
-    /// Converter to display TeamMemberRole enum values in Polish
+    /// Konwerter dla UserRole na polskie tłumaczenia
     /// </summary>
-    public class TeamMemberRoleToStringConverter : IValueConverter
+    public class UserRoleToPolishConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is TeamMemberRole role)
+            if (value is UserRole role)
             {
                 return role.ToPolishString();
             }
+            
             return value?.ToString() ?? string.Empty;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is string str)
-            {
-                return str switch
-                {
-                    "Właściciel" => TeamMemberRole.Owner,
-                    "Członek" => TeamMemberRole.Member,
-                    _ => throw new ArgumentException($"Unknown role: {str}")
-                };
-            }
-            return TeamMemberRole.Member;
+            throw new NotImplementedException("ConvertBack is not supported for UserRoleToPolishConverter");
         }
     }
 } 

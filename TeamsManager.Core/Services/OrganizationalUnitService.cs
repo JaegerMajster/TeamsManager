@@ -587,6 +587,19 @@ namespace TeamsManager.Core.Services
                 return false;
             }
 
+            // NOWE: Sprawdź czy to nie jest domyślna jednostka organizacyjna systemu
+            if (unit.IsSystemDefault)
+            {
+                _logger.LogWarning("Próba usunięcia domyślnej jednostki organizacyjnej systemu: {UnitName} (ID: {UnitId})", unit.Name, unitId);
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Nie można usunąć jednostki organizacyjnej '{unit.Name}': jest to domyślna jednostka organizacyjna systemu",
+                    "error"
+                );
+                return false;
+            }
+
             // 1. Inicjalizacja operacji historii na początku
             var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
                 OperationType.GenericDeleted,

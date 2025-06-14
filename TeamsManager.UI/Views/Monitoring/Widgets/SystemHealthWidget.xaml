@@ -20,7 +20,7 @@
             <!-- Content -->
             <StackPanel Grid.Row="1" Margin="16">
                 <TextBlock Text="Health Status: " FontWeight="Medium"/>
-                <TextBlock Text="{Binding OverallStatus}" Margin="0,8"/>
+                <TextBlock Text="{Binding OverallStatus, Converter={StaticResource HealthCheckToPolishConverter}}" Margin="0,8"/>
                 
                 <TextBlock Text="Components:" FontWeight="Medium" Margin="0,16,0,8"/>
                 <ItemsControl ItemsSource="{Binding HealthComponents}">

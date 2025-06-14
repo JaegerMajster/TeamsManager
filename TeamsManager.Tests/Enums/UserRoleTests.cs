@@ -12,8 +12,10 @@ namespace TeamsManager.Tests.Enums // Lub TeamsManager.Tests.Core.Enums, jeśli 
             ((int)UserRole.Uczen).Should().Be(0);
             ((int)UserRole.Sluchacz).Should().Be(1);
             ((int)UserRole.Nauczyciel).Should().Be(2);
-            ((int)UserRole.Wicedyrektor).Should().Be(3);
-            ((int)UserRole.Dyrektor).Should().Be(4);
+            ((int)UserRole.PracownikAdministracyjny).Should().Be(3);
+            ((int)UserRole.Wicedyrektor).Should().Be(4);
+            ((int)UserRole.Dyrektor).Should().Be(5);
+            ((int)UserRole.Administrator).Should().Be(6);
         }
 
         [Fact]
@@ -23,16 +25,20 @@ namespace TeamsManager.Tests.Enums // Lub TeamsManager.Tests.Core.Enums, jeśli 
             UserRole.Uczen.ToString().Should().Be("Uczen");
             UserRole.Sluchacz.ToString().Should().Be("Sluchacz");
             UserRole.Nauczyciel.ToString().Should().Be("Nauczyciel");
+            UserRole.PracownikAdministracyjny.ToString().Should().Be("PracownikAdministracyjny");
             UserRole.Wicedyrektor.ToString().Should().Be("Wicedyrektor");
             UserRole.Dyrektor.ToString().Should().Be("Dyrektor");
+            UserRole.Administrator.ToString().Should().Be("Administrator");
         }
 
         [Theory]
         [InlineData(UserRole.Uczen)]
         [InlineData(UserRole.Sluchacz)]
         [InlineData(UserRole.Nauczyciel)]
+        [InlineData(UserRole.PracownikAdministracyjny)]
         [InlineData(UserRole.Wicedyrektor)]
         [InlineData(UserRole.Dyrektor)]
+        [InlineData(UserRole.Administrator)]
         public void UserRole_AllDefinedValues_ShouldBeValid(UserRole role)
         {
             // Sprawdzenie czy wszystkie wartości enum są zdefiniowane
@@ -46,8 +52,10 @@ namespace TeamsManager.Tests.Enums // Lub TeamsManager.Tests.Core.Enums, jeśli 
             ((UserRole)0).Should().Be(UserRole.Uczen);
             ((UserRole)1).Should().Be(UserRole.Sluchacz);
             ((UserRole)2).Should().Be(UserRole.Nauczyciel);
-            ((UserRole)3).Should().Be(UserRole.Wicedyrektor);
-            ((UserRole)4).Should().Be(UserRole.Dyrektor);
+            ((UserRole)3).Should().Be(UserRole.PracownikAdministracyjny);
+            ((UserRole)4).Should().Be(UserRole.Wicedyrektor);
+            ((UserRole)5).Should().Be(UserRole.Dyrektor);
+            ((UserRole)6).Should().Be(UserRole.Administrator);
         }
 
         [Fact]

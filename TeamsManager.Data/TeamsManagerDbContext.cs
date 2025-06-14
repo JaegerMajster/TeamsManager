@@ -118,9 +118,11 @@ namespace TeamsManager.Data
                 entity.Property(d => d.Email).HasMaxLength(100);
                 entity.Property(d => d.Phone).HasMaxLength(20);
                 entity.Property(d => d.Location).HasMaxLength(200);
+                entity.Property(d => d.IsSystemDefault).HasDefaultValue(false);
 
                 entity.HasIndex(d => d.Name);
                 entity.HasIndex(d => d.DepartmentCode);
+                entity.HasIndex(d => d.IsSystemDefault);
 
                 entity.HasOne(d => d.ParentDepartment)
                       .WithMany(d => d.SubDepartments)
@@ -149,8 +151,10 @@ namespace TeamsManager.Data
                 entity.HasKey(ou => ou.Id);
                 entity.Property(ou => ou.Name).IsRequired().HasMaxLength(100);
                 entity.Property(ou => ou.Description).HasMaxLength(500);
+                entity.Property(ou => ou.IsSystemDefault).HasDefaultValue(false);
 
                 entity.HasIndex(ou => ou.Name);
+                entity.HasIndex(ou => ou.IsSystemDefault);
 
                 entity.HasOne(ou => ou.ParentUnit)
                       .WithMany(ou => ou.SubUnits)

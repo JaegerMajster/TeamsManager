@@ -18,6 +18,9 @@ namespace TeamsManager.UI.Views.Shell
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             
+            _logger.LogInformation("=== MAINSHELLWINDOW: Rozpoczynanie inicjalizacji ===");
+            Console.WriteLine("=== MAINSHELLWINDOW: Rozpoczynanie inicjalizacji ===");
+            
             InitializeComponent();
             
             DataContext = _viewModel;
@@ -26,9 +29,14 @@ namespace TeamsManager.UI.Views.Shell
             UserProfileButton.Click += UserProfileButton_Click;
             
             // Sprawdź auto-login po załadowaniu okna
-            Loaded += async (s, e) => await CheckAutoLoginAsync();
+            Loaded += async (s, e) => {
+                _logger.LogInformation("=== MAINSHELLWINDOW: Event Loaded wywoływany ===");
+                Console.WriteLine("=== MAINSHELLWINDOW: Event Loaded wywoływany ===");
+                await CheckAutoLoginAsync();
+            };
             
-            _logger.LogDebug("MainShellWindow utworzone pomyślnie");
+            _logger.LogInformation("=== MAINSHELLWINDOW: Konstruktor zakończony pomyślnie ===");
+            Console.WriteLine("=== MAINSHELLWINDOW: Konstruktor zakończony pomyślnie ===");
         }
 
         private void UserProfileButton_Click(object sender, RoutedEventArgs e)
@@ -50,13 +58,26 @@ namespace TeamsManager.UI.Views.Shell
 
         private async Task CheckAutoLoginAsync()
         {
+            _logger.LogInformation("=== MAINSHELLWINDOW: CheckAutoLoginAsync rozpoczęta ===");
+            Console.WriteLine("=== MAINSHELLWINDOW: CheckAutoLoginAsync rozpoczęta ===");
+            
             // Sprawdź auto-login
             var autoLoginSuccess = await _viewModel.CheckAutoLoginAsync();
             
+            _logger.LogInformation("=== MAINSHELLWINDOW: CheckAutoLoginAsync zakończona, wynik: {Result} ===", autoLoginSuccess);
+            Console.WriteLine($"=== MAINSHELLWINDOW: CheckAutoLoginAsync zakończona, wynik: {autoLoginSuccess} ===");
+            
             if (!autoLoginSuccess)
             {
+                _logger.LogInformation("=== MAINSHELLWINDOW: Pokazywanie okna logowania ===");
+                Console.WriteLine("=== MAINSHELLWINDOW: Pokazywanie okna logowania ===");
                 // Pokaż okno logowania
                 ShowLoginWindow();
+            }
+            else
+            {
+                _logger.LogInformation("=== MAINSHELLWINDOW: Auto-login pomyślny, nie pokazuję okna logowania ===");
+                Console.WriteLine("=== MAINSHELLWINDOW: Auto-login pomyślny, nie pokazuję okna logowania ===");
             }
         }
 

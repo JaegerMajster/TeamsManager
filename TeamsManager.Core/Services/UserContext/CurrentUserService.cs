@@ -71,7 +71,7 @@ namespace TeamsManager.Core.Services.UserContext
             }
 
             // Priorytet 3: Domyślna wartość (gdy _manualUserUpn jest null po SetCurrentUserUpn(null))
-            System.Diagnostics.Debug.WriteLine($"CurrentUserService: Nie udało się ustalić UPN z kontekstu HTTP ani ręcznie. Zwracam wartość domyślną '{_defaultUserUpn}'.");
+            System.Diagnostics.Debug.WriteLine($"CurrentUserService: Nie udało się ustalić UPN z kontekstu HTTP ani ręcznie. _manualUserUpn={_manualUserUpn ?? "null"}, zwracam wartość domyślną '{_defaultUserUpn}'.");
             return _defaultUserUpn;
         }
 
@@ -82,8 +82,9 @@ namespace TeamsManager.Core.Services.UserContext
             // 2. Aplikacji UI (App.xaml.cs), gdzie IHttpContextAccessor nie jest dostępny,
             //    i chcemy ustawić użytkownika "globalnie" dla sesji UI po zalogowaniu przez MSAL.
             // 3. Potencjalnych zadań w tle/konsolowych używających Core.
+            var oldUpn = _manualUserUpn;
             _manualUserUpn = upn;
-            System.Diagnostics.Debug.WriteLine($"CurrentUserService (Manual): UPN ustawiony na: {upn ?? "null"}");
+            System.Diagnostics.Debug.WriteLine($"CurrentUserService (Manual): UPN zmieniony z '{oldUpn ?? "null"}' na '{upn ?? "null"}'");
 
             if (_httpContextAccessor?.HttpContext != null)
             {

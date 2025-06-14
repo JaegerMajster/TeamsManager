@@ -35,7 +35,8 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogDebug("[GraphProfile] Rozpoczynanie pobierania profilu użytkownika...");
                 
-                var requestUrl = "/v1.0/me";
+                // Rozszerzone zapytanie o dodatkowe właściwości przydatne do mapowania ról
+                var requestUrl = "/v1.0/me?$select=id,displayName,userPrincipalName,mail,jobTitle,officeLocation,department,companyName,businessPhones,mobilePhone,city,country,postalCode,streetAddress,state,employeeType,employeeId,manager";
                 _logger.LogDebug("[GraphProfile] Request URL: {RequestUrl}", requestUrl);
 
                 var response = await httpClient.GetAsync(requestUrl);
@@ -222,6 +223,17 @@ namespace TeamsManager.UI.Services
         public string? Mail { get; set; }
         public string? JobTitle { get; set; }
         public string? OfficeLocation { get; set; }
+        public string? Department { get; set; }
+        public string? CompanyName { get; set; }
+        public string[]? BusinessPhones { get; set; }
+        public string? MobilePhone { get; set; }
+        public string? City { get; set; }
+        public string? Country { get; set; }
+        public string? PostalCode { get; set; }
+        public string? StreetAddress { get; set; }
+        public string? State { get; set; }
+        public string? EmployeeType { get; set; }
+        public string? EmployeeId { get; set; }
         public BitmapImage? ProfilePicture { get; set; }
     }
 

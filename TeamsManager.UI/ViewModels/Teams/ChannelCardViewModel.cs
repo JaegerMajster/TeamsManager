@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Threading.Tasks;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Extensions;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions;
@@ -164,6 +165,11 @@ namespace TeamsManager.UI.ViewModels.Teams
         /// Whether this channel can be deleted (General channel cannot be deleted)
         /// </summary>
         public bool CanBeDeleted => !Channel.IsGeneral && Channel.Status == ChannelStatus.Active;
+
+        /// <summary>
+        /// Status kanału w języku polskim
+        /// </summary>
+        public string PolishStatus => Channel.Status.ToPolishString();
 
         /// <summary>
         /// Whether save is enabled (has changes and required fields filled)

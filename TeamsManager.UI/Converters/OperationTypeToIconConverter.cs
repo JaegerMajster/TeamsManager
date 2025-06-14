@@ -107,6 +107,36 @@ namespace TeamsManager.UI.Converters
                 "departmentdeleted" or "deletedepartment" => PackIconKind.Domain,
                 "departmentmoved" or "movedepartment" => PackIconKind.FileOutline,
 
+                // Organizational Unit Operations (Generic)
+                "genericcreated" => PackIconKind.FolderPlus,
+                "genericupdated" => PackIconKind.FolderEdit,
+                "genericdeleted" => PackIconKind.FolderRemove,
+                "genericoperation" => PackIconKind.Folder,
+
+                // School Type Operations
+                "schooltypecreated" => PackIconKind.School,
+                "schooltypeupdated" => PackIconKind.School,
+                "schooltypedeleted" => PackIconKind.School,
+
+                // Subject Operations
+                "subjectcreated" => PackIconKind.BookOpen,
+                "subjectupdated" => PackIconKind.BookOpen,
+                "subjectdeleted" => PackIconKind.BookOpen,
+
+                // Team Template Operations
+                "teamtemplatecreated" => PackIconKind.FileDocumentPlus,
+                "teamtemplateupdated" => PackIconKind.FileDocumentEdit,
+                "teamtemplatedeleted" => PackIconKind.FileDocumentRemove,
+                "teamtemplatecloned" => PackIconKind.ContentCopy,
+
+                // Bulk Operations
+                "bulkuserimport" => PackIconKind.AccountMultipleOutline,
+                "bulkteamcreation" => PackIconKind.AccountMultiplePlus,
+                "bulkuseronboarding" => PackIconKind.AccountMultipleCheck,
+                "bulkuseroffboarding" => PackIconKind.AccountMultipleRemove,
+                "bulkrolechange" => PackIconKind.AccountSwitch,
+                "bulkteammembershipoperation" => PackIconKind.AccountGroup,
+
                 // Default dla nieznanych typów
                 _ => PackIconKind.HelpCircle
             };

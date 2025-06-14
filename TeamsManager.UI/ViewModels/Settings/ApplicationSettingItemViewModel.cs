@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Input;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Extensions;
 using TeamsManager.UI.ViewModels;
 
 namespace TeamsManager.UI.ViewModels.Settings
@@ -43,6 +44,11 @@ namespace TeamsManager.UI.ViewModels.Settings
         public string Description => _setting.Description;
         public string Category => _setting.Category;
         public SettingType Type => _setting.Type;
+        
+        /// <summary>
+        /// Typ ustawienia w języku polskim
+        /// </summary>
+        public string PolishType => Type.ToPolishString();
         public bool IsRequired => _setting.IsRequired;
         public bool IsVisible => _setting.IsVisible;
         public int DisplayOrder => _setting.DisplayOrder;

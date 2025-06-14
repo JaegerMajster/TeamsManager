@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Services;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
 {
@@ -140,5 +141,10 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
         public string User { get; set; } = string.Empty;
         public DateTime StartTime { get; set; }
         public bool CanCancel { get; set; }
+        
+        /// <summary>
+        /// Status w języku polskim
+        /// </summary>
+        public string PolishStatus => Status.ToPolishString();
     }
 } 

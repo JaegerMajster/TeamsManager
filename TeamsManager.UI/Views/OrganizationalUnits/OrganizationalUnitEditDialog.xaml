@@ -82,17 +82,24 @@
                     </Border>
                 </Border>
                 
-                <!-- Jednostka nadrzędna -->
+                <!-- Jednostka nadrzędna - Hierarchiczna lista z wcięciami -->
                 <ComboBox Grid.Row="1"
                          Style="{StaticResource MaterialDesignOutlinedComboBox}"
-                         ItemsSource="{Binding AvailableParentUnits}"
+                         ItemsSource="{Binding HierarchicalParentUnits}"
                          SelectedValuePath="Id"
                          SelectedValue="{Binding ParentUnitId}"
-                         DisplayMemberPath="Name"
+                         DisplayMemberPath="DisplayName"
                          materialDesign:HintAssist.Hint="Jednostka nadrzędna"
                          materialDesign:HintAssist.IsFloating="True"
                          materialDesign:HintAssist.HelperText="Pozostaw puste dla jednostki głównej"
-                         IsEnabled="{Binding IsEditMode}"/>
+                         IsEnabled="{Binding IsEditMode}">
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="FontFamily" Value="Consolas, Courier New, monospace"/>
+                            <Setter Property="Padding" Value="8,4"/>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
                 
                 <!-- Nazwa jednostki -->
                 <TextBox Grid.Row="2"

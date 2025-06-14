@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.UI.Models.ViewModels
 {
@@ -53,9 +54,15 @@ namespace TeamsManager.UI.Models.ViewModels
                 {
                     OnPropertyChanged(nameof(IsTeachingRole));
                     OnPropertyChanged(nameof(RolePermissionsDescription));
+                    OnPropertyChanged(nameof(PolishRole));
                 }
             }
         }
+
+        /// <summary>
+        /// Rola użytkownika w języku polskim
+        /// </summary>
+        public string PolishRole => Role.ToPolishString();
 
         public string DepartmentId
         {
@@ -145,7 +152,7 @@ namespace TeamsManager.UI.Models.ViewModels
             }
         }
 
-        public bool IsTeachingRole => Role >= UserRole.Nauczyciel;
+        public bool IsTeachingRole => Role == UserRole.Nauczyciel || Role == UserRole.Wicedyrektor || Role == UserRole.Dyrektor;
 
         public string RolePermissionsDescription
         {
@@ -156,8 +163,10 @@ namespace TeamsManager.UI.Models.ViewModels
                     UserRole.Uczen => "• Członkostwo w zespołach jako uczeń\n• Dostęp do materiałów edukacyjnych\n• Brak uprawnień zarządzania",
                     UserRole.Sluchacz => "• Członkostwo w zespołach jako słuchacz\n• Dostęp do kursów i szkoleń\n• Brak uprawnień zarządzania",
                     UserRole.Nauczyciel => "• Tworzenie i zarządzanie zespołami\n• Właścicielstwo zespołów klasowych\n• Zarządzanie materiałami dydaktycznymi\n• Dostęp do narzędzi nauczyciela",
+                    UserRole.PracownikAdministracyjny => "• Obsługa administracyjna szkoły\n• Dostęp do podstawowych funkcji zarządzania\n• Wsparcie w procesach organizacyjnych\n• Ograniczone uprawnienia do zespołów",
                     UserRole.Wicedyrektor => "• Wszystkie uprawnienia nauczyciela\n• Zarządzanie użytkownikami w swoich typach szkół\n• Nadzór nad zespołami w szkole\n• Dostęp do raportów i statystyk",
                     UserRole.Dyrektor => "• Pełne uprawnienia w całym systemie\n• Zarządzanie wszystkimi użytkownikami\n• Dostęp do ustawień systemowych\n• Zarządzanie strukturą organizacyjną",
+                    UserRole.Administrator => "• Pełne uprawnienia techniczne i administracyjne\n• Zarządzanie systemem i konfiguracją\n• Dostęp do wszystkich funkcji aplikacji\n• Uprawnienia deweloperskie i diagnostyczne",
                     _ => "Nieznana rola"
                 };
             }

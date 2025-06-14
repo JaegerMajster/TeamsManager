@@ -203,7 +203,10 @@ namespace TeamsManager.Core.Models
                     UserRole.Uczen => "Uczeń",
                     UserRole.Sluchacz => "Słuchacz",
                     UserRole.Nauczyciel => "Nauczyciel",
+                    UserRole.PracownikAdministracyjny => "Pracownik administracyjny",
+                    UserRole.Wicedyrektor => "Wicedyrektor",
                     UserRole.Dyrektor => "Dyrektor",
+                    UserRole.Administrator => "Administrator",
                     _ => Role.ToString()
                 };
             }
@@ -243,7 +246,7 @@ namespace TeamsManager.Core.Models
         /// <summary>
         /// Czy użytkownik ma uprawnienia administracyjne
         /// </summary>
-        public bool HasAdminRights => Role >= UserRole.Dyrektor || IsSystemAdmin;
+        public bool HasAdminRights => Role >= UserRole.Dyrektor || Role == UserRole.Administrator || IsSystemAdmin;
 
         /// <summary>
         /// Domyślna rola w zespole na podstawie roli systemowej
@@ -253,8 +256,10 @@ namespace TeamsManager.Core.Models
             UserRole.Uczen => TeamMemberRole.Member,
             UserRole.Sluchacz => TeamMemberRole.Member,
             UserRole.Nauczyciel => TeamMemberRole.Owner,
+            UserRole.PracownikAdministracyjny => TeamMemberRole.Member,
             UserRole.Wicedyrektor => TeamMemberRole.Owner,
             UserRole.Dyrektor => TeamMemberRole.Owner,
+            UserRole.Administrator => TeamMemberRole.Owner,
             _ => TeamMemberRole.Member
         };
 

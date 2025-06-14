@@ -60,6 +60,11 @@ namespace TeamsManager.Core.Models
         /// </summary>
         public int SortOrder { get; set; } = 0;
 
+        /// <summary>
+        /// Czy jest to domyślny dział systemu (nie może być usunięty)
+        /// </summary>
+        public bool IsSystemDefault { get; set; } = false;
+
         // ===== WŁAŚCIWOŚCI NAWIGACYJNE =====
 
         /// <summary>

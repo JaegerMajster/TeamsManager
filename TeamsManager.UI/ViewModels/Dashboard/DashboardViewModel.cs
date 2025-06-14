@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.Core.Extensions;
 using TeamsManager.UI.ViewModels;
 
 namespace TeamsManager.UI.ViewModels.Dashboard
@@ -245,7 +246,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
                     RecentOperations.Add(new OperationHistoryItem
                     {
                         Id = op.Id.ToString(),
-                        OperationType = op.Type.ToString(),
+                        OperationType = op.Type.ToPolishString(),
                         ExecutedAt = op.StartedAt,
                         ExecutedBy = op.CreatedBy ?? "System",
                         IsSuccess = op.Status == Core.Enums.OperationStatus.Completed,

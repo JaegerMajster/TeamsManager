@@ -648,30 +648,42 @@ namespace TeamsManager.UI.ViewModels.Departments
             OrganizationalUnit unit, 
             OrganizationalUnitTreeItemViewModel? parent)
         {
-            return new OrganizationalUnitTreeItemViewModel(unit, parent);
+            var viewModel = new OrganizationalUnitTreeItemViewModel(unit, parent);
+
+            // Rekurencyjnie dodaj podjednostki
+            if (unit.SubUnits != null)
+            {
+                foreach (var subUnit in unit.SubUnits.OrderBy(su => su.SortOrder).ThenBy(su => su.Name))
+                {
+                    var subUnitViewModel = CreateOrganizationalUnitTreeItem(subUnit, viewModel);
+                    viewModel.AddChild(subUnitViewModel);
+                }
+            }
+
+            return viewModel;
         }
 
         private async Task LoadDepartmentsForUnit(
             OrganizationalUnitTreeItemViewModel unitViewModel, 
             IEnumerable<Department> allDepartments)
         {
-            // Znajdź działy przypisane do tej jednostki organizacyjnej
-            var departmentsForUnit = allDepartments
+            // Dodaj działy przypisane do tej jednostki jako dzieci w hierarchii TreeView
+            var unitDepartments = allDepartments
                 .Where(d => d.OrganizationalUnitId == unitViewModel.Id)
                 .OrderBy(d => d.SortOrder)
                 .ThenBy(d => d.Name);
 
-            // Dodaj działy jako dzieci jednostki organizacyjnej
-            foreach (var department in departmentsForUnit)
+            foreach (var department in unitDepartments)
             {
+                // Utwórz ViewModel dla działu i dodaj jako dziecko
                 var departmentViewModel = new OrganizationalUnitTreeItemViewModel(department, unitViewModel);
-                unitViewModel.Children.Add(departmentViewModel);
+                unitViewModel.AddChild(departmentViewModel);
             }
 
-            // Rekurencyjnie załaduj działy dla pod-jednostek
-            foreach (var childUnit in unitViewModel.Children.Where(c => !c.IsDepartment))
+            // Rekurencyjnie załaduj działy dla podjednostek
+            foreach (var child in unitViewModel.Children.Where(c => !c.IsDepartment))
             {
-                await LoadDepartmentsForUnit(childUnit, allDepartments);
+                await LoadDepartmentsForUnit(child, allDepartments);
             }
         }
 

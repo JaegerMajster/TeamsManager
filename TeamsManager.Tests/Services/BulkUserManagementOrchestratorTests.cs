@@ -193,10 +193,11 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Setup(x => x.CreateUserAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()))
-                .ReturnsAsync((string firstName, string lastName, string upn, UserRole role, 
-                    string deptId, string password, string token, bool sendEmail) => 
-                    CreateTestUser(Guid.NewGuid().ToString(), upn, role, true));
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
+                .ReturnsAsync(CreateTestUser(Guid.NewGuid().ToString(), "test@test.local", UserRole.Nauczyciel, true));
 
             // Setup dodawania do zespołów - wzorzec batch processing
             _teamServiceMock.Setup(x => x.AddMemberAsync(It.IsAny<string>(), It.IsAny<string>(), 
@@ -292,10 +293,11 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Setup(x => x.CreateUserAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()))
-                .ReturnsAsync((string firstName, string lastName, string upn, UserRole role, 
-                    string deptId, string password, string token, bool sendEmail) => 
-                    CreateTestUser(Guid.NewGuid().ToString(), upn, role, true));
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
+                .ReturnsAsync(CreateTestUser(Guid.NewGuid().ToString(), "test@test.local", UserRole.Nauczyciel, true));
 
             // Setup operacji masowych zespołów
             _teamServiceMock.Setup(x => x.AddUsersToTeamAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<string>()))
@@ -705,10 +707,11 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Setup(x => x.CreateUserAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()))
-                .ReturnsAsync((string firstName, string lastName, string upn, UserRole role, 
-                    string deptId, string password, string token, bool sendEmail) => 
-                    CreateTestUser(Guid.NewGuid().ToString(), upn, role, true));
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
+                .ReturnsAsync(CreateTestUser(Guid.NewGuid().ToString(), "test@test.local", UserRole.Nauczyciel, true));
 
             // Act - wywołanie równoległe
             var task1 = _orchestrator.BulkUserOnboardingAsync(plans1, _testApiToken);
@@ -790,12 +793,18 @@ namespace TeamsManager.Tests.Services
 
             // Setup tworzenia pierwszego użytkownika - sukces
             _userServiceMock.Setup(x => x.CreateUserAsync("Jan", "Kowalski", "jan.kowalski@test.local", 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ReturnsAsync(CreateTestUser("user-1", "jan.kowalski@test.local", UserRole.Nauczyciel, true));
 
             // Setup tworzenia drugiego użytkownika - błąd
             _userServiceMock.Setup(x => x.CreateUserAsync("Anna", "Nowak", "anna.nowak@test.local", 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ThrowsAsync(new InvalidOperationException("Błąd tworzenia użytkownika w M365"));
 
             _teamServiceMock.Setup(x => x.GetTeamByIdAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
@@ -865,7 +874,10 @@ namespace TeamsManager.Tests.Services
                 .ReturnsAsync(testDepartment);
 
             _userServiceMock.Setup(x => x.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ReturnsAsync(testUser);
 
             _teamServiceMock.Setup(x => x.GetTeamByIdAsync("team-1", It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
@@ -1050,12 +1062,11 @@ namespace TeamsManager.Tests.Services
                 .ReturnsAsync(testDepartment);
 
             _userServiceMock.Setup(x => x.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
-                .Returns(async () =>
-                {
-                    await Task.Delay(5000); // Symulacja długiej operacji
-                    return CreateTestUser("user-1", "user@test.local", UserRole.Nauczyciel, true);
-                });
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
+                .ReturnsAsync(CreateTestUser("user-1", "user@test.local", UserRole.Nauczyciel, true));
 
             // Rozpocznij onboarding ale nie czekaj na zakończenie
             var onboardingTask = _orchestrator.BulkUserOnboardingAsync(plans, _testApiToken);
@@ -1093,7 +1104,10 @@ namespace TeamsManager.Tests.Services
                 .ReturnsAsync(testDepartment);
 
             _userServiceMock.Setup(x => x.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ReturnsAsync(CreateTestUser("user-1", "user@test.local", UserRole.Nauczyciel, true));
 
             // Act - Rozpocznij onboarding

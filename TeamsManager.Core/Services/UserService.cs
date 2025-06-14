@@ -264,7 +264,15 @@ namespace TeamsManager.Core.Services
             string departmentId,
             string password,
             string apiAccessToken, // ZMIANA: accessToken -> apiAccessToken
-            bool sendWelcomeEmail = false)
+            bool sendWelcomeEmail = false,
+            string? phone = null,
+            string? alternateEmail = null,
+            string? externalId = null,
+            DateTime? birthDate = null,
+            DateTime? employmentDate = null,
+            string? position = null,
+            string? notes = null,
+            bool isSystemAdmin = false)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_create";
             
@@ -362,7 +370,26 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                var newUser = new User { /* ... inicjalizacja pól ... */ Id = Guid.NewGuid().ToString(), FirstName = firstName, LastName = lastName, UPN = upn, Role = role, DepartmentId = departmentId, Department = department, ExternalId = externalUserId, CreatedBy = currentUserUpn, IsActive = true };
+                var newUser = new User 
+                { 
+                    Id = Guid.NewGuid().ToString(), 
+                    FirstName = firstName, 
+                    LastName = lastName, 
+                    UPN = upn, 
+                    Role = role, 
+                    DepartmentId = departmentId, 
+                    Department = department, 
+                    ExternalId = externalUserId, 
+                    Phone = phone,
+                    AlternateEmail = alternateEmail,
+                    BirthDate = birthDate,
+                    EmploymentDate = employmentDate,
+                    Position = position,
+                    Notes = notes,
+                    IsSystemAdmin = isSystemAdmin,
+                    CreatedBy = currentUserUpn, 
+                    IsActive = true 
+                };
                 await _userRepository.AddAsync(newUser);
                 _logger.LogInformation("Użytkownik {FirstName} {LastName} ({UPN}) pomyślnie utworzony. ID: {UserId}, External ID: {ExternalUserId}", firstName, lastName, upn, newUser.Id, externalUserId);
                 InvalidateUserCache(userId: newUser.Id, upn: newUser.UPN, role: newUser.Role, invalidateAllGlobalLists: true);

@@ -58,6 +58,14 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="password">Hasło dla nowego użytkownika w M365 (wymagane przy tworzeniu w Graph).</param>
         /// <param name="accessToken">Token dostępu OAuth 2.0 do Microsoft Graph API.</param>
         /// <param name="sendWelcomeEmail">Opcjonalnie, czy wysłać email powitalny.</param>
+        /// <param name="phone">Opcjonalny numer telefonu.</param>
+        /// <param name="alternateEmail">Opcjonalny dodatkowy adres email.</param>
+        /// <param name="externalId">Opcjonalny identyfikator zewnętrzny.</param>
+        /// <param name="birthDate">Opcjonalna data urodzenia.</param>
+        /// <param name="employmentDate">Opcjonalna data zatrudnienia.</param>
+        /// <param name="position">Opcjonalne stanowisko/funkcja.</param>
+        /// <param name="notes">Opcjonalne uwagi.</param>
+        /// <param name="isSystemAdmin">Czy użytkownik ma być administratorem systemu.</param>
         /// <returns>Utworzony obiekt User lub null, jeśli operacja się nie powiodła.</returns>
         Task<User?> CreateUserAsync(
             string firstName,
@@ -67,7 +75,15 @@ namespace TeamsManager.Core.Abstractions.Services
             string departmentId,
             string password,
             string accessToken,
-            bool sendWelcomeEmail = false);
+            bool sendWelcomeEmail = false,
+            string? phone = null,
+            string? alternateEmail = null,
+            string? externalId = null,
+            DateTime? birthDate = null,
+            DateTime? employmentDate = null,
+            string? position = null,
+            string? notes = null,
+            bool isSystemAdmin = false);
 
         /// <summary>
         /// Asynchronicznie aktualizuje dane istniejącego użytkownika.

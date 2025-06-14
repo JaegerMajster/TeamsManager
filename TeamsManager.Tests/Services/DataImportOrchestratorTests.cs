@@ -67,10 +67,13 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Setup(x => x.GetUserByUpnAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string>()))
                 .ReturnsAsync((User?)null);
 
-            _userServiceMock.Setup(x => x.CreateUserAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()))
+                        _userServiceMock.Setup(x => x.CreateUserAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ReturnsAsync((User?)null);
 
             _userServiceMock.Setup(x => x.UpdateUserAsync(It.IsAny<User>(), It.IsAny<string>()))
@@ -101,7 +104,10 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Setup(x => x.CreateUserAsync(
                 "Jan", "Kowalski", "jan.kowalski@test.edu.pl", 
                 UserRole.Nauczyciel, It.IsAny<string>(), It.IsAny<string>(), 
-                _testToken, false))
+                _testToken, false,
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()))
                 .ReturnsAsync(createdUser);
 
             // Act
@@ -176,7 +182,10 @@ namespace TeamsManager.Tests.Services
             _userServiceMock.Verify(x => x.CreateUserAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()), 
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>()), 
                 Times.Never);
         }
 

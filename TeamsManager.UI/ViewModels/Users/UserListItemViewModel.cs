@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Extensions;
 using TeamsManager.Core.Enums;
 
 namespace TeamsManager.UI.ViewModels.Users
@@ -28,6 +29,11 @@ namespace TeamsManager.UI.ViewModels.Users
         public string UPN => _user.UPN;
         public string Email => _user.Email;
         public UserRole Role => _user.Role;
+        
+        /// <summary>
+        /// Rola użytkownika w języku polskim
+        /// </summary>
+        public string PolishRole => Role.ToPolishString();
         public string RoleDisplayName => _user.RoleDisplayName;
         public string? DepartmentName => _user.Department?.Name;
         public string? Position => _user.Position;
@@ -83,9 +89,11 @@ namespace TeamsManager.UI.ViewModels.Users
                 {
                     UserRole.Uczen => "School",
                     UserRole.Sluchacz => "AccountSchool",
-                    UserRole.Nauczyciel => "Teach",
+                    UserRole.Nauczyciel => "Teacher",
+                    UserRole.PracownikAdministracyjny => "AccountTie",
                     UserRole.Wicedyrektor => "AccountSupervisor",
                     UserRole.Dyrektor => "AccountCog",
+                    UserRole.Administrator => "AccountKey",
                     _ => "Account"
                 };
             }

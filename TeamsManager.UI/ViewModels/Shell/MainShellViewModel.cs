@@ -27,6 +27,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         private readonly ConfigurationManager _configManager;
         private readonly IGraphUserProfileService _graphUserProfileService;
         private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
+        private readonly IUserSynchronizationService _userSynchronizationService;
         private readonly ILogger<MainShellViewModel> _logger;
 
         private object? _currentView;
@@ -54,6 +55,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             ConfigurationManager configManager,
             IGraphUserProfileService graphUserProfileService,
             ConditionalAccessAnalyzer conditionalAccessAnalyzer,
+            IUserSynchronizationService userSynchronizationService,
             ILogger<MainShellViewModel> logger)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
@@ -62,6 +64,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
             _graphUserProfileService = graphUserProfileService ?? throw new ArgumentNullException(nameof(graphUserProfileService));
             _conditionalAccessAnalyzer = conditionalAccessAnalyzer ?? throw new ArgumentNullException(nameof(conditionalAccessAnalyzer));
+            _userSynchronizationService = userSynchronizationService ?? throw new ArgumentNullException(nameof(userSynchronizationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             InitializeCommands();
@@ -434,18 +437,50 @@ namespace TeamsManager.UI.ViewModels.Shell
         {
             try
             {
+                Console.WriteLine("=== SPRAWDZANIE AUTO-LOGIN ===");
                 var loginSettings = await _configManager.LoadLoginSettingsAsync();
                 
                 if (loginSettings != null && loginSettings.AutoLogin && !string.IsNullOrEmpty(loginSettings.LastUserEmail))
                 {
                     _logger.LogInformation("Auto-login włączony dla użytkownika: {Email}", loginSettings.LastUserEmail);
+                    Console.WriteLine($"=== AUTO-LOGIN WŁĄCZONY DLA: {loginSettings.LastUserEmail} ===");
                     
                     // Spróbuj cichego logowania
                     try
                     {
+                        Console.WriteLine("=== PRÓBA CICHEGO LOGOWANIA ===");
                         var authResult = await _msalAuthService.AcquireTokenSilentAsync();
                         if (authResult != null && !string.IsNullOrEmpty(authResult.AccessToken))
                         {
+                            Console.WriteLine($"=== CICHY LOGIN POMYŚLNY: {authResult.Account?.Username} ===");
+                            // WAŻNE: Ustaw UPN w CurrentUserService po pomyślnym cichym logowaniu
+                            var userUpn = authResult.Account?.Username;
+                            _logger.LogInformation("Auto-login pomyślny, ustawiam UPN: {UserUpn}", userUpn);
+                            _currentUserService.SetCurrentUserUpn(userUpn);
+                            
+                            // Sprawdź czy UPN został poprawnie ustawiony
+                            var currentUpn = _currentUserService.GetCurrentUserUpn();
+                            _logger.LogInformation("UPN po auto-login: {CurrentUpn}", currentUpn);
+                            
+                            // Synchronizuj użytkownika z lokalną bazą danych
+                            if (!string.IsNullOrEmpty(userUpn))
+                            {
+                                _logger.LogInformation("Rozpoczynanie synchronizacji użytkownika {UserUpn} po auto-login", userUpn);
+                                Console.WriteLine($"=== WYWOŁANIE SYNCHRONIZACJI W AUTO-LOGIN: {userUpn} ===");
+                                
+                                var syncResult = await _userSynchronizationService.SynchronizeLoggedUserAsync(authResult.AccessToken, userUpn);
+                                if (syncResult)
+                                {
+                                    _logger.LogInformation("Synchronizacja użytkownika {UserUpn} po auto-login zakończona pomyślnie", userUpn);
+                                    Console.WriteLine($"=== SYNCHRONIZACJA AUTO-LOGIN POMYŚLNA: {userUpn} ===");
+                                }
+                                else
+                                {
+                                    _logger.LogWarning("Synchronizacja użytkownika {UserUpn} po auto-login nie powiodła się", userUpn);
+                                    Console.WriteLine($"=== SYNCHRONIZACJA AUTO-LOGIN NIEPOMYŚLNA: {userUpn} ===");
+                                }
+                            }
+                            
                             LoadUserInfo();
                             await LoadDetailedUserProfileAsync();
                             return true;
@@ -456,12 +491,18 @@ namespace TeamsManager.UI.ViewModels.Shell
                         _logger.LogWarning(ex, "Cicha autentykacja nie powiodła się, wymagane logowanie interaktywne");
                     }
                 }
+                else
+                {
+                    Console.WriteLine("=== AUTO-LOGIN WYŁĄCZONY LUB BRAK USTAWIEŃ ===");
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas sprawdzania auto-login");
+                Console.WriteLine($"=== BŁĄD AUTO-LOGIN: {ex.Message} ===");
             }
             
+            Console.WriteLine("=== AUTO-LOGIN ZWRACA FALSE ===");
             return false;
         }
 

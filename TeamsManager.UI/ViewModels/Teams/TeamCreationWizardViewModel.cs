@@ -265,8 +265,11 @@ namespace TeamsManager.UI.ViewModels.Teams
                 foreach (var schoolYear in schoolYears)
                     SchoolYears.Add(schoolYear);
                 
-                // Load owners (teachers and above)
-                var owners = users.Where(u => u.Role >= UserRole.Nauczyciel).ToList();
+                // Load owners (teachers, vice-directors, directors, and administrators)
+                var owners = users.Where(u => u.Role == UserRole.Nauczyciel || 
+                                             u.Role == UserRole.Wicedyrektor || 
+                                             u.Role == UserRole.Dyrektor || 
+                                             u.Role == UserRole.Administrator).ToList();
                 AvailableOwners.Clear();
                 foreach (var owner in owners)
                     AvailableOwners.Add(owner);

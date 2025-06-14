@@ -8,6 +8,7 @@ using System.Windows.Input;
 using Microsoft.Win32;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Extensions;
 using TeamsManager.Core.Models;
 using TeamsManager.UI.ViewModels;
 using System.IO;
@@ -369,12 +370,7 @@ namespace TeamsManager.UI.ViewModels.Teams
 
         private string GetRoleDisplayName(TeamMemberRole role)
         {
-            return role switch
-            {
-                TeamMemberRole.Owner => "właściciel",
-                TeamMemberRole.Member => "członek",
-                _ => role.ToString()
-            };
+            return role.ToPolishString().ToLower();
         }
 
         private string GetApiAccessToken()

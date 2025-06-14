@@ -282,7 +282,16 @@ namespace TeamsManager.Tests.Controllers
                 createDto.DepartmentId,
                 createDto.Password,
                 _accessTokenValue,
-                createDto.SendWelcomeEmail))
+                createDto.SendWelcomeEmail,
+                It.IsAny<string?>(), // phone
+                It.IsAny<string?>(), // alternateEmail
+                It.IsAny<string?>(), // externalId
+                It.IsAny<DateTime?>(), // birthDate
+                It.IsAny<DateTime?>(), // employmentDate
+                It.IsAny<string?>(), // position
+                It.IsAny<string?>(), // notes
+                It.IsAny<bool>() // isSystemAdmin
+            ))
                 .ReturnsAsync(createdUser);
 
             // Act
@@ -332,7 +341,16 @@ namespace TeamsManager.Tests.Controllers
             _mockUserService.Setup(s => s.CreateUserAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<UserRole>(), It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<bool>()))
+                It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), // phone
+                It.IsAny<string?>(), // alternateEmail
+                It.IsAny<string?>(), // externalId
+                It.IsAny<DateTime?>(), // birthDate
+                It.IsAny<DateTime?>(), // employmentDate
+                It.IsAny<string?>(), // position
+                It.IsAny<string?>(), // notes
+                It.IsAny<bool>() // isSystemAdmin
+            ))
                            .ReturnsAsync((User?)null);
 
             // Act

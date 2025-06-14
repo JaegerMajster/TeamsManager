@@ -13,6 +13,9 @@ using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Services;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Enums;
+using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.UI.Models;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.UI.ViewModels.Operations
 {
@@ -22,8 +25,33 @@ namespace TeamsManager.UI.ViewModels.Operations
     public class OperationHistoryViewModel : INotifyPropertyChanged
     {
         private readonly IOperationHistoryService _operationHistoryService;
+        private readonly IUserService _userService;
         private readonly ILogger<OperationHistoryViewModel> _logger;
+        private readonly IUIDialogService _uiDialogService;
         private CancellationTokenSource? _cancellationTokenSource;
+
+        // Słowniki mapowania dla polskich nazw
+        private static readonly Dictionary<string, string> EntityTypeMapping = new()
+        {
+            { "Wszystkie", "All" },
+            { "Zespoły", "Team" },
+            { "Użytkownicy", "User" },
+            { "Działy", "Department" },
+            { "Jednostki organizacyjne", "Generic" },
+            { "Typy szkół", "SchoolType" },
+            { "Przedmioty", "Subject" },
+            { "Szablony zespołów", "TeamTemplate" },
+            { "Operacje wsadowe", "Bulk" },
+            { "System", "System" }
+        };
+
+        // Generujemy mapowanie dynamicznie z centralnych rozszerzeń
+        private static readonly Dictionary<string, string> OperationMapping = 
+            GenerateOperationMapping();
+
+        // Generujemy mapowanie statusów dynamicznie z centralnych rozszerzeń
+        private static readonly Dictionary<string, string> StatusMapping = 
+            GenerateStatusMapping();
 
         // Collections
         private ObservableCollection<OperationHistoryItemViewModel> _operations = new();
@@ -40,6 +68,10 @@ namespace TeamsManager.UI.ViewModels.Operations
         private string? _selectedStatus;
         private string _userFilter = string.Empty;
         private string _searchText = string.Empty;
+
+        // Nowe właściwości dla dwóch combo
+        private string? _selectedEntityType;
+        private string? _selectedOperationFilter;
 
         // Pagination
         private int _currentPage = 1;
@@ -64,17 +96,26 @@ namespace TeamsManager.UI.ViewModels.Operations
         // Available filter options
         private ObservableCollection<string> _availableOperationTypes = new();
         private ObservableCollection<string> _availableStatuses = new();
+        private ObservableCollection<string> _availableEntityTypes = new();
+        private ObservableCollection<string> _availableOperations = new();
 
         public OperationHistoryViewModel(
             IOperationHistoryService operationHistoryService,
-            ILogger<OperationHistoryViewModel> logger)
+            IUserService userService,
+            ILogger<OperationHistoryViewModel> logger,
+            IUIDialogService uiDialogService)
         {
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
+            _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _uiDialogService = uiDialogService ?? throw new ArgumentNullException(nameof(uiDialogService));
 
             InitializeCommands();
             InitializeFilterOptions();
-            LoadMockData(); // Temporary for development
+            UpdateAvailableOperations();
+            
+            // Załaduj dane przy inicjalizacji
+            _ = LoadOperationsAsync();
         }
 
         #region Properties
@@ -172,6 +213,30 @@ namespace TeamsManager.UI.ViewModels.Operations
             set
             {
                 _searchText = value;
+                OnPropertyChanged();
+                ApplyFilters();
+            }
+        }
+
+        // Nowe właściwości dla dwóch combo
+        public string? SelectedEntityType
+        {
+            get => _selectedEntityType;
+            set
+            {
+                _selectedEntityType = value;
+                OnPropertyChanged();
+                UpdateAvailableOperations();
+                ApplyFilters();
+            }
+        }
+
+        public string? SelectedOperationFilter
+        {
+            get => _selectedOperationFilter;
+            set
+            {
+                _selectedOperationFilter = value;
                 OnPropertyChanged();
                 ApplyFilters();
             }
@@ -346,6 +411,31 @@ namespace TeamsManager.UI.ViewModels.Operations
             }
         }
 
+        public ObservableCollection<string> AvailableEntityTypes
+        {
+            get => _availableEntityTypes;
+            set
+            {
+                _availableEntityTypes = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ObservableCollection<string> AvailableOperations
+        {
+            get => _availableOperations;
+            set
+            {
+                _availableOperations = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Czy brak danych do wyświetlenia
+        /// </summary>
+        public bool HasNoData => !IsLoading && !FilteredOperations.Any();
+
         #endregion
 
         #region Commands
@@ -362,6 +452,40 @@ namespace TeamsManager.UI.ViewModels.Operations
 
         #region Private Methods
 
+        /// <summary>
+        /// Generuje mapowanie operacji z centralnych rozszerzeń
+        /// </summary>
+        private static Dictionary<string, string> GenerateOperationMapping()
+        {
+            var mapping = new Dictionary<string, string> { { "Wszystkie", "All" } };
+            
+            foreach (OperationType operationType in Enum.GetValues<OperationType>())
+            {
+                var polishName = operationType.ToPolishString();
+                var englishName = operationType.ToString();
+                mapping[polishName] = englishName;
+            }
+            
+            return mapping;
+        }
+
+        /// <summary>
+        /// Generuje mapowanie statusów z centralnych rozszerzeń
+        /// </summary>
+        private static Dictionary<string, string> GenerateStatusMapping()
+        {
+            var mapping = new Dictionary<string, string> { { "Wszystkie", "All" } };
+            
+            foreach (OperationStatus status in Enum.GetValues<OperationStatus>())
+            {
+                var polishName = status.ToPolishString();
+                var englishName = status.ToString();
+                mapping[polishName] = englishName;
+            }
+            
+            return mapping;
+        }
+
         private void InitializeCommands()
         {
             RefreshCommand = new RelayCommand(async () => await LoadOperationsAsync(), () => !IsLoading);
@@ -375,111 +499,14 @@ namespace TeamsManager.UI.ViewModels.Operations
 
         private void InitializeFilterOptions()
         {
-            // Initialize available filter options
-            AvailableOperationTypes = new ObservableCollection<string>
-            {
-                "Wszystkie",
-                "TeamCreated", "TeamUpdated", "TeamDeleted",
-                "UserCreated", "UserUpdated", "UserDeleted",
-                "SystemBackup", "SystemRestore", "DataImport", "DataExport"
-            };
+            // Initialize available filter options using Polish names
+            AvailableOperationTypes = new ObservableCollection<string>(OperationMapping.Keys);
 
-            AvailableStatuses = new ObservableCollection<string>
-            {
-                "Wszystkie",
-                "Completed", "Failed", "InProgress", "PartialSuccess"
-            };
-        }
+            AvailableStatuses = new ObservableCollection<string>(StatusMapping.Keys);
 
-        private void LoadMockData()
-        {
-            _logger.LogDebug("Loading mock data for OperationHistory");
+            AvailableEntityTypes = new ObservableCollection<string>(EntityTypeMapping.Keys);
 
-            var mockOperations = new List<OperationHistory>
-            {
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    StartedAt = DateTime.Now.AddMinutes(-30),
-                    CompletedAt = DateTime.Now.AddMinutes(-29),
-                    Type = OperationType.TeamCreated,
-                    TargetEntityType = "Team",
-                    TargetEntityId = "team-123",
-                    TargetEntityName = "Klasa 3A",
-                    Status = OperationStatus.Completed,
-                    CreatedBy = "admin@example.com",
-                    ProcessedItems = 1,
-                    TotalItems = 1,
-                    OperationDetails = "{\"Name\":\"Klasa 3A\",\"Description\":\"Klasa matematyczno-fizyczna\"}"
-                },
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    StartedAt = DateTime.Now.AddHours(-2),
-                    CompletedAt = DateTime.Now.AddHours(-2).AddMinutes(15),
-                    Type = OperationType.BulkUserImport,
-                    TargetEntityType = "Users",
-                    TargetEntityId = "import-456",
-                    TargetEntityName = "users_import.csv",
-                    Status = OperationStatus.PartialSuccess,
-                    CreatedBy = "operator@example.com",
-                    ProcessedItems = 85,
-                    TotalItems = 100,
-                    OperationDetails = "{\"FileName\":\"users_import.csv\",\"TotalRows\":100,\"ProcessedRows\":85,\"ErrorRows\":15}"
-                },
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    StartedAt = DateTime.Now.AddDays(-1),
-                    CompletedAt = DateTime.Now.AddDays(-1).AddMinutes(5),
-                    Type = OperationType.SystemBackup,
-                    TargetEntityType = "Database",
-                    TargetEntityName = "System Backup",
-                    Status = OperationStatus.Completed,
-                    CreatedBy = "system@example.com",
-                    ProcessedItems = 1,
-                    TotalItems = 1,
-                    OperationDetails = "{\"BackupSize\":\"2.5GB\",\"Tables\":45,\"Duration\":\"00:05:23\"}"
-                },
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    StartedAt = DateTime.Now.AddMinutes(-5),
-                    Type = OperationType.UserUpdated,
-                    TargetEntityType = "User",
-                    TargetEntityId = "user-789",
-                    TargetEntityName = "Jan Kowalski",
-                    Status = OperationStatus.InProgress,
-                    CreatedBy = "admin@example.com",
-                    ProcessedItems = 0,
-                    TotalItems = 1,
-                    OperationDetails = "{\"UserId\":\"user-789\",\"Changes\":[\"Email\",\"Department\"]}"
-                },
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    StartedAt = DateTime.Now.AddDays(-2),
-                    CompletedAt = DateTime.Now.AddDays(-2).AddMinutes(1),
-                    Type = OperationType.TeamDeleted,
-                    TargetEntityType = "Team",
-                    TargetEntityId = "team-old",
-                    TargetEntityName = "Stary Zespół",
-                    Status = OperationStatus.Failed,
-                    CreatedBy = "manager@example.com",
-                    ErrorMessage = "Cannot delete team with active members",
-                    ProcessedItems = 0,
-                    TotalItems = 1,
-                    OperationDetails = "{\"TeamId\":\"team-old\",\"ActiveMembers\":12}"
-                }
-            };
-
-            _allOperations = mockOperations;
-            Operations = new ObservableCollection<OperationHistoryItemViewModel>(
-                mockOperations.Select(op => new OperationHistoryItemViewModel(op))
-            );
-
-            CalculateStatistics();
-            ApplyFilters();
+            AvailableOperations = new ObservableCollection<string> { "Wszystkie" };
         }
 
         private async Task LoadOperationsAsync()
@@ -494,14 +521,30 @@ namespace TeamsManager.UI.ViewModels.Operations
 
                 _logger.LogDebug("Loading operations from API");
 
-                // TODO: Replace with actual API call
-                // var operations = await _operationHistoryService.GetAllAsync(_cancellationTokenSource.Token);
-                
-                // For now, use mock data
-                await Task.Delay(1000, _cancellationTokenSource.Token); // Simulate API call
-                LoadMockData();
+                // Pobierz operacje z serwisu
+                var operations = await _operationHistoryService.GetHistoryByFilterAsync(
+                    startDate: null,
+                    endDate: null,
+                    operationType: null,
+                    operationStatus: null,
+                    createdBy: null,
+                    page: 1,
+                    pageSize: 1000 // Pobierz więcej rekordów na początku
+                );
 
-                _logger.LogDebug($"Loaded {Operations.Count} operations");
+                _allOperations = operations.ToList();
+                
+                // Pobierz DisplayName dla użytkowników
+                var userDisplayNames = await GetUserDisplayNamesAsync(_allOperations);
+                
+                Operations = new ObservableCollection<OperationHistoryItemViewModel>(
+                    _allOperations.Select(op => new OperationHistoryItemViewModel(op, userDisplayNames.GetValueOrDefault(op.CreatedBy)))
+                );
+
+                CalculateStatistics();
+                ApplyFilters();
+
+                _logger.LogDebug($"Loaded {Operations.Count} operations from database");
             }
             catch (OperationCanceledException)
             {
@@ -511,10 +554,15 @@ namespace TeamsManager.UI.ViewModels.Operations
             {
                 _logger.LogError(ex, "Error loading operations");
                 ErrorMessage = $"Błąd podczas ładowania operacji: {ex.Message}";
+                
+                // W przypadku błędu, wyczyść dane
+                Operations.Clear();
+                FilteredOperations.Clear();
             }
             finally
             {
                 IsLoading = false;
+                OnPropertyChanged(nameof(HasNoData));
             }
         }
 
@@ -533,16 +581,32 @@ namespace TeamsManager.UI.ViewModels.Operations
                 filtered = filtered.Where(op => op.StartTime <= EndDate.Value.Date.AddDays(1));
             }
 
-            // Operation type filter
+            // Entity type filter (nowy system)
+            if (!string.IsNullOrEmpty(SelectedEntityType) && SelectedEntityType != "Wszystkie")
+            {
+                var englishEntityType = EntityTypeMapping.GetValueOrDefault(SelectedEntityType, SelectedEntityType);
+                filtered = filtered.Where(op => GetEntityTypeFromOperationType(op.OperationType) == englishEntityType);
+            }
+
+            // Operation filter (nowy system)
+            if (!string.IsNullOrEmpty(SelectedOperationFilter) && SelectedOperationFilter != "Wszystkie")
+            {
+                var englishOperation = OperationMapping.GetValueOrDefault(SelectedOperationFilter, SelectedOperationFilter);
+                filtered = filtered.Where(op => op.OperationType.Equals(englishOperation, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Operation type filter (stary system - zachowany dla kompatybilności)
             if (!string.IsNullOrEmpty(SelectedOperationType) && SelectedOperationType != "Wszystkie")
             {
-                filtered = filtered.Where(op => op.OperationType.Equals(SelectedOperationType, StringComparison.OrdinalIgnoreCase));
+                var englishOperation = OperationMapping.GetValueOrDefault(SelectedOperationType, SelectedOperationType);
+                filtered = filtered.Where(op => op.OperationType.Equals(englishOperation, StringComparison.OrdinalIgnoreCase));
             }
 
             // Status filter
             if (!string.IsNullOrEmpty(SelectedStatus) && SelectedStatus != "Wszystkie")
             {
-                filtered = filtered.Where(op => op.Status.Equals(SelectedStatus, StringComparison.OrdinalIgnoreCase));
+                var englishStatus = StatusMapping.GetValueOrDefault(SelectedStatus, SelectedStatus);
+                filtered = filtered.Where(op => op.Status.Equals(englishStatus, StringComparison.OrdinalIgnoreCase));
             }
 
             // User filter
@@ -575,6 +639,69 @@ namespace TeamsManager.UI.ViewModels.Operations
             ApplyPagination(filteredList);
         }
 
+        /// <summary>
+        /// Mapuje typ operacji na typ encji
+        /// </summary>
+        private string GetEntityTypeFromOperationType(string operationType)
+        {
+            return operationType switch
+            {
+                var op when op.StartsWith("Team") => "Team",
+                var op when op.StartsWith("User") => "User", 
+                var op when op.StartsWith("Department") => "Department",
+                var op when op.StartsWith("Generic") => "Generic",
+                var op when op.StartsWith("SchoolType") => "SchoolType",
+                var op when op.StartsWith("Subject") => "Subject",
+                var op when op.StartsWith("TeamTemplate") => "TeamTemplate",
+                var op when op.StartsWith("Bulk") => "Bulk",
+                var op when op.StartsWith("System") => "System",
+                _ => "System"
+            };
+        }
+
+        /// <summary>
+        /// Aktualizuje dostępne operacje w zależności od wybranego typu encji
+        /// </summary>
+        private void UpdateAvailableOperations()
+        {
+            var operations = new List<string> { "Wszystkie" };
+
+            if (string.IsNullOrEmpty(SelectedEntityType) || SelectedEntityType == "Wszystkie")
+            {
+                // Pokaż wszystkie operacje (polskie nazwy)
+                operations.AddRange(OperationMapping.Keys.Where(k => k != "Wszystkie"));
+            }
+            else
+            {
+                // Pokaż operacje dla wybranego typu encji (polskie nazwy z centralnych rozszerzeń)
+                var operationTypes = SelectedEntityType switch
+                {
+                    "Zespoły" => new[] { OperationType.TeamCreated, OperationType.TeamUpdated, OperationType.TeamDeleted, OperationType.TeamArchived, OperationType.TeamUnarchived },
+                    "Użytkownicy" => new[] { OperationType.UserCreated, OperationType.UserUpdated, OperationType.UserDeactivated, OperationType.UserActivated },
+                    "Działy" => new[] { OperationType.DepartmentCreated, OperationType.DepartmentUpdated, OperationType.DepartmentDeleted },
+                    "Jednostki organizacyjne" => new[] { OperationType.GenericCreated, OperationType.GenericUpdated, OperationType.GenericDeleted },
+                    "Typy szkół" => new[] { OperationType.SchoolTypeCreated, OperationType.SchoolTypeUpdated, OperationType.SchoolTypeDeleted },
+                    "Przedmioty" => new[] { OperationType.SubjectCreated, OperationType.SubjectUpdated, OperationType.SubjectDeleted },
+                    "Szablony zespołów" => new[] { OperationType.TeamTemplateCreated, OperationType.TeamTemplateUpdated, OperationType.TeamTemplateDeleted },
+                    "Operacje wsadowe" => new[] { OperationType.BulkUserImport, OperationType.BulkTeamCreation, OperationType.BulkArchiving },
+                    "System" => new[] { OperationType.SystemBackup, OperationType.SystemRestore },
+                    _ => Array.Empty<OperationType>()
+                };
+                
+                var polishOperations = operationTypes.Select(op => op.ToPolishString()).ToArray();
+                
+                operations.AddRange(polishOperations);
+            }
+
+            AvailableOperations = new ObservableCollection<string>(operations);
+            
+            // Resetuj wybór operacji jeśli nie jest już dostępna
+            if (!string.IsNullOrEmpty(SelectedOperationFilter) && !operations.Contains(SelectedOperationFilter))
+            {
+                SelectedOperationFilter = null;
+            }
+        }
+
         private void ApplyPagination(List<OperationHistoryItemViewModel>? filteredList = null)
         {
             var source = filteredList ?? FilteredOperations.ToList();
@@ -586,6 +713,9 @@ namespace TeamsManager.UI.ViewModels.Operations
             // Update command states
             PreviousPageCommand.RaiseCanExecuteChanged();
             NextPageCommand.RaiseCanExecuteChanged();
+            
+            // Notify about HasNoData change
+            OnPropertyChanged(nameof(HasNoData));
         }
 
         private void CalculateStatistics()
@@ -616,13 +746,81 @@ namespace TeamsManager.UI.ViewModels.Operations
             }
         }
 
-        private void ShowOperationDetails(OperationHistoryItemViewModel? operation)
+        private async void ShowOperationDetails(OperationHistoryItemViewModel? operation)
         {
-            if (operation != null)
+            if (operation == null) return;
+
+            try
             {
-                // TODO: Show details popup
-                _logger.LogDebug($"Showing details for operation {operation.Id}");
+                _logger.LogDebug("Showing details for operation {OperationId}", operation.Id);
+
+                // Przygotuj szczegółowe informacje o operacji
+                var details = BuildOperationDetailsText(operation);
+
+                // Wyświetl dialog informacyjny z szczegółami
+                await _uiDialogService.ShowInformationAsync(
+                    title: "Szczegóły operacji",
+                    message: $"Typ: {operation.PolishOperationType}\nCel: {operation.DisplayTarget}\nStatus: {operation.PolishStatus}",
+                    details: details
+                );
+
+                _logger.LogDebug("Showed details for operation {OperationId}", operation.Id);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error showing operation details for {OperationId}", operation.Id);
+                
+                await _uiDialogService.ShowErrorAsync(
+                    "Błąd", 
+                    "Nie udało się wyświetlić szczegółów operacji.",
+                    ex.Message
+                );
+            }
+        }
+
+        /// <summary>
+        /// Buduje tekst ze szczegółami operacji
+        /// </summary>
+        private string BuildOperationDetailsText(OperationHistoryItemViewModel operation)
+        {
+            var details = new System.Text.StringBuilder();
+
+            // Podstawowe informacje
+            details.AppendLine($"ID: {operation.Id}");
+            details.AppendLine($"Typ: {operation.PolishOperationType}");
+            details.AppendLine($"Status: {operation.PolishStatus}");
+            details.AppendLine($"Rozpoczęto: {operation.FormattedStartTime}");
+            details.AppendLine($"Ukończono: {operation.FormattedEndTime}");
+            details.AppendLine($"Czas trwania: {operation.FormattedDuration}");
+            details.AppendLine($"Utworzył: {operation.DisplayUser}");
+            details.AppendLine();
+
+            // Informacje o postępie (jeśli dostępne)
+            if (operation.HasProgress)
+            {
+                details.AppendLine("=== POSTĘP OPERACJI ===");
+                details.AppendLine($"Razem elementów: {operation.TotalItems}");
+                details.AppendLine($"Przetworzone: {operation.ProcessedItems}");
+                details.AppendLine($"Postęp: {operation.ProgressPercentage:F1}%");
+                details.AppendLine();
+            }
+
+            // Informacje o błędzie (jeśli wystąpił)
+            if (operation.HasError)
+            {
+                details.AppendLine("=== BŁĄD ===");
+                details.AppendLine(operation.ErrorMessage);
+                details.AppendLine();
+            }
+
+            // Szczegóły operacji (jeśli dostępne)
+            if (operation.HasDetails)
+            {
+                details.AppendLine("=== SZCZEGÓŁY OPERACJI ===");
+                details.AppendLine(operation.OperationDetails);
+            }
+
+            return details.ToString();
         }
 
         private async Task ExportToExcelAsync()
@@ -669,6 +867,75 @@ namespace TeamsManager.UI.ViewModels.Operations
             }
         }
 
+        /// <summary>
+        /// Pobiera DisplayName dla użytkowników z operacji
+        /// </summary>
+        private async Task<Dictionary<string, string>> GetUserDisplayNamesAsync(List<OperationHistory> operations)
+        {
+            var userDisplayNames = new Dictionary<string, string>();
+            
+            try
+            {
+                // Pobierz unikalne UPN użytkowników
+                var userUpns = operations
+                    .Where(op => !string.IsNullOrEmpty(op.CreatedBy) && op.CreatedBy != "system")
+                    .Select(op => op.CreatedBy!)
+                    .Distinct()
+                    .ToList();
+
+                if (!userUpns.Any())
+                {
+                    _logger.LogDebug("Brak UPN użytkowników do pobrania DisplayName");
+                    return userDisplayNames;
+                }
+
+                _logger.LogDebug("Pobieranie DisplayName dla {Count} użytkowników: {Users}", userUpns.Count, string.Join(", ", userUpns));
+
+                // Pobierz użytkowników z bazy danych
+                foreach (var upn in userUpns)
+                {
+                    try
+                    {
+                        _logger.LogDebug("Pobieranie użytkownika dla UPN: {UPN}", upn);
+                        var user = await _userService.GetUserByUpnAsync(upn);
+                        if (user != null)
+                        {
+                            _logger.LogDebug("Znaleziono użytkownika {UPN}: DisplayName='{DisplayName}', FirstName='{FirstName}', LastName='{LastName}'", 
+                                upn, user.DisplayName, user.FirstName, user.LastName);
+                            
+                            if (!string.IsNullOrEmpty(user.DisplayName))
+                            {
+                                userDisplayNames[upn] = user.DisplayName;
+                                _logger.LogDebug("Dodano DisplayName dla {UPN}: '{DisplayName}'", upn, user.DisplayName);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("Użytkownik {UPN} nie ma ustawionego DisplayName", upn);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Nie znaleziono użytkownika dla UPN: {UPN}", upn);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Nie udało się pobrać użytkownika {UPN}", upn);
+                    }
+                }
+
+                _logger.LogDebug("Pobrano DisplayName dla {Count} z {Total} użytkowników. Mapowanie: {Mapping}", 
+                    userDisplayNames.Count, userUpns.Count, 
+                    string.Join(", ", userDisplayNames.Select(kvp => $"{kvp.Key}='{kvp.Value}'")));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania DisplayName użytkowników");
+            }
+
+            return userDisplayNames;
+        }
+
         private void ClearFilters()
         {
             StartDate = null;
@@ -677,6 +944,8 @@ namespace TeamsManager.UI.ViewModels.Operations
             SelectedStatus = null;
             UserFilter = string.Empty;
             SearchText = string.Empty;
+            SelectedEntityType = null;
+            SelectedOperationFilter = null;
         }
 
         #endregion
