@@ -8,10 +8,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Helpers.PowerShell;
+using TeamsManager.Core.Models.Graph;
 using System.Text.Json;
 using System.Globalization;
 

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -25,7 +25,7 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<DepartmentService> _logger;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
         // Klucze cache
         private const string AllDepartmentsRootOnlyCacheKey = "Departments_AllActive_RootOnly";
@@ -44,7 +44,7 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<DepartmentService> logger,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -52,7 +52,7 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
         /// <inheritdoc />
@@ -62,7 +62,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie działu {DepartmentId}. Poddziały: {IncludeSubDepartments}, Użytkownicy: {IncludeUsers}, Wymuszenie odświeżenia: {ForceRefresh}", departmentId, includeSubDepartments, includeUsers, forceRefresh); //
             string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId; //
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<Department>(cacheKey, out Department? cachedDepartment) && cachedDepartment != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue<Department>(cacheKey, out Department? cachedDepartment) && cachedDepartment != null)
             {
                 _logger.LogDebug("Dział {DepartmentId} znaleziony w cache.", departmentId); //
                 // Jeśli dział jest w cache, ale potrzebujemy dodatkowych danych, dociągnij je
@@ -80,7 +80,7 @@ namespace TeamsManager.Core.Services
             var department = await _departmentRepository.GetByIdAsync(departmentId);
             if (department != null)
             {
-                _powerShellCacheService.Set(cacheKey, department);
+                _graphCacheService.Set(cacheKey, department);
                 _logger.LogDebug("Dział {DepartmentId} zapisany w cache.", departmentId); //
             }
 
@@ -108,14 +108,14 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie wszystkich aktywnych działów. Tylko główne: {OnlyRoot}, Wymuszenie odświeżenia: {ForceRefresh}", onlyRootDepartments, forceRefresh); //
             string cacheKey = onlyRootDepartments ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey; //
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments) && cachedDepartments != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments) && cachedDepartments != null)
             {
                 _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) znaleziona w cache.", onlyRootDepartments); //
                 return cachedDepartments;
             }
 
             var departments = await _departmentRepository.FindAsync(d => d.IsActive && (onlyRootDepartments ? d.ParentDepartmentId == null : true));
-            _powerShellCacheService.Set(cacheKey, departments);
+            _graphCacheService.Set(cacheKey, departments);
             _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) zapisana w cache. Znaleziono {Count} działów.", onlyRootDepartments, departments.Count()); //
             return departments;
         }
@@ -127,14 +127,14 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie poddziałów dla działu {ParentDepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", parentDepartmentId, forceRefresh); //
             string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentDepartmentId; //
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedSubDepartments) && cachedSubDepartments != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedSubDepartments) && cachedSubDepartments != null)
             {
                 _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} znalezione w cache.", parentDepartmentId); //
                 return cachedSubDepartments;
             }
 
             var subDepartments = await _departmentRepository.FindAsync(d => d.ParentDepartmentId == parentDepartmentId && d.IsActive);
-            _powerShellCacheService.Set(cacheKey, subDepartments);
+            _graphCacheService.Set(cacheKey, subDepartments);
             _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} zapisane w cache. Znaleziono {Count} poddziałów.", parentDepartmentId, subDepartments.Count()); //
             return subDepartments;
         }
@@ -146,14 +146,14 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie użytkowników dla działu {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh); //
             string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId; //
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<User>>(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<User>>(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Użytkownicy dla działu {DepartmentId} znalezieni w cache.", departmentId); //
                 return cachedUsers;
             }
 
             var users = await _userRepository.FindAsync(u => u.DepartmentId == departmentId && u.IsActive);
-            _powerShellCacheService.Set(cacheKey, users);
+            _graphCacheService.Set(cacheKey, users);
             _logger.LogDebug("Użytkownicy dla działu {DepartmentId} zapisani w cache. Znaleziono {Count} użytkowników.", departmentId, users.Count()); //
             return users;
         }
@@ -233,7 +233,7 @@ namespace TeamsManager.Core.Services
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _powerShellCacheService.InvalidateAllDepartmentLists();
+                _graphCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -414,13 +414,13 @@ namespace TeamsManager.Core.Services
 
                 _departmentRepository.Update(existingDepartment);
 
-                _powerShellCacheService.InvalidateDepartment(existingDepartment.Id);
+                _graphCacheService.InvalidateDepartment(existingDepartment.Id);
 
                 // Zapisz zmiany do bazy danych
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _powerShellCacheService.InvalidateAllDepartmentLists();
+                _graphCacheService.InvalidateAllDepartmentLists();
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -489,12 +489,12 @@ namespace TeamsManager.Core.Services
                 if (!department.IsActive)
                 {
                     _logger.LogInformation("Dział ID {DepartmentId} był już nieaktywny.", departmentId);
-                    _powerShellCacheService.InvalidateDepartment(departmentId);
-                    _powerShellCacheService.InvalidateAllDepartmentLists();
+                    _graphCacheService.InvalidateDepartment(departmentId);
+                    _graphCacheService.InvalidateAllDepartmentLists();
 
                     if (!string.IsNullOrEmpty(department.ParentDepartmentId))
                     {
-                        _powerShellCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
+                        _graphCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
                     }
                     
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -561,11 +561,11 @@ namespace TeamsManager.Core.Services
                 await _departmentRepository.SaveChangesAsync();
 
                 // Invaliduj cache IMemoryCache
-                _powerShellCacheService.InvalidateAllDepartmentLists();
+                _graphCacheService.InvalidateAllDepartmentLists();
 
                 if (!string.IsNullOrEmpty(department.ParentDepartmentId))
                 {
-                    _powerShellCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
+                    _graphCacheService.InvalidateSubDepartments(department.ParentDepartmentId);
                 }
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
@@ -600,7 +600,7 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda unieważnia globalny cache dla działów.</remarks>
         public async Task RefreshCacheAsync()
         {
-            _powerShellCacheService.InvalidateAllCache();
+            _graphCacheService.InvalidateAllCache();
             _logger.LogInformation("Cache działów został odświeżony.");
         }
 

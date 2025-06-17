@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -28,7 +28,7 @@ namespace TeamsManager.Core.Services
         private readonly ILogger<SchoolYearService> _logger;
         private readonly ITeamRepository _teamRepository; // Potrzebne do sprawdzania zależności przy usuwaniu
         private readonly IMemoryCache _cache;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
         // Klucze cache
         private const string AllSchoolYearsCacheKey = "SchoolYears_AllActive";
@@ -50,7 +50,7 @@ namespace TeamsManager.Core.Services
             ILogger<SchoolYearService> logger,
             ITeamRepository teamRepository,
             IMemoryCache memoryCache,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
@@ -59,13 +59,13 @@ namespace TeamsManager.Core.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
-            // Delegacja do PowerShellCacheService dla spójnego zarządzania cache
-            return _powerShellCacheService.GetDefaultCacheEntryOptions();
+            // Delegacja do GraphCacheService dla spójnego zarządzania cache
+            return _graphCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
@@ -723,24 +723,24 @@ namespace TeamsManager.Core.Services
             if (invalidateAll)
             {
                 // Pełny reset cache tylko gdy faktycznie potrzebny (np. RefreshCacheAsync)
-                _powerShellCacheService.InvalidateAllCache();
+                _graphCacheService.InvalidateAllCache();
                 _logger.LogDebug("Wykonano pełny reset cache poprzez InvalidateAllCache()");
                 return;
             }
 
             // Granularna inwalidacja - zawsze unieważniamy listę wszystkich lat
-            _powerShellCacheService.InvalidateAllActiveSchoolYearsList();
+            _graphCacheService.InvalidateAllActiveSchoolYearsList();
             
             // Unieważnij bieżący rok jeśli był lub jest bieżący
             if (wasOrIsCurrent)
             {
-                _powerShellCacheService.InvalidateCurrentSchoolYear();
+                _graphCacheService.InvalidateCurrentSchoolYear();
             }
             
             // Unieważnij konkretny rok szkolny jeśli podany
             if (!string.IsNullOrWhiteSpace(schoolYearId))
             {
-                _powerShellCacheService.InvalidateSchoolYearById(schoolYearId);
+                _graphCacheService.InvalidateSchoolYearById(schoolYearId);
             }
         }
 
@@ -758,7 +758,7 @@ namespace TeamsManager.Core.Services
             var dateOnly = date.Date;
             string cacheKey = $"SchoolYears_ActiveOnDate_{dateOnly:yyyy-MM-dd}";
 
-            if (_powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<SchoolYear>? cachedYears) && cachedYears != null)
+            if (_graphCacheService.TryGetValue(cacheKey, out IEnumerable<SchoolYear>? cachedYears) && cachedYears != null)
             {
                 _logger.LogDebug("Lata szkolne aktywne w dniu {Date} znalezione w cache", dateOnly);
                 return cachedYears;
@@ -768,7 +768,7 @@ namespace TeamsManager.Core.Services
             var activeYears = await _schoolYearRepository.GetSchoolYearsActiveOnDateAsync(date);
             var yearsList = activeYears.ToList();
 
-            _powerShellCacheService.Set(cacheKey, yearsList);
+            _graphCacheService.Set(cacheKey, yearsList);
             _logger.LogDebug("Lata szkolne aktywne w dniu {Date} dodane do cache. Liczba: {Count}", dateOnly, yearsList.Count);
 
             return yearsList;

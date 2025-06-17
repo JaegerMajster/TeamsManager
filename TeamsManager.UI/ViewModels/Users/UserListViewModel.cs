@@ -12,6 +12,7 @@ using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.ViewModels.Shell;
+using TeamsManager.UI.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,6 +28,7 @@ namespace TeamsManager.UI.ViewModels.Users
         private readonly IDepartmentService _departmentService;
         private readonly ILogger<UserListViewModel> _logger;
         private readonly MainShellViewModel _mainShellViewModel;
+        private readonly IMsalAuthService _msalAuthService;
         
         private ObservableCollection<UserListItemViewModel> _users;
         private CollectionViewSource _usersViewSource;
@@ -50,12 +52,14 @@ namespace TeamsManager.UI.ViewModels.Users
             IUserService userService,
             IDepartmentService departmentService,
             ILogger<UserListViewModel> logger,
-            MainShellViewModel mainShellViewModel)
+            MainShellViewModel mainShellViewModel,
+            IMsalAuthService msalAuthService)
         {
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
 
             _users = new ObservableCollection<UserListItemViewModel>();
             _usersViewSource = new CollectionViewSource { Source = _users };
@@ -463,10 +467,18 @@ namespace TeamsManager.UI.ViewModels.Users
                 IsLoading = true;
                 var selectedIds = SelectedUsers.Select(u => u.Id).ToList();
                 
+                // Pobierz token dostępu z MSAL Auth Service
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
+                    return;
+                }
+                
                 // W rzeczywistej implementacji użyj batch operation
                 foreach (var userId in selectedIds)
                 {
-                    await _userService.ActivateUserAsync(userId, string.Empty); // Token będzie dostarczony przez HTTP context
+                    await _userService.ActivateUserAsync(userId, accessToken);
                 }
 
                 await LoadUsersAsync(forceRefresh: true);
@@ -489,9 +501,17 @@ namespace TeamsManager.UI.ViewModels.Users
                 IsLoading = true;
                 var selectedIds = SelectedUsers.Select(u => u.Id).ToList();
                 
+                // Pobierz token dostępu z MSAL Auth Service
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
+                    return;
+                }
+                
                 foreach (var userId in selectedIds)
                 {
-                    await _userService.DeactivateUserAsync(userId, string.Empty);
+                    await _userService.DeactivateUserAsync(userId, accessToken);
                 }
 
                 await LoadUsersAsync(forceRefresh: true);
@@ -520,6 +540,14 @@ namespace TeamsManager.UI.ViewModels.Users
                     return;
                 }
 
+                // Pobierz token dostępu z MSAL Auth Service
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
+                    return;
+                }
+
                 // Potwierdzenie usunięcia
                 var userNames = string.Join(", ", selectedInactiveUsers.Select(u => u.FullName));
                 var confirmMessage = $"Czy na pewno chcesz TRWALE usunąć {selectedInactiveUsers.Count} użytkowników?\n\n{userNames}\n\nTa operacja jest nieodwracalna!";
@@ -536,9 +564,6 @@ namespace TeamsManager.UI.ViewModels.Users
                 {
                     return;
                 }
-                
-                // TODO: Pobierz token dostępu z odpowiedniego serwisu
-                var accessToken = "mock-token"; // W rzeczywistej implementacji pobierz z auth service
                 
                 foreach (var user in selectedInactiveUsers)
                 {
@@ -565,6 +590,14 @@ namespace TeamsManager.UI.ViewModels.Users
 
             try
             {
+                // Pobierz token dostępu z MSAL Auth Service
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
+                    return;
+                }
+
                 // Sprawdź czy użytkownik jest dezaktywowany
                 if (user.IsActive)
                 {
@@ -589,9 +622,6 @@ namespace TeamsManager.UI.ViewModels.Users
                 }
 
                 IsLoading = true;
-                
-                // TODO: Pobierz token dostępu z odpowiedniego serwisu
-                var accessToken = "mock-token"; // W rzeczywistej implementacji pobierz z auth service
                 
                 var success = await _userService.DeleteUserAsync(user.Id, accessToken);
                 
@@ -729,6 +759,29 @@ namespace TeamsManager.UI.ViewModels.Users
                 (ActivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeactivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+
+        /// <summary>
+        /// Pobiera token dostępu z MSAL Auth Service
+        /// </summary>
+        private async Task<string?> GetAccessTokenAsync()
+        {
+            try
+            {
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken != null)
+                {
+                    return authResult.AccessToken;
+                }
+
+                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+                return null;
             }
         }
 

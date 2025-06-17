@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net.Http;
 
 namespace TeamsManager.Core.Abstractions.Services
 {
@@ -10,6 +11,40 @@ namespace TeamsManager.Core.Abstractions.Services
     /// </summary>
     public interface IModernHttpService
     {
+        /// <summary>
+        /// Wykonuje żądanie GET zwracające HttpResponseMessage
+        /// </summary>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>HttpResponseMessage</returns>
+        Task<HttpResponseMessage> GetAsync(string url, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie POST zwracające HttpResponseMessage
+        /// </summary>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="content">Zawartość do wysłania (JSON string)</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>HttpResponseMessage</returns>
+        Task<HttpResponseMessage> PostAsync(string url, string content, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie PATCH zwracające HttpResponseMessage
+        /// </summary>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="content">Zawartość do wysłania (JSON string)</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>HttpResponseMessage</returns>
+        Task<HttpResponseMessage> PatchAsync(string url, string content, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie DELETE zwracające HttpResponseMessage
+        /// </summary>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>HttpResponseMessage</returns>
+        Task<HttpResponseMessage> DeleteAsync(string url, Dictionary<string, string>? headers = null);
+
         /// <summary>
         /// Wykonuje żądanie GET do Microsoft Graph API z automatycznym resilience
         /// </summary>
@@ -713,5 +748,129 @@ namespace TeamsManager.Core.Abstractions.Services
                 string? accessToken = null)
                 where TRequest : class 
                 where TResponse : class;
+
+        // ===== MAIL API METHODS =====
+
+        /// <summary>
+        /// Wysyła email przez Microsoft Graph Mail API
+        /// Endpoint: POST /v1.0/me/sendMail
+        /// </summary>
+        /// <typeparam name="TRequest">Typ żądania email</typeparam>
+        /// <param name="emailData">Dane email do wysłania</param>
+        /// <param name="accessToken">Token dostępu (opcjonalny)</param>
+        /// <returns>True jeśli email został wysłany pomyślnie</returns>
+        Task<bool> SendMailAsync<TRequest>(
+            TRequest emailData, 
+            string? accessToken = null)
+            where TRequest : class;
+
+        /// <summary>
+        /// Wysyła email w imieniu określonego użytkownika przez Microsoft Graph Mail API
+        /// Endpoint: POST /v1.0/users/{user-id}/sendMail
+        /// </summary>
+        /// <typeparam name="TRequest">Typ żądania email</typeparam>
+        /// <param name="userId">ID użytkownika w imieniu którego wysyłamy email</param>
+        /// <param name="emailData">Dane email do wysłania</param>
+        /// <param name="accessToken">Token dostępu (opcjonalny)</param>
+        /// <returns>True jeśli email został wysłany pomyślnie</returns>
+        Task<bool> SendMailOnBehalfOfUserAsync<TRequest>(
+            string userId,
+            TRequest emailData, 
+            string? accessToken = null)
+            where TRequest : class;
+
+        /// <summary>
+        /// Tworzy draft email przez Microsoft Graph Mail API
+        /// Endpoint: POST /v1.0/me/messages
+        /// </summary>
+        /// <typeparam name="TRequest">Typ żądania email</typeparam>
+        /// <typeparam name="TResponse">Typ odpowiedzi message</typeparam>
+        /// <param name="emailData">Dane email do utworzenia jako draft</param>
+        /// <param name="accessToken">Token dostępu (opcjonalny)</param>
+        /// <returns>Utworzony draft message lub null w przypadku błędu</returns>
+        Task<TResponse?> CreateDraftEmailAsync<TRequest, TResponse>(
+            TRequest emailData, 
+            string? accessToken = null)
+            where TRequest : class 
+            where TResponse : class;
+
+        /// <summary>
+        /// Pobiera wiadomości email z skrzynki użytkownika
+        /// Endpoint: GET /v1.0/me/messages
+        /// </summary>
+        /// <typeparam name="TResponse">Typ odpowiedzi kolekcji wiadomości</typeparam>
+        /// <param name="accessToken">Token dostępu (opcjonalny)</param>
+        /// <param name="filter">Opcjonalny filtr OData</param>
+        /// <param name="select">Opcjonalne pola do pobrania</param>
+        /// <param name="top">Maksymalna liczba wiadomości do pobrania</param>
+        /// <returns>Lista wiadomości email lub null w przypadku błędu</returns>
+        Task<TResponse?> GetMailMessagesAsync<TResponse>(
+            string? accessToken = null,
+            string? filter = null,
+            string? select = null,
+            int? top = null) 
+            where TResponse : class;
+
+        /// <summary>
+        /// Pobiera konkretną wiadomość email
+        /// Endpoint: GET /v1.0/me/messages/{message-id}
+        /// </summary>
+        /// <typeparam name="TResponse">Typ odpowiedzi wiadomości</typeparam>
+        /// <param name="messageId">ID wiadomości</param>
+        /// <param name="accessToken">Token dostępu (opcjonalny)</param>
+        /// <returns>Wiadomość email lub null jeśli nie znaleziono</returns>
+        Task<TResponse?> GetMailMessageAsync<TResponse>(
+            string messageId,
+            string? accessToken = null) 
+            where TResponse : class;
+
+        /// <summary>
+        /// Pobiera aktualny token dostępu.
+        /// Używane w GraphBulkOperationsService i innych serwisach.
+        /// </summary>
+        /// <returns>Token dostępu lub null jeśli niedostępny</returns>
+        Task<string?> GetAccessTokenAsync();
+
+        // ===== WERSJE GENERIC METOD HTTP =====
+
+        /// <summary>
+        /// Wykonuje żądanie GET zwracające obiekt typu T
+        /// </summary>
+        /// <typeparam name="T">Typ zwracanego obiektu</typeparam>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>Obiekt typu T lub null</returns>
+        Task<T?> GetAsync<T>(string url, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie POST z obiektem typu TRequest zwracające obiekt typu TResponse
+        /// </summary>
+        /// <typeparam name="TRequest">Typ obiektu żądania</typeparam>
+        /// <typeparam name="TResponse">Typ obiektu odpowiedzi</typeparam>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="content">Obiekt do wysłania</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>Obiekt typu TResponse lub null</returns>
+        Task<TResponse?> PostAsync<TRequest, TResponse>(string url, TRequest content, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie PATCH z obiektem typu T
+        /// </summary>
+        /// <typeparam name="T">Typ obiektu żądania</typeparam>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="content">Obiekt do wysłania</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>Task</returns>
+        Task PatchAsync<T>(string url, T content, Dictionary<string, string>? headers = null);
+
+        /// <summary>
+        /// Wykonuje żądanie PUT z obiektem typu T
+        /// </summary>
+        /// <typeparam name="T">Typ obiektu żądania</typeparam>
+        /// <param name="url">Pełny URL lub endpoint</param>
+        /// <param name="content">Obiekt do wysłania</param>
+        /// <param name="headers">Opcjonalne nagłówki</param>
+        /// <returns>Task</returns>
+        Task PutAsync<T>(string url, T content, Dictionary<string, string>? headers = null);
     }
 } 

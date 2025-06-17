@@ -31,13 +31,12 @@ using TeamsManager.Api.Swagger;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
 using TeamsManager.Api.Services; // <-- Dodane dla SignalRNotificationService
-using TeamsManager.Core.Services.PowerShell; // Dla StubNotificationService (jeśli tam jest) lub odpowiedniej przestrzeni nazw
 using TeamsManager.Api.HealthChecks; // <-- Dodane dla DependencyInjectionHealthCheck
-using TeamsManager.Core.Abstractions.Services.PowerShell; // <-- Dodane dla interfejsów PowerShell
 using TeamsManager.Core.Abstractions.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
 using TeamsManager.Core.Abstractions.Services.Cache; // <-- Dodane dla CacheInvalidationService (Etap 7/8)
 using TeamsManager.Core.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
 using TeamsManager.Core.Services.Cache; // <-- Dodane dla implementacji Cache (Etap 7/8)
+using TeamsManager.Core.Models.Graph; // <-- Dodane dla GraphTeam, GraphUser, GraphChannel
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using TeamsManager.Core.Common;
@@ -67,9 +66,9 @@ builder.Services.AddControllers();
 // ========== DODANIE HEALTH CHECKS ==========
 builder.Services.AddHealthChecks()
     .AddCheck<DependencyInjectionHealthCheck>("di_check")
-    .AddCheck<PowerShellConnectionHealthCheck>("powershell_connection", 
+    .AddCheck<GraphConnectionHealthCheck>("graph_connection", 
         failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
-        tags: new[] { "powershell", "graph", "external" });
+        tags: new[] { "graph", "external" });
 // ==========================================
 
 // ========== NOWA LINIA - Dodanie usług SignalR ==========
@@ -250,19 +249,19 @@ else
 // ====================================================================
 
 // ========== NOWA REJESTRACJA - Synchronizatory Graph-DB (Etap 4/8) ==========
-builder.Services.AddScoped<IGraphSynchronizer<Team>, TeamSynchronizer>();
-builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
-builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
+builder.Services.AddScoped<IGraphSynchronizer<Team, GraphTeam>, TeamSynchronizer>();
+builder.Services.AddScoped<IGraphSynchronizer<User, GraphUser>, UserSynchronizer>();
+builder.Services.AddScoped<IGraphSynchronizer<Channel, GraphChannel>, ChannelSynchronizer>();
 
 // ETAP 7/8: Centralizacja inwalidacji cache
 builder.Services.AddScoped<ICacheInvalidationService, CacheInvalidationService>();
 // W przyszłości dodaj więcej synchronizatorów:
 // builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
-// builder.Services.AddScoped<IGraphSynchronizer<Channel>, ChannelSynchronizer>();
 // ===========================================================================
 
-// Rejestracja Serwisów Aplikacyjnych
-builder.Services.AddPowerShellServices(); // To rejestruje IPowerShellConnectionService, IPowerShellCacheService, IPowerShellTeamManagementService, IPowerShellUserManagementService, IPowerShellBulkOperationsService, IPowerShellService
+// Rejestracja Serwisów Aplikacyjnych - Graph API Services
+builder.Services.AddGraphServices(includeAdminNotificationService: true); // Rejestruje wszystkie Graph API services
+
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
@@ -368,9 +367,7 @@ builder.Services.AddSingleton<ModernCircuitBreaker>(provider =>
     );
 });
 
-// Rejestracja TokenManager
-builder.Services.AddScoped<ITokenManager, TokenManager>();
-
+// IConfidentialClientApplication dla TokenManager
 builder.Services.AddScoped<IConfidentialClientApplication>(provider =>
 {
     var authority = $"{oauthApiConfig.AzureAd.Instance?.TrimEnd('/')}/{oauthApiConfig.AzureAd.TenantId}";
@@ -379,11 +376,23 @@ builder.Services.AddScoped<IConfidentialClientApplication>(provider =>
         oauthApiConfig.AzureAd.ClientId,
         authority,
         !string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientSecret));
-
+     
     return ConfidentialClientApplicationBuilder.Create(oauthApiConfig.AzureAd.ClientId)
         .WithClientSecret(oauthApiConfig.AzureAd.ClientSecret)
         .WithAuthority(new Uri(authority))
         .Build();
+});
+
+// Enhanced Token Manager - używa GraphApiConfiguration
+builder.Services.AddScoped<ITokenManager>(provider =>
+{
+    var confidentialClientApp = provider.GetRequiredService<IConfidentialClientApplication>();
+    var memoryCache = provider.GetRequiredService<IMemoryCache>();
+    var logger = provider.GetRequiredService<ILogger<TokenManager>>();
+    var configuration = provider.GetRequiredService<IConfiguration>();
+    var graphConfig = provider.GetRequiredService<GraphApiConfiguration>();
+    
+    return new TokenManager(confidentialClientApp, memoryCache, logger, configuration, graphConfig);
 });
 
 const string MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -478,7 +487,6 @@ using (var scope = app.Services.CreateScope())
         ("IOperationHistoryService", typeof(IOperationHistoryService)),
         ("INotificationService", typeof(INotificationService)),
         ("ICurrentUserService", typeof(ICurrentUserService)),
-        ("IPowerShellBulkOperationsService", typeof(IPowerShellBulkOperationsService)),
         ("ITeamService", typeof(ITeamService)),
         ("IUserService", typeof(IUserService)),
         ("IDepartmentService", typeof(IDepartmentService)),

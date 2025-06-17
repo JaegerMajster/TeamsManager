@@ -1,16 +1,18 @@
-﻿// Plik: TeamsManager.Core/Services/UserService.cs
+// Plik: TeamsManager.Core/Services/UserService.cs
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services
 {
@@ -30,12 +32,12 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<UserService> _logger;
         private readonly ISubjectService _subjectService;
-        private readonly IPowerShellService _powerShellService;
+        private readonly IGraphService _graphService;
         private readonly IOperationHistoryService _operationHistoryService;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
         private readonly INotificationService _notificationService;
         private readonly IAdminNotificationService _adminNotificationService;
-        private readonly IGraphSynchronizer<User> _userSynchronizer;
+        private readonly IGraphSynchronizer<User, GraphUser> _userSynchronizer;
         private readonly IUnitOfWork _unitOfWork;
 
         // Definicje kluczy cache
@@ -58,12 +60,12 @@ namespace TeamsManager.Core.Services
             ICurrentUserService currentUserService,
             ILogger<UserService> logger,
             ISubjectService subjectService,
-            IPowerShellService powerShellService,
+            IGraphService graphService,
             IOperationHistoryService operationHistoryService,
-            IPowerShellCacheService powerShellCacheService,
+            IGraphCacheService graphCacheService,
             INotificationService notificationService,
             IAdminNotificationService adminNotificationService,
-            IGraphSynchronizer<User> userSynchronizer,
+            IGraphSynchronizer<User, GraphUser> userSynchronizer,
             IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -76,16 +78,14 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _userSynchronizer = userSynchronizer ?? throw new ArgumentNullException(nameof(userSynchronizer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
-
-
 
         /// <inheritdoc />
         public async Task<User?> GetUserByIdAsync(string userId, bool forceRefresh = false, string? apiAccessToken = null) // ZMIANA: accessToken -> apiAccessToken
@@ -98,7 +98,7 @@ namespace TeamsManager.Core.Services
             }
             string cacheKey = UserByIdCacheKeyPrefix + userId;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out User? cachedUser))
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik ID: {UserId} znaleziony w cache.", userId);
                 return cachedUser;
@@ -115,23 +115,23 @@ namespace TeamsManager.Core.Services
                     _logger.LogInformation("Próba pobrania użytkownika {UserId} z Microsoft Graph", userId);
                     
                     // Pobierz dane z Graph
-                    var psUser = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    var graphResult = await _graphService.ExecuteWithAutoConnectAsync(
                         apiAccessToken,
-                        async () => await _powerShellService.Users.GetM365UserByIdAsync(userId),
+                        async () => await _graphService.Users.GetM365UserByIdAsync(userId),
                         $"GetM365UserByIdAsync dla ID: {userId}"
                     );
 
-                    if (psUser != null)
+                    if (graphResult.IsSuccess && graphResult.Data != null)
                     {
-                        // Synchronizuj z lokalną bazą
-                        if (await _userSynchronizer.RequiresSynchronizationAsync(psUser, userFromDb!))
+                        // Synchronizuj bezpośrednio z GraphUser
+                        if (await _userSynchronizer.RequiresSynchronizationAsync(graphResult.Data, userFromDb!))
                         {
                             _logger.LogInformation("Synchronizacja użytkownika {UserId} z Microsoft Graph", userId);
                             
                             await _unitOfWork.BeginTransactionAsync();
                             try
                             {
-                                userFromDb = await _userSynchronizer.SynchronizeAsync(psUser, userFromDb);
+                                userFromDb = await _userSynchronizer.SynchronizeAsync(graphResult.Data, userFromDb);
                                 
                                 if (userFromDb.Id != userId && string.IsNullOrEmpty(userFromDb.Id))
                                 {
@@ -173,12 +173,12 @@ namespace TeamsManager.Core.Services
 
             if (userFromDb != null && userFromDb.IsActive)
             {
-                _powerShellCacheService.Set(cacheKey, userFromDb);
+                _graphCacheService.Set(cacheKey, userFromDb);
                 _logger.LogDebug("Użytkownik ID: {UserId} dodany/zaktualizowany w cache po ID.", userId);
                 if (!string.IsNullOrWhiteSpace(userFromDb.UPN))
                 {
                     string upnCacheKey = UserByUpnCacheKeyPrefix + userFromDb.UPN;
-                    _powerShellCacheService.Set(upnCacheKey, userFromDb);
+                    _graphCacheService.Set(upnCacheKey, userFromDb);
                     _logger.LogDebug("Użytkownik (ID: {UserId}, UPN: {UPN}) zaktualizowany/dodany w cache po UPN.", userId, userFromDb.UPN);
                 }
             }
@@ -201,7 +201,7 @@ namespace TeamsManager.Core.Services
             }
             string upnCacheKey = UserByUpnCacheKeyPrefix + upn;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(upnCacheKey, out User? cachedUser))
+            if (!forceRefresh && _graphCacheService.TryGetValue(upnCacheKey, out User? cachedUser))
             {
                 _logger.LogDebug("Użytkownik UPN: {UPN} znaleziony w cache.", upn);
                 return cachedUser;
@@ -212,7 +212,7 @@ namespace TeamsManager.Core.Services
             if (userFromDbBase == null)
             {
                 _logger.LogInformation("Nie znaleziono użytkownika o UPN: {UPN} w repozytorium.", upn);
-                _powerShellCacheService.Set(upnCacheKey, (User?)null);
+                _graphCacheService.Set(upnCacheKey, (User?)null);
                 return null;
             }
             var userFromDbFull = await GetUserByIdAsync(userFromDbBase.Id, forceRefresh: true, apiAccessToken: apiAccessToken); // ZMIANA: przekazanie apiAccessToken
@@ -223,7 +223,7 @@ namespace TeamsManager.Core.Services
         public async Task<IEnumerable<User>> GetAllActiveUsersAsync(bool forceRefresh = false, string? apiAccessToken = null) // ZMIANA: accessToken -> apiAccessToken
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych użytkowników. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllActiveUsersCacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(AllActiveUsersCacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Wszyscy aktywni użytkownicy znalezieni w cache.");
                 return cachedUsers;
@@ -231,7 +231,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszyscy aktywni użytkownicy nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
 
             var usersFromDb = await _userRepository.FindAsync(u => u.IsActive);
-            _powerShellCacheService.Set(AllActiveUsersCacheKey, usersFromDb);
+            _graphCacheService.Set(AllActiveUsersCacheKey, usersFromDb);
             _logger.LogDebug("Wszyscy aktywni użytkownicy dodani do cache.");
             return usersFromDb;
         }
@@ -242,7 +242,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie użytkowników o roli: {Role}. Wymuszenie odświeżenia: {ForceRefresh}", role, forceRefresh);
             string cacheKey = UsersByRoleCacheKeyPrefix + role.ToString();
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
                 _logger.LogDebug("Użytkownicy o roli {Role} znalezieni w cache.", role);
                 return cachedUsers;
@@ -250,7 +250,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Użytkownicy o roli {Role} nie znalezieni w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", role);
 
             var usersFromDb = await _userRepository.GetUsersByRoleAsync(role);
-            _powerShellCacheService.Set(cacheKey, usersFromDb);
+            _graphCacheService.Set(cacheKey, usersFromDb);
             _logger.LogDebug("Użytkownicy o roli {Role} dodani do cache.", role);
             return usersFromDb;
         }
@@ -344,12 +344,12 @@ namespace TeamsManager.Core.Services
                     return null;
                 }
 
-                // NOWE: Sprawdź diagnostykę przed tworzeniem użytkownika - używamy nowej metody z PowerShellConnectionService
-                _logger.LogDebug("Sprawdzanie diagnostyki PowerShell przed tworzeniem użytkownika {UPN}", upn);
-                var diagnostic = await _powerShellService.Connection.DiagnoseConnectionAsync(true, "Get-MgUser -Top 1");
-                if (diagnostic.OverallHealth == PowerShellHealthStatus.Critical)
+                // NOWE: Sprawdź diagnostykę przed tworzeniem użytkownika - używamy nowej metody z GraphConnectionService
+                _logger.LogDebug("Sprawdzanie diagnostyki Graph API przed tworzeniem użytkownika {UPN}", upn);
+                var diagnostic = await _graphService.Connection.GetDiagnosticInfoAsync();
+                if (diagnostic.Status == GraphHealthStatus.Critical)
                 {
-                    var diagnosticMessage = $"System PowerShell nie jest gotowy do tworzenia użytkowników: {diagnostic.OverallHealth}";
+                    var diagnosticMessage = $"System Graph API nie jest gotowy do tworzenia użytkowników: {diagnostic.Status}";
                     _logger.LogError("Nie można utworzyć użytkownika {UPN}: {DiagnosticMessage}. Błędy: {Errors}", 
                         upn, diagnosticMessage, string.Join("; ", diagnostic.Errors));
                     
@@ -369,16 +369,20 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Używamy ExecuteWithAutoConnectAsync dla utworzenia użytkownika w M365
-                string? externalUserId = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var createResult = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellService.Users.CreateM365UserAsync(
+                    async () => await _graphService.Users.CreateM365UserAsync(
                         $"{firstName} {lastName}", 
                         upn, 
                         password, 
-                        accountEnabled: true, 
-                        department: department.Name), // Przekazujemy nazwę departmentu do M365
-                    $"Tworzenie użytkownika M365: {firstName} {lastName} ({upn})"
+                        "PL", 
+                        null, 
+                        true, 
+                        department.Name),
+                    $"Tworzenie użytkownika M365: {upn}"
                 );
+
+                string? externalUserId = createResult.IsSuccess ? createResult.Data?.Id : null;
                 
                 if (string.IsNullOrEmpty(externalUserId))
                 {
@@ -601,12 +605,12 @@ namespace TeamsManager.Core.Services
                 existingUser.IsActive = userToUpdate.IsActive;
 
                 // Aktualizacja użytkownika w M365 używając ExecuteWithAutoConnectAsync
-                var m365UpdateSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var m365UpdateSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
                     async () =>
                     {
                         // Aktualizuj podstawowe właściwości użytkownika
-                        var updateResult = await _powerShellService.Users.UpdateM365UserPropertiesAsync(
+                        var updateResult = await _graphService.Users.UpdateM365UserPropertiesAsync(
                             existingUser.UPN,
                             department: department.Name,
                             jobTitle: existingUser.Position,
@@ -617,7 +621,7 @@ namespace TeamsManager.Core.Services
                         // Jeśli UPN się zmienił, zaktualizuj go
                         if (!string.Equals(oldUpn, existingUser.UPN, StringComparison.OrdinalIgnoreCase))
                         {
-                            var upnUpdateResult = await _powerShellService.Users.UpdateM365UserPrincipalNameAsync(oldUpn!, existingUser.UPN);
+                            var upnUpdateResult = await _graphService.Users.UpdateM365UserPrincipalNameAsync(oldUpn!, existingUser.UPN);
                             return updateResult && upnUpdateResult;
                         }
 
@@ -1217,7 +1221,7 @@ namespace TeamsManager.Core.Services
             UserRole? oldRoleIfChanged = null, bool isActiveChanged = false, 
             bool invalidateAllGlobalLists = false, bool invalidateAll = false)
         {
-            _logger.LogDebug("Delegowanie inwalidacji cache do PowerShellCacheService. " +
+            _logger.LogDebug("Delegowanie inwalidacji cache do GraphCacheService. " +
                 "UserId: {UserId}, UPN: {UPN}, Role: {Role}, OldUpn: {OldUpn}, " +
                 "OldRole: {OldRole}, IsActiveChanged: {IsActiveChanged}, " +
                 "InvalidateAllGlobalLists: {InvalidateAllGlobalLists}, InvalidateAll: {InvalidateAll}",
@@ -1227,14 +1231,14 @@ namespace TeamsManager.Core.Services
             if (invalidateAll)
             {
                 // Pełne resetowanie cache tylko w skrajnych przypadkach
-                _powerShellCacheService.InvalidateAllCache();
-                _powerShellCacheService.InvalidateAllActiveUsersList();
-                _powerShellCacheService.InvalidateUserListCache();
+                _graphCacheService.InvalidateAllCache();
+                _graphCacheService.InvalidateAllActiveUsersList();
+                _graphCacheService.InvalidateUserListCache();
                 
                 // Usuń wszystkie klucze UserService
                 foreach (UserRole roleToInvalidate in Enum.GetValues(typeof(UserRole)))
                 {
-                    _powerShellCacheService.InvalidateUsersByRole(roleToInvalidate);
+                    _graphCacheService.InvalidateUsersByRole(roleToInvalidate.ToString());
                 }
                 
                 _logger.LogInformation("Wykonano pełne resetowanie cache użytkowników.");
@@ -1242,19 +1246,13 @@ namespace TeamsManager.Core.Services
             }
 
             // Granularna inwalidacja - używamy kompleksowej metody
-            _powerShellCacheService.InvalidateUserAndRelatedData(
-                userId, 
-                upn, 
-                oldUpnIfChanged, 
-                role, 
-                oldRoleIfChanged
-            );
+            _graphCacheService.InvalidateUserAndRelatedData(userId);
 
             // Obsługa list globalnych
             if (invalidateAllGlobalLists || isActiveChanged)
             {
-                _powerShellCacheService.InvalidateAllActiveUsersList();
-                _powerShellCacheService.InvalidateUserListCache();
+                _graphCacheService.InvalidateAllActiveUsersList();
+                _graphCacheService.InvalidateUserListCache();
                 
                 _logger.LogDebug("Unieważniono globalne listy użytkowników " +
                     "(isActiveChanged: {IsActiveChanged}, invalidateAllGlobalLists: {InvalidateAllGlobalLists})",
@@ -1264,9 +1262,9 @@ namespace TeamsManager.Core.Services
             // Specjalna obsługa dla ról nauczycielskich
             if (role.HasValue && IsTeachingRole(role.Value))
             {
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Nauczyciel);
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor);
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Dyrektor);
+                _graphCacheService.InvalidateUsersByRole(UserRole.Nauczyciel.ToString());
+                _graphCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor.ToString());
+                _graphCacheService.InvalidateUsersByRole(UserRole.Dyrektor.ToString());
                 
                 _logger.LogDebug("Unieważniono cache dla wszystkich ról nauczycielskich.");
             }
@@ -1274,9 +1272,9 @@ namespace TeamsManager.Core.Services
             // Jeśli stara rola też była nauczycielska
             if (oldRoleIfChanged.HasValue && IsTeachingRole(oldRoleIfChanged.Value))
             {
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Nauczyciel);
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor);
-                _powerShellCacheService.InvalidateUsersByRole(UserRole.Dyrektor);
+                _graphCacheService.InvalidateUsersByRole(UserRole.Nauczyciel.ToString());
+                _graphCacheService.InvalidateUsersByRole(UserRole.Wicedyrektor.ToString());
+                _graphCacheService.InvalidateUsersByRole(UserRole.Dyrektor.ToString());
             }
         }
 
@@ -1348,9 +1346,9 @@ namespace TeamsManager.Core.Services
                 if (deactivateM365Account)
                 {
                     // Używamy ExecuteWithAutoConnectAsync dla dezaktywacji konta M365
-                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    var psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                         apiAccessToken,
-                        async () => await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, false),
+                        async () => await _graphService.Users.SetM365UserAccountStateAsync(user.UPN, false),
                         $"Dezaktywacja konta M365 użytkownika: {user.UPN}"
                     );
                     
@@ -1488,9 +1486,9 @@ namespace TeamsManager.Core.Services
                 if (activateM365Account)
                 {
                     // Używamy ExecuteWithAutoConnectAsync dla aktywacji konta M365
-                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    var psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                         apiAccessToken,
-                        async () => await _powerShellService.Users.SetM365UserAccountStateAsync(user.UPN, true),
+                        async () => await _graphService.Users.SetM365UserAccountStateAsync(user.UPN, true),
                         $"Aktywacja konta M365 użytkownika: {user.UPN}"
                     );
                     
@@ -1630,9 +1628,9 @@ namespace TeamsManager.Core.Services
                 if (deleteM365Account)
                 {
                     // Używamy ExecuteWithAutoConnectAsync dla usunięcia konta M365
-                    var psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                    var psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                         apiAccessToken,
-                        async () => await _powerShellService.Users.DeleteM365UserAsync(user.UPN),
+                        async () => await _graphService.Users.DeleteM365UserAsync(user.UPN),
                         $"Trwałe usunięcie konta M365 użytkownika: {user.UPN}"
                     );
                     

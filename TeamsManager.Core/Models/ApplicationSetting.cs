@@ -33,7 +33,7 @@ namespace TeamsManager.Core.Models
 
         /// <summary>
         /// Kategoria ustawienia do grupowania w interfejsie
-        /// Np. "General", "Teams", "Security", "PowerShell", "Notifications"
+        /// Np. "General", "Teams", "Security", "GraphAPI", "Notifications"
         /// </summary>
         public string Category { get; set; } = "General";
 

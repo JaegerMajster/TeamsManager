@@ -99,7 +99,7 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Informacje o rate limiting.
         /// </summary>
-        public GraphRateLimitInfo? RateLimitInfo { get; set; }
+        public GraphRateLimitStatus? RateLimitInfo { get; set; }
 
         /// <summary>
         /// Dodatkowe metadane operacji.
@@ -116,6 +116,16 @@ namespace TeamsManager.Core.Models.Graph
         /// </summary>
         public bool HasRateLimitIssues => RateLimitInfo?.IsLimitReached == true || 
                                           RateLimitInfo?.UsagePercentage > 90;
+
+        /// <summary>
+        /// Kompatybilność z API - liczba dodanych elementów.
+        /// </summary>
+        public int AddedCount => SuccessfulOperations.Count(s => s.Operation?.Contains("Add") == true || s.Operation?.Contains("Create") == true);
+
+        /// <summary>
+        /// Kompatybilność z API - liczba usuniętych elementów.
+        /// </summary>
+        public int RemovedCount => SuccessfulOperations.Count(s => s.Operation?.Contains("Remove") == true || s.Operation?.Contains("Delete") == true);
 
         /// <summary>
         /// Czy operacja powinna być powtórzona.

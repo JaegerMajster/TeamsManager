@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
@@ -22,8 +22,8 @@ namespace TeamsManager.Application.Services
     /// </summary>
     public class HealthMonitoringOrchestrator : IHealthMonitoringOrchestrator
     {
-        private readonly IPowerShellConnectionService _powerShellConnectionService;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphConnectionService _graphConnectionService;
+        private readonly IGraphCacheService _graphCacheService;
         private readonly ICacheInvalidationService _cacheInvalidationService;
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly ICurrentUserService _currentUserService;
@@ -36,16 +36,16 @@ namespace TeamsManager.Application.Services
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _cancellationTokens;
 
         public HealthMonitoringOrchestrator(
-            IPowerShellConnectionService powerShellConnectionService,
-            IPowerShellCacheService powerShellCacheService,
+            IGraphConnectionService graphConnectionService,
+            IGraphCacheService graphCacheService,
             ICacheInvalidationService cacheInvalidationService,
             IOperationHistoryService operationHistoryService,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
             ILogger<HealthMonitoringOrchestrator> logger)
         {
-            _powerShellConnectionService = powerShellConnectionService ?? throw new ArgumentNullException(nameof(powerShellConnectionService));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphConnectionService = graphConnectionService ?? throw new ArgumentNullException(nameof(graphConnectionService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
@@ -73,7 +73,7 @@ namespace TeamsManager.Application.Services
                 Status = "Running",
                 CurrentOperation = "Inicjalizacja sprawdzenia zdrowia",
                 StartedAt = DateTime.UtcNow,
-                TotalComponents = 3 // PowerShell, Cache, Performance
+                TotalComponents = 3 // Graph API, Cache, Performance
             };
 
             _activeProcesses[processId] = processStatus;
@@ -93,10 +93,10 @@ namespace TeamsManager.Application.Services
                 var result = HealthOperationResult.CreateSuccess("ComprehensiveHealthCheck");
                 var healthChecks = new List<HealthCheckDetail>();
 
-                // 1. Sprawdź PowerShell Connection
-                await UpdateProcessStatusAsync(processId, "Sprawdzanie połączenia PowerShell", 1);
-                var powerShellCheck = await CheckPowerShellConnectionHealthAsync(cts.Token);
-                healthChecks.Add(powerShellCheck);
+                            // 1. Sprawdź Graph API Connection
+            await UpdateProcessStatusAsync(processId, "Sprawdzanie połączenia Graph API", 1);
+            var graphCheck = await CheckGraphConnectionHealthAsync(cts.Token);
+            healthChecks.Add(graphCheck);
 
                 // 2. Sprawdź Cache Performance
                 await UpdateProcessStatusAsync(processId, "Sprawdzanie wydajności cache", 2);
@@ -237,13 +237,13 @@ namespace TeamsManager.Application.Services
                 var result = HealthOperationResult.CreateSuccess("GraphSynchronization");
 
                 // Sprawdź połączenie z Graph
-                var connectionHealth = await _powerShellConnectionService.GetConnectionHealthAsync();
-                if (!connectionHealth.IsConnected || !connectionHealth.TokenValid)
+                var connectionHealth = await _graphConnectionService.GetConnectionHealthAsync();
+                if (!connectionHealth.IsConnected || !connectionHealth.IsTokenValid)
                 {
                     result.Errors.Add(new HealthOperationError
                     {
                         Operation = "GraphConnection",
-                        Component = "PowerShell",
+                        Component = "Graph API",
                         Message = "Brak prawidłowego połączenia z Microsoft Graph",
                         Severity = HealthErrorSeverity.Critical
                     });
@@ -253,7 +253,7 @@ namespace TeamsManager.Application.Services
                     result.SuccessfulOperations.Add(new HealthOperationSuccess
                     {
                         Operation = "GraphConnection",
-                        Component = "PowerShell",
+                        Component = "Graph API",
                         Message = "Połączenie z Microsoft Graph jest aktywne i prawidłowe"
                     });
                 }
@@ -298,7 +298,7 @@ namespace TeamsManager.Application.Services
                 var result = HealthOperationResult.CreateSuccess("CacheOptimization");
 
                 // Pobierz aktualne metryki cache
-                var currentMetrics = _powerShellCacheService.GetCacheMetrics();
+                var currentMetrics = _graphCacheService.GetCacheMetrics();
                 
                 result.Metrics = new HealthMetrics
                 {
@@ -309,7 +309,7 @@ namespace TeamsManager.Application.Services
                 if (currentMetrics.HitRate < 70.0)
                 {
                     // Nie ma metody ResetMetrics, więc robimy inwalidację cache
-                    _powerShellCacheService.InvalidateAllCache();
+                    _graphCacheService.InvalidateAllCache();
                     
                     result.SuccessfulOperations.Add(new HealthOperationSuccess
                     {
@@ -379,33 +379,33 @@ namespace TeamsManager.Application.Services
 
         #region Private Helper Methods
 
-        private async Task<HealthCheckDetail> CheckPowerShellConnectionHealthAsync(CancellationToken cancellationToken)
+        private async Task<HealthCheckDetail> CheckGraphConnectionHealthAsync(CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             
             try
             {
-                var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
+                var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
                 stopwatch.Stop();
 
-                var status = healthInfo.IsConnected && healthInfo.TokenValid 
+                var status = healthInfo.IsConnected && healthInfo.IsTokenValid 
                     ? HealthStatus.Healthy 
                     : HealthStatus.Degraded;
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "PowerShell Connection",
+                    ComponentName = "Graph API Connection",
                     Status = status,
                     Description = status == HealthStatus.Healthy 
-                        ? "Połączenie PowerShell jest aktywne i sprawne" 
-                        : $"Problemy z połączeniem PowerShell. Connected: {healthInfo.IsConnected}, TokenValid: {healthInfo.TokenValid}",
+                        ? "Połączenie Graph API jest aktywne i sprawne" 
+                        : $"Problemy z połączeniem Graph API. Connected: {healthInfo.IsConnected}, TokenValid: {healthInfo.IsTokenValid}",
                     DurationMs = stopwatch.ElapsedMilliseconds,
                     Data = new Dictionary<string, object>
                     {
                         ["Connected"] = healthInfo.IsConnected,
-                        ["TokenValid"] = healthInfo.TokenValid,
-                        ["RunspaceState"] = healthInfo.RunspaceState,
-                        ["CircuitBreakerState"] = healthInfo.CircuitBreakerState
+                        ["TokenValid"] = healthInfo.IsTokenValid,
+                        ["Status"] = healthInfo.Status.ToString(),
+                        ["ResponseTimeMs"] = healthInfo.ResponseTimeMs
                     }
                 };
             }
@@ -414,9 +414,9 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "PowerShell Connection",
+                    ComponentName = "Graph API Connection",
                     Status = HealthStatus.Unhealthy,
-                    Description = $"Błąd sprawdzania połączenia PowerShell: {ex.Message}",
+                    Description = $"Błąd sprawdzania połączenia Graph API: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
                 };
             }
@@ -428,7 +428,7 @@ namespace TeamsManager.Application.Services
             
             try
             {
-                var metrics = _powerShellCacheService.GetCacheMetrics();
+                var metrics = _graphCacheService.GetCacheMetrics();
                 stopwatch.Stop();
 
                 var status = metrics.IsPerformant ? HealthStatus.Healthy : 
@@ -506,15 +506,15 @@ namespace TeamsManager.Application.Services
         {
             var metrics = new HealthMetrics
             {
-                CacheMetrics = _powerShellCacheService.GetCacheMetrics(),
+                CacheMetrics = _graphCacheService.GetCacheMetrics(),
                 MemoryUsageBytes = GC.GetTotalMemory(false),
                 ActiveConnections = 1, // Symulacja
                 AverageApiResponseTimeMs = 50.0, // Symulacja
                 ErrorsLastHour = 0 // Symulacja
             };
 
-            var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
-            metrics.PowerShellConnectionStatus = healthInfo.IsConnected ? "Connected" : "Disconnected";
+            var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
+                            metrics.GraphConnectionStatus = healthInfo.IsConnected ? "Connected" : "Disconnected";
 
             return metrics;
         }

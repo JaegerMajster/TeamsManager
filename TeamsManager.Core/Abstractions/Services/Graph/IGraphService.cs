@@ -6,7 +6,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
 {
     /// <summary>
     /// Główny serwis fasadowy dla operacji Microsoft Graph API
-    /// Zastępuje IPowerShellService z pełnym wsparciem dla Graph API patterns
+    /// Główny interfejs Graph API z pełnym wsparciem dla Graph API patterns
     /// </summary>
     public interface IGraphService : IDisposable
     {
@@ -145,6 +145,23 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         /// </summary>
         /// <returns>Status rate limiting</returns>
         Task<GraphRateLimitStatus> GetGlobalRateLimitStatusAsync();
+
+        #endregion
+
+        #region Rate Limiting & Error Reporting
+
+        /// <summary>
+        /// Aktualizuje informacje o rate limiting
+        /// </summary>
+        /// <param name="retryAfterSeconds">Liczba sekund do ponownej próby</param>
+        /// <returns>Task</returns>
+        Task UpdateRateLimitInfoAsync(int retryAfterSeconds);
+
+        /// <summary>
+        /// Raportuje błąd serwera dla circuit breaker
+        /// </summary>
+        /// <returns>Task</returns>
+        Task ReportServerErrorAsync();
 
         #endregion
 

@@ -33,29 +33,7 @@
                                Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                Margin="0,0,0,12"/>
                     
-                    <!-- PowerShell Response Time -->
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <materialDesign:PackIcon Grid.Column="0" Kind="PowerShell" 
-                                               Width="16" Height="16" 
-                                               Margin="0,0,8,0"
-                                               VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="PowerShell Operations" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="2" 
-                                   Text="{Binding PowerShellResponseTime, StringFormat='{}{0}ms'}" 
-                                   FontWeight="Medium"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-                    
-                    <ProgressBar Value="{Binding PowerShellResponseTime}" 
-                                 Maximum="1000" 
-                                 Height="4" 
-                                 Margin="0,0,0,16"/>
+
                     
                     <!-- Graph API Response Time -->
                     <Grid Margin="0,0,0,16">

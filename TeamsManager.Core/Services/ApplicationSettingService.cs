@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+
+
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -24,7 +26,7 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ApplicationSettingService> _logger;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
         // Definicje kluczy cache
         private const string AllSettingsCacheKey = "ApplicationSettings_AllActive";
@@ -40,14 +42,14 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ApplicationSettingService> logger,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
 
@@ -65,7 +67,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingByKeyCacheKeyPrefix + key;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
             {
                 _logger.LogDebug("Ustawienie '{Key}' znalezione w cache.", key); //
                 return cachedSetting;
@@ -76,12 +78,12 @@ namespace TeamsManager.Core.Services
 
             if (settingFromDb != null)
             {
-                _powerShellCacheService.Set(cacheKey, settingFromDb);
+                _graphCacheService.Set(cacheKey, settingFromDb);
                 _logger.LogDebug("Ustawienie '{Key}' dodane do cache.", key); //
             }
             else
             {
-                _powerShellCacheService.Remove(cacheKey);
+                _graphCacheService.Remove(cacheKey);
             }
 
             return settingFromDb;
@@ -146,7 +148,7 @@ namespace TeamsManager.Core.Services
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh); //
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
                 _logger.LogDebug("Wszystkie aktywne ustawienia znalezione w cache."); //
                 return cachedSettings;
@@ -155,7 +157,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszystkie aktywne ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium."); //
             var settingsFromDb = await _settingsRepository.FindAsync(s => s.IsActive); //
 
-            _powerShellCacheService.Set(AllSettingsCacheKey, settingsFromDb);
+            _graphCacheService.Set(AllSettingsCacheKey, settingsFromDb);
             _logger.LogDebug("Wszystkie aktywne ustawienia dodane do cache."); //
 
             return settingsFromDb;
@@ -174,7 +176,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SettingsByCategoryCacheKeyPrefix + category;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
                 _logger.LogDebug("Ustawienia dla kategorii '{Category}' znalezione w cache.", category); //
                 return cachedSettings;
@@ -183,7 +185,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", category); //
             var settingsFromDb = await _settingsRepository.GetSettingsByCategoryAsync(category);
 
-            _powerShellCacheService.Set(cacheKey, settingsFromDb);
+            _graphCacheService.Set(cacheKey, settingsFromDb);
             _logger.LogDebug("Ustawienia dla kategorii '{Category}' dodane do cache.", category); //
 
             return settingsFromDb;
@@ -391,7 +393,7 @@ namespace TeamsManager.Core.Services
                 InvalidateSettingCache(existingSetting.Key, existingSetting.Category, oldCategory);
                 if (oldKey != null && oldKey != existingSetting.Key)
                 {
-                    _powerShellCacheService.InvalidateSettingByKey(oldKey);
+                    _graphCacheService.InvalidateSettingByKey(oldKey);
                 }
 
                 // 2. Aktualizacja statusu na sukces po pomyślnym wykonaniu logiki
@@ -539,7 +541,7 @@ namespace TeamsManager.Core.Services
 
         /// <summary>
         /// Unieważnia cache dla ustawień aplikacji w sposób granularny.
-        /// Deleguje inwalidację do PowerShellCacheService.
+        /// Deleguje inwalidację do GraphCacheService.
         /// </summary>
         /// <param name="key">Klucz konkretnego ustawienia do usunięcia z cache (opcjonalnie).</param>
         /// <param name="category">Kategoria, dla której ustawienia mają być usunięte z cache (opcjonalnie).</param>
@@ -553,31 +555,31 @@ namespace TeamsManager.Core.Services
             if (invalidateAll)
             {
                 // TYLKO dla RefreshCacheAsync() - globalne resetowanie
-                _powerShellCacheService.InvalidateAllCache();
-                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
+                _graphCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano globalne resetowanie cache przez GraphCacheService.");
                 return;
             }
 
-            // GRANULARNA inwalidacja przez PowerShellCacheService
-            _powerShellCacheService.InvalidateAllActiveSettingsList();
+            // GRANULARNA inwalidacja przez GraphCacheService
+            _graphCacheService.InvalidateAllActiveSettingsList();
             _logger.LogDebug("Unieważniono listę wszystkich aktywnych ustawień.");
 
             if (!string.IsNullOrWhiteSpace(key))
             {
-                _powerShellCacheService.InvalidateSettingByKey(key);
+                _graphCacheService.InvalidateSettingByKey(key);
                 _logger.LogDebug("Unieważniono cache ustawienia o kluczu: {Key}", key);
             }
 
             if (!string.IsNullOrWhiteSpace(category))
             {
-                _powerShellCacheService.InvalidateSettingsByCategory(category);
+                _graphCacheService.InvalidateSettingsByCategory(category);
                 _logger.LogDebug("Unieważniono cache ustawień dla kategorii: {Category}", category);
             }
 
             // Jeśli kategoria została zmieniona, usuń cache także dla starej kategorii
             if (!string.IsNullOrWhiteSpace(oldCategory) && oldCategory != category)
             {
-                _powerShellCacheService.InvalidateSettingsByCategory(oldCategory);
+                _graphCacheService.InvalidateSettingsByCategory(oldCategory);
                 _logger.LogDebug("Unieważniono cache ustawień dla starej kategorii: {OldCategory}", oldCategory);
             }
         }

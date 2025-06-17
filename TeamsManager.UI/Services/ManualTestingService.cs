@@ -206,39 +206,38 @@ namespace TeamsManager.UI.Services
                 }
             });
 
-            // 4. Testy PowerShell Service
+            // 4. Testy Graph API Diagnostics
             suite.TestCases.AddRange(new[]
             {
                 new TestCase
                 {
-                    Id = "PS-001",
-                    Category = "PowerShell",
-                    Name = "Test połączenia PowerShell",
-                    Description = "Test stanu PowerShell Service",
+                    Id = "GRAPH-DIAG-001",
+                    Category = "Graph API",
+                    Name = "Test statusu Graph API",
+                    Description = "Test stanu połączenia Graph API",
                     Steps = new List<string>
                     {
-                        "Wykonaj POST https://localhost:7037/api/PowerShell/test-connection",
+                        "Wykonaj GET https://localhost:7037/api/diagnostics/graph/status",
                         "Z nagłówkiem Authorization: Bearer [token]"
                     },
-                    ExpectedResult = "Zwraca status połączenia i wersję PowerShell",
+                    ExpectedResult = "Zwraca status połączenia Graph API i diagnostyki",
                     Priority = "Medium",
-                    ApiEndpoint = "https://localhost:7037/api/PowerShell/test-connection"
+                    ApiEndpoint = "https://localhost:7037/api/diagnostics/graph/status"
                 },
                 new TestCase
                 {
-                    Id = "PS-002",
-                    Category = "PowerShell",
-                    Name = "Próba połączenia z Graph",
-                    Description = "Test próby połączenia z Microsoft Graph",
+                    Id = "GRAPH-DIAG-002",
+                    Category = "Graph API",
+                    Name = "Test uprawnień Graph API",
+                    Description = "Test uprawnień w Microsoft Graph",
                     Steps = new List<string>
                     {
-                        "Wykonaj POST https://localhost:7037/api/PowerShell/connect",
-                        "Z nagłówkiem Authorization: Bearer [token]",
-                        "Body: {}"
+                        "Wykonaj GET https://localhost:7037/api/diagnostics/graph/permissions",
+                        "Z nagłówkiem Authorization: Bearer [token]"
                     },
-                    ExpectedResult = "✅ Sukces: isConnected=true LUB ❌ Błąd OBO",
+                    ExpectedResult = "✅ Lista uprawnień Graph API LUB ❌ Brak uprawnień",
                     Priority = "High",
-                    ApiEndpoint = "https://localhost:7037/api/PowerShell/connect"
+                    ApiEndpoint = "https://localhost:7037/api/diagnostics/graph/permissions"
                 }
             });
 

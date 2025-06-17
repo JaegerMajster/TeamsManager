@@ -54,6 +54,16 @@ namespace TeamsManager.Core.Models.Graph
         public string? Classification { get; set; }
 
         /// <summary>
+        /// Widoczność zespołu (Public, Private, HiddenMembership).
+        /// </summary>
+        public string? Visibility { get; set; }
+
+        /// <summary>
+        /// Czy zespół jest zarchiwizowany.
+        /// </summary>
+        public bool IsArchived { get; set; }
+
+        /// <summary>
         /// ETag dla cache validation.
         /// </summary>
         public string? ETag { get; set; }
@@ -143,7 +153,7 @@ namespace TeamsManager.Core.Models.Graph
                 Description = Description ?? string.Empty,
                 ExternalId = Id,
                 Status = IsActive ? TeamStatus.Active : TeamStatus.Archived,
-                CreatedAt = CreatedDateTime ?? DateTime.UtcNow,
+                CreatedDate = CreatedDateTime ?? DateTime.UtcNow,
                 // Mapowanie innych właściwości według potrzeb
             };
         }
@@ -161,7 +171,7 @@ namespace TeamsManager.Core.Models.Graph
                 DisplayName = team.DisplayName,
                 Description = team.Description,
                 IsActive = team.IsActive,
-                CreatedDateTime = team.CreatedAt,
+                CreatedDateTime = team.CreatedDate,
                 // Mapowanie innych właściwości według potrzeb
             };
         }
@@ -385,6 +395,11 @@ namespace TeamsManager.Core.Models.Graph
         /// Rola w zespole (owner, member, guest).
         /// </summary>
         public string? Role { get; set; }
+
+        /// <summary>
+        /// Lista ról w zespole.
+        /// </summary>
+        public List<string>? Roles { get; set; }
 
         /// <summary>
         /// Data dodania do zespołu.

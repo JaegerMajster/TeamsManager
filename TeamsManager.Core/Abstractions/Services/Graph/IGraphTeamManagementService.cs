@@ -7,7 +7,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzający zespołami i kanałami w Microsoft Teams przez Graph API
-    /// Zastępuje PowerShell implementację z pełnym wsparciem dla Graph API endpoints
+    /// Implementacja zarządzania zespołami z pełnym wsparciem dla Graph API endpoints
     /// </summary>
     public interface IGraphTeamManagementService
     {
@@ -114,7 +114,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         Task<GraphTeamMember?> GetTeamMemberAsync(string teamId, string userUpn);
 
         /// <summary>
-        /// Dodaje członka do zespołu (NOWA FUNKCJONALNOŚĆ vs PowerShell)
+        /// Dodaje członka do zespołu
         /// Graph API Endpoint: POST /v1.0/teams/{team-id}/members
         /// </summary>
         /// <param name="teamId">ID zespołu (GUID)</param>
@@ -124,7 +124,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         Task<bool> AddTeamMemberAsync(string teamId, string userUpn, string role = "Member");
 
         /// <summary>
-        /// Usuwa członka z zespołu (NOWA FUNKCJONALNOŚĆ vs PowerShell)
+        /// Usuwa członka z zespołu
         /// Graph API Endpoint: DELETE /v1.0/teams/{team-id}/members/{membership-id}
         /// </summary>
         /// <param name="teamId">ID zespołu (GUID)</param>

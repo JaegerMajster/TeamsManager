@@ -7,9 +7,10 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Application.Services
 {
@@ -21,7 +22,7 @@ namespace TeamsManager.Application.Services
         private readonly ITeamService _teamService;
         private readonly ITeamTemplateService _teamTemplateService;
         private readonly ISchoolYearService _schoolYearService;
-        private readonly IPowerShellBulkOperationsService _bulkOperationsService;
+        private readonly IGraphBulkOperationsService _bulkOperationsService;
         private readonly INotificationService _notificationService;
         private readonly ILogger<SchoolYearProcessOrchestrator> _logger;
         private readonly SemaphoreSlim _processSemaphore;
@@ -34,7 +35,7 @@ namespace TeamsManager.Application.Services
             ITeamService teamService,
             ITeamTemplateService teamTemplateService,
             ISchoolYearService schoolYearService,
-            IPowerShellBulkOperationsService bulkOperationsService,
+            IGraphBulkOperationsService bulkOperationsService,
             INotificationService notificationService,
             ILogger<SchoolYearProcessOrchestrator> logger)
         {
@@ -310,7 +311,58 @@ namespace TeamsManager.Application.Services
                     };
                 }
 
-                return await _bulkOperationsService.ArchiveTeamsAsync(teamIds, apiAccessToken, options.BatchSize);
+                return await _bulkOperationsService.ArchiveTeamsAsync(teamIds, apiAccessToken, options.BatchSize)
+                    .ContinueWith(task => 
+                    {
+                        if (task.IsCompletedSuccessfully)
+                        {
+                            var graphResult = task.Result;
+                            // Konwersja GraphBulkResult na BulkOperationResult dla kompatybilności z orkiestratorem
+                            return new BulkOperationResult
+                            {
+                                Success = graphResult.Success,
+                                IsSuccess = graphResult.Success,
+                                ErrorMessage = graphResult.ErrorMessage,
+                                ProcessedAt = DateTime.UtcNow,
+                                OperationType = "ArchiveTeamsFromPreviousSchoolYear",
+                                SuccessfulOperations = graphResult.SuccessfulOperations.Select(s => new BulkOperationSuccess
+                                {
+                                    Operation = s.Operation,
+                                    EntityId = s.EntityId,
+                                    EntityName = s.EntityName,
+                                    Message = s.Message,
+                                    AdditionalData = s.AdditionalData
+                                }).ToList(),
+                                Errors = graphResult.Errors.Select(e => new BulkOperationError
+                                {
+                                    Operation = e.Operation,
+                                    EntityId = e.EntityId,
+                                    EntityName = e.EntityName,
+                                    Message = e.Message,
+                                    Exception = e.Exception,
+                                    AdditionalData = e.AdditionalData
+                                }).ToList()
+                            };
+                        }
+                        else
+                        {
+                            return new BulkOperationResult
+                            {
+                                Success = false,
+                                IsSuccess = false,
+                                ErrorMessage = task.Exception?.GetBaseException().Message ?? "Nieznany błąd",
+                                Errors = new List<BulkOperationError>
+                                {
+                                    new BulkOperationError 
+                                    { 
+                                        Message = task.Exception?.GetBaseException().Message ?? "Nieznany błąd", 
+                                        Operation = "ArchiveTeamsFromPreviousSchoolYear",
+                                        Exception = task.Exception?.GetBaseException()
+                                    }
+                                }
+                            };
+                        }
+                    });
             }
             catch (Exception ex)
             {

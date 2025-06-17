@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,97 +10,90 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
-using TeamsManager.Core.Helpers.PowerShell;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services
 {
     public class ChannelService : IChannelService
     {
-        private readonly IPowerShellService _powerShellService;
+        private readonly IGraphService _graphService;
         private readonly IGenericRepository<Channel> _channelRepository;
         private readonly ITeamRepository _teamRepository;
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<ChannelService> _logger;
-        private readonly IPowerShellCacheService _powerShellCacheService;
-        private readonly IGraphSynchronizer<Channel> _channelSynchronizer;
+        private readonly IGraphCacheService _graphCacheService;
+        private readonly IGraphSynchronizer<Channel, GraphChannel> _channelSynchronizer;
         private readonly IUnitOfWork _unitOfWork;
 
         private const string TeamChannelsCacheKeyPrefix = "Channels_TeamId_";
         private const string ChannelByGraphIdCacheKeyPrefix = "Channel_GraphId_";
 
         public ChannelService(
-            IPowerShellService powerShellService,
+            IGraphService graphService,
             IGenericRepository<Channel> channelRepository,
             ITeamRepository teamRepository,
             IOperationHistoryService operationHistoryService,
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<ChannelService> logger,
-            IPowerShellCacheService powerShellCacheService,
-            IGraphSynchronizer<Channel> channelSynchronizer,
+            IGraphCacheService graphCacheService,
+            IGraphSynchronizer<Channel, GraphChannel> channelSynchronizer,
             IUnitOfWork unitOfWork)
         {
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
             _channelRepository = channelRepository ?? throw new ArgumentNullException(nameof(channelRepository));
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _channelSynchronizer = channelSynchronizer ?? throw new ArgumentNullException(nameof(channelSynchronizer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
 
-
-
-        private Channel MapPsObjectToLocalChannel(PSObject psChannel, string localTeamId)
+        private Channel MapGraphChannelToLocalChannel(GraphChannel graphChannel, string localTeamId)
         {
-            // Użyj PSObjectMapper dla debugowania (opcjonalne)
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                PSObjectMapper.LogProperties(psChannel, _logger, $"Channel for team {localTeamId}");
-            }
+            _logger.LogDebug("Mapowanie GraphChannel do lokalnego Channel dla zespołu {TeamId}", localTeamId);
 
             // Walidacja i pobranie ID
-            var graphChannelId = PSObjectMapper.GetString(psChannel, "Id");
+            var graphChannelId = graphChannel.Id;
             if (string.IsNullOrWhiteSpace(graphChannelId))
             {
                 graphChannelId = Guid.NewGuid().ToString();
-                _logger.LogError("MapPsObjectToLocalChannel: PSObject dla kanału nie zawierał poprawnego ID z Graph. Wygenerowano nowe lokalne ID: {GeneratedId}", graphChannelId);
+                _logger.LogError("MapGraphChannelToLocalChannel: GraphChannel nie zawierał poprawnego ID. Wygenerowano nowe lokalne ID: {GeneratedId}", graphChannelId);
             }
 
             var channel = new Channel
             {
                 Id = graphChannelId,
-                DisplayName = PSObjectMapper.GetString(psChannel, "DisplayName", defaultValue: string.Empty)!,
-                Description = PSObjectMapper.GetString(psChannel, "Description", defaultValue: string.Empty)!,
+                DisplayName = graphChannel.DisplayName ?? string.Empty,
+                Description = graphChannel.Description ?? string.Empty,
                 TeamId = localTeamId,
-                ChannelType = PSObjectMapper.GetString(psChannel, "MembershipType", defaultValue: "Standard")!,
-                ExternalUrl = PSObjectMapper.GetString(psChannel, "WebUrl"),
+                ChannelType = graphChannel.MembershipType ?? "Standard",
+                ExternalUrl = graphChannel.WebUrl,
                 
-                // Użyj typowanych metod dla różnych typów
-                FilesCount = PSObjectMapper.GetInt32(psChannel, "FilesCount", defaultValue: 0),
-                FilesSize = PSObjectMapper.GetInt64(psChannel, "FilesSize", defaultValue: 0),
-                LastActivityDate = PSObjectMapper.GetDateTime(psChannel, "LastActivityDate"),
-                LastMessageDate = PSObjectMapper.GetDateTime(psChannel, "LastMessageDate"),
-                MessageCount = PSObjectMapper.GetInt32(psChannel, "MessageCount", defaultValue: 0),
-                NotificationSettings = PSObjectMapper.GetString(psChannel, "NotificationSettings"),
-                IsModerationEnabled = PSObjectMapper.GetBoolean(psChannel, "IsModerationEnabled", defaultValue: false),
-                Category = PSObjectMapper.GetString(psChannel, "Category"),
-                Tags = PSObjectMapper.GetString(psChannel, "Tags"),
-                SortOrder = PSObjectMapper.GetInt32(psChannel, "SortOrder", defaultValue: 0),
+                // Mapowanie statystyk z GraphChannel
+                FilesCount = graphChannel.Stats?.FilesCount ?? 0,
+                FilesSize = graphChannel.Stats?.FilesSize ?? 0,
+                LastActivityDate = graphChannel.Stats?.LastActivityDate,
+                LastMessageDate = graphChannel.Stats?.LastMessageDate,
+                MessageCount = graphChannel.Stats?.MessageCount ?? 0,
+                NotificationSettings = graphChannel.Settings?.NotificationSettings?.ToString(),
+                IsModerationEnabled = graphChannel.Settings?.IsModerationEnabled ?? false,
+                Category = graphChannel.Settings?.Category,
+                Tags = graphChannel.Settings?.Tags != null ? string.Join(",", graphChannel.Settings.Tags) : null,
+                SortOrder = graphChannel.Settings?.SortOrder ?? 0,
                 
                 // Ustaw domyślne wartości dla właściwości z BaseEntity
-                // IsActive jest obliczane na podstawie Status, nie ustawiamy go bezpośrednio
-                CreatedDate = DateTime.UtcNow,
-                CreatedBy = "PowerShell Sync"
+                CreatedDate = graphChannel.CreatedDateTime ?? DateTime.UtcNow,
+                CreatedBy = "Graph API Sync"
             };
 
             // Dodatkowa walidacja biznesowa
@@ -109,15 +101,16 @@ namespace TeamsManager.Core.Services
             if (channel.FilesSize < 0) channel.FilesSize = 0;
             if (channel.MessageCount < 0) channel.MessageCount = 0;
 
-            if (channel.ChannelType.Equals("private", StringComparison.OrdinalIgnoreCase))
+            // Określenie typu kanału
+            if (graphChannel.MembershipType?.Equals("private", StringComparison.OrdinalIgnoreCase) == true)
             {
                 channel.IsPrivate = true;
             }
 
-            bool? isFavoriteByDefault = PSObjectMapper.GetBoolean(psChannel, "isFavoriteByDefault");
+            // Określenie czy to kanał główny
             if ((channel.DisplayName.Equals("General", StringComparison.OrdinalIgnoreCase) ||
                  channel.DisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase)) ||
-                 isFavoriteByDefault == true)
+                 graphChannel.IsFavoriteByDefault == true)
             {
                 channel.IsGeneral = true;
                 if (string.IsNullOrWhiteSpace(channel.ChannelType) || channel.ChannelType.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
@@ -125,6 +118,7 @@ namespace TeamsManager.Core.Services
                     channel.ChannelType = "Standard";
                 }
             }
+            
             channel.Status = ChannelStatus.Active;
             return channel;
         }
@@ -141,25 +135,26 @@ namespace TeamsManager.Core.Services
             string teamGraphId = team.ExternalId;
             string cacheKey = TeamChannelsCacheKeyPrefix + teamId;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValueWithMetrics(cacheKey, out IEnumerable<Channel>? cachedChannels) && cachedChannels != null)
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics(cacheKey, out IEnumerable<Channel>? cachedChannels) && cachedChannels != null)
             {
                 _logger.LogDebug("Kanały dla lokalnego zespołu ID {TeamId} (GraphID: {TeamGraphId}) znalezione w cache (serwis).", teamId, teamGraphId);
                 return cachedChannels;
             }
 
-            var psObjects = await _powerShellService.ExecuteWithAutoConnectAsync(
+            var graphChannels = await _graphService.ExecuteWithAutoConnectAsync(
                 apiAccessToken,
-                async () => await _powerShellService.Teams.GetTeamChannelsAsync(teamGraphId),
+                async () => await _graphService.Teams.GetTeamChannelsAsync(teamGraphId),
                 $"GetTeamChannelsAsync dla zespołu {teamGraphId}"
             );
 
-            if (psObjects == null)
+            if (graphChannels?.Data == null || !graphChannels.IsSuccess)
             {
-                _logger.LogWarning("Nie udało się pobrać kanałów z PowerShell dla zespołu GraphID {TeamGraphId}.", teamGraphId);
+                _logger.LogWarning("Nie udało się pobrać kanałów z Graph API dla zespołu GraphID {TeamGraphId}. Błąd: {Error}", 
+                    teamGraphId, graphChannels?.ErrorMessage ?? "Nieznany błąd");
                 return Enumerable.Empty<Channel>();
             }
 
-            // NOWA LOGIKA: Użyj ChannelSynchronizer zamiast MapPsObjectToLocalChannel
+            // NOWA LOGIKA: Użyj ChannelSynchronizer zamiast MapGraphChannelToLocalChannel
             var localChannels = (await _channelRepository.FindAsync(c => c.TeamId == teamId)).ToList();
             var currentUser = _currentUserService.GetCurrentUserUpn() ?? "system_sync_channels";
             var graphChannelIds = new HashSet<string>();
@@ -168,13 +163,11 @@ namespace TeamsManager.Core.Services
              await _unitOfWork.BeginTransactionAsync();
             try
             {
-                foreach (var pso in psObjects)
+                foreach (var graphChannel in graphChannels.Data)
                 {
-                    // Utwórz tymczasowy kanał z TeamId
-                    var tempChannel = new Channel { TeamId = teamId };
-                    
                     // Użyj synchronizatora do mapowania właściwości
-                    await _channelSynchronizer.SynchronizeAsync(pso, tempChannel);
+                    var tempChannel = new Channel { TeamId = teamId };
+                    await _channelSynchronizer.SynchronizeAsync(graphChannel, tempChannel);
                     graphChannelIds.Add(tempChannel.Id);
                     
                     var localChannel = localChannels.FirstOrDefault(lc => lc.Id == tempChannel.Id);
@@ -188,10 +181,10 @@ namespace TeamsManager.Core.Services
                         _logger.LogInformation("Dodano nowy kanał: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
                             tempChannel.DisplayName, tempChannel.Id, teamId);
                     }
-                    else if (await _channelSynchronizer.RequiresSynchronizationAsync(pso, localChannel))
+                    else if (await _channelSynchronizer.RequiresSynchronizationAsync(graphChannel, localChannel))
                     {
                         // Aktualizacja istniejącego
-                        await _channelSynchronizer.SynchronizeAsync(pso, localChannel);
+                        await _channelSynchronizer.SynchronizeAsync(graphChannel, localChannel);
                         localChannel.MarkAsModified(currentUser);
                         _unitOfWork.Repository<Channel>().Update(localChannel);
                         _logger.LogInformation("Zaktualizowano kanał: {ChannelDisplayName} (GraphID: {ChannelGraphId}) dla zespołu {TeamId}", 
@@ -223,7 +216,7 @@ namespace TeamsManager.Core.Services
 
             var finalChannelList = (await _channelRepository.FindAsync(c => c.TeamId == teamId && c.IsActive)).ToList();
 
-            _powerShellCacheService.Set(cacheKey, finalChannelList);
+            _graphCacheService.Set(cacheKey, finalChannelList);
             _logger.LogInformation("Pobrano i zsynchronizowano {Count} kanałów dla zespołu ID {TeamId}. Zcache'owano.", finalChannelList.Count, teamId);
             return finalChannelList;
         }
@@ -240,7 +233,7 @@ namespace TeamsManager.Core.Services
             string teamGraphId = team.ExternalId;
             string cacheKey = ChannelByGraphIdCacheKeyPrefix + channelGraphId;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValueWithMetrics(cacheKey, out Channel? cachedChannel) && cachedChannel != null)
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics(cacheKey, out Channel? cachedChannel) && cachedChannel != null)
             {
                 _logger.LogDebug("Kanał GraphID: {ChannelGraphId} (zespół {TeamGraphId}) znaleziony w cache.", channelGraphId, teamGraphId);
                 return cachedChannel;
@@ -252,25 +245,26 @@ namespace TeamsManager.Core.Services
                 if (localChannel != null && localChannel.IsActive)
                 {
                     _logger.LogDebug("Kanał GraphID: {ChannelGraphId} (zespół {TeamGraphId}) znaleziony w lokalnej bazie (bez forceRefresh).", channelGraphId, teamGraphId);
-                    _powerShellCacheService.Set(cacheKey, localChannel);
+                    _graphCacheService.Set(cacheKey, localChannel);
                     return localChannel;
                 }
             }
 
-            var psChannel = await _powerShellService.ExecuteWithAutoConnectAsync(
+            var graphChannelResult = await _graphService.ExecuteWithAutoConnectAsync(
                 apiAccessToken,
-                async () => await _powerShellService.Teams.GetTeamChannelByIdAsync(teamGraphId, channelGraphId),
+                async () => await _graphService.Teams.GetTeamChannelByIdAsync(teamGraphId, channelGraphId),
                 $"GetTeamChannelByIdAsync dla kanału {channelGraphId} w zespole {teamGraphId}"
             );
 
-            if (psChannel == null)
+            if (graphChannelResult?.Data == null || !graphChannelResult.IsSuccess)
             {
-                _logger.LogInformation("Kanał GraphID: {ChannelGraphId} w zespole GraphID: {TeamGraphId} nie znaleziony przez PowerShell.", channelGraphId, teamGraphId);
-                _powerShellCacheService.Remove(cacheKey);
+                _logger.LogInformation("Kanał GraphID: {ChannelGraphId} w zespole GraphID: {TeamGraphId} nie znaleziony przez Graph API. Błąd: {Error}", 
+                    channelGraphId, teamGraphId, graphChannelResult?.ErrorMessage ?? "Nieznany błąd");
+                _graphCacheService.Remove(cacheKey);
                 return null;
             }
 
-            var channelFromGraph = MapPsObjectToLocalChannel(psChannel, teamId);
+            var channelFromGraph = MapGraphChannelToLocalChannel(graphChannelResult.Data, teamId);
             var existingLocalChannel = (await _channelRepository.FindAsync(c => c.Id == channelGraphId && c.TeamId == teamId)).FirstOrDefault();
             var currentUser = _currentUserService.GetCurrentUserUpn() ?? "system_sync_channel";
 
@@ -296,7 +290,7 @@ namespace TeamsManager.Core.Services
             }
             // SaveChangesAsync na wyższym poziomie
 
-            _powerShellCacheService.Set(cacheKey, channelFromGraph);
+            _graphCacheService.Set(cacheKey, channelFromGraph);
             return channelFromGraph;
         }
 
@@ -359,17 +353,18 @@ namespace TeamsManager.Core.Services
                 }
                 string teamGraphId = team.ExternalId;
 
-                var psChannel = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var graphChannelResult = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description),
+                    async () => await _graphService.Teams.CreateTeamChannelAsync(teamGraphId, displayName, isPrivate, description),
                     $"CreateTeamChannelAsync dla kanału '{displayName}' w zespole {teamGraphId}"
                 );
-                if (psChannel == null)
+                
+                if (graphChannelResult?.Data == null || !graphChannelResult.IsSuccess)
                 {
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się utworzyć kanału w Microsoft Teams"
+                        $"Nie udało się utworzyć kanału w Microsoft Teams. Błąd: {graphChannelResult?.ErrorMessage ?? "Nieznany błąd"}"
                     );
 
                     await _notificationService.SendNotificationToUserAsync(
@@ -378,11 +373,12 @@ namespace TeamsManager.Core.Services
                         "error"
                     );
 
-                    _logger.LogError("Nie udało się utworzyć kanału '{DisplayName}' w zespole '{TeamGraphId}' poprzez PowerShell.", displayName, teamGraphId);
+                    _logger.LogError("Nie udało się utworzyć kanału '{DisplayName}' w zespole '{TeamGraphId}' poprzez Graph API. Błąd: {Error}", 
+                        displayName, teamGraphId, graphChannelResult?.ErrorMessage ?? "Nieznany błąd");
                     return null;
                 }
 
-                var newChannel = MapPsObjectToLocalChannel(psChannel, teamId);
+                var newChannel = MapGraphChannelToLocalChannel(graphChannelResult.Data, teamId);
                 newChannel.CreatedBy = currentUserUpn;
                 newChannel.CreatedDate = DateTime.UtcNow;
                 newChannel.Status = ChannelStatus.Active;
@@ -406,7 +402,7 @@ namespace TeamsManager.Core.Services
 
                 _logger.LogInformation("Kanał '{DisplayName}' (GraphID: {ChannelGraphId}) utworzony pomyślnie w zespole {TeamGraphId} i dodany do lokalnej bazy dla TeamId {LocalTeamId}.", newChannel.DisplayName, newChannel.Id, teamGraphId, teamId);
 
-                _powerShellCacheService.InvalidateChannelsForTeam(teamId);
+                _graphCacheService.InvalidateChannelsForTeam(teamId);
                 return newChannel;
             }
             catch (Exception ex)
@@ -498,18 +494,18 @@ namespace TeamsManager.Core.Services
                     return localChannel;
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var updateResult = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription),
+                    async () => await _graphService.Teams.UpdateTeamChannelAsync(teamGraphId, channelId, newDisplayName, newDescription),
                     $"UpdateTeamChannelAsync dla kanału {channelId} w zespole {teamGraphId}"
                 );
 
-                if (!psSuccess)
+                if (!updateResult.IsSuccess)
                 {
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się zaktualizować kanału w Microsoft Teams."
+                        $"Nie udało się zaktualizować kanału w Microsoft Teams. Błąd: {updateResult.ErrorMessage}"
                     );
 
                     await _notificationService.SendNotificationToUserAsync(
@@ -518,7 +514,8 @@ namespace TeamsManager.Core.Services
                         "error"
                     );
 
-                    _logger.LogError("Nie udało się zaktualizować kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez PowerShell.", channelId, teamGraphId);
+                    _logger.LogError("Nie udało się zaktualizować kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez Graph API. Błąd: {Error}", 
+                        channelId, teamGraphId, updateResult.ErrorMessage);
                     return null;
                 }
 
@@ -542,7 +539,7 @@ namespace TeamsManager.Core.Services
                 );
 
                 _logger.LogInformation("Kanał GraphID {ChannelId} zaktualizowany pomyślnie w Graph i lokalnie.", channelId);
-                _powerShellCacheService.InvalidateChannelAndTeam(teamId, channelId);
+                _graphCacheService.InvalidateChannelAndTeam(teamId, channelId);
                 return localChannel;
             }
             catch (Exception ex)
@@ -623,18 +620,18 @@ namespace TeamsManager.Core.Services
                     }
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var deleteResult = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId),
+                    async () => await _graphService.Teams.RemoveTeamChannelAsync(teamGraphId, channelId),
                     $"RemoveTeamChannelAsync dla kanału {channelId} w zespole {teamGraphId}"
                 );
 
-                if (!psSuccess)
+                if (!deleteResult.IsSuccess)
                 {
                     await _operationHistoryService.UpdateOperationStatusAsync(
                         operation.Id,
                         OperationStatus.Failed,
-                        "Nie udało się usunąć kanału w Microsoft Teams."
+                        $"Nie udało się usunąć kanału w Microsoft Teams. Błąd: {deleteResult.ErrorMessage}"
                     );
 
                     await _notificationService.SendNotificationToUserAsync(
@@ -643,7 +640,8 @@ namespace TeamsManager.Core.Services
                         "error"
                     );
 
-                    _logger.LogError("Nie udało się usunąć kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez PowerShell.", channelId, teamGraphId);
+                    _logger.LogError("Nie udało się usunąć kanału GraphID '{ChannelId}' w zespole '{TeamGraphId}' poprzez Graph API. Błąd: {Error}", 
+                        channelId, teamGraphId, deleteResult.ErrorMessage);
                     return false;
                 }
 
@@ -668,7 +666,7 @@ namespace TeamsManager.Core.Services
                 );
 
                 _logger.LogInformation("Kanał GraphID {ChannelId} ('{ChannelDisplayName}') pomyślnie usunięty z zespołu {TeamGraphId}.", channelId, localChannel?.DisplayName ?? "N/A", teamGraphId);
-                _powerShellCacheService.InvalidateChannelAndTeam(teamId, channelId);
+                _graphCacheService.InvalidateChannelAndTeam(teamId, channelId);
                 return true;
             }
             catch (Exception ex)
@@ -702,7 +700,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Odświeżanie cache dla kanałów lokalnego zespołu ID: {TeamId}", teamId);
 
             // Usunięcie cache dla zespołu
-            _powerShellCacheService.Remove(TeamChannelsCacheKeyPrefix + teamId);
+            _graphCacheService.Remove(TeamChannelsCacheKeyPrefix + teamId);
 
             return Task.CompletedTask;
         }
@@ -738,7 +736,7 @@ namespace TeamsManager.Core.Services
                 }
             }
 
-            _powerShellCacheService.BatchInvalidateKeys(
+            _graphCacheService.BatchInvalidateKeys(
                 keysToInvalidate, 
                 $"InvalidateAllChannelsForTeam_{teamId}"
             );
@@ -762,7 +760,7 @@ namespace TeamsManager.Core.Services
 
             var cacheKey = TeamChannelsCacheKeyPrefix + teamId;
             
-            await _powerShellCacheService.WarmCacheAsync(
+            await _graphCacheService.WarmCacheAsync(
                 cacheKey,
                 async () => {
                     _logger.LogInformation("Cache warming: ładowanie kanałów dla zespołu {TeamId}", teamId);
@@ -781,7 +779,7 @@ namespace TeamsManager.Core.Services
         public void InvalidateAllChannelCaches()
         {
             // Usuń wszystkie cache kanałów
-            _powerShellCacheService.InvalidateByPattern(
+            _graphCacheService.InvalidateByPattern(
                 "Channel", 
                 "InvalidateAllChannels"
             );
@@ -795,12 +793,12 @@ namespace TeamsManager.Core.Services
         /// <returns>Informacje o wydajności cache</returns>
         public string GetChannelCacheMetrics()
         {
-            var metrics = _powerShellCacheService.GetCacheMetrics();
-            return $"Cache Hit Rate: {metrics.HitRate:F1}%, " +
-                   $"Total Operations: {metrics.TotalOperations}, " +
+            var metrics = _graphCacheService.GetCacheMetrics();
+            return $"Cache Hit Rate: {metrics.HitRatio:F1}%, " +
+                   $"Total Operations: {metrics.TotalRequests}, " +
                    $"Cache Hits: {metrics.CacheHits}, " +
                    $"Cache Misses: {metrics.CacheMisses}, " +
-                   $"Invalidations: {metrics.CacheInvalidations}";
+                   $"Invalidations: {metrics.InvalidationCount}";
         }
     }
 }

@@ -9,6 +9,7 @@ using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using TeamsManager.Core.Abstractions.Services;
+using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.Models.ViewModels;
@@ -26,6 +27,7 @@ namespace TeamsManager.UI.ViewModels.Users
         private readonly IDepartmentService _departmentService;
         private readonly ILogger<UserDetailViewModel> _logger;
         private readonly UserSchoolTypeAssignmentViewModel _userSchoolTypeAssignmentViewModel;
+        private readonly IMsalAuthService _msalAuthService;
         
         private UserDetailModel _model;
         private ObservableCollection<Department> _departments;
@@ -40,12 +42,14 @@ namespace TeamsManager.UI.ViewModels.Users
             IUserService userService,
             IDepartmentService departmentService,
             ILogger<UserDetailViewModel> logger,
-            UserSchoolTypeAssignmentViewModel userSchoolTypeAssignmentViewModel)
+            UserSchoolTypeAssignmentViewModel userSchoolTypeAssignmentViewModel,
+            IMsalAuthService msalAuthService)
         {
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _userSchoolTypeAssignmentViewModel = userSchoolTypeAssignmentViewModel ?? throw new ArgumentNullException(nameof(userSchoolTypeAssignmentViewModel));
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
 
             _model = new UserDetailModel();
             _departments = new ObservableCollection<Department>();
@@ -309,8 +313,13 @@ namespace TeamsManager.UI.ViewModels.Users
                 IsLoading = true;
                 ErrorMessage = null;
                 
-                // Get access token (in real implementation, this should come from auth service)
-                var accessToken = "mock-token"; // TODO: Get real token from auth service
+                // Pobierz token dostępu z MSAL Auth Service
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
+                    return;
+                }
 
                 if (IsEditMode)
                 {
@@ -466,6 +475,29 @@ namespace TeamsManager.UI.ViewModels.Users
         {
             (SaveCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (RemoveAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+
+        /// <summary>
+        /// Pobiera token dostępu z MSAL Auth Service
+        /// </summary>
+        private async Task<string?> GetAccessTokenAsync()
+        {
+            try
+            {
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken != null)
+                {
+                    return authResult.AccessToken;
+                }
+
+                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+                return null;
+            }
         }
 
         #endregion

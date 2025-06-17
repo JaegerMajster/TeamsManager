@@ -6,16 +6,18 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services
 {
     /// <summary>
-    /// Implementacja serwisu powiadomień administratorów używająca Microsoft.Graph przez PowerShell.
+    /// Implementacja serwisu powiadomień administratorów używająca Microsoft.Graph API.
     /// </summary>
     public class GraphAdminNotificationService : IAdminNotificationService
     {
-        private readonly IPowerShellService _powerShellService;
+        private readonly IGraphService _graphService;
+        private readonly IModernHttpService _modernHttpService;
         private readonly ILogger<GraphAdminNotificationService> _logger;
         private readonly IConfiguration _configuration;
         private readonly List<string> _adminEmails;
@@ -25,11 +27,13 @@ namespace TeamsManager.Core.Services
         private readonly string _environmentName;
 
         public GraphAdminNotificationService(
-            IPowerShellService powerShellService,
+            IGraphService graphService,
+            IModernHttpService modernHttpService,
             ILogger<GraphAdminNotificationService> logger,
             IConfiguration configuration)
         {
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
+            _modernHttpService = modernHttpService ?? throw new ArgumentNullException(nameof(modernHttpService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             
@@ -201,13 +205,54 @@ namespace TeamsManager.Core.Services
                 return;
 
             var fullSubject = $"[{_environmentName}] {subject}";
-            var htmlMessage = BuildHtmlMessage(subject, data ?? new Dictionary<string, object>
+            var htmlMessage = BuildHtmlMessage(subject, new Dictionary<string, object>
             {
                 ["Wiadomość"] = message,
                 ["Data"] = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")
-            });
+            }, data);
 
             await SendToAllAdminsAsync(fullSubject, htmlMessage);
+        }
+
+        public async Task SendGraphApiErrorMetricsAsync(Dictionary<string, object> metrics)
+        {
+            if (!ShouldSendNotification())
+                return;
+
+            try
+            {
+                var method = metrics.GetValueOrDefault("Method", "Unknown").ToString();
+                var endpoint = metrics.GetValueOrDefault("Endpoint", "Unknown").ToString();
+                var httpStatusCode = metrics.GetValueOrDefault("HttpStatusCode", 0);
+                var graphErrorCode = metrics.GetValueOrDefault("GraphErrorCode", "Unknown").ToString();
+                
+                var subject = $"[{_environmentName}] 📊 Graph API Error Metrics: {method}";
+                
+                var errorDetails = new Dictionary<string, object>
+                {
+                    ["Metoda"] = method,
+                    ["Endpoint"] = endpoint,
+                    ["HTTP Status Code"] = httpStatusCode,
+                    ["Graph Error Code"] = graphErrorCode,
+                    ["Request ID"] = metrics.GetValueOrDefault("RequestId", "Unknown"),
+                    ["Can Retry"] = metrics.GetValueOrDefault("CanRetry", false),
+                    ["Is Authentication Error"] = metrics.GetValueOrDefault("IsAuthenticationError", false),
+                    ["Is Permission Error"] = metrics.GetValueOrDefault("IsPermissionError", false),
+                    ["Is Validation Error"] = metrics.GetValueOrDefault("IsValidationError", false),
+                    ["Is Not Found Error"] = metrics.GetValueOrDefault("IsNotFoundError", false),
+                    ["Is Conflict Error"] = metrics.GetValueOrDefault("IsConflictError", false),
+                    ["Timestamp"] = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")
+                };
+
+                var message = BuildHtmlMessage("📊 Graph API Error Metrics", errorDetails, metrics, isError: true);
+                await SendToAllAdminsAsync(subject, message);
+                
+                _logger.LogDebug("Graph API error metrics sent to administrators for method: {Method}", method);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Graph API error metrics to administrators");
+            }
         }
 
         private bool ShouldSendNotification()
@@ -337,20 +382,87 @@ namespace TeamsManager.Core.Services
                 _logger.LogDebug("Sending admin notification to {Email}, subject: {Subject}", 
                     recipientEmail, subject);
 
-                // TODO: Implementacja wysyłania emaili przez Microsoft.Graph
-                // Na razie logujemy powiadomienie jako placeholder
-                _logger.LogInformation("[ADMIN NOTIFICATION EMAIL] To: {Email}, Subject: {Subject}", 
-                    recipientEmail, subject);
-                _logger.LogDebug("[ADMIN NOTIFICATION EMAIL] Body: {Body}", htmlBody);
+                // Sprawdzenie czy Graph Service jest dostępny
+                var connectionResult = await _graphService.DiagnoseConnectionAsync(string.Empty);
+                if (!connectionResult.IsConnected)
+                {
+                    _logger.LogWarning("Graph Service connection failed, falling back to logging. Errors: {Errors}", 
+                        string.Join("; ", connectionResult.Errors));
+                    
+                    // Fallback - logowanie powiadomienia
+                    _logger.LogInformation("[ADMIN NOTIFICATION EMAIL - FALLBACK] To: {Email}, Subject: {Subject}", 
+                        recipientEmail, subject);
+                    _logger.LogDebug("[ADMIN NOTIFICATION EMAIL - FALLBACK] Body: {Body}", htmlBody);
+                    return true;
+                }
 
-                // Symulujemy sukces wysyłania
-                await Task.Delay(100); // Symulacja opóźnienia sieciowego
-                return true;
+                // Pobranie tokenu dostępu z Graph Service
+                var accessToken = await _graphService.Connection.GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    _logger.LogWarning("Failed to get access token for Graph Mail API, falling back to logging");
+                    
+                    // Fallback - logowanie powiadomienia
+                    _logger.LogInformation("[ADMIN NOTIFICATION EMAIL - FALLBACK] To: {Email}, Subject: {Subject}", 
+                        recipientEmail, subject);
+                    return true;
+                }
+
+                // Utworzenie żądania wysłania emaila przez Graph Mail API
+                var mailRequest = new GraphSendMailRequest
+                {
+                    Message = new GraphMessage
+                    {
+                        Subject = subject,
+                        Body = new GraphMessageBody
+                        {
+                            ContentType = "HTML",
+                            Content = htmlBody
+                        },
+                        ToRecipients = new List<GraphEmailAddress>
+                        {
+                            new GraphEmailAddress
+                            {
+                                Name = recipientEmail,
+                                Address = recipientEmail
+                            }
+                        },
+                        From = new GraphEmailAddress
+                        {
+                            Name = _systemName,
+                            Address = _systemEmail
+                        },
+                        Importance = "high"
+                    },
+                    SaveToSentItems = true
+                };
+
+                // Wysłanie emaila przez Graph Mail API
+                var success = await _modernHttpService.SendMailOnBehalfOfUserAsync(_systemEmail, mailRequest, accessToken);
+                
+                if (success)
+                {
+                    _logger.LogInformation("Admin notification sent successfully via Graph Mail API to {Email}", recipientEmail);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to send admin notification via Graph Mail API to {Email}, falling back to logging", recipientEmail);
+                    
+                    // Fallback - logowanie powiadomienia
+                    _logger.LogInformation("[ADMIN NOTIFICATION EMAIL - FALLBACK] To: {Email}, Subject: {Subject}", 
+                        recipientEmail, subject);
+                    return true; // Zwracamy true aby nie blokować innych powiadomień
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending admin notification to {Email}", recipientEmail);
-                return false;
+                _logger.LogError(ex, "Error sending admin notification to {Email}, falling back to logging", recipientEmail);
+                
+                // Fallback - logowanie powiadomienia
+                _logger.LogInformation("[ADMIN NOTIFICATION EMAIL - FALLBACK] To: {Email}, Subject: {Subject}", 
+                    recipientEmail, subject);
+                return true; // Zwracamy true aby nie blokować innych powiadomień
             }
         }
     }

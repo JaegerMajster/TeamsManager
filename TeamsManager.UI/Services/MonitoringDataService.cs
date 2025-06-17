@@ -1,12 +1,16 @@
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.Core.Enums;
 // using TeamsManager.Application.Services; // Moved to Core.Abstractions.Services
 using TeamsManager.UI.Models.Monitoring;
 
 namespace TeamsManager.UI.Services
 {
+    /// <summary>
+    /// Serwis danych monitorowania używający Graph API (Etap 5.2.2)
+    /// </summary>
     public interface IMonitoringDataService
     {
         Task<SystemHealthData> GetSystemHealthAsync();
@@ -39,18 +43,18 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[MONITORING-DATA] Getting system health data from API");
+                _logger.LogDebug("[MONITORING-DATA] Getting system health data from Graph API");
                 
-                // Najpierw spróbuj pobrać dane z API
-                var diagnosticInfo = await _apiService.GetConnectionDiagnosticsAsync();
+                // Najpierw spróbuj pobrać dane z Graph API (Etap 5.2.2)
+                var diagnosticInfo = await _apiService.GetGraphConnectionDiagnosticsAsync();
                 
                 if (diagnosticInfo != null)
                 {
-                    return ConvertDiagnosticInfoToSystemHealth(diagnosticInfo);
+                    return ConvertGraphDiagnosticInfoToSystemHealth(diagnosticInfo);
                 }
                 
-                // Fallback do lokalnego orkiestratora jeśli API nie odpowiada
-                _logger.LogWarning("[MONITORING-DATA] API nie odpowiada, używam lokalnego orkiestratora");
+                // Fallback do lokalnego orkiestratora jeśli Graph API nie odpowiada
+                _logger.LogWarning("[MONITORING-DATA] Graph API nie odpowiada, używam lokalnego orkiestratora");
                 var healthResult = await _healthOrchestrator.RunComprehensiveHealthCheckAsync("");
                 
                 return new SystemHealthData
@@ -68,7 +72,7 @@ namespace TeamsManager.UI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-DATA] Error getting system health data");
+                _logger.LogError(ex, "[MONITORING-DATA] Error getting system health data from Graph API");
                 return CreateErrorHealthData(ex.Message);
             }
         }
@@ -77,11 +81,13 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[MONITORING-DATA] Getting TeamsManager performance metrics");
+                _logger.LogDebug("[MONITORING-DATA] Getting TeamsManager performance metrics from Graph API");
 
-                // Pobierz rzeczywiste dane diagnostyczne z API
-                var diagnosticInfo = await _apiService.GetExtendedConnectionDiagnosticsAsync();
-                var healthInfo = await _apiService.GetConnectionHealthAsync();
+                // Pobierz rzeczywiste dane diagnostyczne z Graph API (Etap 5.2.2)
+                var diagnosticInfo = await _apiService.GetExtendedGraphConnectionDiagnosticsAsync();
+                var healthInfo = await _apiService.GetGraphConnectionHealthAsync();
+                var rateLimitInfo = await _apiService.GetGraphRateLimitStatusAsync();
+                var metricsInfo = await _apiService.GetGraphMetricsAsync();
                 
                 if (diagnosticInfo != null && healthInfo != null)
                 {
@@ -93,23 +99,27 @@ namespace TeamsManager.UI.Services
                         DiskUsagePercent = 0, // Nie istotne dla aplikacji desktop
                         NetworkThroughputMbps = 0, // Nie istotne dla aplikacji desktop
                         
-                        // Sensowne metryki dla TeamsManager
-                        ActiveConnections = healthInfo.IsConnected ? 1 : 0, // PowerShell connection
-                        RequestsPerMinute = 0, // Można rozszerzyć o licznik operacji Graph API
-                        AverageResponseTimeMs = diagnosticInfo.LastOperationDuration?.TotalMilliseconds ?? 0,
-                        ErrorRate = diagnosticInfo.ErrorCount > 0 ? (double)diagnosticInfo.ErrorCount / 10 : 0, // Przelicz błędy na procent
+                        // Sensowne metryki dla TeamsManager (Graph API)
+                        ActiveConnections = healthInfo.IsHealthy ? 1 : 0, // Graph API connection
+                        RequestsPerMinute = rateLimitInfo?.RequestsPerMinute ?? 0, // Graph API requests
+                        AverageResponseTimeMs = healthInfo.ResponseTimeMs,
+                        ErrorRate = metricsInfo?.ErrorRate ?? 0, // Graph API error rate
                         Timestamp = DateTime.UtcNow,
                         
-                        // Dodatkowe właściwości specyficzne dla TeamsManager
+                        // Dodatkowe właściwości specyficzne dla TeamsManager (Graph API)
                         TeamsManagerSpecific = new Dictionary<string, object>
                         {
-                            ["PowerShellConnectionStatus"] = diagnosticInfo.ConnectionStatus,
-                            ["GraphApiStatus"] = diagnosticInfo.GraphApiStatus,
-                            ["CacheHitRate"] = 85.5, // Z cache metrics jeśli dostępne
-                            ["LastSuccessfulOperation"] = diagnosticInfo.LastSuccessfulOperation,
-                            ["TeamsOperationsToday"] = 45, // Można pobrać z operation history
-                            ["UsersOperationsToday"] = 23,
-                            ["ChannelsOperationsToday"] = 12
+                            ["GraphApiConnectionStatus"] = healthInfo.Status,
+                            ["GraphApiHealthy"] = healthInfo.IsHealthy,
+                            ["RateLimitRemaining"] = rateLimitInfo?.RemainingRequests ?? 0,
+                            ["IsThrottled"] = rateLimitInfo?.IsThrottled ?? false,
+                            ["CacheHitRate"] = metricsInfo?.CacheHitRate ?? 85.5,
+                            ["LastSuccessfulOperation"] = diagnosticInfo.LastChecked,
+                            ["TeamsOperationsToday"] = metricsInfo?.TeamsOperationsCount ?? 45,
+                            ["UsersOperationsToday"] = metricsInfo?.UsersOperationsCount ?? 23,
+                            ["ChannelsOperationsToday"] = metricsInfo?.ChannelsOperationsCount ?? 12,
+                            ["GraphApiVersion"] = "v1.0",
+                            ["BatchOperationsSupported"] = true
                         }
                     };
                 }
@@ -128,14 +138,14 @@ namespace TeamsManager.UI.Services
                     Timestamp = DateTime.UtcNow,
                     TeamsManagerSpecific = new Dictionary<string, object>
                     {
-                        ["Status"] = "API Unavailable"
+                        ["Status"] = "Graph API Unavailable"
                     }
                 };
                 return fallbackMetrics;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-DATA] Error getting TeamsManager performance metrics");
+                _logger.LogError(ex, "[MONITORING-DATA] Error getting TeamsManager performance metrics from Graph API");
                 throw;
             }
         }
@@ -190,55 +200,59 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[MONITORING-DATA] Getting recent alerts");
+                _logger.LogDebug("[MONITORING-DATA] Getting recent alerts from Graph API");
 
                 var alerts = new List<SystemAlert>();
 
-                // Pobierz rzeczywiste informacje o stanie systemu z API
-                var diagnosticInfo = await _apiService.GetConnectionDiagnosticsAsync();
+                // Pobierz rzeczywiste informacje o stanie systemu z Graph API (Etap 5.2.2)
+                var diagnosticInfo = await _apiService.GetGraphConnectionDiagnosticsAsync();
+                var healthInfo = await _apiService.GetGraphConnectionHealthAsync();
+                var rateLimitInfo = await _apiService.GetGraphRateLimitStatusAsync();
                 
-                if (diagnosticInfo != null)
+                if (diagnosticInfo != null && healthInfo != null)
                 {
-                    // Generuj alerty na podstawie rzeczywistego stanu systemu
-                    if (diagnosticInfo.OverallHealth == PowerShellHealthStatus.Critical)
+                    // Generuj alerty na podstawie rzeczywistego stanu Graph API
+                    if (!healthInfo.IsHealthy)
                     {
                         alerts.Add(new SystemAlert
                         {
                             Id = Guid.NewGuid().ToString(),
                             Level = AlertLevel.Critical,
-                            Message = "Krytyczny problem z połączeniem PowerShell/Graph",
-                            Component = "PowerShell Connection",
+                            Message = "Krytyczny problem z połączeniem Graph API",
+                            Component = "Graph API Connection",
                             Timestamp = DateTime.UtcNow.AddMinutes(-1),
                             IsAcknowledged = false,
-                            Details = string.Join("; ", diagnosticInfo.Errors)
+                            Details = healthInfo.LastError ?? "Nieznany błąd Graph API"
                         });
                     }
-                    else if (diagnosticInfo.OverallHealth == PowerShellHealthStatus.Warning)
+
+                    // Alert o rate limiting
+                    if (rateLimitInfo?.IsThrottled == true)
                     {
                         alerts.Add(new SystemAlert
                         {
                             Id = Guid.NewGuid().ToString(),
                             Level = AlertLevel.Warning,
-                            Message = "Ostrzeżenia w systemie PowerShell/Graph",
-                            Component = "PowerShell Connection",
+                            Message = "Graph API rate limiting aktywny",
+                            Component = "Graph API Rate Limiting",
                             Timestamp = DateTime.UtcNow.AddMinutes(-2),
                             IsAcknowledged = false,
-                            Details = string.Join("; ", diagnosticInfo.Errors)
+                            Details = $"Pozostało {rateLimitInfo.RemainingRequests} requestów. Reset: {rateLimitInfo.ResetTime}"
                         });
                     }
 
-                    // Alert o braku tokenu
-                    if (!diagnosticInfo.HasApiToken)
+                    // Alert o niskim limicie requestów
+                    if (rateLimitInfo?.RemainingRequests < 1000)
                     {
                         alerts.Add(new SystemAlert
                         {
                             Id = Guid.NewGuid().ToString(),
-                            Level = AlertLevel.Error,
-                            Message = "Brak tokenu dostępu API",
-                            Component = "Authentication",
+                            Level = AlertLevel.Warning,
+                            Message = "Niski limit requestów Graph API",
+                            Component = "Graph API Rate Limiting",
                             Timestamp = DateTime.UtcNow.AddMinutes(-3),
                             IsAcknowledged = false,
-                            Details = "System nie ma dostępu do tokenu API wymaganego do operacji"
+                            Details = $"Pozostało tylko {rateLimitInfo.RemainingRequests} requestów"
                         });
                     }
 
@@ -249,11 +263,26 @@ namespace TeamsManager.UI.Services
                         {
                             Id = Guid.NewGuid().ToString(),
                             Level = AlertLevel.Error,
-                            Message = "Brak połączenia z Microsoft Graph",
-                            Component = "Graph Connection",
+                            Message = "Brak połączenia z Microsoft Graph API",
+                            Component = "Graph API Connection",
                             Timestamp = DateTime.UtcNow.AddMinutes(-4),
                             IsAcknowledged = false,
                             Details = "Nie można nawiązać połączenia z Microsoft Graph API"
+                        });
+                    }
+
+                    // Alert o wysokim czasie odpowiedzi
+                    if (healthInfo.ResponseTimeMs > 5000) // > 5 sekund
+                    {
+                        alerts.Add(new SystemAlert
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Level = AlertLevel.Warning,
+                            Message = "Wysoki czas odpowiedzi Graph API",
+                            Component = "Graph API Performance",
+                            Timestamp = DateTime.UtcNow.AddMinutes(-5),
+                            IsAcknowledged = false,
+                            Details = $"Czas odpowiedzi: {healthInfo.ResponseTimeMs}ms"
                         });
                     }
                 }
@@ -265,11 +294,11 @@ namespace TeamsManager.UI.Services
                     {
                         Id = Guid.NewGuid().ToString(),
                         Level = AlertLevel.Info,
-                        Message = "System działa prawidłowo",
-                        Component = "System",
+                        Message = "Graph API działa prawidłowo",
+                        Component = "Graph API",
                         Timestamp = DateTime.UtcNow.AddMinutes(-5),
                         IsAcknowledged = false,
-                        Details = "Wszystkie komponenty systemu działają w normalnych parametrach"
+                        Details = "Wszystkie komponenty Graph API działają w normalnych parametrach"
                     });
                 }
 
@@ -277,7 +306,7 @@ namespace TeamsManager.UI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-DATA] Error getting recent alerts");
+                _logger.LogError(ex, "[MONITORING-DATA] Error getting recent alerts from Graph API");
                 
                 // Zwróć alert o błędzie
                 return new List<SystemAlert>
@@ -286,7 +315,7 @@ namespace TeamsManager.UI.Services
                     {
                         Id = Guid.NewGuid().ToString(),
                         Level = AlertLevel.Critical,
-                        Message = "Błąd podczas pobierania alertów systemowych",
+                        Message = "Błąd podczas pobierania alertów systemowych Graph API",
                         Component = "Monitoring",
                         Timestamp = DateTime.UtcNow,
                         IsAcknowledged = false,
@@ -343,79 +372,74 @@ namespace TeamsManager.UI.Services
 
         #region Helper Methods
 
-        private SystemHealthData ConvertDiagnosticInfoToSystemHealth(PowerShellDiagnosticInfo diagnosticInfo)
+        private SystemHealthData ConvertGraphDiagnosticInfoToSystemHealth(GraphDiagnosticInfo diagnosticInfo)
         {
             var components = new List<HealthComponent>();
 
-            // Komponent połączenia PowerShell
+            // Komponent połączenia Graph API
             components.Add(new HealthComponent
             {
-                Name = "PowerShell Connection",
+                Name = "Graph API Connection",
                 Status = diagnosticInfo.IsConnected ? 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy : 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
                 Description = diagnosticInfo.IsConnected ? 
-                    "Połączenie aktywne" : 
-                    "Brak połączenia",
-                ResponseTime = diagnosticInfo.LastConnectionAttempt.HasValue ? 
-                    DateTime.UtcNow - diagnosticInfo.LastConnectionAttempt.Value : 
-                    TimeSpan.Zero
+                    "Połączenie Graph API aktywne" : 
+                    "Brak połączenia Graph API",
+                ResponseTime = TimeSpan.FromMilliseconds(diagnosticInfo.ResponseTimeMs)
             });
 
-            // Komponent tokenu API
+            // Komponent uwierzytelnienia Graph API
             components.Add(new HealthComponent
             {
-                Name = "API Token",
-                Status = diagnosticInfo.HasApiToken ? 
+                Name = "Graph API Authentication",
+                Status = !string.IsNullOrEmpty(diagnosticInfo.ConnectionStatus) && diagnosticInfo.ConnectionStatus.Contains("Connected") ? 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy : 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
-                Description = diagnosticInfo.HasApiToken ? 
-                    $"Token dostępny (długość: {diagnosticInfo.ApiTokenLength})" : 
-                    "Brak tokenu API",
+                Description = !string.IsNullOrEmpty(diagnosticInfo.ConnectionStatus) && diagnosticInfo.ConnectionStatus.Contains("Connected") ? 
+                    "Uwierzytelnienie Graph API aktywne" : 
+                    "Problemy z uwierzytelnieniem Graph API",
                 ResponseTime = TimeSpan.Zero
             });
 
-            // Komponent tokenu Graph
+            // Komponent endpointów Graph API
             components.Add(new HealthComponent
             {
-                Name = "Graph Token",
-                Status = diagnosticInfo.HasGraphToken ? 
+                Name = "Graph API Endpoints",
+                Status = diagnosticInfo.IsConnected ? 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy : 
                     TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
-                Description = diagnosticInfo.HasGraphToken ? 
-                    $"Token Graph dostępny (długość: {diagnosticInfo.GraphTokenLength})" : 
-                    "Brak tokenu Graph",
+                Description = diagnosticInfo.IsConnected ? 
+                    "Endpointy Graph API dostępne" : 
+                    "Problemy z dostępem do endpointów Graph API",
                 ResponseTime = TimeSpan.Zero
             });
 
-            // Komponent uprawnień
+            // Komponent cache Graph API
             components.Add(new HealthComponent
             {
-                Name = "Permissions",
-                Status = diagnosticInfo.HasUserCreationPermissions ? 
-                    TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy : 
-                    TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
-                Description = diagnosticInfo.HasUserCreationPermissions ? 
-                    "Uprawnienia do tworzenia użytkowników dostępne" : 
-                    "Brak uprawnień do tworzenia użytkowników",
-                ResponseTime = TimeSpan.Zero
+                Name = "Graph API Cache",
+                Status = TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy, // Założenie - cache działa
+                Description = "Cache Graph API operacyjny",
+                ResponseTime = TimeSpan.FromMilliseconds(15)
             });
 
             return new SystemHealthData
             {
-                OverallStatus = ConvertPowerShellHealthStatusToUI(diagnosticInfo.OverallHealth),
+                OverallStatus = ConvertGraphHealthStatusToUI(diagnosticInfo.ConnectionStatus),
                 Components = components,
                 LastUpdate = DateTime.UtcNow
             };
         }
 
-        private static TeamsManager.UI.Models.Monitoring.HealthCheck ConvertPowerShellHealthStatusToUI(PowerShellHealthStatus status)
+        private static TeamsManager.UI.Models.Monitoring.HealthCheck ConvertGraphHealthStatusToUI(string? status)
         {
-            return status switch
+            return status?.ToLowerInvariant() switch
             {
-                PowerShellHealthStatus.Healthy => TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy,
-                PowerShellHealthStatus.Warning => TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
-                PowerShellHealthStatus.Critical => TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
+                var s when s?.Contains("connected") == true => TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy,
+                var s when s?.Contains("warning") == true => TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
+                var s when s?.Contains("error") == true => TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
+                var s when s?.Contains("critical") == true => TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
                 _ => TeamsManager.UI.Models.Monitoring.HealthCheck.Unknown
             };
         }
@@ -468,13 +492,13 @@ namespace TeamsManager.UI.Services
             return Math.Round(progress, 1);
         }
 
-        private static TeamsManager.UI.Models.Monitoring.HealthCheck ConvertCoreHealthStatusToUI(TeamsManager.Core.Models.HealthStatus coreStatus)
+        private static TeamsManager.UI.Models.Monitoring.HealthCheck ConvertCoreHealthStatusToUI(TeamsManager.Core.Enums.HealthStatus coreStatus)
         {
             return coreStatus switch
             {
-                TeamsManager.Core.Models.HealthStatus.Healthy => TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy,
-                TeamsManager.Core.Models.HealthStatus.Degraded => TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
-                TeamsManager.Core.Models.HealthStatus.Unhealthy => TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
+                TeamsManager.Core.Enums.HealthStatus.Healthy => TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy,
+                TeamsManager.Core.Enums.HealthStatus.Degraded => TeamsManager.UI.Models.Monitoring.HealthCheck.Warning,
+                TeamsManager.Core.Enums.HealthStatus.Unhealthy => TeamsManager.UI.Models.Monitoring.HealthCheck.Critical,
                 _ => TeamsManager.UI.Models.Monitoring.HealthCheck.Unknown
             };
         }

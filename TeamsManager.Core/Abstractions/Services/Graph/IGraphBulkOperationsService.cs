@@ -7,7 +7,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzający operacjami masowymi w Microsoft 365 przez Graph API
-    /// Zastępuje PowerShell implementację z pełnym wsparciem dla Graph Batch API
+    /// Implementacja operacji masowych z pełnym wsparciem dla Graph Batch API
     /// </summary>
     public interface IGraphBulkOperationsService
     {

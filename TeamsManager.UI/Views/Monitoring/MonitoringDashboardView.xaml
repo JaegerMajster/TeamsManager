@@ -118,7 +118,7 @@
                     
                     <Button Style="{StaticResource SuccessButton}"
                             Command="{Binding AutoRepairCommand}"
-                            ToolTip="Automatyczna naprawa problemów PowerShell i Graph API">
+                            ToolTip="Automatyczna naprawa problemów Graph API">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Wrench" 
                                                    Width="16" Height="16" 

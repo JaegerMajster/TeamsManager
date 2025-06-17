@@ -31,11 +31,12 @@ using TeamsManager.UI.Services.UI;
 using TeamsManager.UI.ViewModels.SchoolTypes;
 using TeamsManager.UI.Views.SchoolTypes;
 using TeamsManager.Core.Abstractions.Data;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.Core.Services;
+using Microsoft.Identity.Client;
 
 namespace TeamsManager.UI
 {
@@ -70,7 +71,7 @@ namespace TeamsManager.UI
             services.AddLogging(configure =>
             {
                 configure.AddDebug();
-                configure.SetMinimumLevel(LogLevel.Debug);
+                configure.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
             });
             // --- KONIEC: KONFIGURACJA LOGGERA ---
 
@@ -237,10 +238,7 @@ namespace TeamsManager.UI
             services.AddScoped<IOperationHistoryRepository, TeamsManager.Data.Repositories.OperationHistoryRepository>();
             
             // === DODATKOWE ZALEŻNOŚCI DLA USERSERVICE ===
-            // PowerShell Services
-            services.AddScoped<IPowerShellService, TeamsManager.Core.Services.PowerShell.PowerShellService>();
-            services.AddScoped<IPowerShellUserManagementService, TeamsManager.Core.Services.PowerShell.PowerShellUserManagementService>();
-            services.AddScoped<IPowerShellCacheService, TeamsManager.Core.Services.PowerShell.PowerShellCacheService>();
+
             
             // Current User Service
             services.AddScoped<ICurrentUserService, TeamsManager.Core.Services.UserContext.CurrentUserService>();
@@ -249,7 +247,7 @@ namespace TeamsManager.UI
             services.AddScoped<IAdminNotificationService, TeamsManager.Core.Services.StubAdminNotificationService>();
             
             // Graph Synchronizer (tymczasowo mock - do implementacji później)
-            services.AddScoped<TeamsManager.Core.Abstractions.Services.Synchronization.IGraphSynchronizer<User>, TeamsManager.Core.Services.Synchronization.UserSynchronizer>();
+            // services.AddScoped<TeamsManager.Core.Abstractions.Services.Synchronization.IGraphSynchronizer<User, GraphUser>, TeamsManager.Core.Services.Synchronization.UserSynchronizer>();
             
             // Unit of Work
             services.AddScoped<IUnitOfWork, TeamsManager.Data.UnitOfWork.EfUnitOfWork>();
@@ -285,7 +283,7 @@ namespace TeamsManager.UI
             services.AddScoped<IUserRepository, TeamsManager.Data.Repositories.UserRepository>();
             // Prawdziwy serwis historii operacji (już zarejestrowany powyżej)
             // services.AddScoped<IOperationHistoryService, SimpleDashboardOperationHistoryService>();
-            services.AddScoped<IPowerShellCacheService, TeamsManager.Core.Services.PowerShell.PowerShellCacheService>();
+
 
             // Serwis UI dla SchoolTypes
             services.AddTransient<SchoolTypeUIService>();
@@ -517,8 +515,7 @@ namespace TeamsManager.UI
             // --- POCZĄTEK: REJESTRACJA REAL-TIME MONITORING (ETAP 5.3) ---
             // Core serwisy dla monitoringu - potrzebne w UI dla demonstracji
             
-            // Rejestracja Authentication Services wymaganych przez PowerShell
-            services.AddScoped<TeamsManager.Core.Abstractions.Services.Auth.ITokenManager, TeamsManager.Core.Services.Auth.TokenManager>();
+            // Authentication Services
             
             // Prawdziwy IConfidentialClientApplication dla TokenManager z konfiguracji MSAL
             services.AddScoped<Microsoft.Identity.Client.IConfidentialClientApplication>(provider =>
@@ -552,7 +549,27 @@ namespace TeamsManager.UI
                 return builder.Build();
             });
             
-            services.AddPowerShellServices(); // Rejestruje IPowerShellConnectionService i inne serwisy PowerShell
+            // TokenManager - używa GraphApiConfiguration dla scope'ów
+            services.AddScoped<TeamsManager.Core.Abstractions.Services.Auth.ITokenManager>(provider =>
+            {
+                var confidentialClientApp = provider.GetRequiredService<IConfidentialClientApplication>();
+                var memoryCache = provider.GetRequiredService<IMemoryCache>();
+                var logger = provider.GetRequiredService<ILogger<TeamsManager.Core.Services.Auth.TokenManager>>();
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                var graphConfig = provider.GetRequiredService<GraphApiConfiguration>();
+                
+                return new TeamsManager.Core.Services.Auth.TokenManager(
+                    confidentialClientApp, 
+                    memoryCache, 
+                    logger, 
+                    configuration, 
+                    graphConfig);
+            });
+            
+            // Konfiguracja Graph API - Singleton dla wydajności
+            services.AddSingleton<GraphApiConfiguration>();
+            
+            services.AddGraphServices(includeAdminNotificationService: true); // Rejestruje wszystkie Graph API services
             
             services.AddScoped<IHealthMonitoringOrchestrator, TeamsManager.Application.Services.HealthMonitoringOrchestrator>();
             services.AddScoped<TeamsManager.Core.Abstractions.Services.Cache.ICacheInvalidationService, TeamsManager.Core.Services.Cache.CacheInvalidationService>();

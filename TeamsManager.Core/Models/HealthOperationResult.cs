@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using TeamsManager.Core.Enums;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Models
 {
     /// <summary>
     /// Wynik operacji monitorowania zdrowia systemu
-    /// Następuje wzorce z BulkOperationResult
+    /// Rozszerzenie BulkOperationResult o specyficzne funkcjonalności health check
     /// </summary>
     public class HealthOperationResult
     {
@@ -15,7 +17,7 @@ namespace TeamsManager.Core.Models
         public bool Success { get; set; }
         
         /// <summary>
-        /// Kompatybilność z wzorcami orkiestratora - settable success flag
+        /// Kompatybilność z orkiestratorem - settable success flag
         /// </summary>
         public bool IsSuccess { get; set; }
         
@@ -30,7 +32,7 @@ namespace TeamsManager.Core.Models
         public DateTime ProcessedAt { get; set; } = DateTime.UtcNow;
         
         /// <summary>
-        /// Typ operacji monitorowania
+        /// Typ operacji health check
         /// </summary>
         public string? OperationType { get; set; }
         
@@ -40,27 +42,27 @@ namespace TeamsManager.Core.Models
         public long? ExecutionTimeMs { get; set; }
 
         /// <summary>
-        /// Lista pomyślnych operacji zdrowia
+        /// Lista pomyślnych operacji health check
         /// </summary>
         public List<HealthOperationSuccess> SuccessfulOperations { get; set; } = new List<HealthOperationSuccess>();
         
         /// <summary>
-        /// Lista błędów operacji zdrowia
+        /// Lista błędów operacji health check
         /// </summary>
         public List<HealthOperationError> Errors { get; set; } = new List<HealthOperationError>();
 
         /// <summary>
-        /// Szczegółowe wyniki sprawdzeń zdrowia
+        /// Szczegółowe wyniki sprawdzenia zdrowia komponentów
         /// </summary>
         public List<HealthCheckDetail> HealthChecks { get; set; } = new List<HealthCheckDetail>();
 
         /// <summary>
-        /// Metryki wydajności wykryte podczas operacji
+        /// Metryki wydajności systemu
         /// </summary>
         public HealthMetrics? Metrics { get; set; }
 
         /// <summary>
-        /// Rekomendacje do poprawy stanu systemu
+        /// Rekomendacje naprawcze
         /// </summary>
         public List<string> Recommendations { get; set; } = new List<string>();
 
@@ -103,7 +105,7 @@ namespace TeamsManager.Core.Models
     }
 
     /// <summary>
-    /// Reprezentuje pomyślną operację monitorowania zdrowia
+    /// Pomyślna operacja health check
     /// </summary>
     public class HealthOperationSuccess
     {
@@ -113,43 +115,43 @@ namespace TeamsManager.Core.Models
         public string Operation { get; set; } = string.Empty;
         
         /// <summary>
-        /// Komponent systemu którego dotyczy operacja
+        /// Komponent systemu
         /// </summary>
         public string Component { get; set; } = string.Empty;
         
         /// <summary>
-        /// Nazwa komponentu
+        /// Nazwa komponentu (opcjonalna)
         /// </summary>
         public string? ComponentName { get; set; }
         
         /// <summary>
-        /// Komunikat o sukcesie
+        /// Komunikat sukcesu
         /// </summary>
         public string? Message { get; set; }
         
         /// <summary>
-        /// Dodatkowe dane diagnostyczne
+        /// Dodatkowe dane operacji
         /// </summary>
         public Dictionary<string, object>? AdditionalData { get; set; }
     }
 
     /// <summary>
-    /// Reprezentuje błąd operacji monitorowania zdrowia
+    /// Błąd operacji health check
     /// </summary>
     public class HealthOperationError
     {
         /// <summary>
-        /// Nazwa operacji która się nie powiodła
+        /// Nazwa operacji
         /// </summary>
         public string Operation { get; set; } = string.Empty;
         
         /// <summary>
-        /// Komponent który spowodował błąd
+        /// Komponent systemu
         /// </summary>
         public string? Component { get; set; }
         
         /// <summary>
-        /// Nazwa komponentu
+        /// Nazwa komponentu (opcjonalna)
         /// </summary>
         public string? ComponentName { get; set; }
         
@@ -159,12 +161,12 @@ namespace TeamsManager.Core.Models
         public string Message { get; set; } = string.Empty;
         
         /// <summary>
-        /// Wyjątek który spowodował błąd
+        /// Wyjątek (jeśli wystąpił)
         /// </summary>
         public Exception? Exception { get; set; }
         
         /// <summary>
-        /// Dodatkowe dane o błędzie
+        /// Dodatkowe dane błędu
         /// </summary>
         public Dictionary<string, object>? AdditionalData { get; set; }
 
@@ -216,9 +218,9 @@ namespace TeamsManager.Core.Models
     public class HealthMetrics
     {
         /// <summary>
-        /// Metryki cache
+        /// Metryki cache - MIGRACJA ZAKOŃCZONA: używa GraphCacheMetrics
         /// </summary>
-        public CacheMetrics? CacheMetrics { get; set; }
+        public GraphCacheMetrics? CacheMetrics { get; set; }
 
         /// <summary>
         /// Średni czas odpowiedzi API w milisekundach
@@ -246,9 +248,11 @@ namespace TeamsManager.Core.Models
         public int ErrorsLastHour { get; set; }
 
         /// <summary>
-        /// Status połączenia PowerShell
+        /// Status połączenia Graph API
         /// </summary>
-        public string? PowerShellConnectionStatus { get; set; }
+        public string? GraphConnectionStatus { get; set; }
+
+        
 
         /// <summary>
         /// Metryki specyficzne dla TeamsManager
@@ -325,52 +329,5 @@ namespace TeamsManager.Core.Models
         /// Dodatkowe dane o procesie
         /// </summary>
         public Dictionary<string, object>? AdditionalData { get; set; }
-    }
-
-    /// <summary>
-    /// Status zdrowia komponentu
-    /// </summary>
-    public enum HealthStatus
-    {
-        /// <summary>
-        /// Komponent jest w pełni sprawny
-        /// </summary>
-        Healthy = 0,
-
-        /// <summary>
-        /// Komponent działa z ograniczeniami
-        /// </summary>
-        Degraded = 1,
-
-        /// <summary>
-        /// Komponent nie działa
-        /// </summary>
-        Unhealthy = 2
-    }
-
-    /// <summary>
-    /// Poziom krytyczności błędu zdrowia
-    /// </summary>
-    public enum HealthErrorSeverity
-    {
-        /// <summary>
-        /// Informacja
-        /// </summary>
-        Info = 0,
-
-        /// <summary>
-        /// Ostrzeżenie
-        /// </summary>
-        Warning = 1,
-
-        /// <summary>
-        /// Błąd
-        /// </summary>
-        Error = 2,
-
-        /// <summary>
-        /// Krytyczny błąd
-        /// </summary>
-        Critical = 3
     }
 } 

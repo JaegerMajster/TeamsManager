@@ -18,7 +18,9 @@
 10. [Wzorzec Unit of Work](#10-wzorzec-unit-of-work)
 11. [Wzorzec Powiadomień i Notyfikacji](#11-wzorzec-powiadomień-i-notyfikacji)
 12. [Wzorzec Batch Processing](#12-wzorzec-batch-processing)
-13. [Instrukcje natury ogólnej](#13-instrukcje-ogolne)
+13. [Wzorzec Debugowania Błędów CS0854 - Moq + Parametry Opcjonalne](#13-wzorzec-debugowania-błędów-cs0854---moq--parametry-opcjonalne)
+14. [Wzorzec Autentykacji MSAL w ViewModels](#14-wzorzec-autentykacji-msal-w-viewmodels)
+15. [Instrukcje natury ogólnej](#15-instrukcje-natury-ogólnej)
 
 ---
 s
@@ -1172,5 +1174,294 @@ _departmentServiceMock.Setup(x => x.GetDepartmentByIdAsync("dept-matematyka",
 
 ---
 
-## 14. Instrukcje natury ogólnej
+## 14. Wzorzec Autentykacji MSAL w ViewModels
+
+### Opis
+Standardowy wzorzec implementacji autentykacji Microsoft Graph API za pomocą MSAL (Microsoft Authentication Library) w ViewModels warstwy UI. Zastępuje mock tokeny prawdziwymi tokenami dostępu.
+
+### Implementacja bazowa
+```csharp
+// Dodanie IMsalAuthService do konstruktora
+public class ExampleViewModel : BaseViewModel
+{
+    private readonly IMsalAuthService _msalAuthService;
+    private readonly ILogger<ExampleViewModel> _logger;
+
+    public ExampleViewModel(
+        IMsalAuthService msalAuthService,
+        ILogger<ExampleViewModel> logger,
+        /* inne zależności */)
+    {
+        _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        /* inicjalizacja innych zależności */
+    }
+
+    // Standardowa metoda pobierania tokenu
+    private async Task<string?> GetAccessTokenAsync()
+    {
+        try
+        {
+            var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+            if (authResult?.AccessToken != null)
+                return authResult.AccessToken;
+            
+            _logger.LogWarning("Nie można pobrać tokenu w trybie cichym...");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+            return null;
+        }
+    }
+}
+```
+
+### Wzorzec użycia w operacjach API
+```csharp
+// Przykład w operacji CRUD
+private async Task LoadDataAsync()
+{
+    try
+    {
+        IsLoading = true;
+        
+        var token = await GetAccessTokenAsync();
+        if (token == null)
+        {
+            ShowError("Nie można uzyskać tokenu dostępu. Sprawdź połączenie i spróbuj ponownie.");
+            return;
+        }
+
+        // Użycie tokenu w wywołaniu API
+        var response = await _httpService.GetAsync<List<DataModel>>(
+            "api/endpoint", 
+            token);
+            
+        if (response.IsSuccess && response.Data != null)
+        {
+            DataCollection.Clear();
+            foreach (var item in response.Data)
+            {
+                DataCollection.Add(item);
+            }
+        }
+        else
+        {
+            ShowError($"Błąd podczas ładowania danych: {response.ErrorMessage}");
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Błąd podczas ładowania danych");
+        ShowError("Wystąpił nieoczekiwany błąd podczas ładowania danych.");
+    }
+    finally
+    {
+        IsLoading = false;
+    }
+}
+```
+
+### Wzorzec dla operacji bulk
+```csharp
+// Przykład operacji bulk z tokenem
+private async Task ProcessBulkOperationAsync(IEnumerable<string> items)
+{
+    var token = await GetAccessTokenAsync();
+    if (token == null)
+    {
+        ShowError("Nie można uzyskać tokenu dostępu dla operacji bulk.");
+        return;
+    }
+
+    var results = new List<BulkOperationResult>();
+    
+    foreach (var item in items)
+    {
+        try
+        {
+            var response = await _httpService.PostAsync<OperationResult>(
+                $"api/bulk-operation/{item}", 
+                null, 
+                token);
+                
+            results.Add(new BulkOperationResult 
+            { 
+                ItemId = item, 
+                Success = response.IsSuccess,
+                ErrorMessage = response.ErrorMessage 
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Błąd podczas przetwarzania elementu {ItemId}", item);
+            results.Add(new BulkOperationResult 
+            { 
+                ItemId = item, 
+                Success = false, 
+                ErrorMessage = ex.Message 
+            });
+        }
+    }
+    
+    // Podsumowanie wyników
+    var successful = results.Count(r => r.Success);
+    var failed = results.Count(r => !r.Success);
+    ShowInfo($"Operacja zakończona. Powodzenia: {successful}, Błędów: {failed}");
+}
+```
+
+### Wzorzec dla Child ViewModels z Factory
+```csharp
+// Parent ViewModel z ILoggerFactory
+public class ParentViewModel : BaseViewModel
+{
+    private readonly IMsalAuthService _msalAuthService;
+    private readonly ILoggerFactory _loggerFactory;
+
+    public ParentViewModel(
+        IMsalAuthService msalAuthService,
+        ILoggerFactory loggerFactory)
+    {
+        _msalAuthService = msalAuthService;
+        _loggerFactory = loggerFactory;
+    }
+
+    private void CreateChildViewModels()
+    {
+        // Tworzenie child ViewModels z przekazaniem zależności
+        ChildViewModels = data.Select(item => 
+            new ChildViewModel(
+                item,
+                _msalAuthService,
+                _loggerFactory.CreateLogger<ChildViewModel>()
+            )).ToList();
+    }
+}
+
+// Child ViewModel
+public class ChildViewModel : BaseViewModel
+{
+    public ChildViewModel(
+        DataModel data,
+        IMsalAuthService msalAuthService,
+        ILogger<ChildViewModel> logger)
+    {
+        _data = data;
+        _msalAuthService = msalAuthService;
+        _logger = logger;
+    }
+}
+```
+
+### Using statements wymagane
+```csharp
+using TeamsManager.UI.Services.Abstractions; // IMsalAuthService
+using Microsoft.Extensions.Logging;          // ILogger, ILoggerFactory
+using System;                                // ArgumentNullException
+using System.Threading.Tasks;                // Task, async/await
+```
+
+### Przykłady implementacji w projekcie
+- **UserListViewModel.cs** - operacje bulk na użytkownikach
+- **UserDetailViewModel.cs** - CRUD pojedynczego użytkownika  
+- **TeamListViewModel.cs** - zarządzanie zespołami
+- **TeamChannelsViewModel.cs** - zarządzanie kanałami z child ViewModels
+- **TeamMembersViewModel.cs** - zarządzanie członkami zespołu
+- **TeamLifecycleDialogViewModel.cs** - operacje cyklu życia zespołu
+- **ChannelCardViewModel.cs** - operacje na pojedynczym kanale
+
+### Migracja z mock tokenów
+```csharp
+// PRZED - mock token
+private string GetApiAccessToken() => "mock-token-for-development";
+
+// PO - prawdziwy token MSAL
+private async Task<string?> GetAccessTokenAsync()
+{
+    try
+    {
+        var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+        if (authResult?.AccessToken != null)
+            return authResult.AccessToken;
+        _logger.LogWarning("Nie można pobrać tokenu w trybie cichym...");
+        return null;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+        return null;
+    }
+}
+
+// Aktualizacja wywołań z sync na async
+// PRZED
+var token = GetApiAccessToken();
+var response = await _httpService.GetAsync<DataModel>("api/endpoint", token);
+
+// PO  
+var token = await GetAccessTokenAsync();
+if (token == null) return; // obsługa błędu
+var response = await _httpService.GetAsync<DataModel>("api/endpoint", token);
+```
+
+### Obsługa błędów autentykacji
+```csharp
+// Wzorzec obsługi różnych scenariuszy błędów
+private async Task<string?> GetAccessTokenAsync()
+{
+    try
+    {
+        var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+        
+        if (authResult?.AccessToken != null)
+            return authResult.AccessToken;
+            
+        // Token expired lub nie ma cache - próba interaktywna
+        _logger.LogWarning("Token wygasł lub nie istnieje w cache. Wymagana interaktywna autoryzacja.");
+        
+        // W UI można pokazać dialog logowania
+        ShowWarning("Sesja wygasła. Wymagane ponowne zalogowanie.");
+        
+        return null;
+    }
+    catch (Microsoft.Identity.Client.MsalUiRequiredException)
+    {
+        _logger.LogWarning("Wymagana interaktywna autoryzacja użytkownika");
+        ShowWarning("Wymagane ponowne zalogowanie.");
+        return null;
+    }
+    catch (Microsoft.Identity.Client.MsalServiceException ex)
+    {
+        _logger.LogError(ex, "Błąd serwisu MSAL podczas pobierania tokenu");
+        ShowError("Błąd autoryzacji. Sprawdź połączenie internetowe.");
+        return null;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Nieoczekiwany błąd podczas pobierania tokenu dostępu");
+        ShowError("Wystąpił nieoczekiwany błąd autoryzacji.");
+        return null;
+    }
+}
+```
+
+### Kiedy stosować
+- **Wszystkie ViewModels** komunikujące się z Microsoft Graph API
+- **Zastąpienie mock tokenów** w produkcji
+- **Operacje wymagające autoryzacji** (CRUD, bulk operations)
+- **Child ViewModels** wymagające dostępu do API
+
+### Zalety wzorca
+- **Bezpieczeństwo** - prawdziwe tokeny zamiast mock
+- **Spójność** - jednolity sposób pobierania tokenów
+- **Obsługa błędów** - kompleksowa obsługa scenariuszy błędów
+- **Logowanie** - śledzenie problemów z autoryzacją
+- **Async/await** - nowoczesny wzorzec asynchroniczny
+
+---
+
+## 15. Instrukcje natury ogólnej
 - **Aktualna data** - zawsze wywołuj komendę powershellową, jeśli chcesz gdzieś umieścić wartość aktualnej daty

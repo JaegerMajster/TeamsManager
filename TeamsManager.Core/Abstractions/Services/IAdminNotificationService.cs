@@ -67,5 +67,10 @@ namespace TeamsManager.Core.Abstractions.Services
             string subject,
             string message,
             Dictionary<string, object>? data = null);
+
+        /// <summary>
+        /// Wysyła metryki błędów Graph API do administratorów.
+        /// </summary>
+        Task SendGraphApiErrorMetricsAsync(Dictionary<string, object> metrics);
     }
 } 

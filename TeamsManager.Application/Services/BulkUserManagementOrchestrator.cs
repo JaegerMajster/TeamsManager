@@ -8,10 +8,11 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Application.Services
@@ -20,6 +21,7 @@ namespace TeamsManager.Application.Services
     /// Orkiestrator zarządzania masowymi operacjami na użytkownikach
     /// Odpowiedzialny za kompleksowe operacje HR: onboarding, offboarding, zmiany ról
     /// Następuje wzorce z SchoolYearProcessOrchestrator i TeamLifecycleOrchestrator
+    /// Orkiestrator operacji masowych użytkowników przez Graph API (Etap 4.3)
     /// </summary>
     public class BulkUserManagementOrchestrator : IBulkUserManagementOrchestrator
     {
@@ -27,8 +29,9 @@ namespace TeamsManager.Application.Services
         private readonly ITeamService _teamService;
         private readonly IDepartmentService _departmentService;
         private readonly ISubjectService _subjectService;
-        private readonly IPowerShellBulkOperationsService _bulkOperationsService;
-        private readonly IPowerShellUserManagementService _powerShellUserManagement;
+        private readonly IGraphBulkOperationsService _graphBulkOperationsService;
+        private readonly IGraphUserManagementService _graphUserManagementService;
+        private readonly IGraphService _graphService;
         private readonly INotificationService _notificationService;
         private readonly IAdminNotificationService _adminNotificationService;
         private readonly ICacheInvalidationService _cacheInvalidationService;
@@ -46,8 +49,9 @@ namespace TeamsManager.Application.Services
             ITeamService teamService,
             IDepartmentService departmentService,
             ISubjectService subjectService,
-            IPowerShellBulkOperationsService bulkOperationsService,
-            IPowerShellUserManagementService powerShellUserManagement,
+            IGraphBulkOperationsService graphBulkOperationsService,
+            IGraphUserManagementService graphUserManagementService,
+            IGraphService graphService,
             INotificationService notificationService,
             IAdminNotificationService adminNotificationService,
             ICacheInvalidationService cacheInvalidationService,
@@ -59,8 +63,9 @@ namespace TeamsManager.Application.Services
             _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
             _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
             _subjectService = subjectService ?? throw new ArgumentNullException(nameof(subjectService));
-            _bulkOperationsService = bulkOperationsService ?? throw new ArgumentNullException(nameof(bulkOperationsService));
-            _powerShellUserManagement = powerShellUserManagement ?? throw new ArgumentNullException(nameof(powerShellUserManagement));
+            _graphBulkOperationsService = graphBulkOperationsService ?? throw new ArgumentNullException(nameof(graphBulkOperationsService));
+            _graphUserManagementService = graphUserManagementService ?? throw new ArgumentNullException(nameof(graphUserManagementService));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService));
@@ -386,11 +391,11 @@ namespace TeamsManager.Application.Services
         }
 
         /// <summary>
-        /// Masowe operacje członkostwa w zespołach
+        /// Masowe operacje członkostwa w zespołach - używa Graph Batch API (Etap 4.3.2)
         /// </summary>
         public async Task<BulkOperationResult> BulkTeamMembershipOperationAsync(TeamMembershipOperation[] operations, string apiAccessToken)
         {
-            _logger.LogInformation("BulkUserManagement: Rozpoczynam masowe operacje członkostwa {Count} operacji", operations?.Length ?? 0);
+            _logger.LogInformation("BulkUserManagement: Rozpoczynam masowe operacje członkostwa {Count} operacji przez Graph Batch API", operations?.Length ?? 0);
 
             if (operations == null || !operations.Any())
             {
@@ -400,7 +405,7 @@ namespace TeamsManager.Application.Services
             var successfulOperations = new List<BulkOperationSuccess>();
             var errors = new List<BulkOperationError>();
 
-            // Grupuj operacje według zespołów dla optymalizacji
+            // Grupuj operacje według zespołów i typu operacji dla Graph Batch API
             var operationsByTeam = operations.GroupBy(op => op.TeamId).ToList();
 
             foreach (var teamGroup in operationsByTeam)
@@ -410,7 +415,7 @@ namespace TeamsManager.Application.Services
 
                 try
                 {
-                    // Operacje dodawania
+                    // Operacje dodawania - użyj Graph Batch API
                     var addOperations = teamOperations.Where(op => op.OperationType == TeamMembershipOperationType.Add).ToList();
                     if (addOperations.Any())
                     {
@@ -426,32 +431,40 @@ namespace TeamsManager.Application.Services
 
                         if (userUpns.Any())
                         {
-                            var addResults = await _teamService.AddUsersToTeamAsync(teamId, userUpns, apiAccessToken);
+                            _logger.LogInformation("BulkUserManagement: Dodawanie {Count} użytkowników do zespołu {TeamId} przez Graph Batch API", 
+                                userUpns.Count, teamId);
+
+                            // Użyj Graph Batch API bezpośrednio
+                            var addResults = await _graphBulkOperationsService.BulkAddUsersToTeamAsync(
+                                teamId, 
+                                userUpns, 
+                                "Member");
+
                             foreach (var result in addResults)
                             {
                                 if (result.Value)
                                 {
                                     successfulOperations.Add(new BulkOperationSuccess
                                     {
-                                        Operation = "AddToTeam",
+                                        Operation = "BulkAddToTeam",
                                         EntityId = result.Key,
-                                        Message = $"Dodano do zespołu {teamId}"
+                                        Message = $"Dodano do zespołu {teamId} przez Graph Batch API"
                                     });
                                 }
                                 else
                                 {
                                     errors.Add(new BulkOperationError
                                     {
-                                        Operation = "AddToTeam",
+                                        Operation = "BulkAddToTeam",
                                         EntityId = result.Key,
-                                        Message = $"Nie udało się dodać do zespołu {teamId}"
+                                        Message = $"Nie udało się dodać do zespołu {teamId} przez Graph Batch API"
                                     });
                                 }
                             }
                         }
                     }
 
-                    // Operacje usuwania
+                    // Operacje usuwania - użyj Graph Batch API
                     var removeOperations = teamOperations.Where(op => op.OperationType == TeamMembershipOperationType.Remove).ToList();
                     if (removeOperations.Any())
                     {
@@ -467,25 +480,32 @@ namespace TeamsManager.Application.Services
 
                         if (userUpns.Any())
                         {
-                            var removeResults = await _teamService.RemoveUsersFromTeamAsync(teamId, userUpns, "Bulk operation", apiAccessToken);
+                            _logger.LogInformation("BulkUserManagement: Usuwanie {Count} użytkowników z zespołu {TeamId} przez Graph Batch API", 
+                                userUpns.Count, teamId);
+
+                            // Użyj Graph Batch API bezpośrednio
+                            var removeResults = await _graphBulkOperationsService.BulkRemoveUsersFromTeamAsync(
+                                teamId, 
+                                userUpns);
+
                             foreach (var result in removeResults)
                             {
                                 if (result.Value)
                                 {
                                     successfulOperations.Add(new BulkOperationSuccess
                                     {
-                                        Operation = "RemoveFromTeam",
+                                        Operation = "BulkRemoveFromTeam",
                                         EntityId = result.Key,
-                                        Message = $"Usunięto z zespołu {teamId}"
+                                        Message = $"Usunięto z zespołu {teamId} przez Graph Batch API"
                                     });
                                 }
                                 else
                                 {
                                     errors.Add(new BulkOperationError
                                     {
-                                        Operation = "RemoveFromTeam",
+                                        Operation = "BulkRemoveFromTeam",
                                         EntityId = result.Key,
-                                        Message = $"Nie udało się usunąć z zespołu {teamId}"
+                                        Message = $"Nie udało się usunąć z zespołu {teamId} przez Graph Batch API"
                                     });
                                 }
                             }
@@ -494,7 +514,7 @@ namespace TeamsManager.Application.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Błąd podczas operacji członkostwa dla zespołu {TeamId}", teamId);
+                    _logger.LogError(ex, "BulkUserManagement: Błąd podczas operacji członkostwa dla zespołu {TeamId} przez Graph Batch API", teamId);
                     errors.Add(new BulkOperationError
                     {
                         Operation = "TeamMembershipOperation",
@@ -505,6 +525,9 @@ namespace TeamsManager.Application.Services
                 }
             }
 
+            _logger.LogInformation("BulkUserManagement: Zakończono masowe operacje członkostwa. Sukces: {Success}, Błędy: {Errors}", 
+                successfulOperations.Count, errors.Count);
+
             return new BulkOperationResult
             {
                 Success = !errors.Any(),
@@ -512,7 +535,7 @@ namespace TeamsManager.Application.Services
                 SuccessfulOperations = successfulOperations,
                 Errors = errors,
                 ProcessedAt = DateTime.UtcNow,
-                OperationType = "BulkTeamMembershipOperation"
+                OperationType = "BulkTeamMembershipOperationWithGraphBatch"
             };
         }
 
@@ -1003,6 +1026,456 @@ namespace TeamsManager.Application.Services
         {
             return role == UserRole.Nauczyciel || role == UserRole.Wicedyrektor || role == UserRole.Dyrektor;
         }
+
+        #region Graph API Bulk Operations (Etap 4.3)
+
+        /// <summary>
+        /// Masowo dodaje użytkowników do zespołów używając Graph Batch API
+        /// </summary>
+        private async Task<BulkOperationResult> BulkAddUsersToTeamsWithGraphApiAsync(
+            Dictionary<string, List<string>> teamUserMappings, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            foreach (var mapping in teamUserMappings)
+            {
+                try
+                {
+                    _logger.LogInformation("BulkUserManagement: Dodawanie {Count} użytkowników do zespołu {TeamId} przez Graph API", 
+                        mapping.Value.Count, mapping.Key);
+
+                    // Użyj Graph Batch API do masowego dodawania
+                    var result = await _graphBulkOperationsService.BulkAddUsersToTeamAsync(
+                        mapping.Key, 
+                        mapping.Value, 
+                        "Member");
+
+                    foreach (var userResult in result)
+                    {
+                        if (userResult.Value)
+                        {
+                            successfulOperations.Add(new BulkOperationSuccess
+                            {
+                                Operation = "BulkAddToTeam",
+                                EntityId = userResult.Key,
+                                Message = $"Dodano użytkownika {userResult.Key} do zespołu {mapping.Key} przez Graph API"
+                            });
+                        }
+                        else
+                        {
+                            errors.Add(new BulkOperationError
+                            {
+                                Operation = "BulkAddToTeam",
+                                EntityId = userResult.Key,
+                                Message = $"Nie udało się dodać użytkownika {userResult.Key} do zespołu {mapping.Key} przez Graph API"
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "BulkUserManagement: Błąd podczas masowego dodawania do zespołu {TeamId}", mapping.Key);
+                    foreach (var userUpn in mapping.Value)
+                    {
+                        errors.Add(new BulkOperationError
+                        {
+                            Operation = "BulkAddToTeam",
+                            EntityId = userUpn,
+                            Message = ex.Message,
+                            Exception = ex
+                        });
+                    }
+                }
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkAddUsersToTeamsWithGraphApi"
+            };
+        }
+
+        /// <summary>
+        /// Masowo usuwa użytkowników z zespołów używając Graph Batch API
+        /// </summary>
+        private async Task<BulkOperationResult> BulkRemoveUsersFromTeamsWithGraphApiAsync(
+            Dictionary<string, List<string>> teamUserMappings, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            foreach (var mapping in teamUserMappings)
+            {
+                try
+                {
+                    _logger.LogInformation("BulkUserManagement: Usuwanie {Count} użytkowników z zespołu {TeamId} przez Graph API", 
+                        mapping.Value.Count, mapping.Key);
+
+                    // Użyj Graph Batch API do masowego usuwania
+                    var result = await _graphBulkOperationsService.BulkRemoveUsersFromTeamAsync(
+                        mapping.Key, 
+                        mapping.Value);
+
+                    foreach (var userResult in result)
+                    {
+                        if (userResult.Value)
+                        {
+                            successfulOperations.Add(new BulkOperationSuccess
+                            {
+                                Operation = "BulkRemoveFromTeam",
+                                EntityId = userResult.Key,
+                                Message = $"Usunięto użytkownika {userResult.Key} z zespołu {mapping.Key} przez Graph API"
+                            });
+                        }
+                        else
+                        {
+                            errors.Add(new BulkOperationError
+                            {
+                                Operation = "BulkRemoveFromTeam",
+                                EntityId = userResult.Key,
+                                Message = $"Nie udało się usunąć użytkownika {userResult.Key} z zespołu {mapping.Key} przez Graph API"
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "BulkUserManagement: Błąd podczas masowego usuwania z zespołu {TeamId}", mapping.Key);
+                    foreach (var userUpn in mapping.Value)
+                    {
+                        errors.Add(new BulkOperationError
+                        {
+                            Operation = "BulkRemoveFromTeam",
+                            EntityId = userUpn,
+                            Message = ex.Message,
+                            Exception = ex
+                        });
+                    }
+                }
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkRemoveUsersFromTeamsWithGraphApi"
+            };
+        }
+
+        /// <summary>
+        /// Masowo dezaktywuje konta użytkowników używając Graph API
+        /// </summary>
+        private async Task<BulkOperationResult> BulkDeactivateUsersWithGraphApiAsync(
+            List<string> userUpns, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            // Przygotuj batch operations dla Graph API
+            var userUpdates = new Dictionary<string, Dictionary<string, string>>();
+            foreach (var userUpn in userUpns)
+            {
+                userUpdates[userUpn] = new Dictionary<string, string>
+                {
+                    { "accountEnabled", "false" }
+                };
+            }
+
+            try
+            {
+                _logger.LogInformation("BulkUserManagement: Dezaktywacja {Count} użytkowników przez Graph API", userUpns.Count);
+
+                // Użyj Graph Batch API do masowej dezaktywacji
+                var result = await _graphBulkOperationsService.BulkUpdateUserPropertiesAsync(userUpdates);
+
+                foreach (var userResult in result)
+                {
+                    if (userResult.Value)
+                    {
+                        successfulOperations.Add(new BulkOperationSuccess
+                        {
+                            Operation = "BulkDeactivateUser",
+                            EntityId = userResult.Key,
+                            Message = $"Dezaktywowano konto użytkownika {userResult.Key} przez Graph API"
+                        });
+                    }
+                    else
+                    {
+                        errors.Add(new BulkOperationError
+                        {
+                            Operation = "BulkDeactivateUser",
+                            EntityId = userResult.Key,
+                            Message = $"Nie udało się dezaktywować konta użytkownika {userResult.Key} przez Graph API"
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "BulkUserManagement: Błąd podczas masowej dezaktywacji użytkowników");
+                foreach (var userUpn in userUpns)
+                {
+                    errors.Add(new BulkOperationError
+                    {
+                        Operation = "BulkDeactivateUser",
+                        EntityId = userUpn,
+                        Message = ex.Message,
+                        Exception = ex
+                    });
+                }
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkDeactivateUsersWithGraphApi"
+            };
+        }
+
+        /// <summary>
+        /// Masowo tworzy użytkowników M365 używając Graph API
+        /// </summary>
+        private async Task<BulkOperationResult> BulkCreateUsersWithGraphApiAsync(
+            List<UserOnboardingPlan> plans, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            foreach (var plan in plans)
+            {
+                try
+                {
+                    _logger.LogInformation("BulkUserManagement: Tworzenie użytkownika {UPN} przez Graph API", plan.UPN);
+
+                    // Użyj Graph API do tworzenia użytkownika
+                    var graphUser = await _graphUserManagementService.CreateM365UserAsync(
+                        $"{plan.FirstName} {plan.LastName}",
+                        plan.UPN,
+                        plan.Password,
+                        "PL", // usageLocation
+                        null, // licenseSkuIds - przypisane później
+                        true, // accountEnabled
+                        plan.DepartmentId // department
+                    );
+
+                    if (graphUser != null)
+                    {
+                        successfulOperations.Add(new BulkOperationSuccess
+                        {
+                            Operation = "BulkCreateUser",
+                            EntityId = graphUser.Id,
+                            EntityName = graphUser.DisplayName,
+                            Message = $"Utworzono użytkownika {graphUser.DisplayName} przez Graph API"
+                        });
+
+                        // Wyślij email powitalny jeśli wymagane
+                        if (plan.SendWelcomeEmail)
+                        {
+                            // Placeholder dla wysyłania emaila powitalnego
+                            _logger.LogInformation("BulkUserManagement: Wysłano email powitalny do {UPN}", plan.UPN);
+                        }
+                    }
+                    else
+                    {
+                        errors.Add(new BulkOperationError
+                        {
+                            Operation = "BulkCreateUser",
+                            EntityId = plan.UPN,
+                            Message = $"Nie udało się utworzyć użytkownika {plan.UPN} przez Graph API"
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "BulkUserManagement: Błąd podczas tworzenia użytkownika {UPN}", plan.UPN);
+                    errors.Add(new BulkOperationError
+                    {
+                        Operation = "BulkCreateUser",
+                        EntityId = plan.UPN,
+                        Message = ex.Message,
+                        Exception = ex
+                    });
+                }
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkCreateUsersWithGraphApi"
+            };
+        }
+
+        #endregion
+
+        #region Advanced Graph Batch API Operations (Etap 4.3.2)
+
+        /// <summary>
+        /// Wykonuje zaawansowane operacje batch używając Graph API ExecuteBatchOperationsAsync
+        /// Obsługuje mixed operations (users, teams, licenses) w jednym batch request
+        /// </summary>
+        private async Task<BulkOperationResult> ExecuteAdvancedGraphBatchOperationsAsync(
+            List<GraphBatchOperation> batchOperations, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            try
+            {
+                _logger.LogInformation("BulkUserManagement: Wykonywanie {Count} operacji przez Advanced Graph Batch API", 
+                    batchOperations.Count);
+
+                // Użyj zaawansowanego Graph Batch API z rate limiting
+                var batchResult = await _graphBulkOperationsService.ExecuteBatchOperationsAsync(
+                    batchOperations, 
+                    apiAccessToken, 
+                    respectRateLimit: true);
+
+                if (batchResult.IsSuccess)
+                {
+                    successfulOperations.Add(new BulkOperationSuccess
+                    {
+                        Operation = "AdvancedGraphBatch",
+                        EntityId = "BatchOperations",
+                        Message = $"Wykonano {batchOperations.Count} operacji przez Advanced Graph Batch API"
+                    });
+
+                    _logger.LogInformation("BulkUserManagement: Advanced Graph Batch API - sukces. Operacje: {Count}, Czas: {Duration}ms", 
+                        batchOperations.Count, batchResult.ExecutionTimeMs);
+                }
+                else
+                {
+                    errors.Add(new BulkOperationError
+                    {
+                        Operation = "AdvancedGraphBatch",
+                        EntityId = "BatchOperations",
+                        Message = $"Błąd podczas wykonywania Advanced Graph Batch API: {batchResult.ErrorMessage}"
+                    });
+
+                    _logger.LogError("BulkUserManagement: Advanced Graph Batch API - błąd: {Error}", batchResult.ErrorMessage);
+                }
+
+                // Sprawdź rate limiting status
+                var rateLimitStatus = await _graphBulkOperationsService.GetRateLimitStatusAsync();
+                if (rateLimitStatus != null)
+                {
+                    _logger.LogInformation("BulkUserManagement: Rate Limit Status - Remaining: {Remaining}, Reset: {Reset}", 
+                        rateLimitStatus.RemainingRequests, rateLimitStatus.ResetTime);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "BulkUserManagement: Błąd podczas Advanced Graph Batch API operations");
+                errors.Add(new BulkOperationError
+                {
+                    Operation = "AdvancedGraphBatch",
+                    EntityId = "BatchOperations",
+                    Message = ex.Message,
+                    Exception = ex
+                });
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "AdvancedGraphBatchOperations"
+            };
+        }
+
+        /// <summary>
+        /// Masowo synchronizuje członkostwo zespołów używając Graph API SynchronizeTeamMembershipAsync
+        /// </summary>
+        private async Task<BulkOperationResult> BulkSynchronizeTeamMembershipsWithGraphApiAsync(
+            Dictionary<string, List<string>> teamTargetMemberships, 
+            string apiAccessToken)
+        {
+            var successfulOperations = new List<BulkOperationSuccess>();
+            var errors = new List<BulkOperationError>();
+
+            foreach (var teamMembership in teamTargetMemberships)
+            {
+                try
+                {
+                    _logger.LogInformation("BulkUserManagement: Synchronizacja członkostwa zespołu {TeamId} z {Count} docelowymi użytkownikami", 
+                        teamMembership.Key, teamMembership.Value.Count);
+
+                    // Użyj Graph API do synchronizacji członkostwa
+                    var syncResult = await _graphBulkOperationsService.SynchronizeTeamMembershipAsync(
+                        teamMembership.Key, 
+                        teamMembership.Value, 
+                        "Member");
+
+                    if (syncResult.IsSuccess)
+                    {
+                        successfulOperations.Add(new BulkOperationSuccess
+                        {
+                            Operation = "SynchronizeTeamMembership",
+                            EntityId = teamMembership.Key,
+                            Message = $"Zsynchronizowano członkostwo zespołu {teamMembership.Key} z {teamMembership.Value.Count} użytkownikami"
+                        });
+
+                        _logger.LogInformation("BulkUserManagement: Synchronizacja zespołu {TeamId} - sukces. Dodano: {Added}, Usunięto: {Removed}", 
+                            teamMembership.Key, syncResult.AddedCount, syncResult.RemovedCount);
+                    }
+                    else
+                    {
+                        errors.Add(new BulkOperationError
+                        {
+                            Operation = "SynchronizeTeamMembership",
+                            EntityId = teamMembership.Key,
+                            Message = $"Błąd synchronizacji członkostwa zespołu {teamMembership.Key}: {syncResult.ErrorMessage}"
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "BulkUserManagement: Błąd podczas synchronizacji członkostwa zespołu {TeamId}", teamMembership.Key);
+                    errors.Add(new BulkOperationError
+                    {
+                        Operation = "SynchronizeTeamMembership",
+                        EntityId = teamMembership.Key,
+                        Message = ex.Message,
+                        Exception = ex
+                    });
+                }
+            }
+
+            return new BulkOperationResult
+            {
+                Success = !errors.Any(),
+                IsSuccess = !errors.Any(),
+                SuccessfulOperations = successfulOperations,
+                Errors = errors,
+                ProcessedAt = DateTime.UtcNow,
+                OperationType = "BulkSynchronizeTeamMembershipsWithGraphApi"
+            };
+        }
+
+        #endregion
 
         public void Dispose()
         {

@@ -91,6 +91,11 @@ namespace TeamsManager.Core.Models.Graph
         public string? BusinessPhone { get; set; }
 
         /// <summary>
+        /// Lista numerów telefonów służbowych.
+        /// </summary>
+        public List<string> BusinessPhones { get; set; } = new List<string>();
+
+        /// <summary>
         /// Numer telefonu komórkowego.
         /// </summary>
         public string? MobilePhone { get; set; }
@@ -184,7 +189,7 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Nazwa wyświetlana.
         /// </summary>
-        public string DisplayName => FullName;
+        public string DisplayName { get; set; } = string.Empty;
 
         /// <summary>
         /// Status aktywności użytkownika.

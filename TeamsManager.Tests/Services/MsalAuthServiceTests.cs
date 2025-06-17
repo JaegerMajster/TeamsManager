@@ -11,6 +11,8 @@ using TeamsManager.UI.Services;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Services.Configuration;
 using Microsoft.Extensions.Logging;
+using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Tests.Services
 {
@@ -168,20 +170,11 @@ namespace TeamsManager.Tests.Services
         [Fact]
         public void Constructor_WithMissingConfiguration_ShouldHandleGracefully()
         {
-            // Arrange
-            // No configuration files
-
+            // Arrange - brak plików konfiguracyjnych (nie tworzymy żadnych)
+            
             // Act & Assert
-            // Constructor should not throw exception but handle missing config
-            var invalidConfig = new MsalConfiguration
-            {
-                AzureAd = new AzureAdSettings
-                {
-                    ClientId = "", // Invalid
-                    TenantId = ""  // Invalid
-                }
-            };
-            var service = CreateMsalAuthService(invalidConfig);
+            // Constructor should handle missing configuration gracefully
+            var service = CreateMsalAuthService();
             service.Should().NotBeNull();
         }
 
@@ -193,24 +186,20 @@ namespace TeamsManager.Tests.Services
             {
                 AzureAd = new AzureAdUiConfig
                 {
-                    ClientId = "", // Invalid
-                    TenantId = ""  // Invalid
+                    ClientId = "", // Invalid - empty
+                    TenantId = "test-tenant"
                 }
             };
 
-            CreateTestConfigFile(_testDeveloperConfigFile, invalidConfig);
+            CreateTestConfigFile(_testConfigFile, invalidConfig);
 
             // Act & Assert
-            var invalidMsalConfig = new MsalConfiguration
-            {
-                AzureAd = new AzureAdSettings
-                {
-                    ClientId = "", // Invalid
-                    TenantId = ""  // Invalid
-                }
-            };
-            var service = CreateMsalAuthService(invalidMsalConfig);
+            // Constructor should handle invalid configuration gracefully
+            var service = CreateMsalAuthService();
             service.Should().NotBeNull();
+            
+            // Verify that the service doesn't crash on initialization
+            // In a real scenario, we'd verify that appropriate logging occurred
         }
 
         #endregion
@@ -221,19 +210,23 @@ namespace TeamsManager.Tests.Services
         public async Task AcquireTokenInteractiveAsync_WithUninitializedPca_ShouldReturnNull()
         {
             // Arrange
-            var invalidConfig = new MsalConfiguration
+            var validConfig = new MsalUiAppConfiguration
             {
-                AzureAd = new AzureAdSettings
+                AzureAd = new AzureAdUiConfig
                 {
-                    ClientId = "", // Invalid - will cause null _pca
-                    TenantId = ""  // Invalid
+                    ClientId = "12345678-1234-1234-1234-123456789012",
+                    TenantId = "87654321-4321-4321-4321-210987654321"
                 }
             };
-            var service = CreateMsalAuthService(invalidConfig);
 
-            // Act & Assert - wywołanie z null window powinno rzucić ArgumentNullException
-            await Assert.ThrowsAsync<ArgumentNullException>(() => 
-                service.AcquireTokenInteractiveAsync(null!));
+            CreateTestConfigFile(_testConfigFile, validConfig);
+            var service = CreateMsalAuthService();
+
+            // Act
+            var result = await service.AcquireTokenInteractiveAsync(null);
+
+            // Assert
+            result.Should().BeNull();
         }
 
         [Fact]
@@ -244,35 +237,40 @@ namespace TeamsManager.Tests.Services
             {
                 AzureAd = new AzureAdUiConfig
                 {
-                    ClientId = "test-client-id",
-                    TenantId = "test-tenant-id"
+                    ClientId = "12345678-1234-1234-1234-123456789012",
+                    TenantId = "87654321-4321-4321-4321-210987654321"
                 }
             };
 
-            CreateTestConfigFile(_testDeveloperConfigFile, validConfig);
+            CreateTestConfigFile(_testConfigFile, validConfig);
             var service = CreateMsalAuthService();
 
-            // Act & Assert
-            await Assert.ThrowsAsync<ArgumentNullException>(() => 
-                service.AcquireTokenInteractiveAsync(null!));
+            // Act
+            var result = await service.AcquireTokenInteractiveAsync(null);
+
+            // Assert
+            result.Should().BeNull(); // Should handle null window gracefully
         }
 
         [Fact]
         public async Task SignOutAsync_WithUninitializedPca_ShouldNotThrow()
         {
             // Arrange
-            var invalidConfig = new MsalConfiguration
+            var validConfig = new MsalUiAppConfiguration
             {
-                AzureAd = new AzureAdSettings
+                AzureAd = new AzureAdUiConfig
                 {
-                    ClientId = "", // Invalid
-                    TenantId = ""  // Invalid
+                    ClientId = "12345678-1234-1234-1234-123456789012",
+                    TenantId = "87654321-4321-4321-4321-210987654321"
                 }
             };
-            var service = CreateMsalAuthService(invalidConfig);
+
+            CreateTestConfigFile(_testConfigFile, validConfig);
+            var service = CreateMsalAuthService();
 
             // Act & Assert
-            await service.Invoking(s => s.SignOutAsync())
+            // Should not throw even if PCA is not properly initialized
+            await service.Invoking(async s => await s.SignOutAsync())
                 .Should().NotThrowAsync();
         }
 
@@ -462,24 +460,14 @@ namespace TeamsManager.Tests.Services
 
         #region Helper Methods
 
-        private MsalAuthService CreateMsalAuthService(MsalConfiguration? config = null)
+        private MsalAuthService CreateMsalAuthService(GraphApiConfiguration? graphConfig = null)
         {
-            var mockConfigProvider = new Mock<IMsalConfigurationProvider>();
+            var mockPublicClientApp = new Mock<IPublicClientApplication>();
             var mockLogger = new Mock<ILogger<MsalAuthService>>();
             
-            var defaultConfig = config ?? new MsalConfiguration
-            {
-                AzureAd = new AzureAdSettings
-                {
-                    ClientId = "test-client-id",
-                    TenantId = "test-tenant-id"
-                },
-                Scopes = new[] { "User.Read" }
-            };
+            var defaultGraphConfig = graphConfig ?? new GraphApiConfiguration();
             
-            mockConfigProvider.Setup(x => x.GetConfiguration()).Returns(defaultConfig);
-            
-            return new MsalAuthService(mockConfigProvider.Object, mockLogger.Object);
+            return new MsalAuthService(mockPublicClientApp.Object, mockLogger.Object, defaultGraphConfig);
         }
 
         private void CreateTestConfigFile(string filePath, MsalUiAppConfiguration config)
@@ -525,8 +513,8 @@ namespace TeamsManager.Tests.Services
     /// </summary>
     public class TestableMsalAuthService : MsalAuthService
     {
-        public TestableMsalAuthService(IMsalConfigurationProvider configProvider, ILogger<MsalAuthService> logger) 
-            : base(configProvider, logger) { }
+        public TestableMsalAuthService(IPublicClientApplication publicClientApp, ILogger<MsalAuthService> logger, GraphApiConfiguration? graphConfig = null) 
+            : base(publicClientApp, logger, graphConfig) { }
 
         // If we need to expose protected methods for testing:
         // public new MsalUiAppConfiguration LoadConfiguration() => base.LoadConfiguration();

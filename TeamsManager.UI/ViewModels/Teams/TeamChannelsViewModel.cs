@@ -12,6 +12,8 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Models;
 using TeamsManager.UI.ViewModels;
+using TeamsManager.UI.Services.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace TeamsManager.UI.ViewModels.Teams
 {
@@ -23,6 +25,9 @@ namespace TeamsManager.UI.ViewModels.Teams
         private readonly IChannelService _channelService;
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IMsalAuthService _msalAuthService;
+        private readonly ILogger<TeamChannelsViewModel> _logger;
+        private readonly ILoggerFactory _loggerFactory;
         
         private string _teamId = string.Empty;
         private Team? _team;
@@ -34,11 +39,17 @@ namespace TeamsManager.UI.ViewModels.Teams
         public TeamChannelsViewModel(
             IChannelService channelService,
             INotificationService notificationService,
-            ICurrentUserService currentUserService)
+            ICurrentUserService currentUserService,
+            IMsalAuthService msalAuthService,
+            ILogger<TeamChannelsViewModel> logger,
+            ILoggerFactory loggerFactory)
         {
             _channelService = channelService ?? throw new ArgumentNullException(nameof(channelService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
 
             _channels = new ObservableCollection<ChannelCardViewModel>();
             InitializeCommands();
@@ -262,7 +273,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 // Add new channel view models
                 foreach (var channel in channels)
                 {
-                    var channelVm = new ChannelCardViewModel(channel, _channelService, _notificationService, _currentUserService);
+                    var channelVm = new ChannelCardViewModel(channel, _channelService, _notificationService, _currentUserService, _msalAuthService, _loggerFactory.CreateLogger<ChannelCardViewModel>());
                     channelVm.ChannelUpdated += OnChannelUpdated;
                     channelVm.ChannelDeleted += OnChannelDeleted;
                     Channels.Add(channelVm);
@@ -329,7 +340,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 if (newChannel != null)
                 {
                     // Add to collection
-                    var channelVm = new ChannelCardViewModel(newChannel, _channelService, _notificationService, _currentUserService);
+                    var channelVm = new ChannelCardViewModel(newChannel, _channelService, _notificationService, _currentUserService, _msalAuthService, _loggerFactory.CreateLogger<ChannelCardViewModel>());
                     channelVm.ChannelUpdated += OnChannelUpdated;
                     channelVm.ChannelDeleted += OnChannelDeleted;
                     Channels.Add(channelVm);
@@ -430,7 +441,7 @@ namespace TeamsManager.UI.ViewModels.Teams
 
                         if (newChannel != null)
                         {
-                            var channelVm = new ChannelCardViewModel(newChannel, _channelService, _notificationService, _currentUserService);
+                            var channelVm = new ChannelCardViewModel(newChannel, _channelService, _notificationService, _currentUserService, _msalAuthService, _loggerFactory.CreateLogger<ChannelCardViewModel>());
                             channelVm.ChannelUpdated += OnChannelUpdated;
                             channelVm.ChannelDeleted += OnChannelDeleted;
                             Channels.Add(channelVm);
@@ -523,11 +534,27 @@ namespace TeamsManager.UI.ViewModels.Teams
 
         // ===== HELPER METHODS =====
 
-        private async Task<string> GetAccessTokenAsync()
+        /// <summary>
+        /// Pobiera token dostępu z MSAL Auth Service
+        /// </summary>
+        private async Task<string?> GetAccessTokenAsync()
         {
-            // TODO: Implementacja pobierania tokenu dostępu
-            // Należy zaimplementować w oparciu o istniejący mechanizm w aplikacji
-            return string.Empty;
+            try
+            {
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken != null)
+                {
+                    return authResult.AccessToken;
+                }
+
+                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+                return null;
+            }
         }
     }
 } 

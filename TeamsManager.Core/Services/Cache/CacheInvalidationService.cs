@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.Cache;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
 
@@ -16,12 +16,12 @@ namespace TeamsManager.Core.Services.Cache
     /// </summary>
     public class CacheInvalidationService : ICacheInvalidationService
     {
-        private readonly IPowerShellCacheService _cacheService;
+        private readonly IGraphCacheService _cacheService;
         private readonly ILogger<CacheInvalidationService> _logger;
         private readonly CascadeInvalidationStrategy _cascadeStrategy;
         
         public CacheInvalidationService(
-            IPowerShellCacheService cacheService,
+            IGraphCacheService cacheService,
             ILogger<CacheInvalidationService> logger)
         {
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
@@ -38,7 +38,7 @@ namespace TeamsManager.Core.Services.Cache
                 "Teams_Active",
                 $"Teams_ByOwner_{team.Owner}",
                 $"Team_Id_{team.Id}",
-                "PowerShell_Teams_All"
+                "Graph_Teams_All"
             };
             
             if (!string.IsNullOrEmpty(team.SchoolYearId))
@@ -60,7 +60,7 @@ namespace TeamsManager.Core.Services.Cache
             {
                 $"Team_Id_{team.Id}",
                 "Teams_AllActive",
-                $"PowerShell_Team_{team.ExternalId}"
+                $"Graph_Team_{team.ExternalId}"
             };
             
             // Status change handling
@@ -117,8 +117,8 @@ namespace TeamsManager.Core.Services.Cache
                 "Teams_Active",
                 "Teams_Archived",
                 $"Teams_ByOwner_{team.Owner}",
-                $"PowerShell_Team_{team.ExternalId}",
-                $"PowerShell_TeamChannels_{team.Id}",
+                $"Graph_Team_{team.ExternalId}",
+                $"Graph_TeamChannels_{team.Id}",
                 $"Channels_TeamId_{team.Id}" // Z Etapu 6/8
             };
             
@@ -147,7 +147,7 @@ namespace TeamsManager.Core.Services.Cache
                 "Teams_Active",
                 "Teams_Archived",
                 $"Teams_ByOwner_{team.Owner}",
-                $"PowerShell_Team_{team.ExternalId}"
+                $"Graph_Team_{team.ExternalId}"
             };
             
             await PerformBatchInvalidationAsync(keys, $"TeamRestored_{team.Id}");
@@ -162,8 +162,8 @@ namespace TeamsManager.Core.Services.Cache
                 "Teams_Active",
                 "Teams_Archived",
                 $"Teams_ByOwner_{team.Owner}",
-                $"PowerShell_Team_{team.ExternalId}",
-                $"PowerShell_TeamChannels_{team.Id}",
+                $"Graph_Team_{team.ExternalId}",
+                $"Graph_TeamChannels_{team.Id}",
                 $"Channels_TeamId_{team.Id}"
             };
             
@@ -219,8 +219,8 @@ namespace TeamsManager.Core.Services.Cache
                 $"Users_Role_{user.Role}",
                 $"User_Id_{user.Id}",
                 $"User_Upn_{user.UPN}",
-                $"PowerShell_UserId_{user.UPN}",
-                "PowerShell_M365Users_AccountEnabled_True"
+                $"Graph_UserId_{user.UPN}",
+                "Graph_M365Users_AccountEnabled_True"
             };
             
             if (!string.IsNullOrEmpty(user.DepartmentId))
@@ -237,8 +237,8 @@ namespace TeamsManager.Core.Services.Cache
                 $"User_Upn_{user.UPN}",
                 "Users_AllActive",
                 $"Users_Role_{user.Role}",
-                $"PowerShell_UserId_{user.UPN}",
-                $"PowerShell_M365User_Id_{user.ExternalId}"
+                $"Graph_UserId_{user.UPN}",
+                $"Graph_M365User_Id_{user.ExternalId}"
             };
             
             // Role change handling
@@ -267,10 +267,10 @@ namespace TeamsManager.Core.Services.Cache
                 $"User_Upn_{user.UPN}",
                 "Users_AllActive",
                 $"Users_Role_{user.Role}",
-                $"PowerShell_UserId_{user.UPN}",
-                $"PowerShell_M365User_Id_{user.ExternalId}",
-                "PowerShell_M365Users_AccountEnabled_True",
-                "PowerShell_M365Users_AccountEnabled_False"
+                $"Graph_UserId_{user.UPN}",
+                $"Graph_M365User_Id_{user.ExternalId}",
+                "Graph_M365Users_AccountEnabled_True",
+                "Graph_M365Users_AccountEnabled_False"
             };
             
             await PerformBatchInvalidationAsync(keys, $"UserActivated_{user.Id}");
@@ -284,11 +284,11 @@ namespace TeamsManager.Core.Services.Cache
                 $"User_Upn_{user.UPN}",
                 "Users_AllActive",
                 $"Users_Role_{user.Role}",
-                $"PowerShell_UserId_{user.UPN}",
-                $"PowerShell_UserUpn_{user.UPN}",
-                $"PowerShell_M365User_Id_{user.ExternalId}",
-                "PowerShell_M365Users_AccountEnabled_True",
-                "PowerShell_M365Users_AccountEnabled_False"
+                $"Graph_UserId_{user.UPN}",
+                $"Graph_UserUpn_{user.UPN}",
+                $"Graph_M365User_Id_{user.ExternalId}",
+                "Graph_M365Users_AccountEnabled_True",
+                "Graph_M365Users_AccountEnabled_False"
             };
             
             // Kaskadowa inwalidacja dla departamentu
@@ -358,7 +358,7 @@ namespace TeamsManager.Core.Services.Cache
             {
                 $"Channels_TeamId_{channel.TeamId}",
                 $"Channel_Id_{channel.Id}",
-                $"PowerShell_TeamChannels_{channel.TeamId}"
+                $"Graph_TeamChannels_{channel.TeamId}"
             };
             
             if (!string.IsNullOrEmpty(channel.Id))
@@ -373,7 +373,7 @@ namespace TeamsManager.Core.Services.Cache
             {
                 $"Channel_Id_{channel.Id}",
                 $"Channels_TeamId_{channel.TeamId}",
-                $"PowerShell_TeamChannels_{channel.TeamId}"
+                $"Graph_TeamChannels_{channel.TeamId}"
             };
             
             if (!string.IsNullOrEmpty(channel.Id))
@@ -388,7 +388,7 @@ namespace TeamsManager.Core.Services.Cache
             {
                 $"Channel_Id_{channel.Id}",
                 $"Channels_TeamId_{channel.TeamId}",
-                $"PowerShell_TeamChannels_{channel.TeamId}"
+                $"Graph_TeamChannels_{channel.TeamId}"
             };
             
             if (!string.IsNullOrEmpty(channel.Id))

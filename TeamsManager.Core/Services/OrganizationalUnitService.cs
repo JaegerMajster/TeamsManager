@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -14,7 +14,7 @@ namespace TeamsManager.Core.Services
 {
     /// <summary>
     /// Serwis odpowiedzialny za logikę biznesową jednostek organizacyjnych.
-    /// Implementuje cache'owanie dla często odpytywanych danych.
+    /// Implementuje cache'owanie dla często odpytywanych danych używając Graph Cache Service.
     /// </summary>
     public class OrganizationalUnitService : IOrganizationalUnitService
     {
@@ -24,15 +24,15 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<OrganizationalUnitService> _logger;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
-        // Klucze cache
-        private const string AllOrganizationalUnitsRootOnlyCacheKey = "OrganizationalUnits_AllActive_RootOnly";
-        private const string AllOrganizationalUnitsAllCacheKey = "OrganizationalUnits_AllActive_All";
-        private const string OrganizationalUnitByIdCacheKeyPrefix = "OrganizationalUnit_Id_";
-        private const string SubUnitsByParentIdCacheKeyPrefix = "OrganizationalUnit_Sub_ParentId_";
-        private const string DepartmentsByUnitIdCacheKeyPrefix = "OrganizationalUnit_Departments_Id_";
-        private const string OrganizationalUnitsHierarchyCacheKey = "OrganizationalUnits_Hierarchy";
+        // Klucze cache - zaktualizowane dla Graph Cache Service
+        private const string AllOrganizationalUnitsRootOnlyCacheKey = "Graph_OrganizationalUnits_AllActive_RootOnly";
+        private const string AllOrganizationalUnitsAllCacheKey = "Graph_OrganizationalUnits_AllActive_All";
+        private const string OrganizationalUnitByIdCacheKeyPrefix = "Graph_OrganizationalUnit_Id_";
+        private const string SubUnitsByParentIdCacheKeyPrefix = "Graph_OrganizationalUnit_Sub_ParentId_";
+        private const string DepartmentsByUnitIdCacheKeyPrefix = "Graph_OrganizationalUnit_Departments_Id_";
+        private const string OrganizationalUnitsHierarchyCacheKey = "Graph_OrganizationalUnits_Hierarchy";
 
         public OrganizationalUnitService(
             IGenericRepository<OrganizationalUnit> organizationalUnitRepository,
@@ -41,7 +41,7 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<OrganizationalUnitService> logger,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _organizationalUnitRepository = organizationalUnitRepository ?? throw new ArgumentNullException(nameof(organizationalUnitRepository));
             _departmentRepository = departmentRepository ?? throw new ArgumentNullException(nameof(departmentRepository));
@@ -49,7 +49,7 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
         public async Task<OrganizationalUnit?> GetOrganizationalUnitByIdAsync(string unitId, bool includeSubUnits = false, bool includeDepartments = false, bool forceRefresh = false)
@@ -62,7 +62,7 @@ namespace TeamsManager.Core.Services
 
             var cacheKey = $"{OrganizationalUnitByIdCacheKeyPrefix}{unitId}_{includeSubUnits}_{includeDepartments}";
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<OrganizationalUnit>(cacheKey, out OrganizationalUnit? cachedUnit))
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics<OrganizationalUnit>(cacheKey, out OrganizationalUnit? cachedUnit))
             {
                 _logger.LogDebug("Pobrano jednostkę organizacyjną {UnitId} z cache", unitId);
                 return cachedUnit;
@@ -74,7 +74,7 @@ namespace TeamsManager.Core.Services
 
                 if (unit != null && unit.IsActive)
                 {
-                    _powerShellCacheService.Set(cacheKey, unit);
+                    _graphCacheService.Set(cacheKey, unit, _graphCacheService.GetMediumTermCacheOptions().AbsoluteExpirationRelativeToNow);
                     _logger.LogDebug("Pobrano jednostkę organizacyjną {UnitId} z bazy danych", unitId);
 
                     // Załaduj powiązane dane jeśli potrzebne
@@ -111,7 +111,7 @@ namespace TeamsManager.Core.Services
         {
             var cacheKey = onlyRootUnits ? AllOrganizationalUnitsRootOnlyCacheKey : AllOrganizationalUnitsAllCacheKey;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<OrganizationalUnit>>(cacheKey, out IEnumerable<OrganizationalUnit>? cachedUnits))
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics<IEnumerable<OrganizationalUnit>>(cacheKey, out IEnumerable<OrganizationalUnit>? cachedUnits))
             {
                 _logger.LogDebug("Pobrano jednostki organizacyjne z cache (onlyRoot: {OnlyRoot})", onlyRootUnits);
                 return cachedUnits!;
@@ -133,7 +133,7 @@ namespace TeamsManager.Core.Services
                 // Sortuj wyniki
                 units = units.OrderBy(ou => ou.SortOrder).ThenBy(ou => ou.Name).ToList();
 
-                _powerShellCacheService.Set(cacheKey, units);
+                _graphCacheService.Set(cacheKey, units, _graphCacheService.GetMediumTermCacheOptions().AbsoluteExpirationRelativeToNow);
                 _logger.LogDebug("Pobrano {Count} jednostek organizacyjnych z bazy danych (onlyRoot: {OnlyRoot})", units.Count(), onlyRootUnits);
 
                 return units;
@@ -155,7 +155,7 @@ namespace TeamsManager.Core.Services
 
             var cacheKey = $"{SubUnitsByParentIdCacheKeyPrefix}{parentUnitId}";
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<OrganizationalUnit>>(cacheKey, out IEnumerable<OrganizationalUnit>? cachedSubUnits))
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics<IEnumerable<OrganizationalUnit>>(cacheKey, out IEnumerable<OrganizationalUnit>? cachedSubUnits))
             {
                 _logger.LogDebug("Pobrano podjednostki dla {ParentUnitId} z cache", parentUnitId);
                 return cachedSubUnits!;
@@ -166,7 +166,7 @@ namespace TeamsManager.Core.Services
                 var subUnits = await _organizationalUnitRepository.FindAsync(ou => ou.ParentUnitId == parentUnitId && ou.IsActive);
                 subUnits = subUnits.OrderBy(ou => ou.SortOrder).ThenBy(ou => ou.Name).ToList();
 
-                _powerShellCacheService.Set(cacheKey, subUnits);
+                _graphCacheService.Set(cacheKey, subUnits, _graphCacheService.GetMediumTermCacheOptions().AbsoluteExpirationRelativeToNow);
                 _logger.LogDebug("Pobrano {Count} podjednostek dla {ParentUnitId} z bazy danych", subUnits.Count(), parentUnitId);
 
                 return subUnits;
@@ -180,7 +180,7 @@ namespace TeamsManager.Core.Services
 
         public async Task<IEnumerable<OrganizationalUnit>> GetOrganizationalUnitsHierarchyAsync(bool forceRefresh = false)
         {
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<OrganizationalUnit>>(OrganizationalUnitsHierarchyCacheKey, out IEnumerable<OrganizationalUnit>? cachedHierarchy))
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics<IEnumerable<OrganizationalUnit>>(OrganizationalUnitsHierarchyCacheKey, out IEnumerable<OrganizationalUnit>? cachedHierarchy))
             {
                 _logger.LogDebug("Pobrano hierarchię jednostek organizacyjnych z cache");
                 return cachedHierarchy!;
@@ -207,7 +207,7 @@ namespace TeamsManager.Core.Services
                 // Zwróć tylko jednostki główne
                 var rootUnits = unitsList.Where(ou => ou.ParentUnitId == null).ToList();
 
-                _powerShellCacheService.Set(OrganizationalUnitsHierarchyCacheKey, rootUnits);
+                _graphCacheService.Set(OrganizationalUnitsHierarchyCacheKey, rootUnits, _graphCacheService.GetLongTermCacheOptions().AbsoluteExpirationRelativeToNow);
                 _logger.LogDebug("Pobrano hierarchię {Count} jednostek organizacyjnych z bazy danych", rootUnits.Count);
 
                 return rootUnits;
@@ -745,7 +745,7 @@ namespace TeamsManager.Core.Services
 
             var cacheKey = $"{DepartmentsByUnitIdCacheKeyPrefix}{unitId}";
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments))
+            if (!forceRefresh && _graphCacheService.TryGetValueWithMetrics<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments))
             {
                 _logger.LogDebug("Pobrano działy dla jednostki {UnitId} z cache", unitId);
                 return cachedDepartments!;
@@ -756,7 +756,7 @@ namespace TeamsManager.Core.Services
                 var departments = await _departmentRepository.FindAsync(d => d.OrganizationalUnitId == unitId && d.IsActive);
                 departments = departments.OrderBy(d => d.SortOrder).ThenBy(d => d.Name).ToList();
 
-                _powerShellCacheService.Set(cacheKey, departments);
+                _graphCacheService.Set(cacheKey, departments, _graphCacheService.GetMediumTermCacheOptions().AbsoluteExpirationRelativeToNow);
                 _logger.LogDebug("Pobrano {Count} działów dla jednostki {UnitId} z bazy danych", departments.Count(), unitId);
 
                 return departments;
@@ -988,17 +988,21 @@ namespace TeamsManager.Core.Services
         {
             if (invalidateAll)
             {
-                // Unieważnij wszystkie listy jednostek organizacyjnych
-                _powerShellCacheService.Remove(AllOrganizationalUnitsRootOnlyCacheKey);
-                _powerShellCacheService.Remove(AllOrganizationalUnitsAllCacheKey);
-                _powerShellCacheService.Remove(OrganizationalUnitsHierarchyCacheKey);
+                // Unieważnij wszystkie listy jednostek organizacyjnych używając batch invalidation
+                var allCacheKeys = new[]
+                {
+                    AllOrganizationalUnitsRootOnlyCacheKey,
+                    AllOrganizationalUnitsAllCacheKey,
+                    OrganizationalUnitsHierarchyCacheKey
+                };
                 
+                _graphCacheService.BatchInvalidateKeys(allCacheKeys, "OrganizationalUnit_InvalidateAll");
                 _logger.LogDebug("Unieważniono wszystkie listy jednostek organizacyjnych");
             }
 
             if (!string.IsNullOrEmpty(organizationalUnitId))
             {
-                // Unieważnij cache dla konkretnej jednostki
+                // Unieważnij cache dla konkretnej jednostki organizacyjnej używając batch invalidation
                 var unitCacheKeys = new[]
                 {
                     $"{OrganizationalUnitByIdCacheKeyPrefix}{organizationalUnitId}_False_False",
@@ -1009,11 +1013,7 @@ namespace TeamsManager.Core.Services
                     $"{DepartmentsByUnitIdCacheKeyPrefix}{organizationalUnitId}"
                 };
 
-                foreach (var key in unitCacheKeys)
-                {
-                    _powerShellCacheService.Remove(key);
-                }
-
+                _graphCacheService.BatchInvalidateKeys(unitCacheKeys, $"OrganizationalUnit_InvalidateUnit_{organizationalUnitId}");
                 _logger.LogDebug("Unieważniono cache dla jednostki organizacyjnej {OrganizationalUnitId}", organizationalUnitId);
             }
         }

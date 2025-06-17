@@ -1,21 +1,20 @@
-﻿// Plik: TeamsManager.Core/Services/TeamService.cs
+// Plik: TeamsManager.Core/Services/TeamService.cs
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
 using System.Threading.Tasks;
-
 using Microsoft.Extensions.Logging;
 
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
+
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Cache;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Exceptions.PowerShell;
+using TeamsManager.Core.Exceptions.Graph;
 
 namespace TeamsManager.Core.Services
 {
@@ -31,27 +30,27 @@ namespace TeamsManager.Core.Services
         private readonly ITeamTemplateRepository _teamTemplateRepository;
         private readonly IOperationHistoryRepository _operationHistoryRepository;
         private readonly ICurrentUserService _currentUserService;
-        private readonly IPowerShellTeamManagementService _powerShellTeamService;
-        private readonly IPowerShellUserManagementService _powerShellUserService;
-        private readonly IPowerShellBulkOperationsService _powerShellBulkOps;
-        private readonly IPowerShellService _powerShellService;
+        private readonly IGraphTeamManagementService _graphTeamService;
+        private readonly IGraphUserManagementService _graphUserService;
+        private readonly IGraphBulkOperationsService _graphBulkOps;
+        private readonly IGraphService _graphService;
         private readonly INotificationService _notificationService;
         private readonly IAdminNotificationService _adminNotificationService;
         private readonly ILogger<TeamService> _logger;
         private readonly IGenericRepository<SchoolType> _schoolTypeRepository;
         private readonly ISchoolYearRepository _schoolYearRepository;
 
-        private readonly IOperationHistoryService _operationHistoryService; // Dodaj to do konstruktora
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IOperationHistoryService _operationHistoryService;
+        private readonly IGraphCacheService _graphCacheService;
         private readonly ICacheInvalidationService _cacheInvalidationService;
         
         // NOWA zależność - Unit of Work (opcjonalna dla zachowania kompatybilności)
         private readonly IUnitOfWork? _unitOfWork;
         
         // NOWA zależność - Team Synchronizer (Etap 4/8)
-        private readonly IGraphSynchronizer<Team> _teamSynchronizer;
+        private readonly IGraphSynchronizer<Team, Team> _teamSynchronizer;
 
-        // Klucze cache (delegowane do PowerShellCacheService)
+        // Klucze cache (delegowane do GraphCacheService)
         private const string AllActiveTeamsCacheKey = "Teams_AllActive";
         private const string ActiveTeamsSpecificCacheKey = "Teams_Active";
         private const string ArchivedTeamsCacheKey = "Teams_Archived";
@@ -68,10 +67,10 @@ namespace TeamsManager.Core.Services
             ITeamTemplateRepository teamTemplateRepository,
             IOperationHistoryRepository operationHistoryRepository,
             ICurrentUserService currentUserService,
-            IPowerShellTeamManagementService powerShellTeamService,
-            IPowerShellUserManagementService powerShellUserService,
-            IPowerShellBulkOperationsService powerShellBulkOps,
-            IPowerShellService powerShellService,
+            IGraphTeamManagementService graphTeamService,
+            IGraphUserManagementService graphUserService,
+            IGraphBulkOperationsService graphBulkOps,
+            IGraphService graphService,
             INotificationService notificationService,
             IAdminNotificationService adminNotificationService,
             ILogger<TeamService> logger,
@@ -79,10 +78,10 @@ namespace TeamsManager.Core.Services
             ISchoolYearRepository schoolYearRepository,
 
             IOperationHistoryService operationHistoryService, // Dodaj to do konstruktora
-            IPowerShellCacheService powerShellCacheService,
+            IGraphCacheService graphCacheService,
             ICacheInvalidationService cacheInvalidationService, // NOWE: Cache Invalidation Service (Etap 7/8)
             IUnitOfWork? unitOfWork = null, // NOWY parametr - opcjonalny dla kompatybilności
-            IGraphSynchronizer<Team>? teamSynchronizer = null) // NOWY parametr - Team Synchronizer (Etap 4/8)
+            IGraphSynchronizer<Team, Team>? teamSynchronizer = null) // NOWY parametr - Team Synchronizer (Etap 4/8)
         {
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -90,10 +89,10 @@ namespace TeamsManager.Core.Services
             _teamTemplateRepository = teamTemplateRepository ?? throw new ArgumentNullException(nameof(teamTemplateRepository));
             _operationHistoryRepository = operationHistoryRepository ?? throw new ArgumentNullException(nameof(operationHistoryRepository)); // Zachowaj to dla specjalnych operacji
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
-            _powerShellTeamService = powerShellTeamService ?? throw new ArgumentNullException(nameof(powerShellTeamService));
-            _powerShellUserService = powerShellUserService ?? throw new ArgumentNullException(nameof(powerShellUserService));
-            _powerShellBulkOps = powerShellBulkOps ?? throw new ArgumentNullException(nameof(powerShellBulkOps));
-            _powerShellService = powerShellService ?? throw new ArgumentNullException(nameof(powerShellService));
+            _graphTeamService = graphTeamService ?? throw new ArgumentNullException(nameof(graphTeamService));
+            _graphUserService = graphUserService ?? throw new ArgumentNullException(nameof(graphUserService));
+            _graphBulkOps = graphBulkOps ?? throw new ArgumentNullException(nameof(graphBulkOps));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -101,7 +100,7 @@ namespace TeamsManager.Core.Services
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
 
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService)); // NOWE: Cache Invalidation Service (Etap 7/8)
             _unitOfWork = unitOfWork; // NOWE: opcjonalne przypisanie Unit of Work
             _teamSynchronizer = teamSynchronizer ?? throw new ArgumentNullException(nameof(teamSynchronizer)); // NOWE: Team Synchronizer (Etap 4/8)
@@ -124,7 +123,7 @@ namespace TeamsManager.Core.Services
             string cacheKey = TeamByIdCacheKeyPrefix + teamId;
             Team? team;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out team) && team != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out team) && team != null)
             {
                 _logger.LogDebug("Zespół ID: {TeamId} znaleziony w cache.", teamId);
                 if (team.Status != TeamStatus.Active)
@@ -146,9 +145,9 @@ namespace TeamsManager.Core.Services
                     try
                     {
                         // Pobierz dane z Graph
-                        var graphTeam = await _powerShellService.ExecuteWithAutoConnectAsync(
+                        var graphTeam = await _graphService.ExecuteWithAutoConnectAsync(
                             apiAccessToken,
-                            async () => await _powerShellTeamService.GetTeamAsync(teamId),
+                            async () => await _graphTeamService.GetTeamAsync(teamId),
                             $"GetTeamAsync dla synchronizacji ID: {teamId}"
                         );
                         
@@ -173,12 +172,12 @@ namespace TeamsManager.Core.Services
 
                 if (team != null && team.IsActive)
                 {
-                    _powerShellCacheService.Set(cacheKey, team);
+                    _graphCacheService.Set(cacheKey, team);
                     _logger.LogDebug("Zespół ID: {TeamId} dodany do cache.", teamId);
                 }
                 else
                 {
-                    _powerShellCacheService.Remove(cacheKey);
+                    _graphCacheService.Remove(cacheKey);
                     if (team != null && !team.IsActive)
                     {
                         _logger.LogDebug("Zespół ID: {TeamId} jest nieaktywny (Status != Active), nie zostanie zcache'owany.", teamId);
@@ -195,7 +194,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie wszystkich zespołów z Team.Status = Active. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = AllActiveTeamsCacheKey;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły z Team.Status = Active znalezione w cache.");
                 return cachedTeams;
@@ -209,7 +208,7 @@ namespace TeamsManager.Core.Services
             }
 
             var teamsFromDb = await _teamRepository.FindAsync(t => t.Status == TeamStatus.Active);
-            _powerShellCacheService.Set(cacheKey, teamsFromDb);
+            _graphCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły z Team.Status = Active dodane do cache.");
             return teamsFromDb;
         }
@@ -220,7 +219,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie zespołów o statusie 'Active'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = ActiveTeamsSpecificCacheKey;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły o statusie 'Active' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
@@ -234,7 +233,7 @@ namespace TeamsManager.Core.Services
             }
 
             var teamsFromDb = await _teamRepository.GetActiveTeamsAsync();
-            _powerShellCacheService.Set(cacheKey, teamsFromDb);
+            _graphCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły o statusie 'Active' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
@@ -245,7 +244,7 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("Pobieranie zespołów o statusie 'Archived'. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
             string cacheKey = ArchivedTeamsCacheKey;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły o statusie 'Archived' znalezione w cache. Liczba zespołów: {Count}", cachedTeams.Count());
                 return cachedTeams;
@@ -258,7 +257,7 @@ namespace TeamsManager.Core.Services
                 // Obecnie brak potrzeby wywołania Graph API dla bulk operacji
             }
             var teamsFromDb = await _teamRepository.GetArchivedTeamsAsync();
-            _powerShellCacheService.Set(cacheKey, teamsFromDb);
+            _graphCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły o statusie 'Archived' dodane do cache. Liczba zespołów: {Count}", teamsFromDb.Count());
             return teamsFromDb;
         }
@@ -274,7 +273,7 @@ namespace TeamsManager.Core.Services
             }
             string cacheKey = TeamsByOwnerCacheKeyPrefix + ownerUpn;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły (status Active) dla właściciela {OwnerUpn} znalezione w cache.", ownerUpn);
                 return cachedTeams;
@@ -287,7 +286,7 @@ namespace TeamsManager.Core.Services
                 // Obecnie brak potrzeby wywołania Graph API dla bulk operacji
             }
             var teamsFromDb = await _teamRepository.GetTeamsByOwnerAsync(ownerUpn);
-            _powerShellCacheService.Set(cacheKey, teamsFromDb);
+            _graphCacheService.Set(cacheKey, teamsFromDb);
             _logger.LogDebug("Zespoły (status Active) dla właściciela {OwnerUpn} dodane do cache.", ownerUpn);
             return teamsFromDb;
         }
@@ -375,99 +374,16 @@ namespace TeamsManager.Core.Services
                 }
 
                 // Refaktoryzowane wywołanie z ExecuteWithAutoConnectAsync
-                string? externalTeamIdFromPS = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var createdTeam = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.CreateTeamAsync(
-                        finalDisplayName, description, ownerUser.UPN, visibility, template?.Template
-                    ),
+                    async () => await _graphTeamService.CreateTeamAsync(
+                        finalDisplayName, description, ownerUser.UPN, visibility, teamTemplateId),
                     $"CreateTeamAsync dla zespołu '{finalDisplayName}'"
                 );
                 
-                bool psSuccess = !string.IsNullOrEmpty(externalTeamIdFromPS);
+                string? externalTeamIdFromPS = createdTeam?.Data?.Id;
 
-                if (psSuccess)
-                {
-                    _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony w Microsoft Teams. External ID: {ExternalTeamId}", finalDisplayName, externalTeamIdFromPS);
-                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
-                    newTeam = new Team { /* ... inicjalizacja pól ... */ Id = Guid.NewGuid().ToString(), DisplayName = finalDisplayName, Description = description, Owner = ownerUser.UPN, Status = TeamStatus.Active, Visibility = visibility, TemplateId = template?.Id, SchoolTypeId = schoolTypeId, SchoolYearId = schoolYearId, ExternalId = externalTeamIdFromPS, SchoolType = schoolType, SchoolYear = schoolYear, Template = template };
-                    if (schoolYear != null) newTeam.AcademicYear = schoolYear.Name;
-                    var ownerMembership = new TeamMember { Id = Guid.NewGuid().ToString(), UserId = ownerUser.Id, TeamId = newTeam.Id, Role = ownerUser.DefaultTeamRole, AddedDate = DateTime.UtcNow, AddedBy = currentUserUpn, IsActive = true, IsApproved = !newTeam.RequiresApproval, ApprovedDate = !newTeam.RequiresApproval ? DateTime.UtcNow : null, ApprovedBy = !newTeam.RequiresApproval ? currentUserUpn : null, User = ownerUser, Team = newTeam };
-                    newTeam.Members.Add(ownerMembership);
-                    
-                    // 3. Synchronizacja lokalnej bazy - użyj Unit of Work jeśli dostępny
-                    if (_unitOfWork != null)
-                    {
-                        await _unitOfWork.Teams.AddAsync(newTeam);
-                        
-                        // Zatwierdzamy wszystkie zmiany transakcyjnie
-                        await _unitOfWork.CommitAsync();
-                        
-                        // Zatwierdzamy transakcję
-                        await _unitOfWork.CommitTransactionAsync();
-                    }
-                    else
-                    {
-                        await _teamRepository.AddAsync(newTeam);
-                        // W starym podejściu SaveChangesAsync musi być wywołane wyżej (kontroler)
-                    }
-                    
-                    _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony i zapisany lokalnie. ID: {TeamId}", finalDisplayName, newTeam.Id);
-                    
-                    // 4. Powiadomienia
-                    await _notificationService.SendNotificationToUserAsync(
-                        currentUserUpn,
-                        $"Zespół '{finalDisplayName}' został utworzony pomyślnie.",
-                        "success"
-                    );
-                    
-                    // Powiadom właściciela jeśli to nie current user
-                    if (ownerUser.UPN != currentUserUpn)
-                    {
-                        await _notificationService.SendNotificationToUserAsync(
-                            ownerUser.UPN,
-                            $"Został utworzony nowy zespół '{finalDisplayName}', którego jesteś właścicielem.",
-                            "info"
-                        );
-                    }
-                    
-                    // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _adminNotificationService.SendTeamCreatedNotificationAsync(
-                                newTeam.DisplayName,
-                                newTeam.Id,
-                                currentUserUpn,
-                                newTeam.Members?.Count ?? 0,
-                                new Dictionary<string, object>
-                                {
-                                    ["Opis"] = newTeam.Description ?? "Brak",
-                                    ["Widoczność"] = newTeam.Visibility.ToString(),
-                                    ["Właściciele"] = newTeam.Members?.Count(m => m.Role == TeamMemberRole.Owner) ?? 0,
-                                    ["Szablon"] = template?.Name ?? "Brak",
-                                    ["Typ szkoły"] = schoolType?.FullName ?? "Brak",
-                                    ["Rok szkolny"] = schoolYear?.Name ?? "Brak"
-                                }
-                            );
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o utworzeniu zespołu");
-                        }
-                    });
-                    
-                    // 5. Invalidacja cache i finalizacja audytu
-                    await _cacheInvalidationService.InvalidateForTeamCreatedAsync(newTeam);
-                    
-                    await _operationHistoryService.UpdateOperationStatusAsync(
-                        operation.Id,
-                        OperationStatus.Completed,
-                        $"Zespół ID: {newTeam.Id}, External ID: {externalTeamIdFromPS}"
-                    );
-                    return newTeam;
-                }
-                else
+                if (string.IsNullOrEmpty(externalTeamIdFromPS))
                 {
                     _logger.LogError("Błąd tworzenia zespołu '{FinalDisplayName}' w Microsoft Teams.", finalDisplayName);
                     
@@ -486,30 +402,116 @@ namespace TeamsManager.Core.Services
                     );
                     return null;
                 }
-            }
-            catch (PowerShellConnectionException ex)
-            {
-                _logger.LogError(ex, "Nie można utworzyć zespołu: Błąd połączenia z Microsoft Graph API.");
+
+                _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony w Microsoft Teams. External ID: {ExternalTeamId}", finalDisplayName, externalTeamIdFromPS);
+                var currentUserForCreation = _currentUserService.GetCurrentUserUpn() ?? "system_creation";
+                newTeam = new Team { /* ... inicjalizacja pól ... */ Id = Guid.NewGuid().ToString(), DisplayName = finalDisplayName, Description = description, Owner = ownerUser.UPN, Status = TeamStatus.Active, Visibility = visibility, TemplateId = template?.Id, SchoolTypeId = schoolTypeId, SchoolYearId = schoolYearId, ExternalId = externalTeamIdFromPS, SchoolType = schoolType, SchoolYear = schoolYear, Template = template };
+                if (schoolYear != null) newTeam.AcademicYear = schoolYear.Name;
+                var ownerMembership = new TeamMember { Id = Guid.NewGuid().ToString(), UserId = ownerUser.Id, TeamId = newTeam.Id, Role = ownerUser.DefaultTeamRole, AddedDate = DateTime.UtcNow, AddedBy = currentUserForCreation, IsActive = true, IsApproved = !newTeam.RequiresApproval, ApprovedDate = !newTeam.RequiresApproval ? DateTime.UtcNow : null, ApprovedBy = !newTeam.RequiresApproval ? currentUserForCreation : null, User = ownerUser, Team = newTeam };
+                newTeam.Members.Add(ownerMembership);
                 
-                // Rollback transakcji w przypadku błędu
+                // 3. Synchronizacja lokalnej bazy - użyj Unit of Work jeśli dostępny
                 if (_unitOfWork != null)
                 {
-                    await _unitOfWork.RollbackAsync();
+                    await _unitOfWork.Teams.AddAsync(newTeam);
+                    
+                    // Zatwierdzamy wszystkie zmiany transakcyjnie
+                    await _unitOfWork.CommitAsync();
+                    
+                    // Zatwierdzamy transakcję
+                    await _unitOfWork.CommitTransactionAsync();
                 }
+                else
+                {
+                    await _teamRepository.AddAsync(newTeam);
+                    // W starym podejściu SaveChangesAsync musi być wywołane wyżej (kontroler)
+                }
+                
+                _logger.LogInformation("Zespół '{FinalDisplayName}' pomyślnie utworzony i zapisany lokalnie. ID: {TeamId}", finalDisplayName, newTeam.Id);
+                
+                // 4. Powiadomienia
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserForCreation,
+                    $"Zespół '{finalDisplayName}' został utworzony pomyślnie.",
+                    "success"
+                );
+                
+                // Powiadom właściciela jeśli to nie current user
+                if (ownerUser.UPN != currentUserForCreation)
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        ownerUser.UPN,
+                        $"Został utworzony nowy zespół '{finalDisplayName}', którego jesteś właścicielem.",
+                        "info"
+                    );
+                }
+                
+                // Powiadomienie do administratorów (asynchroniczne, nie blokuje operacji)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _adminNotificationService.SendTeamCreatedNotificationAsync(
+                            newTeam.DisplayName,
+                            newTeam.Id,
+                            currentUserForCreation,
+                            newTeam.Members?.Count ?? 0,
+                            new Dictionary<string, object>
+                            {
+                                ["Opis"] = newTeam.Description ?? "Brak",
+                                ["Widoczność"] = newTeam.Visibility.ToString(),
+                                ["Właściciele"] = newTeam.Members?.Count(m => m.Role == TeamMemberRole.Owner) ?? 0,
+                                ["Szablon"] = template?.Name ?? "Brak",
+                                ["Typ szkoły"] = schoolType?.FullName ?? "Brak",
+                                ["Rok szkolny"] = schoolYear?.Name ?? "Brak"
+                            }
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Błąd podczas wysyłania powiadomienia administratorskiego o utworzeniu zespołu");
+                    }
+                });
+                
+                // 5. Invalidacja cache i finalizacja audytu
+                await _cacheInvalidationService.InvalidateForTeamCreatedAsync(newTeam);
                 
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id,
-                    OperationStatus.Failed,
-                    "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie CreateTeamAsync."
+                    OperationStatus.Completed,
+                    $"Zespół ID: {newTeam.Id}, External ID: {externalTeamIdFromPS}"
                 );
-                
-                await _notificationService.SendNotificationToUserAsync(
-                    _currentUserService.GetCurrentUserUpn() ?? "system",
-                    "Nie udało się utworzyć zespołu: Błąd połączenia z Microsoft Graph API.",
-                    "error"
-                );
-                
-                return null;
+                return newTeam;
+            }
+            catch (GraphConnectionException ex)
+            {
+                return await HandleGraphConnectionExceptionAsync<Team?>(ex, operation, "CreateTeamAsync", 
+                    async () => 
+                    {
+                        // Retry logic dla tworzenia zespołu
+                        if (ex.CanRetry() && !ex.IsAuthenticationError)
+                        {
+                            var retryDelay = ex.GetRecommendedRetryDelay();
+                            _logger.LogWarning(ex, "Graph API błąd w CreateTeamAsync - ponowienie za {Delay}s. Szczegóły: {Details}", 
+                                retryDelay, ex.GetDetailedErrorMessage());
+                            
+                            await Task.Delay(TimeSpan.FromSeconds(retryDelay));
+                            
+                            // Ponów operację tworzenia
+                            var retryResult = await _graphTeamService.CreateTeamAsync(
+                                displayName, description, ownerUpn, visibility, teamTemplateId);
+                            
+                            if (retryResult != null)
+                            {
+                                _logger.LogInformation("Retry CreateTeamAsync zakończony sukcesem dla zespołu: {DisplayName}", displayName);
+                                // Zwracamy null ponieważ metoda oczekuje Team?, a mamy GraphTeam
+                                // Główna logika tworzenia Team zostanie wykonana ponownie
+                                return null;
+                            }
+                        }
+                        
+                        return null;
+                    });
             }
             catch (Exception ex)
             {
@@ -598,9 +600,9 @@ namespace TeamsManager.Core.Services
                     _logger.LogWarning("Próba zmiany statusu zespołu ID {TeamId} z {OldStatus} na {NewStatus} za pomocą metody UpdateTeamAsync jest ignorowana. Użyj ArchiveTeamAsync/RestoreTeamAsync do zmiany statusu.", existingTeam.Id, existingTeam.Status, teamToUpdate.Status);
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.UpdateTeamPropertiesAsync(
+                    async () => await _graphTeamService.UpdateTeamPropertiesAsync(
                         existingTeam.ExternalId ?? teamToUpdate.Id,
                         teamToUpdate.DisplayName,
                         teamToUpdate.Description,
@@ -669,23 +671,42 @@ namespace TeamsManager.Core.Services
                     return false;
                 }
             }
-            catch (PowerShellConnectionException ex)
+
+            catch (GraphConnectionException ex)
             {
-                _logger.LogError(ex, "Nie można zaktualizować zespołu: Błąd połączenia z Microsoft Graph API.");
-                
-                await _operationHistoryService.UpdateOperationStatusAsync(
-                    operation.Id,
-                    OperationStatus.Failed,
-                    "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie UpdateTeamAsync."
-                );
-                
-                await _notificationService.SendNotificationToUserAsync(
-                    _currentUserService.GetCurrentUserUpn() ?? "system",
-                    "Nie udało się zaktualizować zespołu: Błąd połączenia z Microsoft Graph API.",
-                    "error"
-                );
-                
-                return false;
+                return await HandleGraphConnectionExceptionAsync(ex, operation, "UpdateTeamAsync", 
+                    async () => 
+                    {
+                        // Retry logic dla aktualizacji zespołu
+                        if (ex.CanRetry() && !ex.IsAuthenticationError)
+                        {
+                            var retryDelay = ex.GetRecommendedRetryDelay();
+                            _logger.LogWarning(ex, "Graph API błąd w UpdateTeamAsync - ponowienie za {Delay}s. Szczegóły: {Details}", 
+                                retryDelay, ex.GetDetailedErrorMessage());
+                            
+                            await Task.Delay(TimeSpan.FromSeconds(retryDelay));
+                            
+                            // Ponów operację aktualizacji
+                            bool retrySuccess = await _graphService.ExecuteWithAutoConnectAsync(
+                                apiAccessToken,
+                                async () => await _graphTeamService.UpdateTeamPropertiesAsync(
+                                    existingTeam.ExternalId ?? teamToUpdate.Id,
+                                    teamToUpdate.DisplayName,
+                                    teamToUpdate.Description,
+                                    teamToUpdate.Visibility
+                                ),
+                                $"UpdateTeamPropertiesAsync RETRY dla ID: {existingTeam.Id}"
+                            );
+                            
+                            if (retrySuccess)
+                            {
+                                _logger.LogInformation("Retry UpdateTeamAsync zakończony sukcesem dla zespołu ID: {TeamId}", teamToUpdate.Id);
+                                return true;
+                            }
+                        }
+                        
+                        return false;
+                    });
             }
             catch (Exception ex)
             {
@@ -743,9 +764,9 @@ namespace TeamsManager.Core.Services
                     return true; 
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.ArchiveTeamAsync(team.ExternalId ?? team.Id),
+                    async () => await _graphTeamService.ArchiveTeamAsync(team.ExternalId ?? team.Id),
                     $"ArchiveTeamAsync dla zespołu '{team.DisplayName}' (ID: {team.Id})"
                 );
                 if (psSuccess)
@@ -871,9 +892,9 @@ namespace TeamsManager.Core.Services
                     return true; 
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.UnarchiveTeamAsync(team.ExternalId ?? team.Id),
+                    async () => await _graphTeamService.UnarchiveTeamAsync(team.ExternalId ?? team.Id),
                     $"UnarchiveTeamAsync dla zespołu '{team.DisplayName}' (ID: {team.Id})"
                 );
                 if (psSuccess)
@@ -948,9 +969,9 @@ namespace TeamsManager.Core.Services
                     return false; 
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.DeleteTeamAsync(team.ExternalId ?? team.Id),
+                    async () => await _graphTeamService.DeleteTeamAsync(team.ExternalId ?? team.Id),
                     $"DeleteTeamAsync dla zespołu '{team.DisplayName}' (ID: {team.Id})"
                 );
                 if (psSuccess)
@@ -1063,9 +1084,9 @@ namespace TeamsManager.Core.Services
                     return null; 
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellUserService.AddUserToTeamAsync(
+                    async () => await _graphUserService.AddUserToTeamAsync(
                         team.ExternalId ?? team.Id, user.UPN, role.ToString()
                     ),
                     $"AddUserToTeamAsync dla użytkownika {user.UPN} do zespołu '{team.DisplayName}'"
@@ -1165,9 +1186,9 @@ namespace TeamsManager.Core.Services
                     return false; 
                 }
 
-                bool psSuccess = await _powerShellService.ExecuteWithAutoConnectAsync(
+                bool psSuccess = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellUserService.RemoveUserFromTeamAsync(
+                    async () => await _graphUserService.RemoveUserFromTeamAsync(
                         team.ExternalId ?? team.Id, memberToRemove.User!.UPN
                     ),
                     $"RemoveUserFromTeamAsync dla użytkownika {memberToRemove.User!.UPN} z zespołu '{team.DisplayName}'"
@@ -1339,7 +1360,7 @@ namespace TeamsManager.Core.Services
                 );
                 
                 // Invaliduj cache
-                _powerShellCacheService.Remove($"{TeamByIdCacheKeyPrefix}{teamId}");
+                _graphCacheService.Remove($"{TeamByIdCacheKeyPrefix}{teamId}");
                 _logger.LogInformation("Zespół {TeamId} zsynchronizowany z Graph. Zmiany: {Changes}", teamId, syncDetails);
             }
             
@@ -1388,11 +1409,11 @@ namespace TeamsManager.Core.Services
             );
             
             // Invaliduj cache
-            _powerShellCacheService.Remove($"{TeamByIdCacheKeyPrefix}{team.Id}");
+            _graphCacheService.Remove($"{TeamByIdCacheKeyPrefix}{team.Id}");
         }
 
         /// <summary>
-        /// Pomocnicza metoda do pobierania właściwości z obiektów PowerShell.
+        /// Pomocnicza metoda do pobierania właściwości z obiektów Graph API.
         /// </summary>
         private TValue? GetPropertyValue<TValue>(dynamic graphObject, string propertyName)
         {
@@ -1400,10 +1421,24 @@ namespace TeamsManager.Core.Services
             {
                 if (graphObject == null) return default(TValue);
                 
-                var psObject = graphObject as System.Management.Automation.PSObject;
-                if (psObject?.Properties[propertyName]?.Value is TValue value)
+                // Zastąpienie PSObject - używamy reflection dla dynamic object
+                var objectType = graphObject.GetType();
+                var property = objectType.GetProperty(propertyName);
+                if (property != null)
                 {
-                    return value;
+                    var propertyValue = property.GetValue(graphObject);
+                    if (propertyValue is TValue value)
+                    {
+                        return value;
+                    }
+                }
+                
+                // Alternatywnie, spróbuj jako Dictionary jeśli to ExpandoObject
+                if (graphObject is IDictionary<string, object> dictionary && 
+                    dictionary.TryGetValue(propertyName, out var dictValue) && 
+                    dictValue is TValue typedValue)
+                {
+                    return typedValue;
                 }
                 
                 return default(TValue);
@@ -1432,13 +1467,13 @@ namespace TeamsManager.Core.Services
             try
             {
                 // Pobierz wszystkie zespoły z Graph
-                var graphTeams = await _powerShellService.ExecuteWithAutoConnectAsync(
+                var graphTeams = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellTeamService.GetAllTeamsAsync(),
+                    async () => await _graphTeamService.GetAllTeamsAsync(),
                     "GetAllTeamsAsync dla masowej synchronizacji"
                 );
                 
-                if (graphTeams == null || !graphTeams.Any())
+                if (graphTeams?.Data == null || !graphTeams.Data.Any())
                 {
                     _logger.LogWarning("Brak zespołów w Microsoft Graph");
                     await _operationHistoryService.UpdateOperationStatusAsync(
@@ -1454,10 +1489,10 @@ namespace TeamsManager.Core.Services
                 var localTeamDict = localTeams.ToDictionary(t => t.ExternalId ?? t.Id);
                 
                 int processed = 0;
-                int total = graphTeams.Count();
+                int total = graphTeams.Data.Count;
                 
                 // Synchronizuj każdy zespół
-                foreach (var graphTeam in graphTeams)
+                foreach (var graphTeam in graphTeams.Data)
                 {
                     var teamId = "";
                     try
@@ -1555,10 +1590,10 @@ namespace TeamsManager.Core.Services
                     return new Dictionary<string, bool>();
                 }
 
-                // 2. Wywołanie PowerShell z ExecuteWithAutoConnectAsync
-                var psResults = await _powerShellService.ExecuteWithAutoConnectAsync(
+                // 2. Wywołanie Graph API z ExecuteWithAutoConnectAsync
+                var psResults = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellBulkOps.BulkAddUsersToTeamAsync(
+                    async () => await _graphBulkOps.BulkAddUsersToTeamAsync(
                         teamId, userUpns, "Member"
                     ),
                     $"BulkAddUsersToTeamAsync dla {userUpns.Count} użytkowników do zespołu ID: {teamId}"
@@ -1569,7 +1604,7 @@ namespace TeamsManager.Core.Services
                 var syncFailures = 0;
                 var addedUsers = new List<string>();
 
-                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
+                foreach (var kvp in psResults?.Data?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     try
                     {
@@ -1625,11 +1660,11 @@ namespace TeamsManager.Core.Services
                 }
 
                 // 4. Powiadomienia
-                var psSuccessCount = psResults?.Count(r => r.Value) ?? 0;
-                var psFailureCount = psResults?.Count(r => !r.Value) ?? 0;
+                var psSuccessCount = psResults?.Data?.Count(r => r.Value) ?? 0;
+                var psFailureCount = psResults?.Data?.Count(r => !r.Value) ?? 0;
                 
                 var message = $"Operacja dodawania użytkowników do zespołu '{team.DisplayName}' zakończona. " +
-                             $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
+                             $"Graph API: {psSuccessCount}/{userUpns.Count} sukces, " +
                              $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces.";
 
                 await _notificationService.SendNotificationToUserAsync(
@@ -1645,7 +1680,7 @@ namespace TeamsManager.Core.Services
                         ? OperationStatus.Failed
                         : OperationStatus.PartialSuccess;
 
-                var details = $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, {psFailureCount} błąd. " +
+                var details = $"Graph API: {psSuccessCount}/{userUpns.Count} sukces, {psFailureCount} błąd. " +
                              $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces, {syncFailures} błąd.";
 
                 await _operationHistoryService.UpdateOperationStatusAsync(
@@ -1666,7 +1701,7 @@ namespace TeamsManager.Core.Services
 
                 // Invalidacja cache - przekaż listę ID dodanych użytkowników
                 var addedUserIds = new List<string>();
-                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
+                foreach (var kvp in psResults?.Data?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     var user = await _userRepository.GetActiveUserByUpnAsync(kvp.Key);
                     if (user != null)
@@ -1696,25 +1731,44 @@ namespace TeamsManager.Core.Services
                     }
                 });
 
-                return psResults ?? new Dictionary<string, bool>();
+                return psResults?.Data ?? new Dictionary<string, bool>();
             }
-            catch (PowerShellConnectionException ex)
+            catch (GraphConnectionException ex)
             {
-                _logger.LogError(ex, "Nie można dodać użytkowników: Błąd połączenia z Microsoft Graph API.");
-                
-                await _operationHistoryService.UpdateOperationStatusAsync(
-                    operation.Id,
-                    OperationStatus.Failed,
-                    "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie AddUsersToTeamAsync."
-                );
-                
-                await _notificationService.SendNotificationToUserAsync(
-                    currentUserUpn,
-                    "Nie udało się dodać użytkowników: Błąd połączenia z Microsoft Graph API.",
-                    "error"
-                );
-
-                return new Dictionary<string, bool>();
+                return await HandleGraphConnectionExceptionAsync(ex, operation, "AddUsersToTeamAsync",
+                    async () =>
+                    {
+                        // Specjalna obsługa dla operacji masowych
+                        if (ex.IsRateLimitError && userUpns.Count > 20)
+                        {
+                            _logger.LogWarning("Rate limit w AddUsersToTeamAsync - dzielę na mniejsze batche. Użytkowników: {Count}", userUpns.Count);
+                            return await ProcessAddUsersInSmallerBatchesAsync(teamId, userUpns, apiAccessToken, operation);
+                        }
+                        
+                        if (ex.CanRetry() && !ex.IsAuthenticationError)
+                        {
+                            var retryDelay = ex.GetRecommendedRetryDelay();
+                            _logger.LogWarning(ex, "Graph API błąd w AddUsersToTeamAsync - ponowienie za {Delay}s", retryDelay);
+                            
+                            await Task.Delay(TimeSpan.FromSeconds(retryDelay));
+                            
+                            // Ponów operację dodawania użytkowników
+                            var retryResults = await _graphService.ExecuteWithAutoConnectAsync(
+                                apiAccessToken,
+                                async () => await _graphBulkOps.BulkAddUsersToTeamAsync(teamId, userUpns, "Member"),
+                                $"BulkAddUsersToTeamAsync RETRY dla {userUpns.Count} użytkowników"
+                            );
+                            
+                            if (retryResults?.Data != null && retryResults.Data.Any(r => r.Value))
+                            {
+                                _logger.LogInformation("Retry AddUsersToTeamAsync częściowo/całkowicie udany. Sukcesy: {Successes}", 
+                                    retryResults.Data.Count(r => r.Value));
+                                return retryResults.Data;
+                            }
+                        }
+                        
+                        return new Dictionary<string, bool>();
+                    });
             }
             catch (Exception ex)
             {
@@ -1766,10 +1820,10 @@ namespace TeamsManager.Core.Services
                     return new Dictionary<string, bool>();
                 }
 
-                // 2. Wywołanie PowerShell z ExecuteWithAutoConnectAsync
-                var psResults = await _powerShellService.ExecuteWithAutoConnectAsync(
+                // 2. Wywołanie Graph API z ExecuteWithAutoConnectAsync
+                var psResults = await _graphService.ExecuteWithAutoConnectAsync(
                     apiAccessToken,
-                    async () => await _powerShellBulkOps.BulkRemoveUsersFromTeamAsync(
+                    async () => await _graphBulkOps.BulkRemoveUsersFromTeamAsync(
                         teamId, userUpns
                     ),
                     $"BulkRemoveUsersFromTeamAsync dla {userUpns.Count} użytkowników z zespołu ID: {teamId}"
@@ -1780,7 +1834,7 @@ namespace TeamsManager.Core.Services
                 var syncFailures = 0;
                 var removedUsers = new List<string>();
 
-                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
+                foreach (var kvp in psResults?.Data?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     try
                     {
@@ -1819,11 +1873,11 @@ namespace TeamsManager.Core.Services
                 }
 
                 // 4. Powiadomienia
-                var psSuccessCount = psResults?.Count(r => r.Value) ?? 0;
-                var psFailureCount = psResults?.Count(r => !r.Value) ?? 0;
+                var psSuccessCount = psResults?.Data?.Count(r => r.Value) ?? 0;
+                var psFailureCount = psResults?.Data?.Count(r => !r.Value) ?? 0;
                 
                 var message = $"Operacja usuwania użytkowników z zespołu '{team.DisplayName}' zakończona. " +
-                             $"PowerShell: {psSuccessCount}/{userUpns.Count} sukces, " +
+                             $"Graph API: {psSuccessCount}/{userUpns.Count} sukces, " +
                              $"Synchronizacja: {syncSuccesses}/{psSuccessCount} sukces.";
 
                 await _notificationService.SendNotificationToUserAsync(
@@ -1842,7 +1896,7 @@ namespace TeamsManager.Core.Services
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id, 
                     finalStatus,
-                    $"PowerShell: {psSuccessCount}/{userUpns.Count}, Sync: {syncSuccesses}/{psSuccessCount}"
+                    $"Graph API: {psSuccessCount}/{userUpns.Count}, Sync: {syncSuccesses}/{psSuccessCount}"
                 );
 
                 // Powiadom właściciela zespołu o usuniętych członkach
@@ -1857,7 +1911,7 @@ namespace TeamsManager.Core.Services
 
                 // Invalidacja cache - przekaż listę ID usuniętych użytkowników
                 var removedUserIds = new List<string>();
-                foreach (var kvp in psResults?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
+                foreach (var kvp in psResults?.Data?.Where(r => r.Value) ?? Enumerable.Empty<KeyValuePair<string, bool>>())
                 {
                     var user = await _userRepository.GetUserByUpnAsync(kvp.Key);
                     if (user != null)
@@ -1887,25 +1941,44 @@ namespace TeamsManager.Core.Services
                     }
                 });
 
-                return psResults ?? new Dictionary<string, bool>();
+                return psResults?.Data ?? new Dictionary<string, bool>();
             }
-            catch (PowerShellConnectionException ex)
+            catch (GraphConnectionException ex)
             {
-                _logger.LogError(ex, "Nie można usunąć użytkowników: Błąd połączenia z Microsoft Graph API.");
-                
-                await _operationHistoryService.UpdateOperationStatusAsync(
-                    operation.Id,
-                    OperationStatus.Failed,
-                    "Nie udało się nawiązać połączenia z Microsoft Graph API w metodzie RemoveUsersFromTeamAsync."
-                );
-                
-                await _notificationService.SendNotificationToUserAsync(
-                    currentUserUpn,
-                    "Nie udało się usunąć użytkowników: Błąd połączenia z Microsoft Graph API.",
-                    "error"
-                );
-
-                return new Dictionary<string, bool>();
+                return await HandleGraphConnectionExceptionAsync(ex, operation, "RemoveUsersFromTeamAsync",
+                    async () =>
+                    {
+                        // Specjalna obsługa dla operacji masowych
+                        if (ex.IsRateLimitError && userUpns.Count > 20)
+                        {
+                            _logger.LogWarning("Rate limit w RemoveUsersFromTeamAsync - dzielę na mniejsze batche. Użytkowników: {Count}", userUpns.Count);
+                            return await ProcessRemoveUsersInSmallerBatchesAsync(teamId, userUpns, reason, apiAccessToken, operation);
+                        }
+                        
+                        if (ex.CanRetry() && !ex.IsAuthenticationError)
+                        {
+                            var retryDelay = ex.GetRecommendedRetryDelay();
+                            _logger.LogWarning(ex, "Graph API błąd w RemoveUsersFromTeamAsync - ponowienie za {Delay}s", retryDelay);
+                            
+                            await Task.Delay(TimeSpan.FromSeconds(retryDelay));
+                            
+                            // Ponów operację usuwania użytkowników
+                            var retryResults = await _graphService.ExecuteWithAutoConnectAsync(
+                                apiAccessToken,
+                                async () => await _graphBulkOps.BulkRemoveUsersFromTeamAsync(teamId, userUpns),
+                                $"BulkRemoveUsersFromTeamAsync RETRY dla {userUpns.Count} użytkowników"
+                            );
+                            
+                            if (retryResults?.Data != null && retryResults.Data.Any(r => r.Value))
+                            {
+                                _logger.LogInformation("Retry RemoveUsersFromTeamAsync częściowo/całkowicie udany. Sukcesy: {Successes}", 
+                                    retryResults.Data.Count(r => r.Value));
+                                return retryResults.Data;
+                            }
+                        }
+                        
+                        return new Dictionary<string, bool>();
+                    });
             }
             catch (Exception ex)
             {
@@ -1947,7 +2020,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = $"Teams_BySchoolYear_{schoolYearId}";
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły dla roku szkolnego {SchoolYearId} znalezione w cache. Liczba zespołów: {Count}", schoolYearId, cachedTeams.Count());
                 return cachedTeams;
@@ -1966,7 +2039,7 @@ namespace TeamsManager.Core.Services
                 // Tutaj można dodać logikę synchronizacji z Graph API w przyszłości
             }
 
-            _powerShellCacheService.Set(cacheKey, teamsList);
+            _graphCacheService.Set(cacheKey, teamsList);
             _logger.LogDebug("Zespoły dla roku szkolnego {SchoolYearId} dodane do cache. Liczba zespołów: {Count}", schoolYearId, teamsList.Count);
 
             return teamsList;
@@ -1985,7 +2058,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = $"Teams_ByDepartment_{departmentId}";
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<Team>? cachedTeams) && cachedTeams != null)
             {
                 _logger.LogDebug("Zespoły dla działu {DepartmentId} znalezione w cache. Liczba zespołów: {Count}", departmentId, cachedTeams.Count());
                 return cachedTeams;
@@ -2004,10 +2077,255 @@ namespace TeamsManager.Core.Services
                 // Tutaj można dodać logikę synchronizacji z Graph API w przyszłości
             }
 
-            _powerShellCacheService.Set(cacheKey, teamsList);
+            _graphCacheService.Set(cacheKey, teamsList);
             _logger.LogDebug("Zespoły dla działu {DepartmentId} dodane do cache. Liczba zespołów: {Count}", departmentId, teamsList.Count);
 
             return teamsList;
+        }
+
+        /// <summary>
+        /// Uniwersalna obsługa GraphConnectionException z inteligentnym retry, rate limiting i circuit breaker.
+        /// </summary>
+        private async Task<T> HandleGraphConnectionExceptionAsync<T>(
+            GraphConnectionException ex, 
+            OperationHistory operation, 
+            string methodName,
+            Func<Task<T>>? retryAction = null)
+        {
+            var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
+            
+            // Zbierz metryki dla monitoringu
+            var metrics = new Dictionary<string, object>
+            {
+                ["Method"] = methodName,
+                ["Endpoint"] = ex.Endpoint ?? "Unknown",
+                ["HttpStatusCode"] = ex.HttpStatusCode ?? 0,
+                ["GraphErrorCode"] = ex.GraphErrorCode ?? "Unknown",
+                ["RequestId"] = ex.RequestId ?? "Unknown",
+                ["CanRetry"] = ex.CanRetry(),
+                ["IsAuthenticationError"] = ex.IsAuthenticationError,
+                ["IsRateLimitError"] = ex.IsRateLimitError
+            };
+
+            // Specjalna obsługa błędów uwierzytelnienia
+            if (ex.IsAuthenticationError)
+            {
+                _logger.LogError(ex, "Błąd uwierzytelnienia Graph API w {Method}: {Details}", methodName, ex.GetDetailedErrorMessage());
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    "Sesja wygasła. Wymagane ponowne logowanie do Microsoft Graph.",
+                    "warning"
+                );
+                
+                await _operationHistoryService.UpdateOperationStatusAsync(
+                    operation.Id,
+                    OperationStatus.Failed,
+                    $"Błąd uwierzytelnienia Graph API w {methodName}: {ex.GraphErrorCode}"
+                );
+                
+                // Wyślij metryki uwierzytelnienia
+                await _adminNotificationService.SendGraphApiErrorMetricsAsync(metrics);
+                
+                return default(T);
+            }
+
+            // Rate limiting - aktywuj circuit breaker jeśli potrzeba
+            if (ex.IsRateLimitError)
+            {
+                var retryAfter = ex.GetRecommendedRetryDelay();
+                _logger.LogWarning(ex, "Rate limit Graph API w {Method} - oczekiwanie {RetryAfter}s. Szczegóły: {Details}", 
+                    methodName, retryAfter, ex.GetDetailedErrorMessage());
+                
+                // Aktualizuj informacje o rate limiting w Graph Service
+                await _graphService.UpdateRateLimitInfoAsync(retryAfter);
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    $"Microsoft Graph API jest przeciążony. Operacja zostanie ponowiona za {retryAfter} sekund.",
+                    "info"
+                );
+            }
+
+            // Circuit breaker dla błędów serwera
+            if (ex.HttpStatusCode >= 500 && ex.HttpStatusCode < 600)
+            {
+                _logger.LogError(ex, "Błąd serwera Graph API w {Method}: {Details}", methodName, ex.GetDetailedErrorMessage());
+                
+                // Jeśli to kolejny błąd serwera, rozważ circuit breaker
+                await _graphService.ReportServerErrorAsync();
+                
+                await _notificationService.SendNotificationToUserAsync(
+                    currentUserUpn,
+                    "Microsoft Graph API ma problemy techniczne. Spróbuj ponownie za kilka minut.",
+                    "error"
+                );
+            }
+
+            // Spróbuj retry jeśli możliwe
+            if (retryAction != null && ex.CanRetry() && !ex.IsAuthenticationError)
+            {
+                try
+                {
+                    var result = await retryAction();
+                    if (result != null && !result.Equals(default(T)))
+                    {
+                        await _operationHistoryService.UpdateOperationStatusAsync(
+                            operation.Id,
+                            OperationStatus.Completed,
+                            $"Operacja {methodName} zakończona sukcesem po retry"
+                        );
+                        
+                        return result;
+                    }
+                }
+                catch (Exception retryEx)
+                {
+                    _logger.LogError(retryEx, "Retry {Method} również zakończony błędem", methodName);
+                }
+            }
+
+            // Finalna obsługa błędu
+            await _operationHistoryService.UpdateOperationStatusAsync(
+                operation.Id,
+                OperationStatus.Failed,
+                $"Błąd Graph API w {methodName}: {ex.GetDetailedErrorMessage()}"
+            );
+
+            await _notificationService.SendNotificationToUserAsync(
+                currentUserUpn,
+                $"Nie udało się wykonać operacji: {ex.Message}",
+                "error"
+            );
+
+            // Wyślij szczegółowe metryki do administratorów
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _adminNotificationService.SendGraphApiErrorMetricsAsync(metrics);
+                }
+                catch (Exception metricsEx)
+                {
+                    _logger.LogError(metricsEx, "Błąd podczas wysyłania metryki Graph API");
+                }
+            });
+
+            return default(T);
+        }
+
+        /// <summary>
+        /// Przetwarza dodawanie użytkowników w mniejszych batch'ach przy rate limiting.
+        /// </summary>
+        private async Task<Dictionary<string, bool>> ProcessAddUsersInSmallerBatchesAsync(
+            string teamId, List<string> userUpns, string apiAccessToken, OperationHistory operation)
+        {
+            const int batchSize = 10; // Mniejsze batche dla rate limiting
+            var allResults = new Dictionary<string, bool>();
+            var batches = userUpns.Chunk(batchSize).ToList();
+            
+            _logger.LogInformation("Przetwarzanie {TotalUsers} użytkowników w {BatchCount} batch'ach po {BatchSize}", 
+                userUpns.Count, batches.Count, batchSize);
+
+            for (int i = 0; i < batches.Count; i++)
+            {
+                var batch = batches[i].ToList();
+                
+                try
+                {
+                    // Opóźnienie między batch'ami aby uniknąć rate limiting
+                    if (i > 0)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(2));
+                    }
+                    
+                    var batchResults = await _graphService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _graphBulkOps.BulkAddUsersToTeamAsync(teamId, batch, "Member"),
+                        $"BulkAddUsersToTeamAsync batch {i + 1}/{batches.Count}"
+                    );
+                    
+                    if (batchResults != null)
+                    {
+                        foreach (var result in batchResults.Data ?? new Dictionary<string, bool>())
+                        {
+                            allResults[result.Key] = result.Value;
+                        }
+                    }
+                    
+                    _logger.LogDebug("Batch {BatchNumber}/{TotalBatches} zakończony. Sukcesy: {Successes}/{Total}", 
+                        i + 1, batches.Count, batchResults?.Data?.Count(r => r.Value) ?? 0, batch.Count);
+                }
+                catch (Exception batchEx)
+                {
+                    _logger.LogError(batchEx, "Błąd w batch {BatchNumber}/{TotalBatches}", i + 1, batches.Count);
+                    
+                    // Oznacz użytkowników z tego batch'a jako nieudanych
+                    foreach (var upn in batch)
+                    {
+                        allResults[upn] = false;
+                    }
+                }
+            }
+
+            return allResults;
+        }
+
+        /// <summary>
+        /// Przetwarza usuwanie użytkowników w mniejszych batch'ach przy rate limiting.
+        /// </summary>
+        private async Task<Dictionary<string, bool>> ProcessRemoveUsersInSmallerBatchesAsync(
+            string teamId, List<string> userUpns, string reason, string apiAccessToken, OperationHistory operation)
+        {
+            const int batchSize = 10; // Mniejsze batche dla rate limiting
+            var allResults = new Dictionary<string, bool>();
+            var batches = userUpns.Chunk(batchSize).ToList();
+            
+            _logger.LogInformation("Przetwarzanie usuwania {TotalUsers} użytkowników w {BatchCount} batch'ach po {BatchSize}", 
+                userUpns.Count, batches.Count, batchSize);
+
+            for (int i = 0; i < batches.Count; i++)
+            {
+                var batch = batches[i].ToList();
+                
+                try
+                {
+                    // Opóźnienie między batch'ami aby uniknąć rate limiting
+                    if (i > 0)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(2));
+                    }
+                    
+                    var batchResults = await _graphService.ExecuteWithAutoConnectAsync(
+                        apiAccessToken,
+                        async () => await _graphBulkOps.BulkRemoveUsersFromTeamAsync(teamId, batch),
+                        $"BulkRemoveUsersFromTeamAsync batch {i + 1}/{batches.Count}"
+                    );
+                    
+                    if (batchResults != null)
+                    {
+                        foreach (var result in batchResults.Data ?? new Dictionary<string, bool>())
+                        {
+                            allResults[result.Key] = result.Value;
+                        }
+                    }
+                    
+                    _logger.LogDebug("Batch usuwania {BatchNumber}/{TotalBatches} zakończony. Sukcesy: {Successes}/{Total}", 
+                        i + 1, batches.Count, batchResults?.Data?.Count(r => r.Value) ?? 0, batch.Count);
+                }
+                catch (Exception batchEx)
+                {
+                    _logger.LogError(batchEx, "Błąd w batch usuwania {BatchNumber}/{TotalBatches}", i + 1, batches.Count);
+                    
+                    // Oznacz użytkowników z tego batch'a jako nieudanych
+                    foreach (var upn in batch)
+                    {
+                        allResults[upn] = false;
+                    }
+                }
+            }
+
+            return allResults;
         }
     }
 }

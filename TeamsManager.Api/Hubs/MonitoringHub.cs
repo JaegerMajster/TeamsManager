@@ -167,7 +167,7 @@ namespace TeamsManager.Api.Hubs
             {
                 var repairOptions = new RepairOptions
                 {
-                    RepairPowerShellConnection = true,
+                    RepairGraphConnection = true,
                     ClearInvalidCache = true,
                     RestartStuckProcesses = true,
                     SendAdminNotifications = true,

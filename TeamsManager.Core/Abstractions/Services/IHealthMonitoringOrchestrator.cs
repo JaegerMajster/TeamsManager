@@ -62,9 +62,9 @@ namespace TeamsManager.Core.Abstractions.Services
     public class RepairOptions
     {
         /// <summary>
-        /// Czy naprawiać problemy z połączeniem PowerShell
+        /// Czy naprawiać problemy z połączeniem Graph API
         /// </summary>
-        public bool RepairPowerShellConnection { get; set; } = true;
+        public bool RepairGraphConnection { get; set; } = true;
 
         /// <summary>
         /// Czy czyścić nieważne wpisy cache
@@ -87,23 +87,23 @@ namespace TeamsManager.Core.Abstractions.Services
         public bool SendAdminNotifications { get; set; } = true;
 
         /// <summary>
-        /// Czy odświeżać tokeny uwierzytelniania
-        /// </summary>
-        public bool RefreshAuthentication { get; set; } = false;
-
-        /// <summary>
-        /// Czy symulować operacje (dry run) bez rzeczywistych zmian
+        /// Czy wykonać tylko symulację (nie wprowadzać zmian)
         /// </summary>
         public bool DryRun { get; set; } = false;
 
         /// <summary>
-        /// Maksymalny czas oczekiwania na operację (w minutach, domyślnie 30)
+        /// Timeout operacji w minutach
         /// </summary>
         public int TimeoutMinutes { get; set; } = 30;
 
         /// <summary>
-        /// Maksymalna liczba równoległych operacji naprawy
+        /// Maksymalna liczba współbieżnych operacji
         /// </summary>
         public int MaxConcurrency { get; set; } = 2;
+
+        /// <summary>
+        /// Czy odświeżać tokeny uwierzytelniania
+        /// </summary>
+        public bool RefreshAuthentication { get; set; } = true;
     }
 } 

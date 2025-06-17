@@ -11,8 +11,10 @@ using TeamsManager.Core.Enums;
 using TeamsManager.UI.Models.Teams;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.ViewModels.Shell;
+using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.UI.Views.Teams;
 using System.Windows;
+using Microsoft.Extensions.Logging;
 
 namespace TeamsManager.UI.ViewModels.Teams
 {
@@ -24,6 +26,8 @@ namespace TeamsManager.UI.ViewModels.Teams
         private readonly ICurrentUserService _currentUserService;
         private readonly INotificationService _notificationService;
         private readonly MainShellViewModel _mainShellViewModel;
+        private readonly IMsalAuthService _msalAuthService;
+        private readonly ILogger<TeamListViewModel> _logger;
 
         // Kolekcje
         private ObservableCollection<TeamGrouping> _teamGroups = new();
@@ -142,7 +146,9 @@ namespace TeamsManager.UI.ViewModels.Teams
             ISchoolYearService schoolYearService,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
-            MainShellViewModel mainShellViewModel)
+            MainShellViewModel mainShellViewModel,
+            IMsalAuthService msalAuthService,
+            ILogger<TeamListViewModel> logger)
         {
             _teamService = teamService;
             _schoolTypeService = schoolTypeService;
@@ -150,6 +156,8 @@ namespace TeamsManager.UI.ViewModels.Teams
             _currentUserService = currentUserService;
             _notificationService = notificationService;
             _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             // Inicjalizacja komend
             LoadTeamsCommand = new RelayCommand(async () => await LoadTeamsAsync());
@@ -196,6 +204,15 @@ namespace TeamsManager.UI.ViewModels.Teams
                 TeamGroups.Clear();
                 
                 var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        _currentUserService.GetCurrentUserUpn() ?? "system",
+                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
+                        "error"
+                    );
+                    return;
+                }
                 
                 // Pobierz zespoły według statusu
                 var teams = _selectedStatus == TeamStatus.Archived
@@ -269,6 +286,16 @@ namespace TeamsManager.UI.ViewModels.Teams
             {
                 IsLoading = true;
                 var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        _currentUserService.GetCurrentUserUpn() ?? "system",
+                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
+                        "error"
+                    );
+                    return;
+                }
+                
                 var success = await _teamService.ArchiveTeamAsync(team.Id, "Archiwizacja z interfejsu użytkownika", accessToken);
                 
                 if (success)
@@ -319,6 +346,16 @@ namespace TeamsManager.UI.ViewModels.Teams
             {
                 IsLoading = true;
                 var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    await _notificationService.SendNotificationToUserAsync(
+                        _currentUserService.GetCurrentUserUpn() ?? "system",
+                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
+                        "error"
+                    );
+                    return;
+                }
+                
                 var success = await _teamService.RestoreTeamAsync(team.Id, accessToken);
                 
                 if (success)
@@ -504,11 +541,27 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        private async Task<string> GetAccessTokenAsync()
+        /// <summary>
+        /// Pobiera token dostępu z MSAL Auth Service
+        /// </summary>
+        private async Task<string?> GetAccessTokenAsync()
         {
-            // TODO: Implementacja pobierania tokenu dostępu
-            // Należy zaimplementować w oparciu o istniejący mechanizm w aplikacji
-            return string.Empty;
+            try
+            {
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken != null)
+                {
+                    return authResult.AccessToken;
+                }
+
+                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+                return null;
+            }
         }
     }
 } 

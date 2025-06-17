@@ -134,8 +134,8 @@ namespace TeamsManager.Api.Controllers
                 }
 
                 _logger.LogInformation("[HealthMonitoring] Rozpoczynanie automatycznej naprawy przez użytkownika {UserUpn}. " +
-                    "DryRun: {DryRun}, PowerShell: {PowerShell}, Cache: {Cache}", 
-                    currentUserUpn, request.DryRun, request.RepairPowerShellConnection, request.ClearInvalidCache);
+                    "DryRun: {DryRun}, Graph: {Graph}, Cache: {Cache}", 
+                    currentUserUpn, request.DryRun, request.RepairGraphConnection, request.ClearInvalidCache);
 
                 // Pobierz token z nagłówka Authorization
                 var apiToken = await HttpContext.GetBearerTokenAsync();
@@ -155,7 +155,7 @@ namespace TeamsManager.Api.Controllers
 
                 var options = new RepairOptions
                 {
-                    RepairPowerShellConnection = request.RepairPowerShellConnection,
+                    RepairGraphConnection = request.RepairGraphConnection,
                     ClearInvalidCache = request.ClearInvalidCache,
                     RestartStuckProcesses = request.RestartStuckProcesses,
                     OptimizeDatabase = request.OptimizeDatabase,
@@ -420,9 +420,9 @@ namespace TeamsManager.Api.Controllers
     public class AutoRepairRequest
     {
         /// <summary>
-        /// Czy naprawiać problemy z połączeniem PowerShell
+        /// Czy naprawiać problemy z połączeniem Graph API
         /// </summary>
-        public bool RepairPowerShellConnection { get; set; } = true;
+        public bool RepairGraphConnection { get; set; } = true;
 
         /// <summary>
         /// Czy czyścić nieważne wpisy cache

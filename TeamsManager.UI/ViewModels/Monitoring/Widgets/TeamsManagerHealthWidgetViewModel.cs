@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.Core.Models;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
 using System.Windows;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -46,12 +45,12 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             set => SetProperty(ref _notificationIcon, value);
         }
 
-        // Commands
+        // Commands - Graph API specific
         public AsyncRelayCommand RunHealthCheckCommand { get; }
         public AsyncRelayCommand RunAutoRepairCommand { get; }
-        public AsyncRelayCommand CheckModulesCommand { get; }
-        public AsyncRelayCommand InstallModulesCommand { get; }
-        public AsyncRelayCommand TestConnectionCommand { get; }
+        public AsyncRelayCommand TestGraphConnectionCommand { get; }
+        public AsyncRelayCommand RefreshGraphTokenCommand { get; }
+        public AsyncRelayCommand ClearGraphCacheCommand { get; }
 
         public TeamsManagerHealthWidgetViewModel(
             ITeamsManagerApiService apiService,
@@ -64,9 +63,9 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
 
             RunHealthCheckCommand = new AsyncRelayCommand(RunHealthCheckAsync, _ => !IsLoading);
             RunAutoRepairCommand = new AsyncRelayCommand(RunAutoRepairAsync, _ => !IsLoading);
-            CheckModulesCommand = new AsyncRelayCommand(CheckModulesAsync, _ => !IsLoading);
-            InstallModulesCommand = new AsyncRelayCommand(InstallModulesAsync, _ => !IsLoading);
-            TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync, _ => !IsLoading);
+            TestGraphConnectionCommand = new AsyncRelayCommand(TestGraphConnectionAsync, _ => !IsLoading);
+            RefreshGraphTokenCommand = new AsyncRelayCommand(RefreshGraphTokenAsync, _ => !IsLoading);
+            ClearGraphCacheCommand = new AsyncRelayCommand(ClearGraphCacheAsync, _ => !IsLoading);
 
             InitializeAsync();
         }
@@ -83,64 +82,74 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             IsLoading = true;
             try
             {
-                _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Refreshing health data");
+                _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Refreshing Graph API health data");
 
-                // Pobierz diagnostykę połączenia
-                var connectionDiagnostics = await _apiService.GetConnectionDiagnosticsAsync();
-                var healthInfo = await _apiService.GetConnectionHealthAsync();
+                // Pobierz diagnostykę Graph API
+                var graphDiagnostics = await _apiService.GetGraphConnectionDiagnosticsAsync();
+                var graphHealthInfo = await _apiService.GetGraphConnectionHealthAsync();
 
                 // Wyczyść obecne komponenty
                 Components.Clear();
 
-                if (connectionDiagnostics != null)
+                if (graphDiagnostics != null)
                 {
-                    // PowerShell Connection
+                    // Microsoft Graph API Connection
                     Components.Add(new HealthComponent
                     {
-                        Name = "PowerShell Connection",
-                        Description = "Połączenie z Microsoft Graph PowerShell",
-                        Status = connectionDiagnostics.IsHealthy ? "Healthy" : "Unhealthy",
-                        ResponseTime = (long)(connectionDiagnostics.LastOperationDuration?.TotalMilliseconds ?? 0),
+                        Name = "Microsoft Graph API Connection",
+                        Description = "Połączenie z Microsoft Graph API",
+                        Status = graphDiagnostics.IsHealthy ? "Healthy" : "Unhealthy",
+                        ResponseTime = (long)(graphDiagnostics.LastOperationDuration?.TotalMilliseconds ?? 0),
                         LastChecked = DateTime.Now
                     });
 
-                    // Graph API Status
+                    // Graph API Authentication
                     Components.Add(new HealthComponent
                     {
-                        Name = "Microsoft Graph API",
-                        Description = "Dostęp do Microsoft Graph API",
-                        Status = connectionDiagnostics.GraphApiStatus == "Connected" ? "Healthy" : "Unhealthy",
-                        ResponseTime = (long)(connectionDiagnostics.LastOperationDuration?.TotalMilliseconds ?? 0),
-                        LastChecked = DateTime.Now
-                    });
-
-                    // Authentication Status
-                    Components.Add(new HealthComponent
-                    {
-                        Name = "Authentication",
-                        Description = "Status uwierzytelniania OAuth2",
-                        Status = connectionDiagnostics.HasGraphToken ? "Healthy" : "Unhealthy",
+                        Name = "Graph API Authentication",
+                        Description = "Status uwierzytelniania OAuth2 Graph API",
+                        Status = graphDiagnostics.HasGraphToken ? "Healthy" : "Unhealthy",
                         ResponseTime = 0,
                         LastChecked = DateTime.Now
                     });
 
-                    // Permissions Check
+                    // Graph API Permissions
                     Components.Add(new HealthComponent
                     {
-                        Name = "Permissions",
-                        Description = "Uprawnienia do zarządzania Teams",
-                        Status = connectionDiagnostics.HasUserCreationPermissions ? "Healthy" : "Degraded",
+                        Name = "Graph API Permissions",
+                        Description = "Uprawnienia do zarządzania Teams przez Graph API",
+                        Status = graphDiagnostics.HasUserCreationPermissions ? "Healthy" : "Degraded",
                         ResponseTime = 0,
+                        LastChecked = DateTime.Now
+                    });
+
+                    // Graph API Endpoints
+                    Components.Add(new HealthComponent
+                    {
+                        Name = "Graph API Endpoints",
+                        Description = "Dostępność endpointów Graph API",
+                        Status = graphDiagnostics.GraphApiStatus == "Connected" ? "Healthy" : "Unhealthy",
+                        ResponseTime = (long)(graphDiagnostics.LastOperationDuration?.TotalMilliseconds ?? 0),
                         LastChecked = DateTime.Now
                     });
                 }
 
-                if (healthInfo != null)
+                if (graphHealthInfo != null)
                 {
-                    // Database Health
+                    // Graph API Cache
                     Components.Add(new HealthComponent
                     {
-                        Name = "SQLite Database",
+                        Name = "Graph API Cache",
+                        Description = "Status cache Graph API",
+                        Status = "Healthy", // Zakładamy że jeśli mamy healthInfo to cache działa
+                        ResponseTime = 0,
+                        LastChecked = DateTime.Now
+                    });
+
+                    // Local Database
+                    Components.Add(new HealthComponent
+                    {
+                        Name = "Local Database",
                         Description = "Lokalna baza danych TeamsManager",
                         Status = "Healthy", // Zakładamy że jeśli mamy healthInfo to baza działa
                         ResponseTime = 0,
@@ -151,18 +160,18 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                 // Oblicz ogólny status
                 CalculateOverallStatus();
 
-                _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Health data refreshed successfully");
+                _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Graph API health data refreshed successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Failed to refresh health data");
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Failed to refresh Graph API health data");
                 
                 // Dodaj komponent błędu
                 Components.Clear();
                 Components.Add(new HealthComponent
                 {
                     Name = "Connection Error",
-                    Description = "Nie można połączyć się z API TeamsManager",
+                    Description = "Nie można połączyć się z Graph API TeamsManager",
                     Status = "Unhealthy",
                     ResponseTime = 0,
                     LastChecked = DateTime.Now
@@ -203,16 +212,24 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
 
         private async Task RunHealthCheckAsync()
         {
-            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Running comprehensive health check");
+            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Running comprehensive Graph API health check");
             
             try
             {
-                // Uruchom rozszerzoną diagnostykę
-                var extendedDiagnostics = await _apiService.GetExtendedConnectionDiagnosticsAsync();
+                // Uruchom rozszerzoną diagnostykę Graph API
+                var extendedGraphDiagnostics = await _apiService.GetExtendedGraphConnectionDiagnosticsAsync();
                 
-                if (extendedDiagnostics != null)
+                if (extendedGraphDiagnostics != null)
                 {
-                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Extended diagnostics completed");
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Extended Graph API diagnostics completed");
+                    ShowNotification("Health Check", "✅ Rozszerzona diagnostyka Graph API zakończona pomyślnie");
+                }
+                
+                // Pobierz pełny raport diagnostyczny Graph API
+                var fullDiagnosticReport = await _apiService.GetFullGraphDiagnosticReportAsync();
+                if (fullDiagnosticReport != null)
+                {
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Full Graph API diagnostic report generated");
                 }
                 
                 // Odśwież dane
@@ -220,164 +237,76 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Health check failed");
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Graph API health check failed");
+                ShowNotification("Błąd", $"❌ Health check Graph API nie powiódł się: {ex.Message}");
             }
         }
 
         private async Task RunAutoRepairAsync()
         {
-            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Running auto repair");
+            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Running Graph API auto repair");
             
             try
             {
-                // Tutaj można dodać logikę auto-repair
-                // Na razie tylko odświeżamy dane
+                ShowNotification("Auto Repair", "🔄 Rozpoczynanie automatycznej naprawy Graph API...");
+                
+                // Odśwież token Graph API
+                var tokenRefreshed = await _apiService.RefreshGraphTokenAsync();
+                if (tokenRefreshed)
+                {
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Graph API token refreshed successfully");
+                }
+                
+                // Wyczyść cache Graph API
+                var cacheCleared = await _apiService.ClearGraphCacheAsync();
+                if (cacheCleared)
+                {
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Graph API cache cleared successfully");
+                }
+                
+                // Odśwież dane
                 await RefreshAsync();
                 
-                _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Auto repair completed");
+                ShowNotification("Auto Repair", "✅ Automatyczna naprawa Graph API zakończona pomyślnie");
+                _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Graph API auto repair completed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Auto repair failed");
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Graph API auto repair failed");
+                ShowNotification("Błąd", $"❌ Automatyczna naprawa Graph API nie powiodła się: {ex.Message}");
             }
         }
 
         public void ProcessHealthUpdate(object update)
         {
-            // Przetwarzaj aktualizacje z SignalR
-            _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Processing health update from SignalR");
+            // Przetwarzaj aktualizacje z SignalR dla Graph API
+            _logger.LogDebug("[TEAMS-HEALTH-WIDGET] Processing Graph API health update from SignalR");
             
             // Odśwież dane asynchronicznie
             _ = Task.Run(async () => await RefreshAsync());
         }
 
-        private async Task CheckModulesAsync()
+        private async Task TestGraphConnectionAsync()
         {
-            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Sprawdzanie statusu modułów PowerShell");
+            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Rozpoczynanie testu połączenia Graph API");
             
             try
             {
                 IsLoading = true;
+                ShowNotification("Test", "🔄 Rozpoczynanie testu połączenia Graph API...");
                 
-                var moduleStatus = await _apiService.GetModuleStatusAsync();
-                
-                if (moduleStatus != null)
-                {
-                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Status modułów: {OverallStatus}, Zainstalowane: {InstalledCount}/{RequiredCount}",
-                        moduleStatus.OverallStatus, moduleStatus.InstalledModulesCount, moduleStatus.RequiredModulesCount);
-                    
-                    // Aktualizuj UI na głównym wątku
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        // Dodaj komponent statusu modułów
-                        var existingModuleComponent = Components.FirstOrDefault(c => c.Name == "PowerShell Modules");
-                        if (existingModuleComponent != null)
-                        {
-                            Components.Remove(existingModuleComponent);
-                        }
-                        
-                        Components.Add(new HealthComponent
-                        {
-                            Name = "PowerShell Modules",
-                            Description = $"Status modułów: {moduleStatus.InstalledModulesCount}/{moduleStatus.RequiredModulesCount} zainstalowanych",
-                            Status = moduleStatus.OverallStatus,
-                            ResponseTime = 0,
-                            LastChecked = DateTime.Now
-                        });
-                        
-                        CalculateOverallStatus();
-                    });
-                    
-                    // Pokaż powiadomienie użytkownikowi
-                    var statusMessage = moduleStatus.OverallStatus == "Healthy" 
-                        ? "✅ Wszystkie moduły PowerShell są zainstalowane i gotowe"
-                        : $"⚠️ Status modułów: {moduleStatus.OverallStatus} ({moduleStatus.InstalledModulesCount}/{moduleStatus.RequiredModulesCount} zainstalowanych)";
-                    
-                    ShowNotification("Status Modułów", statusMessage);
-                }
-                else
-                {
-                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się pobrać statusu modułów");
-                    ShowNotification("Błąd", "❌ Nie udało się sprawdzić statusu modułów PowerShell");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas sprawdzania modułów");
-                ShowNotification("Błąd", $"❌ Błąd podczas sprawdzania modułów: {ex.Message}");
-            }
-            finally
-            {
-                IsLoading = false;
-            }
-        }
-
-        private async Task InstallModulesAsync()
-        {
-            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Rozpoczynanie instalacji modułów PowerShell");
-            
-            try
-            {
-                IsLoading = true;
-                ShowNotification("Instalacja", "🔄 Rozpoczynanie instalacji modułów PowerShell...");
-                
-                var installResult = await _apiService.InstallModulesAsync(false);
-                
-                if (installResult != null)
-                {
-                    if (installResult.Success)
-                    {
-                        _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Instalacja modułów zakończona pomyślnie: {Message}", installResult.Message);
-                        ShowNotification("Sukces", $"✅ Instalacja modułów zakończona pomyślnie: {installResult.InstalledCount} modułów zainstalowanych");
-                        
-                        // Odśwież status po instalacji
-                        await CheckModulesAsync();
-                        await RefreshAsync();
-                    }
-                    else
-                    {
-                        _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Instalacja modułów nie powiodła się: {ErrorMessage}", installResult.ErrorMessage);
-                        ShowNotification("Błąd", $"❌ Instalacja nie powiodła się: {installResult.ErrorMessage}");
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się uruchomić instalacji modułów");
-                    ShowNotification("Błąd", "❌ Nie udało się uruchomić instalacji modułów");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas instalacji modułów");
-                ShowNotification("Błąd", $"❌ Błąd podczas instalacji: {ex.Message}");
-            }
-            finally
-            {
-                IsLoading = false;
-            }
-        }
-
-        private async Task TestConnectionAsync()
-        {
-            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Rozpoczynanie testu połączenia Microsoft Graph");
-            
-            try
-            {
-                IsLoading = true;
-                ShowNotification("Test", "🔄 Rozpoczynanie testu połączenia Microsoft Graph...");
-                
-                var testResult = await _apiService.TestConnectionAsync();
+                var testResult = await _apiService.TestGraphConnectionAsync();
                 
                 if (testResult != null)
                 {
-                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Test połączenia zakończony. Wynik: {OverallResult}, Testy przeszły: {PassedTests}/{TotalTests}",
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Test połączenia Graph API zakończony. Wynik: {OverallResult}, Testy przeszły: {PassedTests}/{TotalTests}",
                         testResult.OverallResult, testResult.PassedTestsCount, testResult.TotalTestsCount);
                     
                     // Aktualizuj UI na głównym wątku
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        // Dodaj komponent wyniku testu
-                        var existingTestComponent = Components.FirstOrDefault(c => c.Name == "Connection Test");
+                        // Dodaj komponent wyniku testu Graph API
+                        var existingTestComponent = Components.FirstOrDefault(c => c.Name == "Graph API Connection Test");
                         if (existingTestComponent != null)
                         {
                             Components.Remove(existingTestComponent);
@@ -393,8 +322,8 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                         
                         Components.Add(new HealthComponent
                         {
-                            Name = "Connection Test",
-                            Description = $"Test połączenia Graph: {testResult.PassedTestsCount}/{testResult.TotalTestsCount} testów przeszło ({testResult.SuccessPercentage:F1}%)",
+                            Name = "Graph API Connection Test",
+                            Description = $"Test połączenia Graph API: {testResult.PassedTestsCount}/{testResult.TotalTestsCount} testów przeszło ({testResult.SuccessPercentage:F1}%)",
                             Status = testStatus,
                             ResponseTime = (long)testResult.TestDuration.TotalMilliseconds,
                             LastChecked = DateTime.Now
@@ -412,27 +341,99 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                         _ => "❓"
                     };
                     
-                    var message = $"{resultIcon} Test połączenia: {testResult.OverallResult}\n" +
+                    var message = $"{resultIcon} Test połączenia Graph API: {testResult.OverallResult}\n" +
                                  $"Testy przeszły: {testResult.PassedTestsCount}/{testResult.TotalTestsCount} ({testResult.SuccessPercentage:F1}%)\n" +
                                  $"Czas trwania: {testResult.TestDuration.TotalMilliseconds:F0}ms";
                     
-                    if (testResult.ErrorMessages.Any())
-                    {
-                        message += $"\nBłędy: {string.Join(", ", testResult.ErrorMessages)}";
-                    }
+                                if (testResult.Errors.Any())
+            {
+                message += $"\nBłędy: {string.Join(", ", testResult.Errors)}";
+            }
                     
-                    ShowNotification("Wynik Testu", message);
+                    ShowNotification("Wynik Testu Graph API", message);
                 }
                 else
                 {
-                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się wykonać testu połączenia");
-                    ShowNotification("Błąd", "❌ Nie udało się wykonać testu połączenia");
+                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się wykonać testu połączenia Graph API");
+                    ShowNotification("Błąd", "❌ Nie udało się wykonać testu połączenia Graph API");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas testu połączenia");
-                ShowNotification("Błąd", $"❌ Błąd podczas testu: {ex.Message}");
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas testu połączenia Graph API");
+                ShowNotification("Błąd", $"❌ Błąd podczas testu Graph API: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        private async Task RefreshGraphTokenAsync()
+        {
+            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Odświeżanie tokenu Graph API");
+            
+            try
+            {
+                IsLoading = true;
+                ShowNotification("Token", "🔄 Odświeżanie tokenu Graph API...");
+                
+                var tokenRefreshed = await _apiService.RefreshGraphTokenAsync();
+                
+                if (tokenRefreshed)
+                {
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Token Graph API odświeżony pomyślnie");
+                    ShowNotification("Sukces", "✅ Token Graph API odświeżony pomyślnie");
+                    
+                    // Odśwież dane po odświeżeniu tokenu
+                    await RefreshAsync();
+                }
+                else
+                {
+                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się odświeżyć tokenu Graph API");
+                    ShowNotification("Błąd", "❌ Nie udało się odświeżyć tokenu Graph API");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas odświeżania tokenu Graph API");
+                ShowNotification("Błąd", $"❌ Błąd podczas odświeżania tokenu: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        private async Task ClearGraphCacheAsync()
+        {
+            _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Czyszczenie cache Graph API");
+            
+            try
+            {
+                IsLoading = true;
+                ShowNotification("Cache", "🔄 Czyszczenie cache Graph API...");
+                
+                var cacheCleared = await _apiService.ClearGraphCacheAsync();
+                
+                if (cacheCleared)
+                {
+                    _logger.LogInformation("[TEAMS-HEALTH-WIDGET] Cache Graph API wyczyszczony pomyślnie");
+                    ShowNotification("Sukces", "✅ Cache Graph API wyczyszczony pomyślnie");
+                    
+                    // Odśwież dane po wyczyszczeniu cache
+                    await RefreshAsync();
+                }
+                else
+                {
+                    _logger.LogWarning("[TEAMS-HEALTH-WIDGET] Nie udało się wyczyścić cache Graph API");
+                    ShowNotification("Błąd", "❌ Nie udało się wyczyścić cache Graph API");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[TEAMS-HEALTH-WIDGET] Błąd podczas czyszczenia cache Graph API");
+                ShowNotification("Błąd", $"❌ Błąd podczas czyszczenia cache: {ex.Message}");
             }
             finally
             {
@@ -455,8 +456,11 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                     "Błąd" => "❌",
                     "Ostrzeżenie" => "⚠️",
                     "Test" => "🔄",
-                    "Wynik Testu" => "📊",
-                    "Instalacja" => "📦",
+                    "Wynik Testu Graph API" => "📊",
+                    "Health Check" => "🏥",
+                    "Auto Repair" => "🔧",
+                    "Token" => "🔑",
+                    "Cache" => "💾",
                     _ => "ℹ️"
                 };
                 

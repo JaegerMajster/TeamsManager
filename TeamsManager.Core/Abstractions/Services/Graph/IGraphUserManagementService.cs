@@ -6,7 +6,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzający użytkownikami, członkostwem w zespołach i licencjami w Microsoft 365 przez Graph API
-    /// Zastępuje PowerShell implementację z pełnym wsparciem dla Graph API endpoints
+    /// Implementacja zarządzania użytkownikami z pełnym wsparciem dla Graph API endpoints
     /// </summary>
     public interface IGraphUserManagementService
     {
@@ -148,7 +148,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         Task<List<GraphUser>?> GetUsersByDepartmentAsync(string department);
 
         /// <summary>
-        /// Wylogowuje użytkownika ze wszystkich sesji (NOWA FUNKCJONALNOŚĆ vs PowerShell)
+        /// Wylogowuje użytkownika ze wszystkich sesji
         /// Graph API Endpoint: POST /v1.0/users/{user-id}/revokeSignInSessions
         /// </summary>
         /// <param name="userUpn">UPN użytkownika</param>
@@ -223,14 +223,14 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         /// </summary>
         /// <param name="userUpn">UPN użytkownika</param>
         /// <returns>Lista licencji lub null</returns>
-        Task<List<GraphLicense>?> GetUserLicensesAsync(string userUpn);
+        Task<List<License>?> GetUserLicensesAsync(string userUpn);
 
         /// <summary>
         /// Pobiera dostępne licencje M365 z cache (P0-CRITICAL)
         /// Graph API Endpoint: GET /v1.0/subscribedSkus
         /// </summary>
         /// <returns>Lista dostępnych licencji SKU</returns>
-        Task<List<GraphLicense>?> GetAvailableLicensesAsync();
+        Task<List<License>?> GetAvailableLicensesAsync();
 
         #endregion
     }

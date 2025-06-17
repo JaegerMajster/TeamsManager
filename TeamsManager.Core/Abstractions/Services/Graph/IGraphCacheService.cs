@@ -9,7 +9,7 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzający cache'owaniem danych Graph API
-    /// Zastępuje PowerShell cache z Graph API specyfiką (ETag support, rate limiting)
+    /// Cache service z Graph API specyfiką (ETag support, rate limiting)
     /// </summary>
     public interface IGraphCacheService
     {
@@ -198,14 +198,14 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         /// </summary>
         /// <param name="endpoint">Endpoint Graph API</param>
         /// <param name="rateLimitInfo">Informacje o rate limiting</param>
-        void SetRateLimitInfo(string endpoint, GraphRateLimitInfo rateLimitInfo);
+        void SetRateLimitInfo(string endpoint, GraphRateLimitStatus rateLimitInfo);
 
         /// <summary>
         /// Pobiera informacje o rate limiting dla endpointu
         /// </summary>
         /// <param name="endpoint">Endpoint Graph API</param>
         /// <returns>Informacje o rate limiting lub null</returns>
-        GraphRateLimitInfo? GetRateLimitInfo(string endpoint);
+        GraphRateLimitStatus? GetRateLimitInfo(string endpoint);
 
         #endregion
 
@@ -232,6 +232,148 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         /// <param name="key">Klucz cache</param>
         /// <returns>True jeśli cache wygasł</returns>
         bool IsCacheExpired(string key);
+
+        #endregion
+
+        #region Application-Specific Cache Invalidation
+
+        /// <summary>
+        /// Unieważnia cache dla konkretnego ustawienia aplikacji
+        /// Używane w ApplicationSettingService
+        /// </summary>
+        /// <param name="settingKey">Klucz ustawienia</param>
+        void InvalidateSettingByKey(string settingKey);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich list departamentów
+        /// Używane w DepartmentService
+        /// </summary>
+        void InvalidateAllDepartmentLists();
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych ustawień
+        /// Używane w ApplicationSettingService
+        /// </summary>
+        void InvalidateAllActiveSettingsList();
+
+        /// <summary>
+        /// Unieważnia cache ustawień według kategorii
+        /// Używane w ApplicationSettingService
+        /// </summary>
+        /// <param name="category">Kategoria ustawień</param>
+        void InvalidateSettingsByCategory(string category);
+
+        /// <summary>
+        /// Unieważnia cache konkretnego departamentu
+        /// Używane w DepartmentService
+        /// </summary>
+        /// <param name="departmentId">ID departamentu</param>
+        void InvalidateDepartment(string departmentId);
+
+        /// <summary>
+        /// Unieważnia cache użytkowników według roli
+        /// Używane w UserService
+        /// </summary>
+        /// <param name="role">Rola użytkownika</param>
+        void InvalidateUsersByRole(string role);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych użytkowników
+        /// Używane w UserService
+        /// </summary>
+        void InvalidateAllActiveUsersList();
+
+        /// <summary>
+        /// Unieważnia cache listy użytkowników
+        /// Używane w UserService
+        /// </summary>
+        void InvalidateUserListCache();
+
+        /// <summary>
+        /// Unieważnia cache użytkownika i powiązanych danych
+        /// Używane w UserService
+        /// </summary>
+        /// <param name="userId">ID użytkownika</param>
+        void InvalidateUserAndRelatedData(string userId);
+
+        /// <summary>
+        /// Unieważnia cache subdepartamentów
+        /// Używane w DepartmentService
+        /// </summary>
+        /// <param name="parentDepartmentId">ID departamentu nadrzędnego</param>
+        void InvalidateSubDepartments(string parentDepartmentId);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych lat szkolnych
+        /// Używane w SchoolYearService
+        /// </summary>
+        void InvalidateAllActiveSchoolYearsList();
+
+        /// <summary>
+        /// Unieważnia cache bieżącego roku szkolnego
+        /// Używane w SchoolYearService
+        /// </summary>
+        void InvalidateCurrentSchoolYear();
+
+        /// <summary>
+        /// Unieważnia cache roku szkolnego według ID
+        /// Używane w SchoolYearService
+        /// </summary>
+        /// <param name="schoolYearId">ID roku szkolnego</param>
+        void InvalidateSchoolYearById(string schoolYearId);
+
+        /// <summary>
+        /// Unieważnia cache nauczycieli dla przedmiotu
+        /// Używane w SubjectService
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu</param>
+        void InvalidateTeachersForSubject(string subjectId);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych przedmiotów
+        /// Używane w SubjectService
+        /// </summary>
+        void InvalidateAllActiveSubjectsList();
+
+        /// <summary>
+        /// Unieważnia cache przedmiotu według ID
+        /// Używane w SubjectService
+        /// </summary>
+        /// <param name="subjectId">ID przedmiotu</param>
+        void InvalidateSubjectById(string subjectId);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych typów szkół
+        /// Używane w SchoolTypeService
+        /// </summary>
+        void InvalidateAllActiveSchoolTypesList();
+
+        /// <summary>
+        /// Unieważnia cache typu szkoły według ID
+        /// Używane w SchoolTypeService
+        /// </summary>
+        /// <param name="schoolTypeId">ID typu szkoły</param>
+        void InvalidateSchoolTypeById(string schoolTypeId);
+
+        /// <summary>
+        /// Unieważnia cache szablonu zespołu według ID
+        /// Używane w TeamTemplateService
+        /// </summary>
+        /// <param name="templateId">ID szablonu</param>
+        void InvalidateTeamTemplateById(string templateId);
+
+        /// <summary>
+        /// Unieważnia cache wszystkich aktywnych szablonów zespołów
+        /// Używane w TeamTemplateService
+        /// </summary>
+        void InvalidateAllActiveTeamTemplatesList();
+
+        /// <summary>
+        /// Unieważnia cache szablonów zespołów według typu szkoły
+        /// Używane w TeamTemplateService
+        /// </summary>
+        /// <param name="schoolTypeId">ID typu szkoły</param>
+        void InvalidateTeamTemplatesBySchoolType(string schoolTypeId);
 
         #endregion
     }

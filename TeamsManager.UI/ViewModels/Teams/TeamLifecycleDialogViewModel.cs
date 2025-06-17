@@ -16,6 +16,7 @@ using ConsolidationOptions = TeamsManager.Core.Abstractions.Services.Consolidati
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.ViewModels;
+using TeamsManager.UI.Services.Abstractions;
 
 namespace TeamsManager.UI.ViewModels.Teams
 {
@@ -25,6 +26,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         private readonly ISchoolYearService _schoolYearService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamLifecycleDialogViewModel> _logger;
+        private readonly IMsalAuthService _msalAuthService;
         
         private CancellationTokenSource? _cancellationTokenSource;
         private string _selectedOperation = string.Empty;
@@ -61,12 +63,14 @@ namespace TeamsManager.UI.ViewModels.Teams
             ITeamLifecycleOrchestrator lifecycleOrchestrator,
             ISchoolYearService schoolYearService,
             ICurrentUserService currentUserService,
-            ILogger<TeamLifecycleDialogViewModel> logger)
+            ILogger<TeamLifecycleDialogViewModel> logger,
+            IMsalAuthService msalAuthService)
         {
             _lifecycleOrchestrator = lifecycleOrchestrator;
             _schoolYearService = schoolYearService;
             _currentUserService = currentUserService;
             _logger = logger;
+            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
 
             SelectedTeams = new ObservableCollection<Team>();
             AvailableSchoolYears = new ObservableCollection<SchoolYear>();
@@ -625,11 +629,27 @@ namespace TeamsManager.UI.ViewModels.Teams
             ProgressStatus = "Anulowanie operacji...";
         }
 
-        private async Task<string> GetAccessTokenAsync()
+        /// <summary>
+        /// Pobiera token dostępu z MSAL Auth Service
+        /// </summary>
+        private async Task<string?> GetAccessTokenAsync()
         {
-            // TODO: Implementacja pobierania tokenu dostępu
-            // Należy zaimplementować w oparciu o istniejący mechanizm w aplikacji
-            return await Task.FromResult(string.Empty);
+            try
+            {
+                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
+                if (authResult?.AccessToken != null)
+                {
+                    return authResult.AccessToken;
+                }
+
+                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
+                return null;
+            }
         }
 
         #endregion

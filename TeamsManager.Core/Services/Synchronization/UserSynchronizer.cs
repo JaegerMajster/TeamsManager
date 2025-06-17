@@ -1,10 +1,11 @@
 using System;
-using System.Management.Automation;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Helpers.PowerShell;
+
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services.Synchronization
 {
@@ -12,7 +13,7 @@ namespace TeamsManager.Core.Services.Synchronization
     /// Implementacja synchronizatora dla użytkowników Microsoft 365.
     /// KRYTYCZNE: Nie nadpisuje soft-deleted users!
     /// </summary>
-    public class UserSynchronizer : GraphSynchronizerBase<User>
+    public class UserSynchronizer : GraphSynchronizerBase<User, GraphUser>
     {
         private readonly ILogger<UserSynchronizer> _userLogger;
 
@@ -23,7 +24,7 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public override void MapProperties(PSObject graphObject, User entity, bool isUpdate = false)
+        public override void MapProperties(GraphUser graphObject, User entity, bool isUpdate = false)
         {
             // KRYTYCZNE: Jeśli użytkownik jest soft-deleted, NIE synchronizuj
             if (isUpdate && !entity.IsActive)
@@ -36,57 +37,44 @@ namespace TeamsManager.Core.Services.Synchronization
             entity.ExternalId = GetGraphId(graphObject);
             
             // Mapowanie imienia i nazwiska
-            var givenName = GetPropertyValue<string>(graphObject, "GivenName", string.Empty);
-            var surname = GetPropertyValue<string>(graphObject, "Surname", string.Empty);
-            entity.FirstName = givenName ?? string.Empty;
-            entity.LastName = surname ?? string.Empty;
+            entity.FirstName = graphObject.GivenName ?? string.Empty;
+            entity.LastName = graphObject.Surname ?? string.Empty;
             
             // UPN - krytyczne pole
-            var upn = GetPropertyValue<string>(graphObject, "UserPrincipalName", string.Empty);
-            if (!string.IsNullOrEmpty(upn))
+            if (!string.IsNullOrEmpty(graphObject.UserPrincipalName))
             {
-                entity.UPN = upn;
+                entity.UPN = graphObject.UserPrincipalName;
             }
             
             // Dane kontaktowe
-            entity.Phone = GetPropertyValue<string>(graphObject, "MobilePhone") 
-                          ?? GetPropertyValue<string>(graphObject, "BusinessPhones[0]");
-            entity.AlternateEmail = GetPropertyValue<string>(graphObject, "Mail");
-            
-            // Department z Graph
-            var department = GetPropertyValue<string>(graphObject, "Department");
-            // UWAGA: DepartmentId wymaga dodatkowego mapowania - nie synchronizujemy tutaj
+            entity.Phone = graphObject.MobilePhone ?? graphObject.BusinessPhones?.FirstOrDefault();
+            entity.AlternateEmail = graphObject.Mail;
             
             // Stanowisko
-            entity.Position = GetPropertyValue<string>(graphObject, "JobTitle");
+            entity.Position = graphObject.JobTitle;
             
             // Status konta w M365
-            var accountEnabled = GetPropertyValue<bool>(graphObject, "AccountEnabled", true);
-            if (!accountEnabled && entity.IsActive)
+            if (!graphObject.AccountEnabled && entity.IsActive)
             {
                 _userLogger.LogWarning("Użytkownik {UPN} jest wyłączony w M365 ale aktywny lokalnie", entity.UPN);
                 // NIE zmieniamy IsActive automatycznie - to wymaga świadomej decyzji
             }
             
             // Daty
-            var createdDateTime = GetPropertyValue<DateTime?>(graphObject, "CreatedDateTime");
-            if (createdDateTime.HasValue && !isUpdate)
+            if (graphObject.CreatedDateTime.HasValue && !isUpdate)
             {
-                entity.CreatedDate = createdDateTime.Value.ToUniversalTime();
+                entity.CreatedDate = graphObject.CreatedDateTime.Value.ToUniversalTime();
             }
-            
-            // Rozszerzone właściwości
-            MapExtendedProperties(graphObject, entity);
             
             _userLogger.LogDebug("Zmapowano właściwości użytkownika {UPN} (ID: {UserId})", 
                 entity.UPN, entity.ExternalId);
         }
 
         /// <inheritdoc />
-        public override void ValidateGraphObject(PSObject graphObject)
+        public override void ValidateGraphObject(GraphUser graphObject)
         {
             var id = GetGraphId(graphObject);
-            var upn = GetPropertyValue<string>(graphObject, "UserPrincipalName");
+            var upn = graphObject.UserPrincipalName;
 
             if (string.IsNullOrEmpty(id))
             {
@@ -144,13 +132,13 @@ namespace TeamsManager.Core.Services.Synchronization
             return await Task.FromResult(hasChanges);
         }
 
-        private void MapExtendedProperties(PSObject graphObject, User entity)
+        private void MapExtendedProperties(GraphUser graphObject, User entity)
         {
             try
             {
                 // Mapowanie rozszerzonych atrybutów jeśli dostępne
-                var onPremisesDomainName = GetPropertyValue<string>(graphObject, "OnPremisesDomainName");
-                var onPremisesSamAccountName = GetPropertyValue<string>(graphObject, "OnPremisesSamAccountName");
+                string? onPremisesDomainName = null;
+                string? onPremisesSamAccountName = null;
                 
                 // Można rozszerzyć model User o te właściwości jeśli potrzebne
                 
@@ -163,7 +151,7 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        protected override async Task PerformAdditionalSynchronizationAsync(PSObject graphObject, User entity, bool isUpdate)
+        protected override async Task PerformAdditionalSynchronizationAsync(GraphUser graphObject, User entity, bool isUpdate)
         {
             // W przyszłości można tutaj dodać:
             // 1. Synchronizację grup użytkownika
@@ -174,5 +162,12 @@ namespace TeamsManager.Core.Services.Synchronization
             _userLogger.LogDebug("Dodatkowa synchronizacja dla użytkownika {UPN} - obecnie pominięta", entity.UPN);
             await Task.CompletedTask;
         }
+
+        /// <inheritdoc />
+        public override string GetGraphId(GraphUser graphObject)
+        {
+            return graphObject?.Id ?? string.Empty;
+        }
     }
 } 
+

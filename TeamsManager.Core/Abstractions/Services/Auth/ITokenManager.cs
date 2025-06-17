@@ -5,7 +5,7 @@ using Microsoft.Identity.Client;
 namespace TeamsManager.Core.Abstractions.Services.Auth
 {
     /// <summary>
-    /// Zarządza tokenami dostępu do Microsoft Graph dla PowerShell
+    /// Zarządza tokenami dostępu do Microsoft Graph
     /// </summary>
     public interface ITokenManager
     {

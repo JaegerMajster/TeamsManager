@@ -53,15 +53,15 @@ namespace TeamsManager.Tests.Services
             {
                 new HealthCheckDetail
                 {
-                    ComponentName = "PowerShell",
-                    Status = TeamsManager.Core.Models.HealthStatus.Healthy,
-                    Description = "PowerShell connection is healthy",
+                    ComponentName = "Graph API",
+                    Status = TeamsManager.Core.Enums.HealthStatus.Healthy,
+                    Description = "Graph API connection is healthy",
                     DurationMs = 150
                 },
                 new HealthCheckDetail
                 {
                     ComponentName = "Cache",
-                    Status = TeamsManager.Core.Models.HealthStatus.Healthy,
+                    Status = TeamsManager.Core.Enums.HealthStatus.Healthy,
                     Description = "Cache performance is optimal",
                     DurationMs = 75
                 }
@@ -93,9 +93,9 @@ namespace TeamsManager.Tests.Services
                 {
                     new HealthCheckDetail
                     {
-                        ComponentName = "PowerShell",
-                        Status = TeamsManager.Core.Models.HealthStatus.Unhealthy,
-                        Description = "PowerShell connection failed",
+                        ComponentName = "Graph API",
+                        Status = TeamsManager.Core.Enums.HealthStatus.Unhealthy,
+                        Description = "Graph API connection failed",
                         DurationMs = 5000
                     }
                 }
@@ -277,8 +277,8 @@ namespace TeamsManager.Tests.Services
             var healthResult = HealthOperationResult.CreateSuccess("ComprehensiveHealthCheck");
             healthResult.HealthChecks = new List<HealthCheckDetail>
             {
-                new HealthCheckDetail { ComponentName = "PowerShell", Status = TeamsManager.Core.Models.HealthStatus.Healthy },
-                new HealthCheckDetail { ComponentName = "Cache", Status = TeamsManager.Core.Models.HealthStatus.Degraded }
+                new HealthCheckDetail { ComponentName = "Graph API", Status = TeamsManager.Core.Enums.HealthStatus.Healthy },
+                new HealthCheckDetail { ComponentName = "Cache", Status = TeamsManager.Core.Enums.HealthStatus.Degraded }
             };
 
             var activeOperations = new List<OperationHistory>

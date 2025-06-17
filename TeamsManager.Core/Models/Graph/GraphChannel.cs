@@ -89,6 +89,11 @@ namespace TeamsManager.Core.Models.Graph
         public bool IsReadOnly { get; set; }
 
         /// <summary>
+        /// Czy kanał jest domyślnie ulubiony dla nowych członków zespołu.
+        /// </summary>
+        public bool IsFavoriteByDefault { get; set; }
+
+        /// <summary>
         /// Ustawienia kanału.
         /// </summary>
         public GraphChannelSettings? Settings { get; set; }
@@ -125,7 +130,7 @@ namespace TeamsManager.Core.Models.Graph
                 IsPrivate = IsPrivate,
                 IsReadOnly = IsReadOnly,
                 Status = IsActive ? ChannelStatus.Active : ChannelStatus.Archived,
-                CreatedAt = CreatedDateTime ?? DateTime.UtcNow,
+                CreatedDate = CreatedDateTime ?? DateTime.UtcNow,
                 // Mapowanie statystyk jeśli dostępne
                 MessageCount = Stats?.MessageCount ?? 0,
                 FilesCount = Stats?.FilesCount ?? 0,
@@ -152,7 +157,7 @@ namespace TeamsManager.Core.Models.Graph
                 IsReadOnly = channel.IsReadOnly,
                 IsActive = channel.IsActive,
                 MembershipType = channel.IsPrivate ? "private" : "standard",
-                CreatedDateTime = channel.CreatedAt,
+                CreatedDateTime = channel.CreatedDate,
                 Stats = new GraphChannelStats
                 {
                     MessageCount = channel.MessageCount,
@@ -308,9 +313,34 @@ namespace TeamsManager.Core.Models.Graph
         public bool? AllowNewMessageFromConnectors { get; set; }
 
         /// <summary>
-        /// Czy można @wspominać o całym kanale.
+        /// Czy członkowie mogą wspominać kanał.
         /// </summary>
         public bool? AllowChannelMentions { get; set; }
+
+        /// <summary>
+        /// Ustawienia powiadomień kanału.
+        /// </summary>
+        public object? NotificationSettings { get; set; }
+
+        /// <summary>
+        /// Czy moderacja jest włączona dla kanału.
+        /// </summary>
+        public bool? IsModerationEnabled { get; set; }
+
+        /// <summary>
+        /// Kategoria kanału.
+        /// </summary>
+        public string? Category { get; set; }
+
+        /// <summary>
+        /// Tagi kanału.
+        /// </summary>
+        public List<string>? Tags { get; set; }
+
+        /// <summary>
+        /// Kolejność sortowania kanału.
+        /// </summary>
+        public int? SortOrder { get; set; }
 
         /// <summary>
         /// Dodatkowe ustawienia kanału.

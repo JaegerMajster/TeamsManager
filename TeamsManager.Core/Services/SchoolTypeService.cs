@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 
@@ -24,7 +24,7 @@ namespace TeamsManager.Core.Services
         private readonly INotificationService _notificationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<SchoolTypeService> _logger;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
         // Definicje kluczy cache
         private const string AllSchoolTypesCacheKey = "SchoolTypes_AllActive";
@@ -40,7 +40,7 @@ namespace TeamsManager.Core.Services
             INotificationService notificationService,
             ICurrentUserService currentUserService,
             ILogger<SchoolTypeService> logger,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -48,7 +48,7 @@ namespace TeamsManager.Core.Services
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
 
@@ -66,7 +66,7 @@ namespace TeamsManager.Core.Services
 
             string cacheKey = SchoolTypeByIdCacheKeyPrefix + schoolTypeId;
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(cacheKey, out SchoolType? cachedSchoolType))
+            if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out SchoolType? cachedSchoolType))
             {
                 _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} znaleziony w cache.", schoolTypeId);
                 return cachedSchoolType;
@@ -80,13 +80,13 @@ namespace TeamsManager.Core.Services
 
             if (schoolTypeFromDb != null && schoolTypeFromDb.IsActive) // Cache'ujemy tylko aktywne typy po ID
             {
-                _powerShellCacheService.Set(cacheKey, schoolTypeFromDb);
+                _graphCacheService.Set(cacheKey, schoolTypeFromDb);
                 _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} dodany do cache.", schoolTypeId);
             }
             else
             {
                 // Jeśli typ szkoły nie istnieje lub jest nieaktywny, usuwamy go z cache.
-                _powerShellCacheService.Remove(cacheKey);
+                _graphCacheService.Remove(cacheKey);
                 if (schoolTypeFromDb != null && !schoolTypeFromDb.IsActive)
                 {
                     _logger.LogDebug("Typ szkoły ID: {SchoolTypeId} jest nieaktywny, nie zostanie zcache'owany po ID.", schoolTypeId);
@@ -103,7 +103,7 @@ namespace TeamsManager.Core.Services
         {
             _logger.LogInformation("Pobieranie wszystkich aktywnych typów szkół. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
-            if (!forceRefresh && _powerShellCacheService.TryGetValue(AllSchoolTypesCacheKey, out IEnumerable<SchoolType>? cachedSchoolTypes) && cachedSchoolTypes != null)
+            if (!forceRefresh && _graphCacheService.TryGetValue(AllSchoolTypesCacheKey, out IEnumerable<SchoolType>? cachedSchoolTypes) && cachedSchoolTypes != null)
             {
                 _logger.LogDebug("Wszystkie aktywne typy szkół znalezione w cache.");
                 return cachedSchoolTypes;
@@ -112,7 +112,7 @@ namespace TeamsManager.Core.Services
             _logger.LogDebug("Wszystkie aktywne typy szkół nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
             var schoolTypesFromDb = await _schoolTypeRepository.FindAsync(st => st.IsActive);
 
-            _powerShellCacheService.Set(AllSchoolTypesCacheKey, schoolTypesFromDb);
+            _graphCacheService.Set(AllSchoolTypesCacheKey, schoolTypesFromDb);
             _logger.LogDebug("Wszystkie aktywne typy szkół dodane do cache.");
 
             return schoolTypesFromDb;
@@ -584,7 +584,7 @@ namespace TeamsManager.Core.Services
         }
 
         /// <summary>
-        /// Unieważnia cache dla typów szkół używając granularnej inwalidacji PowerShellCacheService.
+        /// Unieważnia cache dla typów szkół używając granularnej inwalidacji GraphCacheService.
         /// </summary>
         /// <param name="schoolTypeId">ID typu szkoły do granularnej inwalidacji</param>
         /// <param name="invalidateAll">Czy wykonać globalne resetowanie (tylko dla RefreshCacheAsync)</param>
@@ -595,18 +595,18 @@ namespace TeamsManager.Core.Services
             if (invalidateAll)
             {
                 // TYLKO dla RefreshCacheAsync() - globalne resetowanie
-                _powerShellCacheService.InvalidateAllCache();
-                _logger.LogDebug("Wykonano globalne resetowanie cache przez PowerShellCacheService.");
+                _graphCacheService.InvalidateAllCache();
+                _logger.LogDebug("Wykonano globalne resetowanie cache przez GraphCacheService.");
                 return;
             }
 
-            // GRANULARNA inwalidacja przez PowerShellCacheService
-            _powerShellCacheService.InvalidateAllActiveSchoolTypesList();
+            // GRANULARNA inwalidacja przez GraphCacheService
+            _graphCacheService.InvalidateAllActiveSchoolTypesList();
             _logger.LogDebug("Unieważniono listę wszystkich aktywnych typów szkół.");
 
             if (!string.IsNullOrWhiteSpace(schoolTypeId))
             {
-                _powerShellCacheService.InvalidateSchoolTypeById(schoolTypeId);
+                _graphCacheService.InvalidateSchoolTypeById(schoolTypeId);
                 _logger.LogDebug("Unieważniono cache typu szkoły ID: {SchoolTypeId}", schoolTypeId);
             }
         }

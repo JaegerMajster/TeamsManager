@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions.Services.Auth;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services.Auth
 {
@@ -14,27 +15,20 @@ namespace TeamsManager.Core.Services.Auth
         private readonly IMemoryCache _cache;
         private readonly ILogger<TokenManager> _logger;
         private readonly IConfiguration _configuration;
+        private readonly GraphApiConfiguration _graphConfig;
         
-        // Scopes dla PowerShell Microsoft Graph
-        private readonly string[] _graphPowerShellScopes = new[] { 
-            "https://graph.microsoft.com/User.Read", 
-            "https://graph.microsoft.com/Group.ReadWrite.All", 
-            "https://graph.microsoft.com/Team.ReadBasic.All",
-            "https://graph.microsoft.com/TeamSettings.ReadWrite.All",
-            "https://graph.microsoft.com/Channel.ReadBasic.All",
-            "https://graph.microsoft.com/ChannelSettings.ReadWrite.All"
-        };
-
         public TokenManager(
             IConfidentialClientApplication confidentialClientApp,
             IMemoryCache cache,
             ILogger<TokenManager> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            GraphApiConfiguration? graphConfig = null)
         {
             _confidentialClientApp = confidentialClientApp ?? throw new ArgumentNullException(nameof(confidentialClientApp));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _graphConfig = graphConfig ?? new GraphApiConfiguration();
         }
 
         public async Task<string?> GetValidAccessTokenAsync(string userUpn, string apiAccessToken)
@@ -63,9 +57,9 @@ namespace TeamsManager.Core.Services.Auth
 
             try
             {
-                // Pobierz nowy token przez OBO flow
+                // Pobierz nowy token przez OBO flow - używamy centralnych scope'ów
                 var userAssertion = new UserAssertion(apiAccessToken);
-                var builder = _confidentialClientApp?.AcquireTokenOnBehalfOf(_graphPowerShellScopes, userAssertion);
+                var builder = _confidentialClientApp?.AcquireTokenOnBehalfOf(_graphConfig.Scopes.DelegatedPermissions, userAssertion);
                 
                 if (builder == null)
                 {
@@ -102,7 +96,7 @@ namespace TeamsManager.Core.Services.Auth
                     return false;
                 }
 
-                var builder = _confidentialClientApp?.AcquireTokenSilent(_graphPowerShellScopes, account);
+                var builder = _confidentialClientApp?.AcquireTokenSilent(_graphConfig.Scopes.DelegatedPermissions, account);
                 
                 if (builder == null)
                 {

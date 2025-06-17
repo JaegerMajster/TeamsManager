@@ -105,7 +105,7 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Informacje o rate limiting.
         /// </summary>
-        public GraphRateLimitInfo? RateLimitInfo { get; set; }
+        public GraphRateLimitStatus? RateLimitInfo { get; set; }
 
         /// <summary>
         /// Dodatkowe metadane operacji.
@@ -568,6 +568,11 @@ namespace TeamsManager.Core.Models.Graph
         public bool Success { get; set; }
 
         /// <summary>
+        /// Czy warming zakończył się sukcesem (alias dla Success).
+        /// </summary>
+        public bool IsSuccessful { get; set; }
+
+        /// <summary>
         /// Liczba endpointów, które zostały przygotowane.
         /// </summary>
         public int WarmedEndpoints { get; set; }
@@ -583,9 +588,24 @@ namespace TeamsManager.Core.Models.Graph
         public long DurationMs { get; set; }
 
         /// <summary>
+        /// Czas wykonania w milisekundach (alias dla DurationMs).
+        /// </summary>
+        public long ExecutionTimeMs { get; set; }
+
+        /// <summary>
         /// Lista błędów podczas warming.
         /// </summary>
         public List<string> Errors { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Komunikat błędu (pierwszy błąd z listy).
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// Liczba elementów w cache po warming.
+        /// </summary>
+        public int CachedItemsCount { get; set; }
 
         /// <summary>
         /// Wskaźnik sukcesu (0-100%).

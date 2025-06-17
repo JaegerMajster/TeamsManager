@@ -1,10 +1,11 @@
 using System;
-using System.Management.Automation;
+
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Helpers.PowerShell;
+
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services.Synchronization
 {
@@ -12,7 +13,7 @@ namespace TeamsManager.Core.Services.Synchronization
     /// Implementacja synchronizatora dla zespołów Microsoft Teams.
     /// Mapuje dane z Microsoft Graph do lokalnej encji Team.
     /// </summary>
-    public class TeamSynchronizer : GraphSynchronizerBase<Team>
+    public class TeamSynchronizer : GraphSynchronizerBase<Team, GraphTeam>
     {
         private readonly ILogger<TeamSynchronizer> _teamLogger;
 
@@ -23,19 +24,18 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public override void MapProperties(PSObject graphObject, Team entity, bool isUpdate = false)
+        public override void MapProperties(GraphTeam graphObject, Team entity, bool isUpdate = false)
         {
             // Podstawowe właściwości zespołu
             entity.ExternalId = GetGraphId(graphObject);
-            entity.DisplayName = GetPropertyValue<string>(graphObject, "DisplayName", string.Empty) ?? string.Empty;
-            entity.Description = GetPropertyValue<string>(graphObject, "Description", string.Empty) ?? string.Empty;
+            entity.DisplayName = graphObject.DisplayName ?? string.Empty;
+            entity.Description = graphObject.Description ?? string.Empty;
             
             // Widoczność zespołu
-            var visibilityString = GetPropertyValue<string>(graphObject, "Visibility", "Private");
-            entity.Visibility = ParseVisibility(visibilityString);
+            entity.Visibility = ParseVisibility(graphObject.Visibility);
 
             // Status archiwizacji
-            var isArchived = GetPropertyValue<bool>(graphObject, "IsArchived", false);
+            var isArchived = graphObject.IsArchived;
             
             // WAŻNE: Obsługa statusu i prefiksów archiwizacji
             if (isArchived && entity.Status != TeamStatus.Archived)
@@ -66,37 +66,33 @@ namespace TeamsManager.Core.Services.Synchronization
                 entity.Description = entity.GetBaseDescription();
             }
 
+            // Daty utworzenia/modyfikacji z Graph
+            if (graphObject.CreatedDateTime.HasValue && !isUpdate)
+            {
+                entity.CreatedDate = graphObject.CreatedDateTime.Value.ToUniversalTime();
+            }
+
             // Właściciel zespołu - może wymagać dodatkowego wywołania API
-            var owners = GetPropertyValue<object[]>(graphObject, "Owners", null);
+            string[]? owners = null;
             if (owners != null && owners.Length > 0)
             {
                 // Pobierz pierwszy UPN właściciela jeśli dostępny
-                if (owners[0] is PSObject ownerObj)
+                var firstOwner = owners[0];
+                if (!string.IsNullOrEmpty(firstOwner))
                 {
-                    var ownerUpn = PSObjectMapper.GetString(ownerObj, "UserPrincipalName");
-                    if (!string.IsNullOrEmpty(ownerUpn))
-                    {
-                        entity.Owner = ownerUpn;
-                    }
+                    // Zakładamy że owners zawiera UPN-y jako stringi
+                    entity.Owner = firstOwner;
                 }
             }
 
-            // Daty utworzenia/modyfikacji z Graph
-            var createdDateTime = GetPropertyValue<DateTime?>(graphObject, "CreatedDateTime", null);
-            if (createdDateTime.HasValue && !isUpdate)
-            {
-                entity.CreatedDate = createdDateTime.Value.ToUniversalTime();
-            }
-
             // Dodatkowe właściwości Teams
-            var teamSettings = GetPropertyValue<PSObject>(graphObject, "TeamSettings", null);
+            object? teamSettings = null;
             if (teamSettings != null)
             {
                 MapTeamSettings(teamSettings, entity);
             }
 
-            // Statystyki zespołu
-            var memberCount = GetPropertyValue<int?>(graphObject, "MemberCount", null);
+            int? memberCount = null;
             if (memberCount.HasValue)
             {
                 // Można użyć do walidacji czy lokalna liczba członków jest aktualna
@@ -104,15 +100,22 @@ namespace TeamsManager.Core.Services.Synchronization
                     entity.ExternalId, memberCount.Value);
             }
 
+            // Dodatkowe mapowanie
+            string? displayName = graphObject.DisplayName;
+            if (!string.IsNullOrEmpty(displayName))
+            {
+                entity.DisplayName = displayName;
+            }
+
             _teamLogger.LogDebug("Zmapowano właściwości zespołu {TeamId} ({DisplayName})", 
                 entity.ExternalId, entity.DisplayName);
         }
 
         /// <inheritdoc />
-        public override void ValidateGraphObject(PSObject graphObject)
+        public override void ValidateGraphObject(GraphTeam graphObject)
         {
             var id = GetGraphId(graphObject);
-            var displayName = GetPropertyValue<string>(graphObject, "DisplayName", null);
+            string? displayName = null;
 
             if (string.IsNullOrEmpty(id))
             {
@@ -181,25 +184,25 @@ namespace TeamsManager.Core.Services.Synchronization
         /// <summary>
         /// Mapuje ustawienia zespołu z obiektu TeamSettings.
         /// </summary>
-        private void MapTeamSettings(PSObject teamSettings, Team entity)
+        private void MapTeamSettings(object? teamSettings, Team entity)
         {
             try
             {
                 // Mapowanie ustawień członkostwa
-                var memberSettings = GetPropertyValue<PSObject>(teamSettings, "MemberSettings", null);
+                object? memberSettings = null;
                 if (memberSettings != null)
                 {
-                    var allowCreateUpdateChannels = PSObjectMapper.GetBoolean(memberSettings, "AllowCreateUpdateChannels", true);
-                    var allowDeleteChannels = PSObjectMapper.GetBoolean(memberSettings, "AllowDeleteChannels", true);
+                    var allowCreateUpdateChannels = GetPropertyValueFromObject<bool>(memberSettings, "AllowCreateUpdateChannels", true);
+                    var allowDeleteChannels = GetPropertyValueFromObject<bool>(memberSettings, "AllowDeleteChannels", true);
                     // Można rozszerzyć model Team o te właściwości jeśli potrzebne
                 }
 
                 // Mapowanie ustawień wiadomości
-                var messagingSettings = GetPropertyValue<PSObject>(teamSettings, "MessagingSettings", null);
+                object? messagingSettings = null;
                 if (messagingSettings != null)
                 {
-                    var allowUserEditMessages = PSObjectMapper.GetBoolean(messagingSettings, "AllowUserEditMessages", true);
-                    var allowUserDeleteMessages = PSObjectMapper.GetBoolean(messagingSettings, "AllowUserDeleteMessages", true);
+                    var allowUserEditMessages = GetPropertyValueFromObject<bool>(messagingSettings, "AllowUserEditMessages", true);
+                    var allowUserDeleteMessages = GetPropertyValueFromObject<bool>(messagingSettings, "AllowUserDeleteMessages", true);
                     // Można rozszerzyć model Team o te właściwości jeśli potrzebne
                 }
 
@@ -209,6 +212,31 @@ namespace TeamsManager.Core.Services.Synchronization
             {
                 _teamLogger.LogWarning(ex, "Nie udało się zmapować wszystkich ustawień zespołu {TeamId}", 
                     entity.ExternalId);
+            }
+        }
+
+        /// <summary>
+        /// Pobiera wartość właściwości z obiektu dynamic.
+        /// </summary>
+        private TValue? GetPropertyValueFromObject<TValue>(object? obj, string propertyName, TValue? defaultValue = default)
+        {
+            if (obj == null) return defaultValue;
+            
+            try
+            {
+                dynamic dynamicObj = obj;
+                var property = dynamicObj.GetType().GetProperty(propertyName);
+                if (property != null)
+                {
+                    var value = property.GetValue(dynamicObj);
+                    if (value is TValue typedValue)
+                        return typedValue;
+                }
+                return defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
             }
         }
 
@@ -229,7 +257,7 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        protected override async Task PerformAdditionalSynchronizationAsync(PSObject graphObject, Team entity, bool isUpdate)
+        protected override async Task PerformAdditionalSynchronizationAsync(GraphTeam graphObject, Team entity, bool isUpdate)
         {
             // W przyszłości można tutaj dodać:
             // 1. Synchronizację członków zespołu
@@ -241,6 +269,12 @@ namespace TeamsManager.Core.Services.Synchronization
                 entity.ExternalId);
 
             await Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        public override string GetGraphId(GraphTeam graphObject)
+        {
+            return graphObject?.Id ?? string.Empty;
         }
     }
 } 

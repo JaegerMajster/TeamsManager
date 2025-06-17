@@ -8,21 +8,22 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.Core.Enums;
 
 namespace TeamsManager.Application.Services
 {
     /// <summary>
     /// Orkiestrator monitorowania zdrowia systemu TeamsManager
-    /// Skupiony na kluczowych komponentach: PowerShell, Graph API, Teams Operations, Authentication
+    /// Skupiony na kluczowych komponentach: Graph API, Teams Operations, Authentication
     /// </summary>
     public class TeamsManagerHealthOrchestrator : IHealthMonitoringOrchestrator
     {
-        private readonly IPowerShellConnectionService _powerShellConnectionService;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphConnectionService _graphConnectionService;
+        private readonly IGraphCacheService _graphCacheService;
         private readonly ICacheInvalidationService _cacheInvalidationService;
         private readonly IOperationHistoryService _operationHistoryService;
         private readonly ICurrentUserService _currentUserService;
@@ -35,16 +36,16 @@ namespace TeamsManager.Application.Services
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _cancellationTokens;
 
         public TeamsManagerHealthOrchestrator(
-            IPowerShellConnectionService powerShellConnectionService,
-            IPowerShellCacheService powerShellCacheService,
+            IGraphConnectionService graphConnectionService,
+            IGraphCacheService graphCacheService,
             ICacheInvalidationService cacheInvalidationService,
             IOperationHistoryService operationHistoryService,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
             ILogger<TeamsManagerHealthOrchestrator> logger)
         {
-            _powerShellConnectionService = powerShellConnectionService ?? throw new ArgumentNullException(nameof(powerShellConnectionService));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphConnectionService = graphConnectionService ?? throw new ArgumentNullException(nameof(graphConnectionService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService));
             _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
@@ -72,7 +73,7 @@ namespace TeamsManager.Application.Services
                 Status = "Running",
                 CurrentOperation = "Inicjalizacja sprawdzenia zdrowia TeamsManager",
                 StartedAt = DateTime.UtcNow,
-                TotalComponents = 5 // PowerShell, Graph API, Authentication, Cache, Database
+                TotalComponents = 4 // Graph API, Authentication, Cache, Database
             };
 
             _activeProcesses[processId] = processStatus;
@@ -91,10 +92,10 @@ namespace TeamsManager.Application.Services
                 var result = HealthOperationResult.CreateSuccess("TeamsManagerHealthCheck");
                 var healthChecks = new List<HealthCheckDetail>();
 
-                // 1. Sprawdź PowerShell Connection (najważniejsze)
-                await UpdateProcessStatusAsync(processId, "Sprawdzanie połączenia PowerShell z Microsoft Graph", 1);
-                var powerShellCheck = await CheckPowerShellGraphConnectionAsync(cts.Token);
-                healthChecks.Add(powerShellCheck);
+                            // 1. Sprawdź Graph API Connection (najważniejsze)
+            await UpdateProcessStatusAsync(processId, "Sprawdzanie połączenia z Microsoft Graph", 1);
+            var graphCheck = await CheckGraphConnectionAsync(cts.Token);
+            healthChecks.Add(graphCheck);
 
                 // 2. Sprawdź Microsoft Graph API Health
                 await UpdateProcessStatusAsync(processId, "Sprawdzanie dostępności Microsoft Graph API", 2);
@@ -199,10 +200,10 @@ namespace TeamsManager.Application.Services
 
                 var result = HealthOperationResult.CreateSuccess("TeamsManagerAutoRepair");
 
-                // Naprawa PowerShell Connection
-                if (options.RepairPowerShellConnection)
+                // Naprawa Graph API Connection
+                if (options.RepairGraphConnection)
                 {
-                    await RepairPowerShellConnectionAsync(result, options.DryRun, cts.Token);
+                    await RepairGraphConnectionAsync(result, options.DryRun, cts.Token);
                 }
 
                 // Naprawa Cache Teams/Users
@@ -318,8 +319,8 @@ namespace TeamsManager.Application.Services
                 // Optymalizacja cache Users
                 await OptimizeUsersCacheAsync(result);
 
-                // Optymalizacja cache PowerShell
-                await OptimizePowerShellCacheAsync(result);
+                            // Optymalizacja cache Graph API
+            await OptimizeGraphCacheAsync(result);
 
                 stopwatch.Stop();
                 result.ExecutionTimeMs = stopwatch.ElapsedMilliseconds;
@@ -363,34 +364,35 @@ namespace TeamsManager.Application.Services
 
         #region Private Health Check Methods
 
-        private async Task<HealthCheckDetail> CheckPowerShellGraphConnectionAsync(CancellationToken cancellationToken)
+        private async Task<HealthCheckDetail> CheckGraphConnectionAsync(CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             
             try
             {
-                var diagnostics = await _powerShellConnectionService.DiagnoseConnectionAsync();
+                var diagnostics = await _graphConnectionService.DiagnoseConnectionAsync();
                 stopwatch.Stop();
 
-                var status = diagnostics.OverallHealth switch
+                var status = diagnostics.Status switch
                 {
-                    PowerShellHealthStatus.Healthy => HealthStatus.Healthy,
-                    PowerShellHealthStatus.Degraded => HealthStatus.Degraded,
+                    GraphHealthStatus.Healthy => HealthStatus.Healthy,
+                    GraphHealthStatus.Warning => HealthStatus.Degraded,
+                    GraphHealthStatus.Critical => HealthStatus.Unhealthy,
                     _ => HealthStatus.Unhealthy
                 };
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "PowerShell Graph Connection",
+                    ComponentName = "Graph API Connection",
                     Status = status,
-                    Description = $"PowerShell: {diagnostics.ConnectionStatus}, Graph: {diagnostics.GraphApiStatus}",
+                    Description = $"Połączenie: {(diagnostics.IsConnected ? "Aktywne" : "Nieaktywne")}, Status: {diagnostics.Status}",
                     DurationMs = stopwatch.ElapsedMilliseconds,
                     Data = new Dictionary<string, object>
                     {
-                        ["ConnectionStatus"] = diagnostics.ConnectionStatus,
-                        ["GraphApiStatus"] = diagnostics.GraphApiStatus,
-                        ["LastSuccessfulOperation"] = diagnostics.LastSuccessfulOperation,
-                        ["ErrorCount"] = diagnostics.ErrorCount
+                        ["IsConnected"] = diagnostics.IsConnected,
+                        ["Status"] = diagnostics.Status.ToString(),
+                        ["LastChecked"] = diagnostics.LastChecked,
+                        ["ErrorCount"] = diagnostics.Errors.Count
                     }
                 };
             }
@@ -399,9 +401,9 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "PowerShell Graph Connection",
+                    ComponentName = "Graph API Connection",
                     Status = HealthStatus.Unhealthy,
-                    Description = $"Błąd sprawdzania PowerShell: {ex.Message}",
+                    Description = $"Błąd sprawdzania Graph API: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
                 };
             }
@@ -414,11 +416,13 @@ namespace TeamsManager.Application.Services
             try
             {
                 // Test podstawowego wywołania Graph API
-                var testResult = await _powerShellConnectionService.ExecuteScriptAsync("Get-MgUser -Top 1");
+                var testResult = await _graphConnectionService.ExecuteScriptAsync("Get-MgUser -Top 1");
 
                 stopwatch.Stop();
 
-                var success = testResult != null && testResult.Count > 0;
+                // Rzutowanie na dynamic aby uzyskać dostęp do właściwości Count
+                var dynamicResult = testResult as dynamic;
+                var success = testResult != null && dynamicResult?.Count > 0;
                 var status = success ? HealthStatus.Healthy : HealthStatus.Unhealthy;
 
                 return new HealthCheckDetail
@@ -432,7 +436,7 @@ namespace TeamsManager.Application.Services
                     Data = new Dictionary<string, object>
                     {
                         ["Success"] = success,
-                        ["ResultCount"] = testResult?.Count ?? 0,
+                        ["ResultCount"] = dynamicResult?.Count ?? 0,
                         ["ErrorMessage"] = success ? "Brak błędów" : "Brak odpowiedzi z Graph API"
                     }
                 };
@@ -498,7 +502,7 @@ namespace TeamsManager.Application.Services
             
             try
             {
-                var metrics = _powerShellCacheService.GetCacheMetrics();
+                var metrics = _graphCacheService.GetCacheMetrics();
                 stopwatch.Stop();
 
                 var status = metrics.HitRate >= 80.0 ? HealthStatus.Healthy : 
@@ -575,15 +579,15 @@ namespace TeamsManager.Application.Services
         {
             var metrics = new HealthMetrics
             {
-                CacheMetrics = _powerShellCacheService.GetCacheMetrics(),
+                CacheMetrics = _graphCacheService.GetCacheMetrics(),
                 MemoryUsageBytes = GC.GetTotalMemory(false),
-                ActiveConnections = 1, // PowerShell connection
+                ActiveConnections = 1, // Graph API connection
                 AverageApiResponseTimeMs = 150.0, // Graph API response time
                 ErrorsLastHour = 0 // Z operation history
             };
 
-            var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
-            metrics.PowerShellConnectionStatus = healthInfo.IsConnected ? "Connected" : "Disconnected";
+            var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
+            metrics.GraphConnectionStatus = healthInfo.IsConnected ? "Connected" : "Disconnected";
 
             // Dodaj metryki specyficzne dla TeamsManager
             metrics.TeamsManagerSpecificMetrics = new Dictionary<string, object>
@@ -610,8 +614,8 @@ namespace TeamsManager.Application.Services
             {
                 switch (component.ComponentName)
                 {
-                    case "PowerShell Graph Connection":
-                        recommendations.Add("🔴 KRYTYCZNE: Połączenie PowerShell z Graph API nie działa - sprawdź uwierzytelnianie i uprawnienia");
+                                    case "Graph API Connection":
+                    recommendations.Add("🔴 KRYTYCZNE: Połączenie z Graph API nie działa - sprawdź uwierzytelnianie i uprawnienia");
                         break;
                     case "Microsoft Graph API":
                         recommendations.Add("🔴 KRYTYCZNE: Microsoft Graph API nie odpowiada - sprawdź połączenie internetowe i status usług Microsoft");
@@ -656,36 +660,36 @@ namespace TeamsManager.Application.Services
 
         #region Private Repair Methods
 
-        private async Task RepairPowerShellConnectionAsync(HealthOperationResult result, bool dryRun, CancellationToken cancellationToken)
+        private async Task RepairGraphConnectionAsync(HealthOperationResult result, bool dryRun, CancellationToken cancellationToken)
         {
             try
             {
                 if (!dryRun)
                 {
-                    // Próba ponownego połączenia PowerShell - użyj istniejącej metody
-                    var healthInfo = await _powerShellConnectionService.GetConnectionHealthAsync();
+                    // Próba ponownego połączenia Graph API - użyj istniejącej metody
+                    var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
                     if (!healthInfo.IsConnected)
                     {
                         // Symulacja ponownego połączenia - w rzeczywistej implementacji
                         // należałoby użyć ConnectWithAccessTokenAsync z odpowiednim tokenem
-                        _logger.LogInformation("Symulacja ponownego połączenia PowerShell");
+                        _logger.LogInformation("Symulacja ponownego połączenia Graph API");
                     }
                 }
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess
                 {
-                    Operation = "PowerShellReconnect",
-                    Component = "PowerShell",
-                    Message = dryRun ? "[DRY RUN] PowerShell zostałby ponownie połączony" : "PowerShell połączony ponownie"
+                    Operation = "GraphApiReconnect",
+                    Component = "GraphAPI",
+                    Message = dryRun ? "[DRY RUN] Graph API zostałby ponownie połączony" : "Graph API połączony ponownie"
                 });
             }
             catch (Exception ex)
             {
                 result.Errors.Add(new HealthOperationError
                 {
-                    Operation = "PowerShellReconnect",
-                    Component = "PowerShell",
-                    Message = $"Błąd ponownego połączenia PowerShell: {ex.Message}",
+                    Operation = "GraphApiReconnect",
+                    Component = "GraphAPI",
+                    Message = $"Błąd ponownego połączenia Graph API: {ex.Message}",
                     Exception = ex,
                     Severity = HealthErrorSeverity.Critical
                 });
@@ -898,27 +902,27 @@ namespace TeamsManager.Application.Services
             }
         }
 
-        private async Task OptimizePowerShellCacheAsync(HealthOperationResult result)
+        private async Task OptimizeGraphCacheAsync(HealthOperationResult result)
         {
             try
             {
-                // Optymalizacja cache PowerShell
+                // Optymalizacja cache Graph API
                 await Task.Delay(50);
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess
                 {
-                    Operation = "PowerShellCacheOptimization",
+                    Operation = "GraphCacheOptimization",
                     Component = "Cache",
-                    Message = "Cache PowerShell zoptymalizowany"
+                    Message = "Cache Graph API zoptymalizowany"
                 });
             }
             catch (Exception ex)
             {
                 result.Errors.Add(new HealthOperationError
                 {
-                    Operation = "PowerShellCacheOptimization",
+                    Operation = "GraphCacheOptimization",
                     Component = "Cache",
-                    Message = $"Błąd optymalizacji cache PowerShell: {ex.Message}",
+                    Message = $"Błąd optymalizacji cache Graph API: {ex.Message}",
                     Exception = ex,
                     Severity = HealthErrorSeverity.Warning
                 });

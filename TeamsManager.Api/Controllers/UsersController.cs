@@ -199,7 +199,7 @@ namespace TeamsManager.Api.Controllers
                     // Dla uproszczenia, załóżmy, że CreateUserAsync zwraca obiekt User gotowy do aktualizacji.
                     // W rzeczywistości, po utworzeniu w M365, ExternalId jest kluczowy.
                     // Następnie można wywołać _userService.UpdateUserAsync(user, accessToken) aby zsynchronizować te dodatkowe pola,
-                    // jeśli PowerShellService.CreateM365UserAsync ich nie ustawia.
+                    // jeśli Graph API CreateM365UserAsync ich nie ustawia.
                     // Na razie pominiemy dodatkowe wywołanie UpdateUserAsync dla tych pól po utworzeniu w M365.
                     // Zakładamy, że CreateUserAsync w serwisie odpowiednio zarządza zapisem lokalnym tych danych.
                 }
@@ -306,7 +306,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> AssignUserToSchoolType(string userId, [FromBody] AssignUserToSchoolTypeRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie przypisania użytkownika {UserId} do typu szkoły {SchoolTypeId}", userId, requestDto.SchoolTypeId);
-            // Ta operacja nie wymaga bezpośredniego accessToken dla PowerShellService w obecnej implementacji serwisu
+            // Ta operacja nie wymaga bezpośredniego accessToken dla Graph API w obecnej implementacji serwisu
             var assignment = await _userService.AssignUserToSchoolTypeAsync(
                 userId,
                 requestDto.SchoolTypeId,
@@ -329,7 +329,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> RemoveUserFromSchoolType(string userSchoolTypeId)
         {
             _logger.LogInformation("Żądanie usunięcia przypisania UserSchoolType ID: {UserSchoolTypeId}", userSchoolTypeId);
-            // Ta operacja nie wymaga accessToken dla PowerShellService
+            // Ta operacja nie wymaga accessToken dla Graph API
             var success = await _userService.RemoveUserFromSchoolTypeAsync(userSchoolTypeId);
             if (success)
             {
@@ -344,7 +344,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> AssignTeacherToSubject(string teacherId, [FromBody] AssignTeacherToSubjectRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie przypisania nauczyciela {TeacherId} do przedmiotu {SubjectId}", teacherId, requestDto.SubjectId);
-            // Ta operacja nie wymaga accessToken dla PowerShellService
+            // Ta operacja nie wymaga accessToken dla Graph API
             var assignment = await _userService.AssignTeacherToSubjectAsync(
                 teacherId,
                 requestDto.SubjectId,
@@ -365,7 +365,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> RemoveTeacherFromSubject(string userSubjectId)
         {
             _logger.LogInformation("Żądanie usunięcia przypisania UserSubject ID: {UserSubjectId}", userSubjectId);
-            // Ta operacja nie wymaga accessToken dla PowerShellService
+            // Ta operacja nie wymaga accessToken dla Graph API
             var success = await _userService.RemoveTeacherFromSubjectAsync(userSubjectId);
             if (success)
             {

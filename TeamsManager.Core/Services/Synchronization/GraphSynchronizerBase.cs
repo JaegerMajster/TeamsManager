@@ -1,10 +1,10 @@
 using System;
-using System.Management.Automation;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
-using TeamsManager.Core.Helpers.PowerShell;
+using TeamsManager.Core.Helpers;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 
 namespace TeamsManager.Core.Services.Synchronization
 {
@@ -13,17 +13,18 @@ namespace TeamsManager.Core.Services.Synchronization
     /// Wzorzec Template Method dla synchronizacji Graph→DB.
     /// </summary>
     /// <typeparam name="T">Typ encji dziedziczącej po BaseEntity</typeparam>
-    public abstract class GraphSynchronizerBase<T> : IGraphSynchronizer<T> where T : BaseEntity, new()
+    /// <typeparam name="TGraphModel">Typ modelu Graph API</typeparam>
+    public abstract class GraphSynchronizerBase<T, TGraphModel> : IGraphSynchronizer<T, TGraphModel> where T : BaseEntity, new()
     {
-        protected readonly ILogger<GraphSynchronizerBase<T>> _logger;
+        protected readonly ILogger<GraphSynchronizerBase<T, TGraphModel>> _logger;
 
-        protected GraphSynchronizerBase(ILogger<GraphSynchronizerBase<T>> logger)
+        protected GraphSynchronizerBase(ILogger<GraphSynchronizerBase<T, TGraphModel>> logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <inheritdoc />
-        public virtual async Task<T> SynchronizeAsync(PSObject graphObject, T? existingEntity = null, string? currentUserUpn = null)
+        public virtual async Task<T> SynchronizeAsync(TGraphModel graphObject, T? existingEntity = null, string? currentUserUpn = null)
         {
             if (graphObject == null)
                 throw new ArgumentNullException(nameof(graphObject));
@@ -66,7 +67,7 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public virtual async Task<bool> RequiresSynchronizationAsync(PSObject graphObject, T existingEntity)
+        public virtual async Task<bool> RequiresSynchronizationAsync(TGraphModel graphObject, T existingEntity)
         {
             if (graphObject == null || existingEntity == null)
                 return true;
@@ -99,36 +100,19 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public abstract void MapProperties(PSObject graphObject, T entity, bool isUpdate = false);
+        public abstract void MapProperties(TGraphModel graphObject, T entity, bool isUpdate = false);
 
         /// <inheritdoc />
-        public abstract void ValidateGraphObject(PSObject graphObject);
+        public abstract void ValidateGraphObject(TGraphModel graphObject);
 
         /// <inheritdoc />
-        public virtual string GetGraphId(PSObject graphObject)
-        {
-            // Większość obiektów Graph ma pole "Id"
-            var id = PSObjectMapper.GetString(graphObject, "Id");
-            if (string.IsNullOrEmpty(id))
-            {
-                // Fallback do innych możliwych nazw
-                id = PSObjectMapper.GetString(graphObject, "id") ?? 
-                     PSObjectMapper.GetString(graphObject, "ID");
-            }
-
-            if (string.IsNullOrEmpty(id))
-            {
-                throw new ArgumentException($"Nie można pobrać ID z obiektu Graph typu {graphObject.BaseObject?.GetType().Name}", nameof(graphObject));
-            }
-
-            return id;
-        }
+        public abstract string GetGraphId(TGraphModel graphObject);
 
         /// <summary>
         /// Metoda do nadpisania w klasach pochodnych dla dodatkowej logiki synchronizacji.
         /// Na przykład: synchronizacja relacji, członków zespołu, kanałów itp.
         /// </summary>
-        protected virtual Task PerformAdditionalSynchronizationAsync(PSObject graphObject, T entity, bool isUpdate)
+        protected virtual Task PerformAdditionalSynchronizationAsync(TGraphModel graphObject, T entity, bool isUpdate)
         {
             // Domyślnie brak dodatkowej logiki
             return Task.CompletedTask;
@@ -140,40 +124,42 @@ namespace TeamsManager.Core.Services.Synchronization
         protected abstract Task<bool> DetectChangesAsync(T tempEntity, T existingEntity);
 
         /// <summary>
-        /// Pomocnicza metoda do bezpiecznego pobierania wartości z PSObject z logowaniem.
+        /// Pomocnicza metoda do bezpiecznego pobierania wartości z TGraphModel z logowaniem.
         /// </summary>
-        protected TValue? GetPropertyValue<TValue>(PSObject graphObject, string propertyName, TValue? defaultValue = default)
+        protected TValue? GetPropertyValue<TValue>(TGraphModel graphObject, string propertyName, TValue? defaultValue = default)
         {
             try
             {
                 if (typeof(TValue) == typeof(string))
                 {
-                    return (TValue)(object)PSObjectMapper.GetString(graphObject, propertyName, defaultValue?.ToString());
+                    return (TValue)(object)GraphModelMapper.GetString(graphObject, propertyName, defaultValue?.ToString());
                 }
                 else if (typeof(TValue) == typeof(bool))
                 {
-                    return (TValue)(object)PSObjectMapper.GetBoolean(graphObject, propertyName, 
+                    return (TValue)(object)GraphModelMapper.GetBoolean(graphObject, propertyName, 
                         defaultValue != null ? Convert.ToBoolean(defaultValue) : false);
                 }
                 else if (typeof(TValue) == typeof(DateTime?))
                 {
-                    return (TValue)(object)PSObjectMapper.GetDateTime(graphObject, propertyName);
+                    return (TValue)(object)GraphModelMapper.GetDateTime(graphObject, propertyName);
                 }
                 else if (typeof(TValue) == typeof(object[]))
                 {
                     // Dla tablic obiektów, próbujemy pobrać bezpośrednio
-                    var value = graphObject.Properties[propertyName]?.Value;
+                    var property = graphObject.GetType().GetProperty(propertyName);
+                    var value = property?.GetValue(graphObject);
                     if (value is object[] array)
                     {
                         return (TValue)(object)array;
                     }
                     return defaultValue;
                 }
-                else if (typeof(TValue) == typeof(PSObject))
+                else if (typeof(TValue) == typeof(TGraphModel))
                 {
-                    // Dla zagnieżdżonych PSObject
-                    var value = graphObject.Properties[propertyName]?.Value;
-                    if (value is PSObject psObj)
+                    // Dla zagnieżdżonych TGraphModel
+                    var property = graphObject.GetType().GetProperty(propertyName);
+                    var value = property?.GetValue(graphObject);
+                    if (value is TGraphModel psObj)
                     {
                         return (TValue)(object)psObj;
                     }
@@ -181,12 +167,13 @@ namespace TeamsManager.Core.Services.Synchronization
                 }
                 else if (typeof(TValue) == typeof(int?))
                 {
-                    return (TValue)(object)PSObjectMapper.GetNullableInt32(graphObject, propertyName);
+                    return (TValue)(object)GraphModelMapper.GetNullableInt32(graphObject, propertyName);
                 }
                 else
                 {
                     // Dla innych typów używamy ogólnej metody
-                    var value = graphObject.Properties[propertyName]?.Value;
+                    var property = graphObject.GetType().GetProperty(propertyName);
+                    var value = property?.GetValue(graphObject);
                     if (value != null && value is TValue typedValue)
                     {
                         return typedValue;
@@ -196,7 +183,7 @@ namespace TeamsManager.Core.Services.Synchronization
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Nie udało się pobrać właściwości {PropertyName} typu {Type} z PSObject", 
+                _logger.LogWarning(ex, "Nie udało się pobrać właściwości {PropertyName} typu {Type} z TGraphModel", 
                     propertyName, typeof(TValue).Name);
                 return defaultValue;
             }

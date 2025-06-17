@@ -1,18 +1,18 @@
 using System;
-using System.Management.Automation;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Enums;
-using TeamsManager.Core.Helpers.PowerShell;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
+using System.Linq;
 
 namespace TeamsManager.Core.Services.Synchronization
 {
     /// <summary>
     /// Implementacja synchronizatora dla kanałów Microsoft Teams.
-    /// Wykorzystuje istniejącą logikę MapPsObjectToLocalChannel.
+    /// Wykorzystuje GraphChannel z Graph API.
     /// </summary>
-    public class ChannelSynchronizer : GraphSynchronizerBase<Channel>
+    public class ChannelSynchronizer : GraphSynchronizerBase<Channel, GraphChannel>
     {
         private readonly ILogger<ChannelSynchronizer> _channelLogger;
 
@@ -23,32 +23,32 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public override void MapProperties(PSObject graphObject, Channel entity, bool isUpdate = false)
+        public override void MapProperties(GraphChannel graphObject, Channel entity, bool isUpdate = false)
         {
             // Podstawowe właściwości
             entity.Id = GetGraphId(graphObject) ?? Guid.NewGuid().ToString();
-            entity.DisplayName = GetPropertyValue<string>(graphObject, "DisplayName", string.Empty) ?? string.Empty;
-            entity.Description = GetPropertyValue<string>(graphObject, "Description", string.Empty) ?? string.Empty;
+            entity.DisplayName = graphObject.DisplayName ?? string.Empty;
+            entity.Description = graphObject.Description ?? string.Empty;
             
             // Typ kanału
-            entity.ChannelType = GetPropertyValue<string>(graphObject, "MembershipType", "Standard") ?? "Standard";
+            entity.ChannelType = graphObject.MembershipType ?? "Standard";
             
             // URL
-            entity.ExternalUrl = GetPropertyValue<string>(graphObject, "WebUrl");
+            entity.ExternalUrl = graphObject.WebUrl;
             
-            // Statystyki
-            entity.FilesCount = GetPropertyValue<int>(graphObject, "FilesCount", 0);
-            entity.FilesSize = GetPropertyValue<long>(graphObject, "FilesSize", 0);
-            entity.LastActivityDate = GetPropertyValue<DateTime?>(graphObject, "LastActivityDate");
-            entity.LastMessageDate = GetPropertyValue<DateTime?>(graphObject, "LastMessageDate");
-            entity.MessageCount = GetPropertyValue<int>(graphObject, "MessageCount", 0);
+            // Statystyki z GraphChannelStats
+            entity.FilesCount = graphObject.Stats?.FilesCount ?? 0;
+            entity.FilesSize = graphObject.Stats?.FilesSize ?? 0;
+            entity.LastActivityDate = graphObject.Stats?.LastActivityDate;
+            entity.LastMessageDate = graphObject.Stats?.LastMessageDate;
+            entity.MessageCount = graphObject.Stats?.MessageCount ?? 0;
             
-            // Ustawienia
-            entity.NotificationSettings = GetPropertyValue<string>(graphObject, "NotificationSettings");
-            entity.IsModerationEnabled = GetPropertyValue<bool>(graphObject, "IsModerationEnabled", false);
-            entity.Category = GetPropertyValue<string>(graphObject, "Category");
-            entity.Tags = GetPropertyValue<string>(graphObject, "Tags");
-            entity.SortOrder = GetPropertyValue<int>(graphObject, "SortOrder", 0);
+            // Ustawienia z GraphChannelSettings
+            entity.NotificationSettings = graphObject.Settings?.NotificationSettings?.ToString();
+            entity.IsModerationEnabled = graphObject.Settings?.IsModerationEnabled ?? false;
+            entity.Category = graphObject.Settings?.Category;
+            entity.Tags = graphObject.Settings?.Tags != null ? string.Join(", ", graphObject.Settings.Tags.Cast<string>()) : null;
+            entity.SortOrder = graphObject.Settings?.SortOrder ?? 0;
             
             // Walidacja wartości
             if (entity.FilesCount < 0) entity.FilesCount = 0;
@@ -62,10 +62,9 @@ namespace TeamsManager.Core.Services.Synchronization
             }
             
             // Określ czy to kanał ogólny
-            var isFavoriteByDefault = GetPropertyValue<bool?>(graphObject, "isFavoriteByDefault");
             if ((entity.DisplayName.Equals("General", StringComparison.OrdinalIgnoreCase) ||
                  entity.DisplayName.Equals("Ogólny", StringComparison.OrdinalIgnoreCase)) ||
-                 isFavoriteByDefault == true)
+                 graphObject.IsFavoriteByDefault == true)
             {
                 entity.IsGeneral = true;
                 if (string.IsNullOrWhiteSpace(entity.ChannelType) || 
@@ -86,21 +85,21 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        public override void ValidateGraphObject(PSObject graphObject)
+        public override void ValidateGraphObject(GraphChannel graphObject)
         {
             var id = GetGraphId(graphObject);
-            var displayName = GetPropertyValue<string>(graphObject, "DisplayName");
+            var displayName = graphObject.DisplayName;
 
             if (string.IsNullOrEmpty(id))
             {
-                _channelLogger.LogError("Obiekt Graph kanału nie zawiera wymaganego pola 'Id'");
+                _channelLogger.LogError("Obiekt GraphChannel nie zawiera wymaganego pola 'Id'");
                 // Generujemy ID zamiast rzucać wyjątek - zgodnie z obecną logiką
                 return;
             }
 
             if (string.IsNullOrEmpty(displayName))
             {
-                throw new ArgumentException("Obiekt Graph kanału nie zawiera wymaganego pola 'DisplayName'");
+                throw new ArgumentException("Obiekt GraphChannel nie zawiera wymaganego pola 'DisplayName'");
             }
         }
 
@@ -150,13 +149,19 @@ namespace TeamsManager.Core.Services.Synchronization
         }
 
         /// <inheritdoc />
-        protected override async Task PerformAdditionalSynchronizationAsync(PSObject graphObject, Channel entity, bool isUpdate)
+        protected override async Task PerformAdditionalSynchronizationAsync(GraphChannel graphObject, Channel entity, bool isUpdate)
         {
             // Sprawdź czy kanał został usunięty z Graph
             // Jeśli lokalny kanał jest aktywny ale nie ma go w Graph, oznacz jako zarchiwizowany
             
             _channelLogger.LogDebug("Dodatkowa synchronizacja dla kanału {ChannelId} - obecnie pominięta", entity.Id);
             await Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        public override string GetGraphId(GraphChannel graphObject)
+        {
+            return graphObject?.Id ?? string.Empty;
         }
     }
 } 

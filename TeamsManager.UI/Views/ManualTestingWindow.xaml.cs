@@ -160,7 +160,6 @@ namespace TeamsManager.UI.Views
                 // Dodaj testy według kategorii
                 AddAuthenticationTests();
                 AddGraphApiTests();
-                AddPowerShellTests();
                 AddTeamsManagementTests();
                 AddUITests();
 
@@ -229,88 +228,42 @@ namespace TeamsManager.UI.Views
             _currentTestSuite.TestCases.Add(new TestCase
             {
                 Id = "GRAPH-001",
-                Name = "Test dostępu do Microsoft Graph API",
-                Description = "Weryfikuje czy aplikacja może uzyskać dedykowany token dla Microsoft Graph API i uzyskać dostęp " +
-                             "do podstawowych informacji użytkownika. Test sprawdza działanie endpointów /me i /me/photo.",
-                Category = "API Graph",
-                Priority = "Średni",
-                ExpectedResult = "Aplikacja pomyślnie łączy się z Graph API, pobiera profil użytkownika i jego zdjęcie",
+                Name = "Test statusu Graph API",
+                Description = "Weryfikuje czy Graph API może pomyślnie nawiązać połączenie z Microsoft Graph przy użyciu " +
+                             "tokenu uzyskanego przez uwierzytelnianie. Test sprawdza czy Graph API jest dostępne " +
+                             "i czy można wykonać operacje Graph API.",
+                Category = "Graph API",
+                Priority = "Krytyczny",
+                ExpectedResult = "Graph API pomyślnie łączy się z Microsoft Graph, zwraca status połączenia i diagnostyki",
                 Steps = new List<string>
                 {
-                    "Upewnij się że jesteś zalogowany",
+                    "Upewnij się że jesteś zalogowany do aplikacji",
                     "Kliknij przycisk testowania Graph API",
-                    "Sprawdź czy aplikacja uzyskuje token Graph (może wymagać dodatkowych zgód)",
-                    "Zweryfikuj czy endpoint /me zwraca dane profilu",
-                    "Sprawdź czy endpoint /me/photo zwraca zdjęcie użytkownika lub błąd 404 (brak zdjęcia to OK)",
-                    "Sprawdź wyniki w polu tekstowym"
+                    "Sprawdź czy API wykonuje uwierzytelnianie",
+                    "Zweryfikuj czy Graph API Service otrzymuje prawidłowy token",
+                    "Sprawdź czy połączenie z Graph API działa",
+                    "Sprawdź status połączenia w wynikach testu"
                 },
                 HasAutomaticExecution = true,
-                AutoExecuteButtonText = "🌐 Test Graph API"
+                AutoExecuteButtonText = "🔧 Test Graph API"
             });
 
             _currentTestSuite.TestCases.Add(new TestCase
             {
                 Id = "GRAPH-002",
-                Name = "Test ładowania profilu użytkownika na ekranie głównym",
-                Description = "Sprawdza czy główny ekran aplikacji poprawnie ładuje i wyświetla profil użytkownika z Graph API, " +
-                             "w tym jego nazwę wyświetlaną i awatar.",
-                Category = "API Graph", 
-                Priority = "Średni",
-                ExpectedResult = "Na ekranie głównym widoczna jest nazwa użytkownika i jego awatar zamiast fragmentu tokenu",
-                Steps = new List<string>
-                {
-                    "Zaloguj się do aplikacji",
-                    "Sprawdź lewy górny róg głównego okna",
-                    "Zweryfikuj czy wyświetlana jest pełna nazwa użytkownika (DisplayName)",
-                    "Sprawdź czy awatar użytkownika jest wyświetlany poprawnie",
-                    "Jeśli awatar nie jest dostępny, powinien być wyświetlony domyślny placeholder",
-                    "Upewnij się że nie są widoczne fragmenty tokenów"
-                },
-                HasAutomaticExecution = false
-            });
-        }
-
-        private void AddPowerShellTests()
-        {
-            _currentTestSuite.TestCases.Add(new TestCase
-            {
-                Id = "PS-001",
-                Name = "Test połączenia PowerShell z Microsoft Graph",
-                Description = "Weryfikuje czy serwis PowerShell może pomyślnie nawiązać połączenie z Microsoft Graph przy użyciu " +
-                             "tokenu uzyskanego przez przepływ On-Behalf-Of. Test sprawdza czy moduł Microsoft.Graph jest dostępny " +
-                             "i czy można wykonać polecenia Graph przez PowerShell.",
-                Category = "PowerShell",
-                Priority = "Krytyczny",
-                ExpectedResult = "PowerShell pomyślnie łączy się z Graph, zwraca status połączenia i podstawowe informacje",
-                Steps = new List<string>
-                {
-                    "Upewnij się że jesteś zalogowany do aplikacji",
-                    "Kliknij przycisk testowania PowerShell",
-                    "Sprawdź czy API wykonuje przepływ On-Behalf-Of",
-                    "Zweryfikuj czy PowerShell Service otrzymuje token Graph",
-                    "Sprawdź czy polecenie Connect-MgGraph wykonuje się pomyślnie",
-                    "Sprawdź status połączenia w wynikach testu"
-                },
-                HasAutomaticExecution = true,
-                AutoExecuteButtonText = "🔧 Test PowerShell Graph"
-            });
-
-            _currentTestSuite.TestCases.Add(new TestCase
-            {
-                Id = "PS-002",
-                Name = "Test poleceń PowerShell Microsoft.Graph",
-                Description = "Sprawdza czy po nawiązaniu połączenia można wykonać podstawowe polecenia modułu Microsoft.Graph " +
-                             "jak Get-MgUser, Get-MgGroup itp.",
-                Category = "PowerShell",
+                Name = "Test uprawnień Graph API",
+                Description = "Sprawdza czy aplikacja ma wymagane uprawnienia do Microsoft Graph API " +
+                             "i czy można wykonać podstawowe operacje na użytkownikach i zespołach.",
+                Category = "Graph API",
                 Priority = "Wysoki", 
-                ExpectedResult = "Polecenia PowerShell Graph wykonują się pomyślnie i zwracają dane",
+                ExpectedResult = "Graph API ma prawidłowe uprawnienia i może wykonywać operacje",
                 Steps = new List<string>
                 {
-                    "Nawiąż połączenie PowerShell z Graph (test PS-001)",
-                    "Wykonaj polecenie Get-MgContext sprawdzające kontekst",
-                    "Wykonaj Get-MgUser -UserId 'me' pobierające profil",
-                    "Sprawdź czy polecenia zwracają dane bez błędów",
-                    "Zweryfikuj czy dane są w poprawnym formacie JSON/PowerShell"
+                    "Nawiąż połączenie z Graph API (test GRAPH-001)",
+                    "Sprawdź uprawnienia aplikacji w Graph API",
+                    "Wykonaj test pobierania profilu użytkownika",
+                    "Sprawdź czy operacje zwracają dane bez błędów",
+                    "Zweryfikuj czy można wykonać operacje na zespołach"
                 },
                 HasAutomaticExecution = false
             });
@@ -410,7 +363,7 @@ namespace TeamsManager.UI.Views
             // Czyść listy kategorii
             AuthTestsList.Items.Clear();
             GraphApiTestsList.Items.Clear(); 
-            PowerShellTestsList.Items.Clear();
+
             TeamsManagementTestsList.Items.Clear();
             UiTestsList.Items.Clear();
 
@@ -429,11 +382,10 @@ namespace TeamsManager.UI.Views
                         AuthTestsList.Items.Add(testViewModel);
                         break;
                     case "API Graph":
+                    case "Graph API":
                         GraphApiTestsList.Items.Add(testViewModel);
                         break;
-                    case "PowerShell":
-                        PowerShellTestsList.Items.Add(testViewModel);
-                        break;
+                    
                     case "Zarządzanie Teams":
                         TeamsManagementTestsList.Items.Add(testViewModel);
                         break;
@@ -451,7 +403,7 @@ namespace TeamsManager.UI.Views
             { 
                 AuthCategoryExpander, 
                 GraphApiCategoryExpander, 
-                PowerShellCategoryExpander, 
+ 
                 TeamsManagementCategoryExpander, 
                 UiCategoryExpander 
             };
@@ -519,7 +471,7 @@ namespace TeamsManager.UI.Views
                 { 
                     AuthTestsList, 
                     GraphApiTestsList, 
-                    PowerShellTestsList, 
+     
                     TeamsManagementTestsList, 
                     UiTestsList 
                 };
@@ -690,13 +642,6 @@ namespace TeamsManager.UI.Views
                         await ExecuteGraphApiTest();
                         return; // ExecuteGraphApiTest ma własną obsługę wyników
 
-                    case "PS-001":
-                        // Test PowerShell
-                        var psResult = await ExecutePowerShellTest();
-                        success = psResult.Success;
-                        message = psResult.Message;
-                        break;
-
                     default:
                         message = "❓ Ten test nie ma zaimplementowanej automatycznej wykonania";
                         break;
@@ -774,11 +719,11 @@ namespace TeamsManager.UI.Views
                 var results = new StringBuilder();
                 results.AppendLine("🔍 Wyniki testowania Microsoft Graph API:");
                 results.AppendLine();
-                results.AppendLine($"📋 Endpoint /me: {testResult.MeEndpointStatus}");
-                results.AppendLine($"   Dostęp do profilu: {(testResult.CanAccessProfile ? "✅ TAK" : "❌ NIE")}");
+                results.AppendLine($"📋 Endpoint /me: {testResult.StatusCode}");
+                results.AppendLine($"   Dostęp do profilu: {(testResult.IsSuccessful ? "✅ TAK" : "❌ NIE")}");
                 results.AppendLine();
-                results.AppendLine($"📸 Endpoint /me/photo: {testResult.PhotoEndpointStatus}");
-                results.AppendLine($"   Dostęp do zdjęć: {(testResult.CanAccessPhoto ? "✅ TAK" : "❌ NIE")}");
+                results.AppendLine($"📸 Endpoint /me/photo: {testResult.StatusCode}");
+                results.AppendLine($"   Dostęp do zdjęć: {(testResult.IsSuccessful ? "✅ TAK" : "❌ NIE")}");
                 
                 if (!string.IsNullOrEmpty(testResult.ErrorMessage))
                 {
@@ -789,7 +734,7 @@ namespace TeamsManager.UI.Views
 
                 results.AppendLine();
                 results.AppendLine("📈 Podsumowanie:");
-                if (testResult.CanAccessProfile)
+                if (testResult.IsSuccessful)
                 {
                     results.AppendLine("✅ Test Graph API zakończony pomyślnie - aplikacja ma dostęp do podstawowych danych profilu");
                 }
@@ -799,7 +744,7 @@ namespace TeamsManager.UI.Views
                 }
 
                 TestResultTextBox.Text = results.ToString();
-                ExecutionStatus.Text = testResult.CanAccessProfile ? "✅ Test Graph API - sukces" : "❌ Test Graph API - niepowodzenie";
+                ExecutionStatus.Text = testResult.IsSuccessful ? "✅ Test Graph API - sukces" : "❌ Test Graph API - niepowodzenie";
             }
             catch (Exception ex)
             {
@@ -855,7 +800,7 @@ namespace TeamsManager.UI.Views
             }
         }
 
-        private async Task<(bool Success, string Message)> ExecutePowerShellTest()
+        private async Task<(bool Success, string Message)> ExecuteGraphTest()
         {
             if (_authResult == null || string.IsNullOrEmpty(_authResult.AccessToken))
             {
@@ -867,7 +812,7 @@ namespace TeamsManager.UI.Views
                 return (false, "HttpClient nie został zainicjalizowany");
             }
 
-            string apiUrl = "https://localhost:7037/api/PowerShell/test-connection";
+            string apiUrl = "https://localhost:7037/api/diagnostics/graph/status";
 
             try
             {
@@ -880,23 +825,23 @@ namespace TeamsManager.UI.Views
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogInformation("PowerShell test succeeded with status {StatusCode}", response.StatusCode);
+                    _logger.LogInformation("Graph test succeeded with status {StatusCode}", response.StatusCode);
                     return (true, $"Sukces - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
                 else
                 {
-                    _logger.LogWarning("PowerShell test failed with status {StatusCode}", response.StatusCode);
+                    _logger.LogWarning("Graph test failed with status {StatusCode}", response.StatusCode);
                     return (false, $"Błąd API - Status: {response.StatusCode}, Odpowiedź: {responseBody}");
                 }
             }
             catch (HttpRequestException httpEx)
             {
-                _logger.LogError(httpEx, "HTTP request error in PowerShell test");
+                _logger.LogError(httpEx, "HTTP request error in Graph test");
                 return (false, $"Błąd połączenia: {httpEx.Message}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error in PowerShell test");
+                _logger.LogError(ex, "Unexpected error in Graph test");
                 return (false, $"Wyjątek: {ex.Message}");
             }
         }

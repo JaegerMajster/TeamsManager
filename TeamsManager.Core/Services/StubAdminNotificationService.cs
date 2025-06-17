@@ -58,5 +58,17 @@ namespace TeamsManager.Core.Services
             _logger.LogInformation("[STUB ADMIN NOTIFICATION] Custom: {Subject} - {Message}", subject, message);
             return Task.CompletedTask;
         }
+
+        public Task SendGraphApiErrorMetricsAsync(Dictionary<string, object> metrics)
+        {
+            var method = metrics.GetValueOrDefault("Method", "Unknown");
+            var endpoint = metrics.GetValueOrDefault("Endpoint", "Unknown");
+            var httpStatusCode = metrics.GetValueOrDefault("HttpStatusCode", 0);
+            var graphErrorCode = metrics.GetValueOrDefault("GraphErrorCode", "Unknown");
+            
+            _logger.LogWarning("[STUB ADMIN NOTIFICATION] Graph API Error Metrics: Method={Method}, Endpoint={Endpoint}, StatusCode={StatusCode}, ErrorCode={ErrorCode}", 
+                method, endpoint, httpStatusCode, graphErrorCode);
+            return Task.CompletedTask;
+        }
     }
 } 

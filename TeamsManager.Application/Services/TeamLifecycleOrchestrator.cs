@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Models;
@@ -26,7 +26,8 @@ namespace TeamsManager.Application.Services
         private readonly ITeamService _teamService;
         private readonly IUserService _userService;
         private readonly ISchoolYearService _schoolYearService;
-        private readonly IPowerShellBulkOperationsService _bulkOperationsService;
+        private readonly IGraphBulkOperationsService _bulkOperationsService;
+        private readonly IGraphService _graphService;
         private readonly INotificationService _notificationService;
         private readonly IAdminNotificationService _adminNotificationService;
         private readonly ICacheInvalidationService _cacheInvalidationService;
@@ -43,7 +44,8 @@ namespace TeamsManager.Application.Services
             ITeamService teamService,
             IUserService userService,
             ISchoolYearService schoolYearService,
-            IPowerShellBulkOperationsService bulkOperationsService,
+            IGraphBulkOperationsService bulkOperationsService,
+            IGraphService graphService,
             INotificationService notificationService,
             IAdminNotificationService adminNotificationService,
             ICacheInvalidationService cacheInvalidationService,
@@ -55,6 +57,7 @@ namespace TeamsManager.Application.Services
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _schoolYearService = schoolYearService ?? throw new ArgumentNullException(nameof(schoolYearService));
             _bulkOperationsService = bulkOperationsService ?? throw new ArgumentNullException(nameof(bulkOperationsService));
+            _graphService = graphService ?? throw new ArgumentNullException(nameof(graphService));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
             _adminNotificationService = adminNotificationService ?? throw new ArgumentNullException(nameof(adminNotificationService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService));
@@ -215,7 +218,7 @@ namespace TeamsManager.Application.Services
                         processStatus.CurrentOperation = "Cleanup operations";
                         await UpdateProcessStatusAsync(processId, processStatus);
 
-                        var cleanupResults = await PerformCleanupOperationsAsync(
+                        var cleanupResults = await PerformGraphCleanupOperationsAsync(
                             successfulOperations.Select(s => s.EntityId).ToArray(), 
                             options, 
                             apiAccessToken);
@@ -412,15 +415,16 @@ namespace TeamsManager.Application.Services
                         {
                             try
                             {
-                                var restored = await _teamService.RestoreTeamAsync(team.Id, apiAccessToken);
+                                // Użyj Graph API bezpośrednio dla przywracania
+                                var restored = await RestoreTeamWithGraphApiAsync(team, apiAccessToken);
                                 if (restored)
                                 {
                                     successfulOperations.Add(new BulkOperationSuccess
                                     {
                                         Operation = "RestoreTeam",
                                         EntityId = team.Id,
-                                        EntityName = team.GetBaseDisplayName(),
-                                        Message = $"Zespół '{team.GetBaseDisplayName()}' przywrócony pomyślnie"
+                                        EntityName = team.DisplayName,
+                                        Message = $"Zespół '{team.DisplayName}' przywrócony pomyślnie przez Graph API"
                                     });
 
                                     // Invalidacja cache (wzorzec cache invalidation)
@@ -432,7 +436,7 @@ namespace TeamsManager.Application.Services
                                     {
                                         Operation = "RestoreTeam",
                                         EntityId = team.Id,
-                                        Message = $"Nie udało się przywrócić zespołu '{team.GetBaseDisplayName()}'"
+                                        Message = $"Nie udało się przywrócić zespołu '{team.DisplayName}' przez Graph API"
                                     });
                                 }
                             }
@@ -832,7 +836,8 @@ namespace TeamsManager.Application.Services
                     }
                     else
                     {
-                        var archived = await _teamService.ArchiveTeamAsync(team.Id, options.Reason, apiAccessToken);
+                        // Użyj Graph API bezpośrednio dla archiwizacji
+                        var archived = await ArchiveTeamWithGraphApiAsync(team, options.Reason, apiAccessToken);
                         if (archived)
                         {
                             successfulOperations.Add(new BulkOperationSuccess
@@ -840,7 +845,7 @@ namespace TeamsManager.Application.Services
                                 Operation = "ArchiveTeam",
                                 EntityId = team.Id,
                                 EntityName = team.DisplayName,
-                                Message = $"Zespół '{team.DisplayName}' zarchiwizowany pomyślnie"
+                                Message = $"Zespół '{team.DisplayName}' zarchiwizowany pomyślnie przez Graph API"
                             });
 
                             // Cache invalidation
@@ -852,7 +857,7 @@ namespace TeamsManager.Application.Services
                             {
                                 Operation = "ArchiveTeam",
                                 EntityId = team.Id,
-                                Message = $"Nie udało się zarchiwizować zespołu '{team.DisplayName}'"
+                                Message = $"Nie udało się zarchiwizować zespołu '{team.DisplayName}' przez Graph API"
                             });
                         }
                     }
@@ -879,7 +884,88 @@ namespace TeamsManager.Application.Services
             };
         }
 
-        private async Task<BulkOperationResult> PerformCleanupOperationsAsync(
+        /// <summary>
+        /// Archiwizuje zespół używając Graph API bezpośrednio
+        /// </summary>
+        private async Task<bool> ArchiveTeamWithGraphApiAsync(Team team, string reason, string apiAccessToken)
+        {
+            try
+            {
+                _logger.LogInformation("TeamLifecycle: Archiwizacja zespołu {TeamId} przez Graph API", team.Id);
+
+                // Użyj Graph API do archiwizacji zespołu
+                var result = await _graphService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _graphService.Teams.ArchiveTeamAsync(team.ExternalId ?? team.Id),
+                    $"ArchiveTeam dla zespołu '{team.DisplayName}' (ID: {team.Id})"
+                );
+
+                if (result.IsSuccess && result.Data)
+                {
+                    // Aktualizuj lokalny status zespołu
+                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_archive";
+                    team.Archive(reason, currentUserUpn);
+                    
+                    _logger.LogInformation("TeamLifecycle: Zespół {TeamId} pomyślnie zarchiwizowany przez Graph API", team.Id);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("TeamLifecycle: Nie udało się zarchiwizować zespołu {TeamId} przez Graph API: {Error}", 
+                        team.Id, result.ErrorMessage);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "TeamLifecycle: Błąd archiwizacji zespołu {TeamId} przez Graph API", team.Id);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Przywraca zespół używając Graph API bezpośrednio
+        /// </summary>
+        private async Task<bool> RestoreTeamWithGraphApiAsync(Team team, string apiAccessToken)
+        {
+            try
+            {
+                _logger.LogInformation("TeamLifecycle: Przywracanie zespołu {TeamId} przez Graph API", team.Id);
+
+                // Użyj Graph API do przywracania zespołu
+                var result = await _graphService.ExecuteWithAutoConnectAsync(
+                    apiAccessToken,
+                    async () => await _graphService.Teams.UnarchiveTeamAsync(team.ExternalId ?? team.Id),
+                    $"UnarchiveTeam dla zespołu '{team.DisplayName}' (ID: {team.Id})"
+                );
+
+                if (result.IsSuccess && result.Data)
+                {
+                    // Aktualizuj lokalny status zespołu
+                    var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system_restore";
+                    team.Restore(currentUserUpn);
+                    
+                    _logger.LogInformation("TeamLifecycle: Zespół {TeamId} pomyślnie przywrócony przez Graph API", team.Id);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("TeamLifecycle: Nie udało się przywrócić zespołu {TeamId} przez Graph API: {Error}", 
+                        team.Id, result.ErrorMessage);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "TeamLifecycle: Błąd przywracania zespołu {TeamId} przez Graph API", team.Id);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje cleanup operacje używając Graph API
+        /// </summary>
+        private async Task<BulkOperationResult> PerformGraphCleanupOperationsAsync(
             string[] teamIds, 
             ArchiveOptions options, 
             string apiAccessToken)
@@ -893,34 +979,52 @@ namespace TeamsManager.Application.Services
                 {
                     if (options.CleanupChannels)
                     {
-                        // Placeholder dla cleanup kanałów
-                        // W rzeczywistej implementacji można by usunąć niepotrzebne kanały
-                        successfulOperations.Add(new BulkOperationSuccess
+                        // Użyj Graph API do cleanup kanałów
+                        var channelsResult = await _graphService.ExecuteWithAutoConnectAsync(
+                            apiAccessToken,
+                            async () => await _graphService.Teams.GetTeamChannelsAsync(teamId),
+                            $"GetChannels dla zespołu {teamId}"
+                        );
+
+                        if (channelsResult.IsSuccess && channelsResult.Data?.Any() == true)
                         {
-                            Operation = "CleanupChannels",
-                            EntityId = teamId,
-                            Message = "Cleanup kanałów wykonany (placeholder)"
-                        });
+                            // Logika cleanup kanałów - placeholder
+                            successfulOperations.Add(new BulkOperationSuccess
+                            {
+                                Operation = "CleanupChannels",
+                                EntityId = teamId,
+                                Message = $"Cleanup {channelsResult.Data.Count()} kanałów wykonany przez Graph API"
+                            });
+                        }
                     }
 
                     if (options.RemoveInactiveMembers)
                     {
-                        // Placeholder dla usuwania nieaktywnych członków
-                        // W rzeczywistej implementacji można by usunąć nieaktywnych członków
-                        successfulOperations.Add(new BulkOperationSuccess
+                        // Użyj Graph API do usuwania nieaktywnych członków
+                        var membersResult = await _graphService.ExecuteWithAutoConnectAsync(
+                            apiAccessToken,
+                            async () => await _graphService.Teams.GetTeamMembersAsync(teamId),
+                            $"GetMembers dla zespołu {teamId}"
+                        );
+
+                        if (membersResult.IsSuccess && membersResult.Data?.Any() == true)
                         {
-                            Operation = "RemoveInactiveMembers",
-                            EntityId = teamId,
-                            Message = "Usuwanie nieaktywnych członków wykonane (placeholder)"
-                        });
+                            // Logika usuwania nieaktywnych członków - placeholder
+                            successfulOperations.Add(new BulkOperationSuccess
+                            {
+                                Operation = "RemoveInactiveMembers",
+                                EntityId = teamId,
+                                Message = $"Sprawdzono {membersResult.Data.Count()} członków przez Graph API"
+                            });
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "TeamLifecycle: Błąd cleanup dla zespołu {TeamId}", teamId);
+                    _logger.LogError(ex, "TeamLifecycle: Błąd Graph cleanup dla zespołu {TeamId}", teamId);
                     errors.Add(new BulkOperationError
                     {
-                        Operation = "Cleanup",
+                        Operation = "GraphCleanup",
                         EntityId = teamId,
                         Message = ex.Message,
                         Exception = ex

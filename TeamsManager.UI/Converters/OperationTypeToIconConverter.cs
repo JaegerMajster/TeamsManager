@@ -85,8 +85,8 @@ namespace TeamsManager.UI.Converters
                 "filedeleted" or "deletefile" => PackIconKind.Delete,
                 "fileprocessed" or "processfile" => PackIconKind.FileDocumentEdit,
 
-                // PowerShell Operations
-                "powershellscript" or "scriptexecution" => PackIconKind.Console,
+                // Script Operations
+                "scriptexecution" => PackIconKind.Console,
                 "commandexecution" or "executecommand" => PackIconKind.Console,
                 "automationrun" or "automation" => PackIconKind.Robot,
 

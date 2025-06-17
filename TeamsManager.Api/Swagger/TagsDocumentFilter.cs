@@ -24,7 +24,7 @@ namespace TeamsManager.Api.Swagger
                 ["ApplicationSettings"] = ("⚙️ **Ustawienia aplikacji**\n\nGlobalne parametry konfiguracyjne systemu i opcje personalizacji.", 9),
                 ["OperationHistories"] = ("📊 **Historia operacji**\n\nAudyt działań w systemie, śledzenie zmian i raportowanie.", 10),
                 ["TestAuth"] = ("🔧 **Testowanie uwierzytelniania**\n\nEndpointy pomocnicze do testowania mechanizmów autoryzacji w środowisku deweloperskim.", 11),
-                ["PowerShell"] = ("⚡ **Operacje PowerShell**\n\nWykonywanie skryptów PowerShell do zaawansowanego zarządzania Microsoft 365.", 12)
+                ["Diagnostics"] = ("🔍 **Diagnostyka Graph API**\n\nMonitorowanie i diagnostyka połączeń z Microsoft Graph API.", 12)
             };
 
             // Jeśli dokument nie ma tagów, utwórz listę

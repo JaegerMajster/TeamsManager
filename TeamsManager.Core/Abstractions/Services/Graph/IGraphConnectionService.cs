@@ -86,5 +86,48 @@ namespace TeamsManager.Core.Abstractions.Services.Graph
         /// <param name="exception">Wyjątek do analizy</param>
         /// <returns>Szczegółowe informacje o błędzie</returns>
         GraphApiError AnalyzeGraphError(Exception exception);
+
+        /// <summary>
+        /// Sprawdza ważność tokenu dostępu.
+        /// Używane w GraphUserManagementService i innych serwisach Graph.
+        /// </summary>
+        /// <returns>True jeśli token jest ważny</returns>
+        Task<bool> CheckTokenValidityAsync();
+
+        /// <summary>
+        /// Odświeża token dostępu.
+        /// Używane w GraphUserManagementService i innych serwisach Graph.
+        /// </summary>
+        /// <returns>True jeśli token został pomyślnie odświeżony</returns>
+        Task<bool> RefreshTokenAsync();
+
+        /// <summary>
+        /// Zapewnia ważny token dostępu - sprawdza i odświeża jeśli potrzeba.
+        /// Używane w GraphBulkOperationsService.
+        /// </summary>
+        /// <returns>True jeśli token jest ważny lub został odświeżony</returns>
+        Task<bool> EnsureValidTokenAsync();
+
+        /// <summary>
+        /// Pobiera aktualny token dostępu.
+        /// Używane w GraphBulkOperationsService i innych serwisach.
+        /// </summary>
+        /// <returns>Token dostępu lub null jeśli niedostępny</returns>
+        Task<string?> GetAccessTokenAsync();
+
+        /// <summary>
+        /// Wykonuje diagnostykę połączenia Graph API.
+        /// Alias dla GetDiagnosticInfoAsync().
+        /// </summary>
+        /// <returns>Informacje diagnostyczne</returns>
+        Task<GraphDiagnosticInfo> DiagnoseConnectionAsync();
+
+        /// <summary>
+        /// Symuluje wykonanie operacji Graph API.
+        /// W Graph API zwraca informacje o dostępności endpointu.
+        /// </summary>
+        /// <param name="script">Operacja Graph API do wykonania</param>
+        /// <returns>Wynik symulacji wykonania</returns>
+        Task<object> ExecuteScriptAsync(string script);
     }
 } 

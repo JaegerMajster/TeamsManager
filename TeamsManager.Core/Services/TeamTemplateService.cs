@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Primitives;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
+using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Services.Cache;
@@ -29,7 +29,7 @@ namespace TeamsManager.Core.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamTemplateService> _logger;
         private readonly IMemoryCache _cache;
-        private readonly IPowerShellCacheService _powerShellCacheService;
+        private readonly IGraphCacheService _graphCacheService;
 
         private readonly TimeSpan _defaultCacheDuration = TimeSpan.FromHours(1); // Szablony zmieniają się rzadko
 
@@ -46,7 +46,7 @@ namespace TeamsManager.Core.Services
             ICurrentUserService currentUserService,
             ILogger<TeamTemplateService> logger,
             IMemoryCache memoryCache,
-            IPowerShellCacheService powerShellCacheService)
+            IGraphCacheService graphCacheService)
         {
             _teamTemplateRepository = teamTemplateRepository ?? throw new ArgumentNullException(nameof(teamTemplateRepository));
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
@@ -55,13 +55,13 @@ namespace TeamsManager.Core.Services
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
-            _powerShellCacheService = powerShellCacheService ?? throw new ArgumentNullException(nameof(powerShellCacheService));
+            _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
         }
 
         private MemoryCacheEntryOptions GetDefaultCacheEntryOptions()
         {
-            // Delegacja do PowerShellCacheService
-            return _powerShellCacheService.GetDefaultCacheEntryOptions();
+            // Delegacja do GraphCacheService
+            return _graphCacheService.GetDefaultCacheEntryOptions();
         }
 
         /// <inheritdoc />
@@ -861,7 +861,7 @@ namespace TeamsManager.Core.Services
 
         /// <summary>
         /// Unieważnia cache dla szablonów zespołów w sposób granularny.
-        /// Deleguje zarządzanie do PowerShellCacheService eliminując problem "Thundering Herd".
+        /// Deleguje zarządzanie do GraphCacheService eliminując problem "Thundering Herd".
         /// </summary>
         /// <param name="templateId">ID szablonu, którego specyficzny cache ma być usunięty (opcjonalnie).</param>
         /// <param name="schoolTypeId">ID typu szkoły, którego cache szablonów ma być usunięty (opcjonalnie).</param>
@@ -892,14 +892,14 @@ namespace TeamsManager.Core.Services
             if (invalidateAll)
             {
                 _logger.LogDebug("Wymuszono pełną inwalidację cache (invalidateAll=true)");
-                _powerShellCacheService.InvalidateAllCache();
+                _graphCacheService.InvalidateAllCache();
                 return; // Pełna inwalidacja obejmuje wszystko
             }
             
             // Inwalidacja konkretnego szablonu (zawsze gdy podano templateId)
             if (!string.IsNullOrWhiteSpace(templateId))
             {
-                _powerShellCacheService.InvalidateTeamTemplateById(templateId);
+                _graphCacheService.InvalidateTeamTemplateById(templateId);
             }
             
             // Jeśli tylko cache szablonu (GenerateTeamNameFromTemplateAsync), nie inwaliduj list
@@ -909,18 +909,18 @@ namespace TeamsManager.Core.Services
             }
             
             // Granularna inwalidacja - inwaliduj listy dla operacji strukturalnych
-            _powerShellCacheService.InvalidateAllActiveTeamTemplatesList();
+            _graphCacheService.InvalidateAllActiveTeamTemplatesList();
             
             // Inwalidacja według typu szkoły (gdy operacja wpływa na listy typu szkoły)
             if (!string.IsNullOrWhiteSpace(schoolTypeId))
             {
-                _powerShellCacheService.InvalidateTeamTemplatesBySchoolType(schoolTypeId);
+                _graphCacheService.InvalidateTeamTemplatesBySchoolType(schoolTypeId);
             }
             
             // Inwalidacja starego typu szkoły (przy zmianie)
             if (!string.IsNullOrWhiteSpace(oldSchoolTypeId) && oldSchoolTypeId != schoolTypeId)
             {
-                _powerShellCacheService.InvalidateTeamTemplatesBySchoolType(oldSchoolTypeId);
+                _graphCacheService.InvalidateTeamTemplatesBySchoolType(oldSchoolTypeId);
             }
         }
 

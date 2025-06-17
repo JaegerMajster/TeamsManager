@@ -199,51 +199,7 @@
                                 </ListBox>
                             </Expander>
 
-                            <!-- Kategoria PowerShell -->
-                            <Expander Name="PowerShellCategoryExpander" IsExpanded="False" Margin="0,4">
-                                <Expander.Header>
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="Powershell" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="PowerShell i Automatyzacja"
-                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"/>
-                                    </StackPanel>
-                                </Expander.Header>
-                                <ListBox Name="PowerShellTestsList"
-                                         SelectionChanged="TestCategoryList_SelectionChanged" Tag="PowerShell"
-                                         Background="Transparent" BorderThickness="0">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Padding="12,8" CornerRadius="4">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
 
-                                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding ResultIcon}" FontSize="16"
-                                                                   Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding Id}"
-                                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
-                                                                   FontWeight="Bold" Margin="0,0,8,0"/>
-                                                        <!-- Właściwości ustawione bezpośrednio, usunięto Style="{StaticResource ChipStyle}" -->
-                                                        <Border Background="{StaticResource AccentBlue}"
-                                                                Padding="8,2" CornerRadius="10">
-                                                            <TextBlock Text="{Binding Priority}" FontSize="10"
-                                                                       Foreground="White" FontWeight="Medium"/>
-                                                        </Border>
-                                                    </StackPanel>
-
-                                                    <TextBlock Grid.Row="1" Text="{Binding Name}"
-                                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
-                                                               Foreground="{StaticResource TextSecondary}"
-                                                               TextWrapping="Wrap" Margin="24,4,0,0"/>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </Expander>
 
                             <!-- Kategoria Zarządzanie Teams -->
                             <Expander Name="TeamsManagementCategoryExpander" IsExpanded="False" Margin="0,4">

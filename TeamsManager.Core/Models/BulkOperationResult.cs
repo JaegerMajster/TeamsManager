@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace TeamsManager.Core.Models
 {
     /// <summary>
-    /// Wynik pojedynczej operacji w ramach operacji masowej PowerShell
+    /// Wynik pojedynczej operacji w ramach operacji masowej Graph API
     /// </summary>
     public class BulkOperationResult
     {
@@ -29,7 +29,7 @@ namespace TeamsManager.Core.Models
         public Dictionary<string, object>? AdditionalData { get; set; }
         
         /// <summary>
-        /// Typ operacji PowerShell (dla debugowania)
+        /// Typ operacji Graph API (dla debugowania)
         /// </summary>
         public string? OperationType { get; set; }
         

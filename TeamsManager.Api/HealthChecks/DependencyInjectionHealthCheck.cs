@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
-using TeamsManager.Core.Abstractions.Services.PowerShell;
 
 namespace TeamsManager.Api.HealthChecks
 {
@@ -30,7 +29,6 @@ namespace TeamsManager.Api.HealthChecks
                 typeof(IOperationHistoryService),
                 typeof(INotificationService),
                 typeof(ICurrentUserService),
-                typeof(IPowerShellBulkOperationsService),
                 typeof(ITeamService),
                 typeof(IUserService),
                 typeof(IDepartmentService),
