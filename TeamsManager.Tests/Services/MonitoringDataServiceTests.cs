@@ -8,6 +8,7 @@ using TeamsManager.Application.Services;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.UI.Models.Monitoring;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
@@ -401,6 +402,244 @@ namespace TeamsManager.Tests.Services
 
             action.Should().Throw<ArgumentNullException>()
                 .WithParameterName("logger");
+        }
+
+        #endregion
+
+        #region GetSystemHealthAsync Additional Tests
+
+        [Fact]
+        public async Task GetSystemHealthAsync_WithNullGraphDiagnosticInfo_ShouldFallbackToOrchestrator()
+        {
+            // Arrange
+            var healthResult = new HealthOperationResult
+            {
+                Success = true,
+                IsSuccess = true,
+                HealthChecks = new List<HealthCheckDetail>
+                {
+                    new HealthCheckDetail
+                    {
+                        ComponentName = "Graph API",
+                        Status = HealthStatus.Healthy,
+                        Description = "Connection healthy",
+                        DurationMs = 100
+                    }
+                }
+            };
+
+            _apiServiceMock
+                .Setup(x => x.GetGraphConnectionDiagnosticsAsync())
+                .ReturnsAsync((GraphDiagnosticInfo)null);
+
+            _healthOrchestratorMock
+                .Setup(x => x.RunComprehensiveHealthCheckAsync(""))
+                .ReturnsAsync(healthResult);
+
+            // Act
+            var result = await _service.GetSystemHealthAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.OverallStatus.Should().Be(TeamsManager.UI.Models.Monitoring.HealthCheck.Healthy);
+            result.Components.Should().HaveCount(1);
+            result.Components[0].Name.Should().Be("Graph API");
+            _healthOrchestratorMock.Verify(x => x.RunComprehensiveHealthCheckAsync(""), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetSystemHealthAsync_WithUnhealthyOrchestrator_ShouldReturnCritical()
+        {
+            // Arrange
+            var healthResult = new HealthOperationResult
+            {
+                Success = false,
+                IsSuccess = false,
+                HealthChecks = new List<HealthCheckDetail>
+                {
+                    new HealthCheckDetail
+                    {
+                        ComponentName = "Graph API",
+                        Status = HealthStatus.Unhealthy,
+                        Description = "Connection failed",
+                        DurationMs = 5000
+                    }
+                }
+            };
+
+            _apiServiceMock
+                .Setup(x => x.GetGraphConnectionDiagnosticsAsync())
+                .ReturnsAsync((GraphDiagnosticInfo)null);
+
+            _healthOrchestratorMock
+                .Setup(x => x.RunComprehensiveHealthCheckAsync(""))
+                .ReturnsAsync(healthResult);
+
+            // Act
+            var result = await _service.GetSystemHealthAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.OverallStatus.Should().Be(TeamsManager.UI.Models.Monitoring.HealthCheck.Critical);
+            result.Components.Should().HaveCount(1);
+            result.Components[0].Status.Should().Be(TeamsManager.UI.Models.Monitoring.HealthCheck.Critical);
+        }
+
+        #endregion
+
+        #region GetActiveOperationsAsync Additional Tests
+
+        [Fact]
+        public async Task GetActiveOperationsAsync_WithProcessStatuses_ShouldIncludeProcessData()
+        {
+            // Arrange
+            var activeOperations = new List<OperationHistory>
+            {
+                new OperationHistory
+                {
+                    Id = "op-1",
+                    Type = OperationType.TeamCreated,
+                    Status = OperationStatus.InProgress,
+                    TargetEntityName = "Test Team",
+                    CreatedBy = "user@test.com",
+                    StartedAt = DateTime.UtcNow.AddMinutes(-5),
+                    ProcessedItems = 50,
+                    TotalItems = 100
+                }
+            };
+
+            var processStatuses = new List<HealthMonitoringProcessStatus>
+            {
+                new HealthMonitoringProcessStatus
+                {
+                    ProcessId = "process-1",
+                    OperationType = "HealthCheck",
+                    Status = "Running",
+                    StartedAt = DateTime.UtcNow.AddMinutes(-2),
+                    CurrentOperation = "Checking Graph API"
+                }
+            };
+
+            _operationHistoryServiceMock
+                .Setup(x => x.GetActiveOperationsAsync())
+                .ReturnsAsync(activeOperations);
+
+            _healthOrchestratorMock
+                .Setup(x => x.GetActiveProcessesStatusAsync())
+                .ReturnsAsync(processStatuses);
+
+            // Act
+            var result = await _service.GetActiveOperationsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().HaveCount(2);
+            result.Should().Contain(op => op.Type == "Process");
+            result.Should().Contain(op => op.Name == "HealthCheck");
+        }
+
+        [Fact]
+        public async Task GetActiveOperationsAsync_WithException_ShouldReturnEmptyListGracefully()
+        {
+            // Arrange
+            _operationHistoryServiceMock
+                .Setup(x => x.GetActiveOperationsAsync())
+                .ThrowsAsync(new InvalidOperationException("Database connection failed"));
+
+            // Act
+            var result = await _service.GetActiveOperationsAsync();
+
+            // Assert
+            // Implementation gracefully handles exceptions by returning empty list
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
+        }
+
+        #endregion
+
+        #region Performance Tests
+
+        [Fact]
+        public async Task GetSystemHealthAsync_Performance_ShouldCompleteQuickly()
+        {
+            // Arrange
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var healthResult = new HealthOperationResult
+            {
+                Success = true,
+                IsSuccess = true,
+                HealthChecks = new List<HealthCheckDetail>()
+            };
+
+            _apiServiceMock
+                .Setup(x => x.GetGraphConnectionDiagnosticsAsync())
+                .ReturnsAsync((GraphDiagnosticInfo)null);
+
+            _healthOrchestratorMock
+                .Setup(x => x.RunComprehensiveHealthCheckAsync(""))
+                .ReturnsAsync(healthResult);
+
+            // Act
+            var result = await _service.GetSystemHealthAsync();
+            stopwatch.Stop();
+
+            // Assert
+            result.Should().NotBeNull();
+            stopwatch.ElapsedMilliseconds.Should().BeLessThan(1000); // Should complete within 1 second
+        }
+
+        #endregion
+
+        #region Edge Cases
+
+        [Fact]
+        public async Task GetSystemHealthAsync_WithEmptyHealthChecks_ShouldHandleGracefully()
+        {
+            // Arrange
+            var healthResult = new HealthOperationResult
+            {
+                Success = true,
+                IsSuccess = true,
+                HealthChecks = null // Null health checks
+            };
+
+            _apiServiceMock
+                .Setup(x => x.GetGraphConnectionDiagnosticsAsync())
+                .ReturnsAsync((GraphDiagnosticInfo)null);
+
+            _healthOrchestratorMock
+                .Setup(x => x.RunComprehensiveHealthCheckAsync(""))
+                .ReturnsAsync(healthResult);
+
+            // Act
+            var result = await _service.GetSystemHealthAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Components.Should().NotBeNull();
+            result.Components.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GetActiveOperationsAsync_WithNullProcessStatuses_ShouldHandleGracefully()
+        {
+            // Arrange
+            var activeOperations = new List<OperationHistory>();
+
+            _operationHistoryServiceMock
+                .Setup(x => x.GetActiveOperationsAsync())
+                .ReturnsAsync(activeOperations);
+
+            _healthOrchestratorMock
+                .Setup(x => x.GetActiveProcessesStatusAsync())
+                .ReturnsAsync((IEnumerable<HealthMonitoringProcessStatus>)null);
+
+            // Act
+            var result = await _service.GetActiveOperationsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
         }
 
         #endregion

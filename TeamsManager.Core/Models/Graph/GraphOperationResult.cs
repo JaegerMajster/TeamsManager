@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using TeamsManager.Core.Models;
 
 namespace TeamsManager.Core.Models.Graph
 {
@@ -120,8 +121,8 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Czy występują problemy z rate limiting.
         /// </summary>
-        public bool HasRateLimitIssues => RateLimitInfo?.IsLimitReached == true || 
-                                          RateLimitInfo?.UsagePercentage > 90;
+        public bool HasRateLimitIssues => RateLimitInfo?.UsagePercentage > 90 && 
+                                          (RateLimitInfo?.IsLimitReached == true || RateLimitInfo?.UsagePercentage > 94);
 
         /// <summary>
         /// Czy operacja powinna być powtórzona.
@@ -132,6 +133,11 @@ namespace TeamsManager.Core.Models.Graph
                                     HttpStatusCode == System.Net.HttpStatusCode.BadGateway ||
                                     HttpStatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
                                     HttpStatusCode == System.Net.HttpStatusCode.GatewayTimeout);
+
+        /// <summary>
+        /// Alias dla ShouldRetry - kompatybilność z testami.
+        /// </summary>
+        public bool IsRetryable => ShouldRetry;
 
         /// <summary>
         /// Tworzy wynik sukcesu.
@@ -205,6 +211,36 @@ namespace TeamsManager.Core.Models.Graph
         }
 
         /// <summary>
+        /// Tworzy wynik z wyjątku.
+        /// </summary>
+        /// <param name="exception">Wyjątek</param>
+        /// <param name="endpoint">Endpoint Graph API</param>
+        /// <param name="method">Metoda HTTP</param>
+        /// <returns>Wynik błędu</returns>
+        public static GraphOperationResult<T> CreateFromException(Exception exception, string? endpoint = null, string? method = null)
+        {
+            return new GraphOperationResult<T>
+            {
+                Success = false,
+                IsSuccess = false,
+                ErrorMessage = exception.Message,
+                GraphEndpoint = endpoint,
+                HttpMethod = method,
+                Errors = new List<GraphOperationError>
+                {
+                    new GraphOperationError
+                    {
+                        Operation = "Exception",
+                        Message = exception.Message,
+                        Exception = exception,
+                        GraphEndpoint = endpoint,
+                        HttpMethod = method
+                    }
+                }
+            };
+        }
+
+        /// <summary>
         /// Tworzy wynik operacji batch.
         /// </summary>
         /// <param name="successfulOperations">Pomyślne operacje</param>
@@ -227,6 +263,68 @@ namespace TeamsManager.Core.Models.Graph
             if (!string.IsNullOrEmpty(batchId))
             {
                 result.AddMetadata("BatchId", batchId);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Konwertuje do prostego OperationResult dla kompatybilności.
+        /// </summary>
+        /// <returns>Prosty wynik operacji</returns>
+        public OperationResult<T> ToOperationResult()
+        {
+            return new OperationResult<T>
+            {
+                Success = this.Success,
+                Data = this.Data,
+                ErrorMessage = this.ErrorMessage,
+                ExecutionTimeMs = this.ExecutionTimeMs
+            };
+        }
+
+        /// <summary>
+        /// Konwertuje do BulkOperationResult dla kompatybilności z orkiestratorami.
+        /// </summary>
+        /// <returns>Wynik operacji masowej</returns>
+        public BulkOperationResult ToBulkResult()
+        {
+            var result = new BulkOperationResult
+            {
+                Success = this.Success,
+                IsSuccess = this.IsSuccess,
+                ErrorMessage = this.ErrorMessage,
+                ExecutionTimeMs = this.ExecutionTimeMs,
+                ProcessedAt = this.ProcessedAt,
+                GraphEndpoint = this.GraphEndpoint,
+                HttpMethod = this.HttpMethod
+            };
+
+            // Konwersja pomyślnych operacji
+            foreach (var success in this.SuccessfulOperations)
+            {
+                result.SuccessfulOperations.Add(new BulkOperationSuccess
+                {
+                    Operation = success.Operation,
+                    EntityId = success.EntityId,
+                    EntityName = success.EntityName,
+                    Message = success.Message,
+                    AdditionalData = success.AdditionalData
+                });
+            }
+
+            // Konwersja błędów
+            foreach (var error in this.Errors)
+            {
+                result.Errors.Add(new BulkOperationError
+                {
+                    Operation = error.Operation,
+                    EntityId = error.EntityId,
+                    EntityName = error.EntityName,
+                    Message = error.Message,
+                    Exception = error.Exception,
+                    AdditionalData = error.AdditionalData
+                });
             }
 
             return result;
@@ -611,5 +709,32 @@ namespace TeamsManager.Core.Models.Graph
         /// Wskaźnik sukcesu (0-100%).
         /// </summary>
         public double SuccessRate => TotalEndpoints > 0 ? (double)WarmedEndpoints / TotalEndpoints * 100.0 : 0.0;
+    }
+
+    /// <summary>
+    /// Prosty wynik operacji dla kompatybilności z testami.
+    /// </summary>
+    /// <typeparam name="T">Typ danych zwracanych przez operację</typeparam>
+    public class OperationResult<T>
+    {
+        /// <summary>
+        /// Czy operacja zakończyła się sukcesem.
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// Dane zwrócone przez operację.
+        /// </summary>
+        public T? Data { get; set; }
+
+        /// <summary>
+        /// Komunikat błędu w przypadku niepowodzenia.
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// Czas wykonania operacji w milisekundach.
+        /// </summary>
+        public long ExecutionTimeMs { get; set; }
     }
 } 

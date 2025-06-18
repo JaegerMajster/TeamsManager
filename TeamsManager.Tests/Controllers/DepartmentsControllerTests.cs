@@ -58,7 +58,7 @@ namespace TeamsManager.Tests.Controllers
                 new Department { Id = "2", Name = "HR Department", IsActive = true }
             };
             
-            _mockDepartmentService.Setup(s => s.GetAllDepartmentsAsync(false, false))
+            _mockDepartmentService.Setup(s => s.GetAllDepartmentsAsync(false))
                                  .ReturnsAsync(departments);
 
             // Act
@@ -73,7 +73,7 @@ namespace TeamsManager.Tests.Controllers
         public async Task GetAllDepartments_WithServiceException_ShouldReturnInternalServerError()
         {
             // Arrange
-            _mockDepartmentService.Setup(s => s.GetAllDepartmentsAsync(It.IsAny<bool>(), It.IsAny<bool>()))
+            _mockDepartmentService.Setup(s => s.GetAllDepartmentsAsync(It.IsAny<bool>()))
                                  .ThrowsAsync(new Exception("Database error"));
 
             // Act & Assert
@@ -91,7 +91,7 @@ namespace TeamsManager.Tests.Controllers
             var departmentId = "dept-123";
             var department = new Department { Id = departmentId, Name = "Test Department", IsActive = true };
             
-            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, false, false, false))
+            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, false, false))
                                  .ReturnsAsync(department);
 
             // Act
@@ -108,7 +108,7 @@ namespace TeamsManager.Tests.Controllers
             // Arrange
             var departmentId = "nonexistent";
             
-            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>()))
+            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, It.IsAny<bool>(), It.IsAny<bool>()))
                                  .ReturnsAsync((Department?)null);
 
             // Act
@@ -199,7 +199,7 @@ namespace TeamsManager.Tests.Controllers
                 IsActive = true
             };
             
-            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, false, false, false))
+            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId))
                                  .ReturnsAsync(existingDepartment);
             
             _mockDepartmentService.Setup(s => s.UpdateDepartmentAsync(It.Is<Department>(d => 
@@ -221,7 +221,7 @@ namespace TeamsManager.Tests.Controllers
             var updateDto = new UpdateDepartmentRequestDto { Name = "Updated Department" };
             
             var existingDepartment = new Department { Id = departmentId, Name = "Old Name", IsActive = true };
-            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, false, false, false))
+            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId))
                                  .ReturnsAsync(existingDepartment);
             
             _mockDepartmentService.Setup(s => s.UpdateDepartmentAsync(It.IsAny<Department>()))
@@ -265,7 +265,7 @@ namespace TeamsManager.Tests.Controllers
             _mockDepartmentService.Setup(s => s.DeleteDepartmentAsync(departmentId))
                                  .ReturnsAsync(false);
             
-            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId, false, false, false))
+            _mockDepartmentService.Setup(s => s.GetDepartmentByIdAsync(departmentId))
                                  .ReturnsAsync((Department?)null);
 
             // Act

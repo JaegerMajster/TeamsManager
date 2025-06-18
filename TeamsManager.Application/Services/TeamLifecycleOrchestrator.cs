@@ -75,6 +75,13 @@ namespace TeamsManager.Application.Services
             ArchiveOptions options,
             string apiAccessToken)
         {
+            // 1. Walidacja parametrów na początku - ArgumentException/ArgumentNullException
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            
+            if (string.IsNullOrWhiteSpace(apiAccessToken))
+                throw new ArgumentException("Token dostępu jest wymagany", nameof(apiAccessToken));
+
             var processId = Guid.NewGuid().ToString();
             var cts = new CancellationTokenSource();
             
@@ -82,20 +89,18 @@ namespace TeamsManager.Application.Services
 
             try
             {
-                // 1. Walidacja parametrów (wzorzec z SchoolYearProcessOrchestrator)
+                // 2. Obsługa pustej listy zespołów - SUKCES z 0 operacji
                 if (teamIds?.Any() != true)
                 {
-                    _logger.LogWarning("TeamLifecycle: Pusta lista zespołów do archiwizacji");
+                    _logger.LogInformation("TeamLifecycle: Pusta lista zespołów - zwracam sukces z 0 operacji");
                     return new BulkOperationResult
                     {
-                        Success = false,
-                        IsSuccess = false,
-                        ErrorMessage = "Lista zespołów jest wymagana",
-                        Errors = new List<BulkOperationError>
-                        {
-                            new BulkOperationError { Message = "Lista zespołów jest wymagana", Operation = "BulkArchiveValidation" }
-                        },
-                        SuccessfulOperations = new List<BulkOperationSuccess>()
+                        Success = true,
+                        IsSuccess = true,
+                        SuccessfulOperations = new List<BulkOperationSuccess>(),
+                        Errors = new List<BulkOperationError>(),
+                        ProcessedAt = DateTime.UtcNow,
+                        OperationType = "BulkArchiveTeamsWithCleanup"
                     };
                 }
 
@@ -298,6 +303,16 @@ namespace TeamsManager.Application.Services
             RestoreOptions options,
             string apiAccessToken)
         {
+            // 1. Walidacja parametrów na początku - ArgumentException/ArgumentNullException
+            if (teamIds == null)
+                throw new ArgumentNullException(nameof(teamIds));
+                
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            
+            if (string.IsNullOrWhiteSpace(apiAccessToken))
+                throw new ArgumentException("Token dostępu jest wymagany", nameof(apiAccessToken));
+
             var processId = Guid.NewGuid().ToString();
             var cts = new CancellationTokenSource();
             
@@ -305,18 +320,18 @@ namespace TeamsManager.Application.Services
 
             try
             {
-                // Walidacja parametrów
-                if (teamIds?.Any() != true)
+                // 2. Obsługa pustej listy zespołów - SUKCES z 0 operacji
+                if (!teamIds.Any())
                 {
+                    _logger.LogInformation("TeamLifecycle: Pusta lista zespołów - zwracam sukces z 0 operacji");
                     return new BulkOperationResult
                     {
-                        Success = false,
-                        IsSuccess = false,
-                        ErrorMessage = "Lista zespołów jest wymagana",
-                        Errors = new List<BulkOperationError>
-                        {
-                            new BulkOperationError { Message = "Lista zespołów jest wymagana", Operation = "BulkRestoreValidation" }
-                        }
+                        Success = true,
+                        IsSuccess = true,
+                        SuccessfulOperations = new List<BulkOperationSuccess>(),
+                        Errors = new List<BulkOperationError>(),
+                        ProcessedAt = DateTime.UtcNow,
+                        OperationType = "BulkRestoreTeamsWithValidation"
                     };
                 }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace TeamsManager.Core.Models.Graph
 {
@@ -31,13 +32,13 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Procent ukończenia (0-100)
         /// </summary>
-        public double PercentageComplete => TotalOperations > 0 ? 
+        public double PercentageComplete => TotalOperations != 0 ? 
             (double)CompletedOperations / TotalOperations * 100.0 : 0.0;
 
         /// <summary>
         /// Wskaźnik sukcesu (0-100%)
         /// </summary>
-        public double SuccessRate => CompletedOperations > 0 ? 
+        public double SuccessRate => CompletedOperations != 0 ? 
             (double)SuccessfulOperations / CompletedOperations * 100.0 : 0.0;
 
         /// <summary>
@@ -91,12 +92,15 @@ namespace TeamsManager.Core.Models.Graph
         {
             get
             {
+                if (TotalOperations == 0)
+                    return "Oczekuje: 0 operacji do wykonania";
+                
                 if (IsCompleted)
                     return $"Ukończono: {SuccessfulOperations}/{TotalOperations} operacji zakończonych sukcesem";
                 
                 if (IsInProgress)
-                    return $"W trakcie: {CompletedOperations}/{TotalOperations} ({PercentageComplete:F1}%)";
-                
+                    return $"W trakcie: {CompletedOperations}/{TotalOperations} ({PercentageComplete.ToString("F1", CultureInfo.InvariantCulture)}%)";
+                    
                 return $"Oczekuje: {TotalOperations} operacji do wykonania";
             }
         }

@@ -133,6 +133,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 return createdTeam;
             }
+            catch (ArgumentException)
+            {
+                // Re-throw ArgumentException (validation errors) - nie loguj ich jako błędy
+                throw;
+            }
             catch (GraphConnectionException ex)
             {
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(ex, 
@@ -274,6 +279,11 @@ namespace TeamsManager.Core.Services.Graph
                 _logger.LogDebug("Zespół {TeamId} został zarchiwizowany", teamId);
                 return true;
             }
+            catch (ArgumentException)
+            {
+                // Re-throw ArgumentException (validation errors)
+                throw;
+            }
             catch (GraphConnectionException ex)
             {
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(ex, 
@@ -318,6 +328,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 _logger.LogDebug("Zespół {TeamId} został przywrócony z archiwum", teamId);
                 return true;
+            }
+            catch (ArgumentException)
+            {
+                // Re-throw ArgumentException (validation errors)
+                throw;
             }
             catch (GraphConnectionException ex)
             {
@@ -364,6 +379,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 _logger.LogDebug("Zespół {TeamId} został usunięty", teamId);
                 return true;
+            }
+            catch (ArgumentException)
+            {
+                // Re-throw ArgumentException (validation errors)
+                throw;
             }
             catch (GraphConnectionException ex)
             {
@@ -436,6 +456,11 @@ namespace TeamsManager.Core.Services.Graph
                 }
 
                 return team;
+            }
+            catch (ArgumentException)
+            {
+                // Re-throw ArgumentException (validation errors)
+                throw;
             }
             catch (GraphConnectionException ex)
             {

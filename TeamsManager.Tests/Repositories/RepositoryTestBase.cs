@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TeamsManager.Data.Repositories;
 using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Tests.Infrastructure;
@@ -17,6 +18,9 @@ namespace TeamsManager.Tests.Repositories
         protected override void ConfigureServices(IServiceCollection services)
         {
             base.ConfigureServices(services);
+
+            // Rejestracja loggera dla EfUnitOfWork (tylko dla testów)
+            services.AddLogging(builder => builder.AddConsole());
 
             // Rejestracja wszystkich repozytoriów używanych w testach
             services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();

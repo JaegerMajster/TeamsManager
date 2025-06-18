@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.ComponentModel.DataAnnotations;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
@@ -50,7 +51,7 @@ namespace TeamsManager.Api.Controllers
                 
                 // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
-                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Unauthorized("Brak tokenu dostępu w nagłówku Authorization");
                 }
@@ -112,7 +113,7 @@ namespace TeamsManager.Api.Controllers
                 
                 // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
-                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Unauthorized("Brak tokenu dostępu w nagłówku Authorization");
                 }
@@ -175,7 +176,7 @@ namespace TeamsManager.Api.Controllers
                 
                 // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
-                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Unauthorized("Brak tokenu dostępu w nagłówku Authorization");
                 }
@@ -237,7 +238,7 @@ namespace TeamsManager.Api.Controllers
                 
                 // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
-                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
                     return Unauthorized("Brak tokenu dostępu w nagłówku Authorization");
                 }

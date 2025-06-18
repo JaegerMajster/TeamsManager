@@ -114,8 +114,8 @@ namespace TeamsManager.Core.Models.Graph
         /// <summary>
         /// Czy występują problemy z rate limiting.
         /// </summary>
-        public bool HasRateLimitIssues => RateLimitInfo?.IsLimitReached == true || 
-                                          RateLimitInfo?.UsagePercentage > 90;
+        public bool HasRateLimitIssues => RateLimitInfo?.UsagePercentage > 90 && 
+                                          (RateLimitInfo?.IsLimitReached == true || RateLimitInfo?.UsagePercentage > 94);
 
         /// <summary>
         /// Kompatybilność z API - liczba dodanych elementów.

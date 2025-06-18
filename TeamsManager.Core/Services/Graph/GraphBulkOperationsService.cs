@@ -134,6 +134,12 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (GraphConnectionException ex)
             {
+                // Zwróć false dla wszystkich użytkowników przed przekazaniem do GraphExceptionHandler
+                foreach (var userUpn in userUpns.Where(u => !result.ContainsKey(u)))
+                {
+                    result[userUpn] = false;
+                }
+                
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(ex, 
                     () => BulkAddUsersToTeamAsync(teamId, userUpns, role, progress),
                     _logger,
@@ -1798,14 +1804,44 @@ namespace TeamsManager.Core.Services.Graph
             string accessToken,
             bool respectRateLimit = true)
         {
-            if (batchOperations == null || !batchOperations.Any())
-                throw new ArgumentException("Lista operacji nie może być pusta", nameof(batchOperations));
+            if (batchOperations == null)
+                throw new ArgumentNullException(nameof(batchOperations));
 
             if (string.IsNullOrWhiteSpace(accessToken))
                 throw new ArgumentException("Token dostępu nie może być pusty", nameof(accessToken));
 
+            // Dla pustej listy zwróć pusty wynik (zgodnie z best practices)
+            if (!batchOperations.Any())
+            {
+                _logger.LogDebug("Otrzymano pustą listę operacji batch - zwracam pusty wynik");
+                var emptyResult = GraphBulkResult.CreateSuccess("/$batch", "POST", 0);
+                emptyResult.BatchId = Guid.NewGuid().ToString();
+                return emptyResult;
+            }
+
+            // Jeśli batch jest większy niż maksymalny rozmiar, podziel na mniejsze batche
             if (batchOperations.Count > MaxBatchSize)
-                throw new ArgumentException($"Maksymalny rozmiar batch to {MaxBatchSize} operacji", nameof(batchOperations));
+            {
+                _logger.LogDebug("Dzielę duży batch {Count} operacji na mniejsze batche (max {MaxSize})", 
+                    batchOperations.Count, MaxBatchSize);
+                
+                var chunkingStartTime = DateTime.UtcNow;
+                var allResults = new List<GraphBatchOperationResult>();
+                var batches = CreateBatches(batchOperations, MaxBatchSize);
+                
+                foreach (var batch in batches)
+                {
+                    var batchResult = await ExecuteBatchOperationsAsync(batch, accessToken, respectRateLimit);
+                    allResults.AddRange(batchResult.BatchResults);
+                }
+                
+                var executionTime = (long)(DateTime.UtcNow - chunkingStartTime).TotalMilliseconds;
+                var finalResult = GraphBulkResult.CreateSuccess("/$batch", "POST", executionTime);
+                finalResult.BatchId = Guid.NewGuid().ToString();
+                finalResult.BatchResults.AddRange(allResults);
+                
+                return finalResult;
+            }
 
             _logger.LogDebug("Wykonuję batch z {Count} operacjami", batchOperations.Count);
 

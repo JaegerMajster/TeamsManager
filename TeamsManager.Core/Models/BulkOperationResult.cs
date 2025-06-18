@@ -38,6 +38,16 @@ namespace TeamsManager.Core.Models
         /// </summary>
         public long? ExecutionTimeMs { get; set; }
 
+        /// <summary>
+        /// Endpoint Graph API (dla kompatybilności).
+        /// </summary>
+        public string? GraphEndpoint { get; set; }
+
+        /// <summary>
+        /// Metoda HTTP (dla kompatybilności).
+        /// </summary>
+        public string? HttpMethod { get; set; }
+
         // ===== WŁAŚCIWOŚCI KOMPATYBILNOŚCI Z ORKIESTRATOREM =====
         
         /// <summary>

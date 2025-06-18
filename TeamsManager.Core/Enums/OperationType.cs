@@ -6,6 +6,9 @@
     /// </summary>
     public enum OperationType
     {
+        // Nieznana/domyślna operacja
+        None = 0,               // Nieznana operacja
+        
         // Operacje na zespołach
         TeamCreated = 1,        // Utworzenie zespołu
         TeamUpdated = 2,        // Aktualizacja zespołu

@@ -25,6 +25,7 @@ namespace TeamsManager.Tests.Services
             _mockHandler = new Mock<HttpMessageHandler>();
             
             var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("https://graph.microsoft.com/");
             var confidentialClientApp = new Mock<IConfidentialClientApplication>();
             
             _modernHttpService = new ModernHttpService(httpClient, _mockLogger.Object, confidentialClientApp.Object);
@@ -37,6 +38,7 @@ namespace TeamsManager.Tests.Services
         {
             // Arrange
             var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("https://graph.microsoft.com/");
             var confidentialClientApp = new Mock<IConfidentialClientApplication>();
             var service = new ModernHttpService(httpClient, _mockLogger.Object, confidentialClientApp.Object);
 
@@ -49,6 +51,7 @@ namespace TeamsManager.Tests.Services
         {
             // Arrange & Act
             var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("https://graph.microsoft.com/");
             var confidentialClientApp = new Mock<IConfidentialClientApplication>();
             var service = new ModernHttpService(httpClient, _mockLogger.Object, confidentialClientApp.Object);
 
@@ -183,6 +186,7 @@ namespace TeamsManager.Tests.Services
         {
             // Arrange & Act
             var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("https://graph.microsoft.com/");
             var confidentialClientApp = new Mock<IConfidentialClientApplication>();
             var service = new ModernHttpService(httpClient, _mockLogger.Object, confidentialClientApp.Object);
 
@@ -197,6 +201,7 @@ namespace TeamsManager.Tests.Services
         {
             // Arrange
             var httpClient = new HttpClient(_mockHandler.Object);
+            httpClient.BaseAddress = new Uri("https://graph.microsoft.com/");
             var logger = new Mock<ILogger<ModernHttpService>>();
             var confidentialClientApp = new Mock<IConfidentialClientApplication>();
             var service = new ModernHttpService(httpClient, logger.Object, confidentialClientApp.Object);

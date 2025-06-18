@@ -13,11 +13,11 @@ namespace TeamsManager.Core.Extensions
         /// </summary>
         public static string ToPolishString(this OperationStatus status) => status switch
         {
-            OperationStatus.Pending => "Oczekuje",
-            OperationStatus.InProgress => "W toku",
-            OperationStatus.Completed => "Zakończono",
-            OperationStatus.Failed => "Niepowodzenie",
-            OperationStatus.Cancelled => "Anulowano",
+            OperationStatus.Pending => "Oczekująca",
+            OperationStatus.InProgress => "W trakcie",
+            OperationStatus.Completed => "Zakończona sukcesem",
+            OperationStatus.Failed => "Nieudana",
+            OperationStatus.Cancelled => "Anulowana",
             OperationStatus.PartialSuccess => "Częściowy sukces",
             _ => status.ToString()
         };
@@ -27,6 +27,7 @@ namespace TeamsManager.Core.Extensions
         /// </summary>
         public static string ToPolishString(this OperationType operationType) => operationType switch
         {
+            OperationType.None => "Nieznana operacja",
             OperationType.TeamCreated => "Utworzenie zespołu",
             OperationType.TeamUpdated => "Aktualizacja zespołu",
             OperationType.TeamArchived => "Archiwizacja zespołu",

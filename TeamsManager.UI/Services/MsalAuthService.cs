@@ -106,9 +106,12 @@ namespace TeamsManager.UI.Services
 
         public async Task<AuthenticationResult?> AcquireTokenInteractiveAsync(Window window)
         {
-            // Sprawdź argumenty zgodnie z wzorcem implementacyjnym
+            // Handle null window gracefully - return null instead of throwing
             if (window == null)
-                throw new ArgumentNullException(nameof(window));
+            {
+                _logger.LogWarning("MSAL: Cannot acquire token interactively with null window");
+                return null;
+            }
             
             if (_publicClientApp == null) // Sprawdź, czy _publicClientApp zostało poprawnie zainicjowane
             {
@@ -231,9 +234,12 @@ namespace TeamsManager.UI.Services
 
         public async Task<string?> AcquireGraphTokenInteractiveAsync(Window window)
         {
-            // Sprawdź argumenty zgodnie z wzorcem implementacyjnym
+            // Handle null window gracefully - return null instead of throwing
             if (window == null)
-                throw new ArgumentNullException(nameof(window));
+            {
+                _logger.LogWarning("MSAL: Cannot acquire Graph token interactively with null window");
+                return null;
+            }
             
             if (_publicClientApp == null)
             {
