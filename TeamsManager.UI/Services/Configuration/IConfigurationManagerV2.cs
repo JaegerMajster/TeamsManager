@@ -21,6 +21,7 @@ namespace TeamsManager.UI.Services.Configuration
         Task<bool> ValidateConfigurationAsync();
         Task BackupConfigurationAsync();
         Task RestoreConfigurationAsync(string backupPath);
+        Task ReencryptForCurrentUserAsync(string configName);
         
         // Zdarzenia
         event EventHandler<ConfigurationChangedEventArgs> ConfigurationChanged;

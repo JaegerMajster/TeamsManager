@@ -107,7 +107,7 @@ namespace TeamsManager.UI.Services.Configuration
                     var encryptedData = JsonSerializer.Deserialize<EncryptedData>(jsonContent);
                     if (encryptedData != null)
                     {
-                        var decryptedJson = _encryption.Decrypt(encryptedData);
+                        var decryptedJson = _encryption.DecryptWithFallback(encryptedData);
                         return JsonSerializer.Deserialize<T>(decryptedJson);
                     }
                 }
@@ -129,6 +129,8 @@ namespace TeamsManager.UI.Services.Configuration
         {
             try
             {
+                _logger.LogInformation("💾 Rozpoczęcie zapisu konfiguracji {ConfigName}", configName);
+                
                 if (configuration == null)
                     throw new ArgumentNullException(nameof(configuration));
 
@@ -136,6 +138,8 @@ namespace TeamsManager.UI.Services.Configuration
                 await CreateBackupAsync(configName);
 
                 var filePath = GetConfigFilePath(configName);
+                _logger.LogInformation("💾 Ścieżka pliku: {FilePath}", filePath);
+                
                 var jsonOptions = new JsonSerializerOptions 
                 { 
                     WriteIndented = true,
@@ -147,25 +151,33 @@ namespace TeamsManager.UI.Services.Configuration
                 // Sprawdź czy plik powinien być zaszyfrowany
                 if (IsEncrypted(configName))
                 {
+                    _logger.LogInformation("💾 Konfiguracja {ConfigName} wymaga szyfrowania", configName);
                     var plainJson = JsonSerializer.Serialize(configuration, jsonOptions);
+                    _logger.LogInformation("💾 JSON do zaszyfrowania ma {Length} znaków", plainJson.Length);
+                    
                     var encryptedData = _encryption.Encrypt(plainJson);
+                    _logger.LogInformation("💾 Dane zaszyfrowane pomyślnie");
+                    
                     jsonContent = JsonSerializer.Serialize(encryptedData, jsonOptions);
+                    _logger.LogInformation("💾 JSON zaszyfrowany ma {Length} znaków", jsonContent.Length);
                 }
                 else
                 {
+                    _logger.LogInformation("💾 Konfiguracja {ConfigName} nie wymaga szyfrowania", configName);
                     jsonContent = JsonSerializer.Serialize(configuration, jsonOptions);
                 }
 
                 await File.WriteAllTextAsync(filePath, jsonContent);
+                _logger.LogInformation("💾 Plik zapisany na dysku");
                 
-                _logger.LogInformation("Zapisano konfigurację {ConfigName}", configName);
+                _logger.LogInformation("💾 Zapisano konfigurację {ConfigName}", configName);
                 
                 // Powiadom o zmianie
                 ConfigurationChanged?.Invoke(this, new ConfigurationChangedEventArgs(configName, typeof(T)));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas zapisywania konfiguracji {ConfigName}", configName);
+                _logger.LogError(ex, "💾 Błąd podczas zapisywania konfiguracji {ConfigName}", configName);
                 throw;
             }
         }
@@ -299,6 +311,19 @@ namespace TeamsManager.UI.Services.Configuration
         {
             try
             {
+                // Ignoruj zmiany w katalogu logs żeby uniknąć pętli z FileLoggerProvider
+                if (e.FullPath.Contains("\\logs\\") || e.FullPath.Contains("/logs/"))
+                {
+                    return;
+                }
+                
+                // Ignoruj zmiany w katalogu backups i cache
+                if (e.FullPath.Contains("\\backups\\") || e.FullPath.Contains("/backups/") ||
+                    e.FullPath.Contains("\\cache\\") || e.FullPath.Contains("/cache/"))
+                {
+                    return;
+                }
+                
                 if (e.ChangeType == WatcherChangeTypes.Changed || e.ChangeType == WatcherChangeTypes.Created)
                 {
                     var configName = Path.GetFileNameWithoutExtension(e.Name);
@@ -369,6 +394,64 @@ namespace TeamsManager.UI.Services.Configuration
                 using var entryStream = entry.Open();
                 using var fileStream = File.OpenRead(file);
                 await fileStream.CopyToAsync(entryStream);
+            }
+        }
+
+        public async Task ReencryptForCurrentUserAsync(string configName)
+        {
+            try
+            {
+                _logger.LogInformation("🔄 Rozpoczęcie ponownego szyfrowania {ConfigName} dla bieżącego użytkownika", configName);
+                
+                if (!IsEncrypted(configName))
+                {
+                    _logger.LogWarning("Konfiguracja {ConfigName} nie wymaga szyfrowania", configName);
+                    return;
+                }
+
+                var filePath = GetConfigFilePath(configName);
+                if (!File.Exists(filePath))
+                {
+                    _logger.LogWarning("Plik {ConfigName} nie istnieje", configName);
+                    return;
+                }
+
+                // Wczytaj i odszyfruj obecne dane (z fallback)
+                var jsonContent = await File.ReadAllTextAsync(filePath);
+                var encryptedData = JsonSerializer.Deserialize<EncryptedData>(jsonContent);
+                
+                if (encryptedData == null)
+                {
+                    _logger.LogError("Nie można zdekodować danych z {ConfigName}", configName);
+                    return;
+                }
+
+                var decryptedJson = _encryption.DecryptWithFallback(encryptedData);
+                
+                if (string.IsNullOrEmpty(decryptedJson) || decryptedJson == "{}")
+                {
+                    _logger.LogWarning("Nie udało się odzyskać danych z {ConfigName}", configName);
+                    return;
+                }
+
+                // Ponownie zaszyfruj dla bieżącego użytkownika
+                var newEncryptedData = _encryption.EncryptForCurrentUser(decryptedJson);
+                
+                // Backup przed zapisem
+                await CreateBackupAsync(configName);
+                
+                // Zapisz ponownie zaszyfrowane dane
+                var jsonOptions = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+                var newJsonContent = JsonSerializer.Serialize(newEncryptedData, jsonOptions);
+                
+                await File.WriteAllTextAsync(filePath, newJsonContent);
+                
+                _logger.LogInformation("✅ Pomyślnie ponownie zaszyfrowano {ConfigName} dla użytkownika {User}", configName, Environment.UserName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Błąd podczas ponownego szyfrowania {ConfigName}", configName);
+                throw;
             }
         }
 

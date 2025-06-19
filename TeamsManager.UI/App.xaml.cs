@@ -43,6 +43,7 @@ using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Broker;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Services.Configuration;
+using TeamsManager.UI.Tools;
 
 namespace TeamsManager.UI
 {
@@ -92,6 +93,13 @@ namespace TeamsManager.UI
             {
                 configure.AddDebug();
                 configure.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
+                
+                // Upewnij się, że katalog logs istnieje
+                var logsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TeamsManager", "logs");
+                Directory.CreateDirectory(logsPath);
+                
+                // Dodaj FileLoggerProvider do zapisywania logów do plików UTF-8
+                configure.AddProvider(new Services.Configuration.FileLoggerProvider(logsPath));
             });
 
             // Konfiguracja ICurrentUserService
@@ -105,6 +113,9 @@ namespace TeamsManager.UI
             // Okno i ViewModel konfiguracji
             services.AddTransient<ConfigurationSetupWindow>();
             services.AddTransient<ConfigurationSetupViewModel>();
+            
+            // DEBUG TOOL dla konfiguracji
+            // services.AddTransient<TeamsManager.UI.Tools.ConfigurationDebugTool>();
             
             // Rejestracja IPublicClientApplication dla MsalAuthService z Windows Hello/WAM - NOWY SYSTEM V2.0
             // LAZY LOADING - konfiguracja ładowana dopiero gdy jest potrzebna
@@ -677,62 +688,146 @@ namespace TeamsManager.UI
         {
             try
             {
-                // Sprawdź czy baza danych istnieje i utwórz ją jeśli nie
+                System.Diagnostics.Debug.WriteLine("=== APP: Inicjalizacja bazy danych ===");
                 await context.Database.EnsureCreatedAsync();
-                
-                // Sprawdź czy dane już istnieją
-                var usersCount = await context.Users.CountAsync();
-                var departmentsCount = await context.Departments.CountAsync();
-                
-                System.Diagnostics.Debug.WriteLine($"[Database] Users: {usersCount}, Departments: {departmentsCount}");
-                
-    
-                if (usersCount == 0 && departmentsCount == 0)
-                {
-                    System.Diagnostics.Debug.WriteLine("[Database] Baza danych jest pusta, dodawanie przykładowych danych...");
-                    await TeamsManager.Data.TestDataSeeder.SeedAsync(context);
-                    System.Diagnostics.Debug.WriteLine("[Database] Przykładowe dane zostały dodane.");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("[Database] Baza danych zawiera już dane.");
-                }
-
-                // Utwórz domyślną jednostkę organizacyjną i przypisz do niej wszystkie działy
-                System.Diagnostics.Debug.WriteLine("[Database] Sprawdzanie jednostek organizacyjnych...");
-                await Scripts.CreateDefaultOrganizationalUnit.ExecuteAsync(context);
+                System.Diagnostics.Debug.WriteLine("=== APP: Baza danych zainicjalizowana ===");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Database] Błąd podczas inicjalizacji bazy danych: {ex.Message}");
-                MessageBox.Show(
-                    $"Błąd podczas inicjalizacji bazy danych:\n\n{ex.Message}", 
-                    "Błąd bazy danych", 
-                    MessageBoxButton.OK, 
-                    MessageBoxImage.Warning);
+                System.Diagnostics.Debug.WriteLine($"=== APP: Błąd inicjalizacji bazy danych: {ex.Message} ===");
+            }
+        }
+
+        private async Task RunConfigurationTestAsync()
+        {
+            try
+            {
+                Console.WriteLine("🔧 TEST KONFIGURACJI V2.0");
+                
+                var configManager = ServiceProvider.GetRequiredService<IConfigurationManagerV2>();
+                
+                // Test 1: Application Configuration
+                Console.WriteLine("\n1. Testowanie Application Configuration...");
+                var appConfig = await configManager.LoadApplicationConfigurationAsync();
+                if (appConfig != null)
+                {
+                    Console.WriteLine($"✅ Application Name: {appConfig.Application.Name}");
+                    Console.WriteLine($"✅ Version: {appConfig.Application.Version}");
+                    Console.WriteLine($"✅ Environment: {appConfig.Environment}");
+                    Console.WriteLine($"✅ API Base URL: {appConfig.Api.BaseUrl}");
+                }
+                else
+                {
+                    Console.WriteLine("❌ Application Configuration NIE WCZYTANA");
+                }
+
+                // Test 2: Azure AD Configuration (ZASZYFROWANA)
+                Console.WriteLine("\n2. Testowanie Azure AD Configuration (zaszyfrowana)...");
+                var azureConfig = await configManager.LoadAzureAdConfigurationAsync();
+                if (azureConfig != null)
+                {
+                    Console.WriteLine($"✅ Tenant ID: {azureConfig.TenantId}");
+                    Console.WriteLine($"✅ UI Client ID: {azureConfig.Ui.ClientId}");
+                    Console.WriteLine($"✅ API Client ID: {azureConfig.Api.ClientId}");
+                    Console.WriteLine($"✅ Client Secret: {(string.IsNullOrEmpty(azureConfig.Api.ClientSecret) ? "BRAK" : "USTAWIONY")}");
+                    Console.WriteLine($"✅ Audience: {azureConfig.Api.Audience}");
+                }
+                else
+                {
+                    Console.WriteLine("❌ Azure AD Configuration NIE WCZYTANA");
+                }
+
+                Console.WriteLine("\n✅ TEST ZAKOŃCZONY");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ BŁĄD TESTU: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-
+            ILogger<App>? logger = null;
+            
             try
             {
-                System.Diagnostics.Debug.WriteLine("=== APP: OnStartup rozpoczęta ===");
-                Console.WriteLine("=== APP: OnStartup rozpoczęta ===");
+                // Najpierw skonfiguruj logger
+                var logsDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "TeamsManager", "logs");
+                
+                using var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
+                {
+                    builder
+                        .SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug)
+                        .AddProvider(new Services.Configuration.FileLoggerProvider(logsDirectory));
+                });
+                
+                logger = loggerFactory.CreateLogger<App>();
+                
+                logger.LogInformation("🚀 TEAMSMANAGER - URUCHOMIENIE APLIKACJI");
+                logger.LogInformation($"🚀 Argumenty: {string.Join(", ", e.Args)}");
+                logger.LogInformation($"🚀 Użytkownik: {Environment.UserName}");
+                logger.LogInformation($"🚀 Maszyna: {Environment.MachineName}");
+                logger.LogInformation($"🚀 Wersja .NET: {Environment.Version}");
+                
+                Console.WriteLine("🚀 APP: OnStartup rozpoczęty");
+                Console.WriteLine($"🚀 APP: Argumenty: {string.Join(", ", e.Args)}");
+                
+                // TEST SZYFROWANIA - dodany dla debugowania problemu
+                Console.WriteLine("🧪 APP: Uruchamiam test szyfrowania...");
+                logger.LogInformation("🧪 Uruchamiam test szyfrowania...");
+                
+                ConfigurationTool.TestEncryption();
+                
+                Console.WriteLine("🧪 APP: Test szyfrowania zakończony");
+                logger.LogInformation("🧪 Test szyfrowania zakończony");
+                
+                // TEST KONFIGURACJI - sprawdź argument --test-config
+                if (e.Args.Length > 0 && e.Args[0] == "--test-config")
+                {
+                    Console.WriteLine("🔧 APP: Wykryto argument --test-config, uruchamiam test");
+                    logger.LogInformation("🔧 Wykryto argument --test-config, uruchamiam test");
+                    
+                    base.OnStartup(e);
+                    await RunConfigurationTestAsync();
+                    
+                    Console.WriteLine("✅ APP: Test zakończony, zamykam aplikację");
+                    logger.LogInformation("✅ Test zakończony, zamykam aplikację");
+                    
+                    Shutdown();
+                    return;
+                }
+                
+                base.OnStartup(e);
+                
+                System.Diagnostics.Debug.WriteLine("=== APP: Uruchamianie aplikacji ===");
+                Console.WriteLine("=== APP: Uruchamianie aplikacji ===");
+                logger.LogInformation("=== URUCHAMIANIE GŁÓWNEJ APLIKACJI ===");
                 
                 // Sprawdź czy konfiguracja jest kompletna
+                logger.LogInformation("🔍 Sprawdzam kompletność konfiguracji...");
+                
                 var isConfigComplete = await ConfigurationSetupWindow.CheckConfigurationAsync(ServiceProvider);
+                
+                logger.LogInformation($"🔍 Wynik sprawdzania konfiguracji: {(isConfigComplete ? "KOMPLETNA" : "NIEKOMPLETNA")}");
+                
                 if (!isConfigComplete)
                 {
                     System.Diagnostics.Debug.WriteLine("=== APP: Konfiguracja niekompletna - pokazuję okno konfiguracji ===");
+                    logger.LogWarning("❌ Konfiguracja niekompletna - pokazuję okno konfiguracji");
                     
                     // Pokaż okno konfiguracji
                     var configResult = ConfigurationSetupWindow.ShowConfigurationDialog(null, ServiceProvider);
+                    
+                    logger.LogInformation($"🔧 Wynik okna konfiguracji: {configResult}");
+                    
                     if (configResult != true)
                     {
                         // Użytkownik anulował konfigurację - zamknij aplikację
+                        logger.LogWarning("❌ Użytkownik anulował konfigurację - zamykam aplikację");
+                        
                         MessageBox.Show("Aplikacja zostanie zamknięta, ponieważ konfiguracja jest wymagana do prawidłowego działania.",
                                       "Konfiguracja anulowana", MessageBoxButton.OK, MessageBoxImage.Information);
                         
@@ -749,11 +844,19 @@ namespace TeamsManager.UI
                     }
                     
                     System.Diagnostics.Debug.WriteLine("=== APP: Konfiguracja zakończona pomyślnie ===");
+                    logger.LogInformation("✅ Konfiguracja zakończona pomyślnie");
                     
                     // Po zapisaniu konfiguracji sprawdź ponownie czy jest kompletna
+                    logger.LogInformation("🔍 Sprawdzam ponownie kompletność konfiguracji po zapisie...");
+                    
                     isConfigComplete = await ConfigurationSetupWindow.CheckConfigurationAsync(ServiceProvider);
+                    
+                    logger.LogInformation($"🔍 Wynik ponownego sprawdzania: {(isConfigComplete ? "KOMPLETNA" : "NIEKOMPLETNA")}");
+                    
                     if (!isConfigComplete)
                     {
+                        logger.LogError("❌ Konfiguracja nadal niekompletna po zapisie - zamykam aplikację");
+                        
                         MessageBox.Show("Konfiguracja nadal jest niekompletna. Aplikacja zostanie zamknięta.",
                                       "Błąd konfiguracji", MessageBoxButton.OK, MessageBoxImage.Error);
                         
@@ -769,6 +872,8 @@ namespace TeamsManager.UI
                     }
                 }
                 
+                logger.LogInformation("✅ Konfiguracja jest kompletna - kontynuuję uruchomienie");
+                
                 // Przywróć normalny ShutdownMode i uruchom główne okno
                 try
                 {
@@ -777,21 +882,25 @@ namespace TeamsManager.UI
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[APP] Nie można ustawić ShutdownMode: {ex.Message}");
+                    logger.LogWarning(ex, "Nie można ustawić ShutdownMode");
                 }
                 
                 System.Diagnostics.Debug.WriteLine("=== APP: Tworzenie MainShellWindow przez DI ===");
                 Console.WriteLine("=== APP: Tworzenie MainShellWindow przez DI ===");
+                logger.LogInformation("🏠 Tworzenie głównego okna aplikacji...");
                 
                 // Tworzenie MainShellWindow przez DI
                 var mainShellWindow = ServiceProvider.GetRequiredService<MainShellWindow>();
                 
                 System.Diagnostics.Debug.WriteLine($"=== APP: MainShellWindow utworzone: {mainShellWindow != null} ===");
                 Console.WriteLine($"=== APP: MainShellWindow utworzone: {mainShellWindow != null} ===");
+                logger.LogInformation($"🏠 MainShellWindow utworzone: {mainShellWindow != null}");
                 
                 mainShellWindow.Show();
                 
                 System.Diagnostics.Debug.WriteLine("=== APP: MainShellWindow.Show() wywołane ===");
                 Console.WriteLine("=== APP: MainShellWindow.Show() wywołane ===");
+                logger.LogInformation("🏠 MainShellWindow.Show() wywołane - aplikacja uruchomiona");
                 
                 // Weryfikacja DI (debug)
                 System.Diagnostics.Debug.WriteLine($"[DI Test] MainShellWindow created via DI: {mainShellWindow != null}");
@@ -823,20 +932,24 @@ namespace TeamsManager.UI
                         {
                             System.Diagnostics.Debug.WriteLine($"[Config Test] Azure AD configuration loaded successfully");
                             System.Diagnostics.Debug.WriteLine($"[Config Test] UI ClientId: {azureAdConfig.Ui.ClientId}, API ClientId: {azureAdConfig.Api.ClientId}");
+                            logger.LogInformation("✅ Konfiguracja Azure AD załadowana pomyślnie");
                         }
                         else
                         {
                             System.Diagnostics.Debug.WriteLine($"[Config Test] Azure AD configuration is invalid or incomplete");
+                            logger.LogWarning("❌ Konfiguracja Azure AD jest nieprawidłowa lub niekompletna");
                         }
                     }
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine($"[Config Test] Failed to load Azure AD configuration: {ex.Message}");
+                        logger.LogError(ex, "❌ Błąd podczas ładowania konfiguracji Azure AD");
                     }
                 }
                 else
                 {
                     System.Diagnostics.Debug.WriteLine($"[Config Test] ConfigurationManagerV2 service not available");
+                    logger.LogWarning("❌ Serwis ConfigurationManagerV2 niedostępny");
                 }
 
                 // Sprawdzenie DbContext i seedowanie danych
@@ -844,6 +957,7 @@ namespace TeamsManager.UI
                 {
                     var dbContext = ServiceProvider.GetRequiredService<TeamsManagerDbContext>();
                     System.Diagnostics.Debug.WriteLine($"[UI DI Test] DbContext instance created: {dbContext != null}");
+                    logger.LogInformation($"📊 DbContext utworzony: {dbContext != null}");
                     
                     // Inicjalizacja danych początkowych (Seed Data)
                     _ = Task.Run(async () => 
@@ -858,22 +972,29 @@ namespace TeamsManager.UI
                             await seedDataService.InitializeDefaultDataAsync();
                             
                             System.Diagnostics.Debug.WriteLine("[SeedData] Dane początkowe systemu zostały zainicjalizowane");
+                            logger.LogInformation("📊 Dane początkowe systemu zostały zainicjalizowane");
                         }
                         catch (Exception ex)
                         {
                             System.Diagnostics.Debug.WriteLine($"[SeedData] Błąd podczas inicjalizacji danych początkowych: {ex.Message}");
+                            logger.LogError(ex, "❌ Błąd podczas inicjalizacji danych początkowych");
                         }
                     });
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[UI DI Test] Error creating DbContext: {ex.Message}");
+                    logger.LogError(ex, "❌ Błąd podczas tworzenia DbContext");
                 }
+                
+                logger.LogInformation("🎉 APLIKACJA URUCHOMIONA POMYŚLNIE");
             }
             catch (Exception ex)
             {
+                logger?.LogError(ex, "❌ KRYTYCZNY BŁĄD podczas uruchamiania aplikacji");
+                
                 MessageBox.Show(
-                    $"Błąd podczas tworzenia głównego okna:\n\n{ex.Message}\n\nSprawdż konfigurację serwisów.",
+                    $"Błąd podczas tworzenia głównego okna:\n\n{ex.Message}\n\nSprawdź konfigurację serwisów.",
                     "Błąd krytyczny",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);

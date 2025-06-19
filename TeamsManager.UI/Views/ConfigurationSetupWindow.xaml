@@ -298,7 +298,7 @@
                                                 <Run FontWeight="Bold">Krok 2.22:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienia" (Add permissions)</Run>
                                             </TextBlock>
                                             
-                                            <Border Background="#FF4A2D2D" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                            <Border Background="#FF4A2D2D" CornerRadius="4" Padding="12">
                                                 <StackPanel>
                                                     <TextBlock Text="⚠️ WAŻNE - SKOPIUJ NATYCHMIAST:" FontWeight="Bold" Foreground="#FFFF6B6B" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" Foreground="#FFFF6B6B" Style="{StaticResource MaterialDesignBody2TextBlock}">
@@ -478,10 +478,10 @@
                                         materialDesign:TextFieldAssist.HasClearButton="True"/>
                                 
                                 <!-- Client Secret -->
-                                <TextBox Grid.Row="3"
+                                <PasswordBox Grid.Row="3"
                                         Margin="0,0,0,16"
-                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}"
+                                        Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
+                                        materialDesign:PasswordBoxAssist.Password="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}"
                                         materialDesign:HintAssist.Hint="Client Secret *"
                                         materialDesign:HintAssist.IsFloating="True"
                                         materialDesign:HintAssist.HelperText="Tajny klucz aplikacji API (dla OBO flow)"
@@ -597,6 +597,8 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
                     <!-- Status info -->
@@ -615,17 +617,30 @@
                     
                     <Button Grid.Column="2"
                            Style="{StaticResource SecondaryActionButton}"
+                           Content="POKAŻ"
+                           Command="{Binding ShowConfigCommand}"
+                           Margin="0,0,8,0"/>
+                    
+                    <Button Grid.Column="3"
+                           Style="{StaticResource SecondaryActionButton}"
+                           Content="NAPRAW"
+                           Command="{Binding FixEncryptionCommand}"
+                           Margin="0,0,8,0"
+                           ToolTip="Napraw szyfrowanie dla bieżącego użytkownika"/>
+                    
+                    <Button Grid.Column="4"
+                           Style="{StaticResource SecondaryActionButton}"
                            Content="TESTUJ"
                            Command="{Binding TestConnectionCommand}"
                            Margin="0,0,8,0"/>
                     
-                    <Button Grid.Column="3"
+                    <Button Grid.Column="5"
                            Style="{StaticResource SecondaryActionButton}"
                            Content="ANULUJ"
                            Command="{Binding CancelCommand}"
                            Margin="0,0,8,0"/>
                     
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="6"
                            Style="{StaticResource PrimaryActionButton}"
                            Command="{Binding SaveCommand}"
                            MinWidth="120">
