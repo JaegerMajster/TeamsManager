@@ -240,7 +240,8 @@ namespace TeamsManager.UI.ViewModels
                     UiClientId = azureConfig.Ui.ClientId ?? string.Empty;
                     ApiClientId = azureConfig.Api.ClientId ?? string.Empty;
                     TenantId = azureConfig.TenantId ?? string.Empty;
-                    ClientSecret = azureConfig.Api.ClientSecret ?? string.Empty;
+                    // ClientSecret celowo nie wczytujemy ze względów bezpieczeństwa
+                    ClientSecret = string.Empty;
                     Audience = azureConfig.Api.Audience ?? string.Empty;
                 }
 
@@ -302,6 +303,16 @@ namespace TeamsManager.UI.ViewModels
                     }
                 };
 
+                // Jeśli ClientSecret jest pusty, zachowaj istniejący
+                if (string.IsNullOrWhiteSpace(ClientSecret))
+                {
+                    var existingConfig = await _configManager.LoadAzureAdConfigurationAsync();
+                    if (existingConfig?.Api?.ClientSecret != null)
+                    {
+                        azureConfig.Api.ClientSecret = existingConfig.Api.ClientSecret;
+                    }
+                }
+
                 var appConfig = new ApplicationConfiguration
                 {
                     Environment = Environment,
@@ -325,6 +336,9 @@ namespace TeamsManager.UI.ViewModels
                 StatusMessage = "Konfiguracja zapisana pomyślnie";
 
                 _logger.LogInformation("Konfiguracja została zapisana pomyślnie");
+                
+                // Zamknij okno po pomyślnym zapisaniu
+                RequestClose?.Invoke();
             }
             catch (Exception ex)
             {
@@ -350,10 +364,22 @@ namespace TeamsManager.UI.ViewModels
                     result.MissingConfigurations.Add("Azure AD: API Client ID nie jest ustawiony");
                 if (string.IsNullOrWhiteSpace(TenantId))
                     result.MissingConfigurations.Add("Azure AD: Tenant ID nie jest ustawiony");
-                if (string.IsNullOrWhiteSpace(ClientSecret))
-                    result.MissingConfigurations.Add("Azure AD: Client Secret nie jest ustawiony");
                 if (string.IsNullOrWhiteSpace(Audience))
                     result.MissingConfigurations.Add("Azure AD: Audience nie jest ustawione");
+
+                // Sprawdź ClientSecret - może być pusty jeśli już istnieje
+                if (string.IsNullOrWhiteSpace(ClientSecret))
+                {
+                    var existingConfig = await _configManager.LoadAzureAdConfigurationAsync();
+                    if (existingConfig?.Api?.ClientSecret == null || string.IsNullOrWhiteSpace(existingConfig.Api.ClientSecret))
+                    {
+                        result.MissingConfigurations.Add("Azure AD: Client Secret nie jest ustawiony");
+                    }
+                    else
+                    {
+                        result.Warnings.Add("Azure AD: Używany jest istniejący Client Secret");
+                    }
+                }
 
                 // Ostrzeżenia
                 if (Environment == "Production" && string.IsNullOrWhiteSpace(ApiBaseUrl))

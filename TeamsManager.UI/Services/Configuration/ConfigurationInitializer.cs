@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Models.Configuration;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.Services.Configuration
 {
@@ -25,6 +26,7 @@ namespace TeamsManager.UI.Services.Configuration
                 _logger.LogInformation("Rozpoczęto inicjalizację systemu konfiguracji V2.0");
 
                 await EnsureApplicationConfigurationAsync();
+                await EnsureAzureAdConfigurationAsync();
                 await EnsureUserPreferencesAsync();
                 await EnsureLoginSettingsAsync();
                 await EnsureDatabaseConfigurationAsync();
@@ -44,15 +46,38 @@ namespace TeamsManager.UI.Services.Configuration
             try
             {
                 // Sprawdź czy podstawowe pliki konfiguracyjne istnieją
-                var appConfig = await _configManager.LoadApplicationConfigurationAsync();
-                var loginConfig = await _configManager.LoadLoginSettingsAsync();
+                var appConfig = await SafeLoadConfigurationAsync<ApplicationConfiguration>("application");
+                var azureConfig = await SafeLoadConfigurationAsync<AzureAdConfiguration>("azure-ad");
+                var loginConfig = await SafeLoadConfigurationAsync<LoginSettingsConfiguration>("login-settings");
                 
-                return appConfig == null || loginConfig == null;
+                // Jeśli którakolwiek z podstawowych konfiguracji nie istnieje, wymagana jest inicjalizacja
+                bool requiresInit = appConfig == null || azureConfig == null || loginConfig == null;
+                
+                if (requiresInit)
+                {
+                    _logger.LogInformation("Wymagana inicjalizacja konfiguracji - brakujące pliki: " +
+                        $"App: {appConfig == null}, Azure: {azureConfig == null}, Login: {loginConfig == null}");
+                }
+                
+                return requiresInit;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Błąd podczas sprawdzania czy wymagana jest inicjalizacja - zakładam że tak");
                 return true;
+            }
+        }
+
+        private async Task<T?> SafeLoadConfigurationAsync<T>(string configName) where T : class
+        {
+            try
+            {
+                return await _configManager.GetConfigurationAsync<T>(configName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Nie udało się załadować konfiguracji {ConfigName} - prawdopodobnie nie istnieje", configName);
+                return null;
             }
         }
 
@@ -94,6 +119,47 @@ namespace TeamsManager.UI.Services.Configuration
                 };
 
                 await _configManager.SaveApplicationConfigurationAsync(config);
+            }
+        }
+
+        private async Task EnsureAzureAdConfigurationAsync()
+        {
+            var config = await SafeLoadConfigurationAsync<AzureAdConfiguration>("azure-ad");
+            if (config == null)
+            {
+                _logger.LogInformation("Tworzę pustą konfigurację Azure AD do wypełnienia przez użytkownika");
+                
+                config = new AzureAdConfiguration
+                {
+                    TenantId = string.Empty,
+                    Ui = new UiClientSettings
+                    {
+                        ClientId = string.Empty,
+                        RedirectUri = "http://localhost",
+                        Scopes = new List<string>
+                        {
+                            "https://graph.microsoft.com/User.Read",
+                            "https://graph.microsoft.com/Team.ReadBasic.All"
+                        }
+                    },
+                    Api = new ApiClientSettings
+                    {
+                        ClientId = string.Empty,
+                        ClientSecret = string.Empty,
+                        Audience = string.Empty
+                    },
+                    Graph = new GraphSettings
+                    {
+                        BaseUrl = "https://graph.microsoft.com/v1.0",
+                        Scopes = new List<string>
+                        {
+                            "https://graph.microsoft.com/User.Read",
+                            "https://graph.microsoft.com/Team.ReadBasic.All"
+                        }
+                    }
+                };
+
+                await _configManager.SaveConfigurationAsync("azure-ad", config);
             }
         }
 

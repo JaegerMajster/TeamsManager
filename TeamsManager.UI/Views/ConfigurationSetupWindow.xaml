@@ -4,11 +4,11 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:converters="clr-namespace:TeamsManager.UI.Converters"
         Title="Konfiguracja TeamsManager" 
-        Width="1000"
-        Height="750"
-        MinWidth="900"
-        MinHeight="600"
-        WindowStartupLocation="CenterOwner"
+        Width="1200"
+        Height="950"
+        MinWidth="1100"
+        MinHeight="800"
+        WindowStartupLocation="CenterScreen"
         Background="{DynamicResource BackgroundDark}"
         FontFamily="{DynamicResource MaterialDesignFont}"
         Style="{StaticResource BaseWindowStyle}">
@@ -170,7 +170,7 @@
                         </Expander>
                     </materialDesign:Card>
 
-                    <!-- Instrukcje konfiguracji Azure AD -->
+                    <!-- Instrukcje konfiguracji Microsoft Entra ID -->
                     <materialDesign:Card Grid.Row="2" 
                                         Margin="24,0,24,24" 
                                         materialDesign:ElevationAssist.Elevation="Dp2"
@@ -185,7 +185,7 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{DynamicResource AccentBlue}"
                                                            Margin="0,0,12,0"/>
-                                    <TextBlock Text="Instrukcje konfiguracji Azure AD" 
+                                    <TextBlock Text="Instrukcje konfiguracji Microsoft Entra ID" 
                                              Style="{StaticResource MaterialDesignHeadline6TextBlock}"
                                              VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -198,10 +198,10 @@
                                             <TextBlock Text="📋 Przegląd konfiguracji" FontWeight="Bold" Foreground="White" 
                                                      Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="0,0,0,8"/>
                                             <TextBlock TextWrapping="Wrap" Foreground="White" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                TeamsManager wymaga dwóch aplikacji w Azure AD do przepływu On-Behalf-Of (OBO):<LineBreak/>
+                                                TeamsManager wymaga dwóch aplikacji w Microsoft Entra ID do przepływu On-Behalf-Of (OBO):<LineBreak/>
                                                 <Run FontWeight="Bold">1. TeamsManager UI</Run> - aplikacja kliencka (publiczna)<LineBreak/>
                                                 <Run FontWeight="Bold">2. TeamsManager API</Run> - aplikacja serwera (poufna)<LineBreak/><LineBreak/>
-                                                Postępuj zgodnie z instrukcjami poniżej, aby skonfigurować obie aplikacje.
+                                                Postępuj zgodnie z instrukcjami poniżej, aby skonfigurować obie aplikacje w Microsoft Entra ID.
                                             </TextBlock>
                                         </StackPanel>
                                     </Border>
@@ -213,22 +213,26 @@
                                                      Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
                                             
                                             <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                <Run FontWeight="Bold">Krok 1.1:</Run> Przejdź do <Run FontWeight="Bold">Azure Portal</Run> → <Run FontWeight="Bold">Azure Active Directory</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 1.2:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"App registrations"</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 1.3:</Run> Kliknij <Run FontWeight="Bold">"+ New registration"</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 1.4:</Run> Wypełnij formularz:<LineBreak/>
-                                                &#160;&#160;• Name: <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
-                                                &#160;&#160;• Supported account types: <Run FontWeight="Bold">"Accounts in this organizational directory only"</Run><LineBreak/>
-                                                &#160;&#160;• Redirect URI: <Run FontWeight="Bold">"Public client/native (mobile &amp; desktop)" → "http://localhost"</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 1.5:</Run> Kliknij <Run FontWeight="Bold">"Register"</Run>
+                                                <Run FontWeight="Bold">Krok 1.1:</Run> Przejdź do <Run FontWeight="Bold">centrum administracyjnego Microsoft Entra</Run> (entra.microsoft.com)<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.2:</Run> Zaloguj się kontem z uprawnieniami administratora<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.3:</Run> Przejdź do <Run FontWeight="Bold">Entra ID</Run> → rozwiń menu <Run FontWeight="Bold">Aplikacje (Applications)</Run> → <Run FontWeight="Bold">Rejestracje aplikacji (App registrations)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.4:</Run> Kliknij <Run FontWeight="Bold">"Nowa rejestracja" (New registration)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.5:</Run> Wypełnij formularz:<LineBreak/>
+                                                &#160;&#160;• Nazwa (Name): <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
+                                                &#160;&#160;• Obsługiwane typy kont (Supported account types): <Run FontWeight="Bold">"Konta tylko w tym katalogu organizacyjnym" (Accounts in this organizational directory only)</Run><LineBreak/>
+                                                &#160;&#160;• Identyfikator URI przekierowania (Redirect URI): <Run FontWeight="Bold">"Klient publiczny/natywny (mobilny i klasyczny)" (Public client/native) → "http://localhost"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.6:</Run> Kliknij <Run FontWeight="Bold">"Zarejestruj" (Register)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.7:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Uwierzytelnianie" (Authentication)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.8:</Run> W sekcji <Run FontWeight="Bold">"Ustawienia zaawansowane" (Advanced settings)</Run> ustaw <Run FontWeight="Bold">"Zezwalaj na przepływy klientów publicznych" (Allow public client flows)</Run> na <Run FontWeight="Bold">"Tak" (Yes)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.9:</Run> Kliknij <Run FontWeight="Bold">"Zapisz" (Save)</Run>
                                             </TextBlock>
                                             
                                             <Border Background="#FF2D4A2D" CornerRadius="4" Padding="12" Margin="0,0,0,8">
                                                 <StackPanel>
                                                     <TextBlock Text="✅ SKOPIUJ TERAZ:" FontWeight="Bold" Foreground="#FF90EE90" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" Foreground="#FF90EE90" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                        Na stronie przeglądu nowo utworzonej aplikacji UI znajdź sekcję <Run FontWeight="Bold">"Essentials"</Run>.<LineBreak/>
-                                                        Skopiuj wartość <Run FontWeight="Bold">"Application (client) ID"</Run> i wklej ją do pola <Run FontWeight="Bold">"UI Client ID"</Run> w sekcji Azure AD poniżej.
+                                                        Na stronie przeglądu (Overview) nowo utworzonej aplikacji UI znajdź sekcję <Run FontWeight="Bold">"Podstawowe informacje" (Essentials)</Run>.<LineBreak/>
+                                                        Skopiuj wartość <Run FontWeight="Bold">"Identyfikator aplikacji (klienta)" (Application (client) ID)</Run> i wklej ją do pola <Run FontWeight="Bold">"UI Client ID"</Run> w sekcji Microsoft Entra ID poniżej.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
@@ -242,40 +246,64 @@
                                                      Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
                                             
                                             <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                <Run FontWeight="Bold">Krok 2.1:</Run> Wróć do listy <Run FontWeight="Bold">"App registrations"</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 2.2:</Run> Kliknij ponownie <Run FontWeight="Bold">"+ New registration"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.1:</Run> Wróć do listy <Run FontWeight="Bold">"Rejestracje aplikacji" (App registrations)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.2:</Run> Kliknij ponownie <Run FontWeight="Bold">"Nowa rejestracja" (New registration)</Run><LineBreak/>
                                                 <Run FontWeight="Bold">Krok 2.3:</Run> Wypełnij formularz:<LineBreak/>
-                                                &#160;&#160;• Name: <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
-                                                &#160;&#160;• Supported account types: <Run FontWeight="Bold">"Accounts in this organizational directory only"</Run><LineBreak/>
-                                                &#160;&#160;• Redirect URI: <Run FontWeight="Bold">pozostaw puste</Run><LineBreak/>
-                                                <Run FontWeight="Bold">Krok 2.4:</Run> Kliknij <Run FontWeight="Bold">"Register"</Run>
+                                                &#160;&#160;• Nazwa (Name): <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
+                                                &#160;&#160;• Obsługiwane typy kont (Supported account types): <Run FontWeight="Bold">"Konta tylko w tym katalogu organizacyjnym" (Accounts in this organizational directory only)</Run><LineBreak/>
+                                                &#160;&#160;• Identyfikator URI przekierowania (Redirect URI): <Run FontWeight="Bold">pozostaw puste</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.4:</Run> Kliknij <Run FontWeight="Bold">"Zarejestruj" (Register)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.5:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Uwidocznij interfejs API" (Expose an API)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.6:</Run> Obok <Run FontWeight="Bold">"Identyfikator URI aplikacji" (Application ID URI)</Run> kliknij <Run FontWeight="Bold">"Dodaj" (Add)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.7:</Run> Zaakceptuj proponowany URI <Run FontWeight="Bold">api://[API Client ID]</Run> i kliknij <Run FontWeight="Bold">"Zapisz" (Save)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.8:</Run> Kliknij <Run FontWeight="Bold">"Dodaj zakres" (Add a scope)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.9:</Run> Wypełnij formularz zakresu:<LineBreak/>
+                                                &#160;&#160;• Nazwa zakresu (Scope name): <Run FontWeight="Bold">"access"</Run><LineBreak/>
+                                                &#160;&#160;• Kto może wyrazić zgodę (Who can consent): <Run FontWeight="Bold">"Administratorzy i użytkownicy" (Admins and users)</Run><LineBreak/>
+                                                &#160;&#160;• Nazwa wyświetlana zgody administratora (Admin consent display name): <Run FontWeight="Bold">"Access TeamsManager API"</Run><LineBreak/>
+                                                &#160;&#160;• Opis zgody administratora (Admin consent description): <Run FontWeight="Bold">"Allows access to TeamsManager API"</Run><LineBreak/>
+                                                &#160;&#160;• Nazwa wyświetlana zgody użytkownika (User consent display name): <Run FontWeight="Bold">"Access TeamsManager API"</Run><LineBreak/>
+                                                &#160;&#160;• Opis zgody użytkownika (User consent description): <Run FontWeight="Bold">"Allows access to TeamsManager API"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.10:</Run> Kliknij <Run FontWeight="Bold">"Dodaj zakres" (Add scope)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.11:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Manifest"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.12:</Run> Znajdź właściwość <Run FontWeight="Bold">"knownClientApplications"</Run> i dodaj ID aplikacji UI:<LineBreak/>
+                                                &#160;&#160;• <Run FontWeight="Bold">"knownClientApplications": ["UI Client ID z kroku 1"]</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.13:</Run> Kliknij <Run FontWeight="Bold">"Zapisz" (Save)</Run>
                                             </TextBlock>
                                             
                                             <Border Background="#FF2D4A2D" CornerRadius="4" Padding="12" Margin="0,0,0,12">
                                                 <StackPanel>
                                                     <TextBlock Text="✅ SKOPIUJ TERAZ:" FontWeight="Bold" Foreground="#FF90EE90" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" Foreground="#FF90EE90" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                        Na stronie przeglądu nowo utworzonej aplikacji API znajdź sekcję <Run FontWeight="Bold">"Essentials"</Run>.<LineBreak/>
-                                                        Skopiuj wartość <Run FontWeight="Bold">"Application (client) ID"</Run> i wklej ją do pola <Run FontWeight="Bold">"API Client ID"</Run> w sekcji Azure AD poniżej.
+                                                        Na stronie przeglądu (Overview) nowo utworzonej aplikacji API znajdź sekcję <Run FontWeight="Bold">"Podstawowe informacje" (Essentials)</Run>.<LineBreak/>
+                                                        Skopiuj wartość <Run FontWeight="Bold">"Identyfikator aplikacji (klienta)" (Application (client) ID)</Run> i wklej ją do pola <Run FontWeight="Bold">"API Client ID"</Run> w sekcji Microsoft Entra ID poniżej.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
                                             
                                             <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                <Run FontWeight="Bold">Krok 2.5:</Run> Teraz utwórz Client Secret:<LineBreak/>
-                                                &#160;&#160;• W menu po lewej kliknij <Run FontWeight="Bold">"Certificates &amp; secrets"</Run><LineBreak/>
-                                                &#160;&#160;• W sekcji "Client secrets" kliknij <Run FontWeight="Bold">"+ New client secret"</Run><LineBreak/>
-                                                &#160;&#160;• Description: <Run FontWeight="Bold">"TeamsManager Secret"</Run><LineBreak/>
-                                                &#160;&#160;• Expires: <Run FontWeight="Bold">"24 months"</Run><LineBreak/>
-                                                &#160;&#160;• Kliknij <Run FontWeight="Bold">"Add"</Run>
+                                                <Run FontWeight="Bold">Krok 2.14:</Run> Teraz utwórz wpis tajny klienta (Client Secret):<LineBreak/>
+                                                &#160;&#160;• W menu po lewej kliknij <Run FontWeight="Bold">"Certyfikaty i wpisy tajne" (Certificates &amp; secrets)</Run><LineBreak/>
+                                                &#160;&#160;• W sekcji "Wpisy tajne klienta" (Client secrets) kliknij <Run FontWeight="Bold">"Nowy wpis tajny klienta" (New client secret)</Run><LineBreak/>
+                                                &#160;&#160;• Opis (Description): <Run FontWeight="Bold">"TeamsManager Secret"</Run><LineBreak/>
+                                                &#160;&#160;• Wygasa (Expires): <Run FontWeight="Bold">"24 miesiące" (24 months)</Run><LineBreak/>
+                                                &#160;&#160;• Kliknij <Run FontWeight="Bold">"Dodaj" (Add)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.15:</Run> Wróć do aplikacji <Run FontWeight="Bold">"TeamsManager UI"</Run> z kroku 1<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.16:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Uprawnienia interfejsu API" (API permissions)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.17:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienie" (Add a permission)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.18:</Run> Wybierz zakładkę <Run FontWeight="Bold">"Interfejsy API używane przez moją organizację" (APIs my organization uses)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.19:</Run> Znajdź i wybierz aplikację <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.20:</Run> Wybierz <Run FontWeight="Bold">"Uprawnienia delegowane" (Delegated permissions)</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.21:</Run> Zaznacz uprawnienie <Run FontWeight="Bold">"access"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.22:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienia" (Add permissions)</Run>
                                             </TextBlock>
                                             
                                             <Border Background="#FF4A2D2D" CornerRadius="4" Padding="12" Margin="0,0,0,8">
                                                 <StackPanel>
                                                     <TextBlock Text="⚠️ WAŻNE - SKOPIUJ NATYCHMIAST:" FontWeight="Bold" Foreground="#FFFF6B6B" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" Foreground="#FFFF6B6B" Style="{StaticResource MaterialDesignBody2TextBlock}">
-                                                        Po utworzeniu sekretu skopiuj jego <Run FontWeight="Bold">VALUE</Run> (nie ID!) i wklej do pola <Run FontWeight="Bold">"Client Secret"</Run> poniżej.<LineBreak/>
-                                                        <Run FontWeight="Bold">Ta wartość będzie widoczna tylko raz!</Run>
+                                                        Po utworzeniu sekretu skopiuj jego <Run FontWeight="Bold">WARTOŚĆ (VALUE)</Run> (nie Identyfikator wpisu tajnego (Secret ID)!) i wklej do pola <Run FontWeight="Bold">"Client Secret"</Run> poniżej.<LineBreak/>
+                                                        <Run FontWeight="Bold">Ta wartość będzie widoczna tylko raz!</Run> Jeśli nawigujesz do innej strony, nie będzie można jej ponownie odczytać.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
@@ -285,7 +313,7 @@
                                     <!-- Krok 3: Konfiguracja uprawnień -->
                                     <Border Background="#FF2A3A2A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                         <StackPanel>
-                                            <TextBlock Text="🔹 Krok 3: Konfiguracja uprawnień" FontWeight="Bold" Foreground="#FF90EE90" 
+                                            <TextBlock Text="🔹 Krok 3: Konfiguracja uprawnień Microsoft Graph" FontWeight="Bold" Foreground="#FF90EE90" 
                                                      Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
                                             
                                             <!-- Uprawnienia dla UI -->
@@ -294,17 +322,17 @@
                                                     <TextBlock Text="🔹 Dla aplikacji UI (TeamsManager UI):" FontWeight="Bold" Foreground="#FF87CEEB" Margin="0,0,0,8"/>
                                                     <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Style="{StaticResource MaterialDesignBody2TextBlock}">
                                                         <Run FontWeight="Bold">Krok 3.1:</Run> Przejdź do aplikacji <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.2:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"API permissions"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.3:</Run> Kliknij <Run FontWeight="Bold">"+ Add a permission"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.2:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Uprawnienia interfejsu API" (API permissions)</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.3:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienie" (Add a permission)</Run><LineBreak/>
                                                         <Run FontWeight="Bold">Krok 3.4:</Run> Wybierz <Run FontWeight="Bold">"Microsoft Graph"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.5:</Run> Wybierz <Run FontWeight="Bold">"Delegated permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.5:</Run> Wybierz <Run FontWeight="Bold">"Uprawnienia delegowane" (Delegated permissions)</Run><LineBreak/>
                                                         <Run FontWeight="Bold">Krok 3.6:</Run> Znajdź i zaznacz te uprawnienia:<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">User.Read</Run> (w sekcji "User")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Team.ReadWrite.All</Run> (w sekcji "Team")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Group.ReadWrite.All</Run> (w sekcji "Group")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Directory.Read.All</Run> (w sekcji "Directory")<LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.7:</Run> Kliknij <Run FontWeight="Bold">"Add permissions"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.8:</Run> Kliknij <Run FontWeight="Bold">"Grant admin consent for [nazwa organizacji]"</Run>
+                                                        <Run FontWeight="Bold">Krok 3.7:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienia" (Add permissions)</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.8:</Run> Kliknij <Run FontWeight="Bold">"Udziel zgody administratora dla [nazwa organizacji]" (Grant admin consent for [organization name])</Run>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
@@ -315,17 +343,17 @@
                                                     <TextBlock Text="🔹 Dla aplikacji API (TeamsManager API):" FontWeight="Bold" Foreground="#FFFF9A56" Margin="0,0,0,8"/>
                                                     <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Style="{StaticResource MaterialDesignBody2TextBlock}">
                                                         <Run FontWeight="Bold">Krok 3.9:</Run> Przejdź do aplikacji <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.10:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"API permissions"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.11:</Run> Kliknij <Run FontWeight="Bold">"+ Add a permission"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.10:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"Uprawnienia interfejsu API" (API permissions)</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.11:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienie" (Add a permission)</Run><LineBreak/>
                                                         <Run FontWeight="Bold">Krok 3.12:</Run> Wybierz <Run FontWeight="Bold">"Microsoft Graph"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.13:</Run> Wybierz <Run FontWeight="Bold">"Application permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.13:</Run> Wybierz <Run FontWeight="Bold">"Uprawnienia aplikacji" (Application permissions)</Run><LineBreak/>
                                                         <Run FontWeight="Bold">Krok 3.14:</Run> Znajdź i zaznacz te uprawnienia:<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Team.ReadWrite.All</Run> (w sekcji "Team")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Group.ReadWrite.All</Run> (w sekcji "Group")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">User.Read.All</Run> (w sekcji "User")<LineBreak/>
                                                         &#160;&#160;• <Run FontWeight="Bold">Directory.Read.All</Run> (w sekcji "Directory")<LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.15:</Run> Kliknij <Run FontWeight="Bold">"Add permissions"</Run><LineBreak/>
-                                                        <Run FontWeight="Bold">Krok 3.16:</Run> Kliknij <Run FontWeight="Bold">"Grant admin consent for [nazwa organizacji]"</Run>
+                                                        <Run FontWeight="Bold">Krok 3.15:</Run> Kliknij <Run FontWeight="Bold">"Dodaj uprawnienia" (Add permissions)</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.16:</Run> Kliknij <Run FontWeight="Bold">"Udziel zgody administratora dla [nazwa organizacji]" (Grant admin consent for [organization name])</Run>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>
@@ -343,15 +371,15 @@
                                     </Border>
 
                                     <!-- Krok 4: Finalizacja -->
-                                    <Border Background="#FF1E3A8A" CornerRadius="6" Padding="16">
+                                    <Border Background="#FF1E3A8A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                         <StackPanel>
                                             <TextBlock Text="🔹 Krok 4: Finalizacja konfiguracji" FontWeight="Bold" Foreground="White" 
                                                      Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
                                             
                                             <TextBlock TextWrapping="Wrap" Foreground="White" Style="{StaticResource MaterialDesignBody2TextBlock}" Margin="0,0,0,8">
-                                                <Run FontWeight="Bold">Krok 4.1:</Run> Skopiuj <Run FontWeight="Bold">Tenant ID</Run> z Azure Portal:<LineBreak/>
-                                                &#160;&#160;• Przejdź do <Run FontWeight="Bold">Azure Active Directory</Run> → <Run FontWeight="Bold">Overview</Run><LineBreak/>
-                                                &#160;&#160;• Skopiuj <Run FontWeight="Bold">"Tenant ID"</Run> i wklej do pola <Run FontWeight="Bold">"Tenant ID"</Run> poniżej<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.1:</Run> Skopiuj <Run FontWeight="Bold">Identyfikator dzierżawy (Tenant ID)</Run> z centrum administracyjnego Microsoft Entra:<LineBreak/>
+                                                &#160;&#160;• Przejdź do <Run FontWeight="Bold">Entra ID</Run> → <Run FontWeight="Bold">Przegląd (Overview)</Run><LineBreak/>
+                                                &#160;&#160;• Skopiuj <Run FontWeight="Bold">"Identyfikator dzierżawy" (Tenant ID)</Run> i wklej do pola <Run FontWeight="Bold">"Tenant ID"</Run> poniżej<LineBreak/>
                                                 <Run FontWeight="Bold">Krok 4.2:</Run> Ustaw <Run FontWeight="Bold">Audience</Run> na: <Run FontWeight="Bold">api://[API Client ID]</Run><LineBreak/>
                                                 &#160;&#160;• Gdzie [API Client ID] to ID aplikacji TeamsManager API<LineBreak/>
                                                 <Run FontWeight="Bold">Krok 4.3:</Run> Kliknij <Run FontWeight="Bold">"WALIDUJ"</Run> aby sprawdzić konfigurację<LineBreak/>
@@ -359,12 +387,38 @@
                                             </TextBlock>
                                         </StackPanel>
                                     </Border>
+
+                                    <!-- Krok 5: Opcjonalna konfiguracja Windows Hello -->
+                                    <Border Background="#FF2A2A3A" CornerRadius="6" Padding="16">
+                                        <StackPanel>
+                                            <TextBlock Text="🔹 Krok 5: Opcjonalna konfiguracja Windows Hello (Zaawansowane)" FontWeight="Bold" Foreground="#FF87CEEB" 
+                                                     Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
+                                            
+                                            <TextBlock TextWrapping="Wrap" Foreground="#FF87CEEB" Style="{StaticResource MaterialDesignBody2TextBlock}" Margin="0,0,0,8">
+                                                <Run FontWeight="Bold">Dla zaawansowanych użytkowników:</Run> Jeśli chcesz włączyć uwierzytelnianie Windows Hello, możesz dodać dodatkowy identyfikator URI przekierowania:<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 5.1:</Run> Wróć do aplikacji <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 5.2:</Run> W sekcji <Run FontWeight="Bold">"Uwierzytelnianie" (Authentication)</Run> dodaj URI przekierowania:<LineBreak/>
+                                                &#160;&#160;• <Run FontWeight="Bold">ms-appx-web://microsoft.aad.brokerplugin/[UI Client ID]</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 5.3:</Run> Kliknij <Run FontWeight="Bold">"Zapisz" (Save)</Run>
+                                            </TextBlock>
+                                            
+                                            <Border Background="#FF4A4A2D" CornerRadius="4" Padding="12">
+                                                <StackPanel>
+                                                    <TextBlock Text="ℹ️ INFORMACJA" FontWeight="Bold" Foreground="#FFFFFF90" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#FFFFFF90" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        Konfiguracja Windows Hello jest opcjonalna i wymaga dodatkowej implementacji w aplikacji.<LineBreak/>
+                                                        Podstawowa konfiguracja z kroków 1-4 jest wystarczająca dla standardowego działania TeamsManager.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </ScrollViewer>
                         </Expander>
                     </materialDesign:Card>
 
-                    <!-- Konfiguracja Azure AD -->
+                    <!-- Konfiguracja Microsoft Entra ID -->
                     <materialDesign:Card Grid.Row="3" 
                                         Margin="24,0,24,24" 
                                         materialDesign:ElevationAssist.Elevation="Dp2"
@@ -379,7 +433,7 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{DynamicResource AccentBlue}"
                                                            Margin="0,0,12,0"/>
-                                    <TextBlock Text="Konfiguracja Azure AD" 
+                                    <TextBlock Text="Konfiguracja Microsoft Entra ID" 
                                              Style="{StaticResource MaterialDesignHeadline6TextBlock}"
                                              VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -400,7 +454,7 @@
                                         Text="{Binding UiClientId, UpdateSourceTrigger=PropertyChanged}"
                                         materialDesign:HintAssist.Hint="UI Client ID *"
                                         materialDesign:HintAssist.IsFloating="True"
-                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji UI z Azure AD"
+                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji UI z Microsoft Entra ID"
                                         materialDesign:TextFieldAssist.HasClearButton="True"/>
                                 
                                 <!-- Client ID API -->
@@ -410,7 +464,7 @@
                                         Text="{Binding ApiClientId, UpdateSourceTrigger=PropertyChanged}"
                                         materialDesign:HintAssist.Hint="API Client ID *"
                                         materialDesign:HintAssist.IsFloating="True"
-                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji API z Azure AD"
+                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji API z Microsoft Entra ID"
                                         materialDesign:TextFieldAssist.HasClearButton="True"/>
                                 
                                 <!-- Tenant ID -->
@@ -420,7 +474,7 @@
                                         Text="{Binding TenantId, UpdateSourceTrigger=PropertyChanged}"
                                         materialDesign:HintAssist.Hint="Tenant ID *"
                                         materialDesign:HintAssist.IsFloating="True"
-                                        materialDesign:HintAssist.HelperText="Identyfikator dzierżawy Azure AD"
+                                        materialDesign:HintAssist.HelperText="Identyfikator dzierżawy Microsoft Entra ID"
                                         materialDesign:TextFieldAssist.HasClearButton="True"/>
                                 
                                 <!-- Client Secret -->

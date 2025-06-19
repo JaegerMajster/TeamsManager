@@ -27,7 +27,7 @@ namespace TeamsManager.UI.Services.Configuration
 
                 // Krok 1: Generuj losową sól i IV
                 var salt = GenerateRandomBytes(32);
-                var iv = GenerateRandomBytes(16);
+                var iv = GenerateRandomBytes(12); // AES-GCM używa 12-bajtowego nonce
 
                 // Krok 2: Utwórz klucz z DPAPI + sól
                 var key = DeriveKeyFromDPAPI(salt);

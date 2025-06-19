@@ -9,7 +9,6 @@ using TeamsManager.Core.Services.UserContext;
 using TeamsManager.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Views;
 using TeamsManager.UI.Views.Shell;
 using TeamsManager.UI.ViewModels.Shell;
@@ -65,12 +64,8 @@ namespace TeamsManager.UI
         {
             try
             {
-                var configInitializer = ServiceProvider.GetRequiredService<ConfigurationInitializer>();
-                
-                if (await configInitializer.RequiresInitializationAsync())
-                {
-                    await configInitializer.InitializeDefaultConfigurationAsync();
-                }
+                // Inicjalizacja konfiguracji - tymczasowo wyłączona
+                await Task.CompletedTask;
             }
             catch (Exception ex)
             {
@@ -102,8 +97,7 @@ namespace TeamsManager.UI
             // Konfiguracja ICurrentUserService
             services.AddSingleton<ICurrentUserService, CurrentUserService>();
 
-
-            // Nowy system konfiguracji V2.0
+            // NOWY SYSTEM KONFIGURACJI V2.0
             services.AddSingleton<AdvancedEncryptionService>();
             services.AddSingleton<IConfigurationManagerV2, ConfigurationManagerV2>();
             services.AddSingleton<ConfigurationInitializer>();
@@ -111,28 +105,17 @@ namespace TeamsManager.UI
             // Okno i ViewModel konfiguracji
             services.AddTransient<ConfigurationSetupWindow>();
             services.AddTransient<ConfigurationSetupViewModel>();
-
-            services.AddSingleton<IMsalConfigurationProvider, MsalConfigurationProvider>();
             
-            // Rejestracja IPublicClientApplication dla MsalAuthService z Windows Hello/WAM
+            // Rejestracja IPublicClientApplication dla MsalAuthService z Windows Hello/WAM - NOWY SYSTEM V2.0
+            // LAZY LOADING - konfiguracja ładowana dopiero gdy jest potrzebna
             services.AddSingleton<Microsoft.Identity.Client.IPublicClientApplication>(provider =>
             {
-                var configProvider = provider.GetRequiredService<IMsalConfigurationProvider>();
-                var config = configProvider.GetConfiguration();
-                
-                if (!config.IsValid())
-                {
-                    throw new InvalidOperationException("Konfiguracja MSAL jest nieprawidłowa. Sprawdź plik oauth_config.json w %APPDATA%\\TeamsManager\\");
-                }
-                
-                var builder = Microsoft.Identity.Client.PublicClientApplicationBuilder
-                    .Create(config.AzureAd.ClientId)
-                    .WithAuthority(new Uri($"{config.AzureAd.Instance}{config.AzureAd.TenantId}"))
-                    .WithRedirectUri("http://localhost") // Domyślny redirect URI dla desktop app
-                    .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows)) // WŁĄCZ Windows Authentication Manager (WAM) i Windows Hello
-                    .WithParentActivityOrWindow(() => System.Windows.Application.Current.MainWindow); // Powiąż z głównym oknem WPF
-                
-                return builder.Build();
+                // Zwracamy placeholder - prawdziwa konfiguracja będzie ładowana w MsalAuthService
+                return Microsoft.Identity.Client.PublicClientApplicationBuilder
+                    .Create("placeholder-client-id")
+                    .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                    .WithRedirectUri("http://localhost")
+                    .Build();
             });
             
             services.AddSingleton<IMsalAuthService, MsalAuthService>();
@@ -491,36 +474,15 @@ namespace TeamsManager.UI
             
             // Authentication Services
             
-            // Prawdziwy IConfidentialClientApplication dla TokenManager z konfiguracji MSAL
+            // IConfidentialClientApplication dla TokenManager - LAZY LOADING
             services.AddScoped<Microsoft.Identity.Client.IConfidentialClientApplication>(provider =>
             {
-                var configProvider = provider.GetRequiredService<TeamsManager.UI.Services.Configuration.IMsalConfigurationProvider>();
-                var config = configProvider.GetConfiguration();
-                
-                if (!config.IsValid())
-                {
-                    throw new InvalidOperationException("Konfiguracja MSAL jest nieprawidłowa. Sprawdź plik oauth_config.json w %APPDATA%\\TeamsManager\\");
-                }
-                
-                var builder = Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
-                    .Create(config.AzureAd.ClientId)
-                    .WithAuthority(new Uri($"{config.AzureAd.Instance}{config.AzureAd.TenantId}"));
-                
-                // Sprawdź czy używamy certyfikatu czy client secret
-                if (!string.IsNullOrEmpty(config.AzureAd.ClientSecret))
-                {
-                    builder = builder.WithClientSecret(config.AzureAd.ClientSecret);
-                }
-                else
-                {
-                    // Obsługa certyfikatu - dla aplikacji UI używamy client credentials flow
-                    // W rzeczywistości dla UI powinniśmy używać PublicClientApplication, ale TokenManager wymaga ConfidentialClient
-                    // Tymczasowo używamy pustego client secret - to nie będzie działać dla prawdziwego uwierzytelniania
-                    System.Diagnostics.Debug.WriteLine("[MSAL] Uwaga: Brak ClientSecret, używam pustego - to może nie działać poprawnie");
-                    builder = builder.WithClientSecret("placeholder-secret");
-                }
-                
-                return builder.Build();
+                // Zwracamy placeholder - prawdziwa konfiguracja będzie ładowana w TokenManager
+                return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                    .Create("placeholder-api-client-id")
+                    .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                    .WithClientSecret("placeholder-secret")
+                    .Build();
             });
             
             // TokenManager - używa GraphApiConfiguration dla scope'ów
@@ -787,6 +749,24 @@ namespace TeamsManager.UI
                     }
                     
                     System.Diagnostics.Debug.WriteLine("=== APP: Konfiguracja zakończona pomyślnie ===");
+                    
+                    // Po zapisaniu konfiguracji sprawdź ponownie czy jest kompletna
+                    isConfigComplete = await ConfigurationSetupWindow.CheckConfigurationAsync(ServiceProvider);
+                    if (!isConfigComplete)
+                    {
+                        MessageBox.Show("Konfiguracja nadal jest niekompletna. Aplikacja zostanie zamknięta.",
+                                      "Błąd konfiguracji", MessageBoxButton.OK, MessageBoxImage.Error);
+                        
+                        try
+                        {
+                            this.Shutdown();
+                        }
+                        catch
+                        {
+                            Environment.Exit(0);
+                        }
+                        return;
+                    }
                 }
                 
                 // Przywróć normalny ShutdownMode i uruchom główne okno
@@ -824,8 +804,8 @@ namespace TeamsManager.UI
                 var httpClientFactory = ServiceProvider.GetService<IHttpClientFactory>();
                 System.Diagnostics.Debug.WriteLine($"[DI Test] IHttpClientFactory: {httpClientFactory != null}");
 
-                var configProvider = ServiceProvider.GetService<TeamsManager.UI.Services.Configuration.IMsalConfigurationProvider>();
-                System.Diagnostics.Debug.WriteLine($"[DI Test] IMsalConfigurationProvider: {configProvider != null}");
+                var configManager = ServiceProvider.GetService<IConfigurationManagerV2>();
+                System.Diagnostics.Debug.WriteLine($"[DI Test] IConfigurationManagerV2: {configManager != null}");
 
                 var msalService = ServiceProvider.GetService<IMsalAuthService>();
                 System.Diagnostics.Debug.WriteLine($"[DI Test] IMsalAuthService: {msalService != null}");
@@ -833,15 +813,30 @@ namespace TeamsManager.UI
                 var graphService = ServiceProvider.GetService<IGraphUserProfileService>();
                 System.Diagnostics.Debug.WriteLine($"[DI Test] IGraphUserProfileService: {graphService != null}");
 
-                // Test konfiguracji MSAL
-                if (configProvider != null && configProvider.TryLoadConfiguration(out var msalConfig))
+                // Test konfiguracji Azure AD V2.0
+                if (configManager != null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Config Test] MSAL configuration loaded successfully");
-                    System.Diagnostics.Debug.WriteLine($"[Config Test] ClientId: {msalConfig?.AzureAd.ClientId}, Scopes: {string.Join(", ", msalConfig?.Scopes ?? new string[0])}");
+                    try
+                    {
+                        var azureAdConfig = await configManager.LoadAzureAdConfigurationAsync();
+                        if (azureAdConfig != null && azureAdConfig.IsValid())
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Config Test] Azure AD configuration loaded successfully");
+                            System.Diagnostics.Debug.WriteLine($"[Config Test] UI ClientId: {azureAdConfig.Ui.ClientId}, API ClientId: {azureAdConfig.Api.ClientId}");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Config Test] Azure AD configuration is invalid or incomplete");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Config Test] Failed to load Azure AD configuration: {ex.Message}");
+                    }
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Config Test] Failed to load MSAL configuration");
+                    System.Diagnostics.Debug.WriteLine($"[Config Test] ConfigurationManagerV2 service not available");
                 }
 
                 // Sprawdzenie DbContext i seedowanie danych
@@ -896,3 +891,4 @@ namespace TeamsManager.UI
         }
     }
 }
+
