@@ -58,10 +58,10 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<ApplicationSetting?> GetSettingByKeyAsync(string key, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie ustawienia aplikacji o kluczu: {Key}. Wymuszenie odświeżenia: {ForceRefresh}", key, forceRefresh); //
+            _logger.LogInformation("Pobieranie ustawienia aplikacji o kluczu: {Key}. Wymuszenie odświeżenia: {ForceRefresh}", key, forceRefresh);
             if (string.IsNullOrWhiteSpace(key))
             {
-                _logger.LogWarning("Próba pobrania ustawienia z pustym kluczem."); //
+                _logger.LogWarning("Próba pobrania ustawienia z pustym kluczem.");
                 return null;
             }
 
@@ -69,17 +69,17 @@ namespace TeamsManager.Core.Services
 
             if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out ApplicationSetting? cachedSetting))
             {
-                _logger.LogDebug("Ustawienie '{Key}' znalezione w cache.", key); //
+                _logger.LogDebug("Ustawienie '{Key}' znalezione w cache.", key);
                 return cachedSetting;
             }
 
-            _logger.LogDebug("Ustawienie '{Key}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", key); //
+            _logger.LogDebug("Ustawienie '{Key}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", key);
             var settingFromDb = await _settingsRepository.GetSettingByKeyAsync(key);
 
             if (settingFromDb != null)
             {
                 _graphCacheService.Set(cacheKey, settingFromDb);
-                _logger.LogDebug("Ustawienie '{Key}' dodane do cache.", key); //
+                _logger.LogDebug("Ustawienie '{Key}' dodane do cache.", key);
             }
             else
             {
@@ -93,12 +93,12 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Zmiany w danych mogą nie być widoczne natychmiast bez odświeżenia cache'u.</remarks>
         public async Task<T?> GetSettingValueAsync<T>(string key, T? defaultValue = default)
         {
-            _logger.LogDebug("Pobieranie wartości ustawienia o kluczu: {Key} jako typ {TypeName}", key, typeof(T).Name); //
+            _logger.LogDebug("Pobieranie wartości ustawienia o kluczu: {Key} jako typ {TypeName}", key, typeof(T).Name);
             var setting = await GetSettingByKeyAsync(key);
 
             if (setting == null || string.IsNullOrWhiteSpace(setting.Value))
             {
-                _logger.LogDebug("Ustawienie o kluczu '{Key}' nie znalezione lub pusta wartość. Zwracanie wartości domyślnej: {DefaultValue}", key, defaultValue); //
+                _logger.LogDebug("Ustawienie o kluczu '{Key}' nie znalezione lub pusta wartość. Zwracanie wartości domyślnej: {DefaultValue}", key, defaultValue);
                 return defaultValue;
             }
 
@@ -106,39 +106,39 @@ namespace TeamsManager.Core.Services
             {
                 var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
-                return setting.Type switch //
+                return setting.Type switch
                 {
-                    SettingType.String when targetType == typeof(string) => (T)(object)setting.GetStringValue(), //
-                    SettingType.Integer when targetType == typeof(int) => (T)(object)setting.GetIntValue(), //
-                    SettingType.Boolean when targetType == typeof(bool) => (T)(object)setting.GetBoolValue(), //
-                    SettingType.DateTime when targetType == typeof(DateTime) => (T?)(object?)setting.GetDateTimeValue() ?? defaultValue, //
-                    SettingType.Decimal when targetType == typeof(decimal) => (T)(object)setting.GetDecimalValue(), //
-                    SettingType.Json when !string.IsNullOrWhiteSpace(setting.Value) => //
-                        JsonSerializer.Deserialize<T>(setting.Value), //
-                    _ => LogTypeMismatchAndReturnDefault(key, setting.Type, defaultValue) //
+                    SettingType.String when targetType == typeof(string) => (T)(object)setting.GetStringValue(),
+                    SettingType.Integer when targetType == typeof(int) => (T)(object)setting.GetIntValue(),
+                    SettingType.Boolean when targetType == typeof(bool) => (T)(object)setting.GetBoolValue(),
+                    SettingType.DateTime when targetType == typeof(DateTime) => (T?)(object?)setting.GetDateTimeValue() ?? defaultValue,
+                    SettingType.Decimal when targetType == typeof(decimal) => (T)(object)setting.GetDecimalValue(),
+                    SettingType.Json when !string.IsNullOrWhiteSpace(setting.Value) =>
+                        JsonSerializer.Deserialize<T>(setting.Value),
+                    _ => LogTypeMismatchAndReturnDefault(key, setting.Type, defaultValue)
                 };
             }
             catch (InvalidCastException ex)
             {
-                _logger.LogError(ex, "Błąd rzutowania typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}. Wartość: '{Value}'", //
+                _logger.LogError(ex, "Błąd rzutowania typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}. Wartość: '{Value}'",
                                  key, typeof(T).Name, setting.Type, setting.Value);
                 return defaultValue;
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Błąd deserializacji JSON dla ustawienia '{Key}'. Wartość: '{Value}'", key, setting.Value); //
+                _logger.LogError(ex, "Błąd deserializacji JSON dla ustawienia '{Key}'. Wartość: '{Value}'", key, setting.Value);
                 return defaultValue;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Nieoczekiwany błąd podczas pobierania i konwersji ustawienia '{Key}'. Wartość: '{Value}'", key, setting.Value); //
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas pobierania i konwersji ustawienia '{Key}'. Wartość: '{Value}'", key, setting.Value);
                 return defaultValue;
             }
         }
 
         private T? LogTypeMismatchAndReturnDefault<T>(string key, SettingType actualType, T? defaultValue)
         {
-            _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}.", key, typeof(T).Name, actualType); //
+            _logger.LogWarning("Niezgodność typu dla ustawienia '{Key}'. Oczekiwano {ExpectedType}, znaleziono {ActualType}.", key, typeof(T).Name, actualType);
             return defaultValue;
         }
 
@@ -146,19 +146,19 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<ApplicationSetting>> GetAllSettingsAsync(bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh); //
+            _logger.LogInformation("Pobieranie wszystkich aktywnych ustawień aplikacji. Wymuszenie odświeżenia: {ForceRefresh}", forceRefresh);
 
             if (!forceRefresh && _graphCacheService.TryGetValue(AllSettingsCacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
-                _logger.LogDebug("Wszystkie aktywne ustawienia znalezione w cache."); //
+                _logger.LogDebug("Wszystkie aktywne ustawienia znalezione w cache.");
                 return cachedSettings;
             }
 
-            _logger.LogDebug("Wszystkie aktywne ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium."); //
-            var settingsFromDb = await _settingsRepository.FindAsync(s => s.IsActive); //
+            _logger.LogDebug("Wszystkie aktywne ustawienia nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.");
+            var settingsFromDb = await _settingsRepository.FindAsync(s => s.IsActive);
 
             _graphCacheService.Set(AllSettingsCacheKey, settingsFromDb);
-            _logger.LogDebug("Wszystkie aktywne ustawienia dodane do cache."); //
+            _logger.LogDebug("Wszystkie aktywne ustawienia dodane do cache.");
 
             return settingsFromDb;
         }
@@ -167,10 +167,10 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<ApplicationSetting>> GetSettingsByCategoryAsync(string category, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie aktywnych ustawień aplikacji dla kategorii: {Category}. Wymuszenie odświeżenia: {ForceRefresh}", category, forceRefresh); //
+            _logger.LogInformation("Pobieranie aktywnych ustawień aplikacji dla kategorii: {Category}. Wymuszenie odświeżenia: {ForceRefresh}", category, forceRefresh);
             if (string.IsNullOrWhiteSpace(category))
             {
-                _logger.LogWarning("Próba pobrania ustawień dla pustej kategorii."); //
+                _logger.LogWarning("Próba pobrania ustawień dla pustej kategorii.");
                 return Enumerable.Empty<ApplicationSetting>();
             }
 
@@ -178,15 +178,15 @@ namespace TeamsManager.Core.Services
 
             if (!forceRefresh && _graphCacheService.TryGetValue(cacheKey, out IEnumerable<ApplicationSetting>? cachedSettings) && cachedSettings != null)
             {
-                _logger.LogDebug("Ustawienia dla kategorii '{Category}' znalezione w cache.", category); //
+                _logger.LogDebug("Ustawienia dla kategorii '{Category}' znalezione w cache.", category);
                 return cachedSettings;
             }
 
-            _logger.LogDebug("Ustawienia dla kategorii '{Category}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", category); //
+            _logger.LogDebug("Ustawienia dla kategorii '{Category}' nie znalezione w cache lub wymuszono odświeżenie. Pobieranie z repozytorium.", category);
             var settingsFromDb = await _settingsRepository.GetSettingsByCategoryAsync(category);
 
             _graphCacheService.Set(cacheKey, settingsFromDb);
-            _logger.LogDebug("Ustawienia dla kategorii '{Category}' dodane do cache.", category); //
+            _logger.LogDebug("Ustawienia dla kategorii '{Category}' dodane do cache.", category);
 
             return settingsFromDb;
         }
@@ -533,9 +533,9 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda unieważnia globalny cache dla ustawień aplikacji.</remarks>
         public Task RefreshCacheAsync()
         {
-            _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a ustawień aplikacji."); //
-            InvalidateSettingCache(invalidateAll: true); //
-            _logger.LogInformation("Cache ustawień aplikacji został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu."); //
+            _logger.LogInformation("Rozpoczynanie odświeżania całego cache'a ustawień aplikacji.");
+            InvalidateSettingCache(invalidateAll: true);
+            _logger.LogInformation("Cache ustawień aplikacji został zresetowany. Wpisy zostaną odświeżone przy następnym żądaniu.");
             return Task.CompletedTask;
         }
 

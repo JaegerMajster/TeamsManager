@@ -10,7 +10,6 @@ namespace TeamsManager.API.Controllers
 {
     /// <summary>
     /// Kontroler API dla procesów związanych z rokiem szkolnym
-    /// Główne endpointy dla automatyzacji tworzenia zespołów
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
@@ -32,10 +31,8 @@ namespace TeamsManager.API.Controllers
         }
 
         /// <summary>
-        /// Główny endpoint: Tworzy zespoły dla nowego roku szkolnego
+        /// Tworzy zespoły dla nowego roku szkolnego
         /// </summary>
-        /// <param name="request">Parametry procesu tworzenia zespołów</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("create-teams-for-new-school-year")]
         [ProducesResponseType(typeof(BulkOperationResult), 200)]
         [ProducesResponseType(400)]
@@ -48,7 +45,6 @@ namespace TeamsManager.API.Controllers
             {
                 _logger.LogInformation("🚀 API: Rozpoczynam proces tworzenia zespołów dla roku {SchoolYearId}", request.SchoolYearId);
 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -56,14 +52,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -104,8 +98,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Archiwizuje zespoły z poprzedniego roku szkolnego
         /// </summary>
-        /// <param name="request">Parametry procesu archiwizacji</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("archive-teams-from-previous-year")]
         [ProducesResponseType(typeof(BulkOperationResult), 200)]
         [ProducesResponseType(400)]
@@ -118,7 +110,6 @@ namespace TeamsManager.API.Controllers
             {
                 _logger.LogInformation("🗃️ API: Rozpoczynam archiwizację zespołów dla roku {SchoolYearId}", request.SchoolYearId);
 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -126,14 +117,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -162,8 +151,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Kompleksowy proces przejścia na nowy rok szkolny
         /// </summary>
-        /// <param name="request">Parametry procesu przejścia</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("transition-to-new-school-year")]
         [ProducesResponseType(typeof(BulkOperationResult), 200)]
         [ProducesResponseType(400)]
@@ -177,7 +164,6 @@ namespace TeamsManager.API.Controllers
                 _logger.LogInformation("🔄 API: Rozpoczynam proces przejścia z roku {OldYear} na {NewYear}", 
                     request.OldSchoolYearId, request.NewSchoolYearId);
 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -185,14 +171,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -221,9 +205,8 @@ namespace TeamsManager.API.Controllers
         }
 
         /// <summary>
-        /// Pobiera status aktualnie wykonywanych procesów
+        /// Pobiera status aktywnych procesów
         /// </summary>
-        /// <returns>Lista aktywnych procesów</returns>
         [HttpGet("active-processes")]
         [ProducesResponseType(typeof(IEnumerable<SchoolYearProcessStatus>), 200)]
         [ProducesResponseType(401)]
@@ -232,7 +215,8 @@ namespace TeamsManager.API.Controllers
         {
             try
             {
-                var processes = await _orchestrator.GetActiveProcessesStatusAsync();
+                _logger.LogInformation("📊 API: Pobieranie statusu aktywnych procesów");
+                var processes = await _orchestrator.GetActiveProcessesAsync();
                 return Ok(processes);
             }
             catch (Exception ex)
@@ -245,8 +229,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Anuluje aktywny proces
         /// </summary>
-        /// <param name="processId">ID procesu do anulowania</param>
-        /// <returns>Wynik operacji anulowania</returns>
         [HttpPost("cancel-process/{processId}")]
         [ProducesResponseType(typeof(CancelProcessResponse), 200)]
         [ProducesResponseType(400)]
@@ -257,122 +239,83 @@ namespace TeamsManager.API.Controllers
         {
             try
             {
-                if (string.IsNullOrEmpty(processId))
+                if (string.IsNullOrWhiteSpace(processId))
                 {
-                    return BadRequest("ID procesu nie może być pusty");
+                    return BadRequest(new CancelProcessResponse 
+                    { 
+                        Success = false, 
+                        Message = "ID procesu jest wymagane" 
+                    });
                 }
 
-                _logger.LogInformation("🛑 API: Próba anulowania procesu {ProcessId}", processId);
-
+                _logger.LogInformation("🛑 API: Anulowanie procesu {ProcessId}", processId);
                 var success = await _orchestrator.CancelProcessAsync(processId);
-                
+
                 if (success)
                 {
-                    _logger.LogInformation("✅ API: Proces {ProcessId} został anulowany", processId);
-                    return Ok(new CancelProcessResponse { Success = true, Message = "Proces został anulowany" });
+                    return Ok(new CancelProcessResponse 
+                    { 
+                        Success = true, 
+                        Message = "Proces został anulowany pomyślnie" 
+                    });
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ API: Nie można anulować procesu {ProcessId} - proces nie istnieje lub już się zakończył", processId);
-                    return NotFound(new CancelProcessResponse { Success = false, Message = "Proces nie istnieje lub już się zakończył" });
+                    return NotFound(new CancelProcessResponse 
+                    { 
+                        Success = false, 
+                        Message = "Proces nie został znaleziony lub już się zakończył" 
+                    });
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ API: Błąd podczas anulowania procesu {ProcessId}", processId);
-                return StatusCode(500, new CancelProcessResponse { Success = false, Message = "Wystąpił błąd wewnętrzny serwera" });
+                return StatusCode(500, new CancelProcessResponse 
+                { 
+                    Success = false, 
+                    Message = "Wystąpił błąd wewnętrzny serwera" 
+                });
             }
         }
     }
 
-    #region Request/Response DTOs
-
-    /// <summary>
-    /// Request do tworzenia zespołów dla nowego roku szkolnego
-    /// </summary>
     public class CreateTeamsForNewSchoolYearRequest
     {
-        /// <summary>
-        /// ID roku szkolnego
-        /// </summary>
         [Required]
         public string SchoolYearId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Lista ID szablonów zespołów
-        /// </summary>
         [Required]
-        [MinLength(1, ErrorMessage = "Wymagany jest przynajmniej jeden szablon")]
         public string[] TemplateIds { get; set; } = Array.Empty<string>();
 
-        /// <summary>
-        /// Opcjonalne ustawienia procesu
-        /// </summary>
         public SchoolYearProcessOptions? Options { get; set; }
     }
 
-    /// <summary>
-    /// Request do archiwizacji zespołów
-    /// </summary>
     public class ArchiveTeamsRequest
     {
-        /// <summary>
-        /// ID roku szkolnego do archiwizacji
-        /// </summary>
         [Required]
         public string SchoolYearId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Opcjonalne ustawienia procesu
-        /// </summary>
         public SchoolYearProcessOptions? Options { get; set; }
     }
 
-    /// <summary>
-    /// Request do przejścia na nowy rok szkolny
-    /// </summary>
     public class TransitionToNewSchoolYearRequest
     {
-        /// <summary>
-        /// ID starego roku szkolnego
-        /// </summary>
         [Required]
         public string OldSchoolYearId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// ID nowego roku szkolnego
-        /// </summary>
         [Required]
         public string NewSchoolYearId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Lista ID szablonów dla nowych zespołów
-        /// </summary>
         [Required]
-        [MinLength(1, ErrorMessage = "Wymagany jest przynajmniej jeden szablon")]
         public string[] TemplateIds { get; set; } = Array.Empty<string>();
 
-        /// <summary>
-        /// Opcjonalne ustawienia procesu
-        /// </summary>
         public SchoolYearProcessOptions? Options { get; set; }
     }
 
-    /// <summary>
-    /// Response dla operacji anulowania procesu
-    /// </summary>
     public class CancelProcessResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Komunikat opisujący wynik operacji
-        /// </summary>
         public string Message { get; set; } = string.Empty;
     }
-
-    #endregion
 } 

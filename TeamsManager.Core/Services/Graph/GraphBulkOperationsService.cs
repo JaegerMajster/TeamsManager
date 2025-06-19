@@ -26,8 +26,8 @@ namespace TeamsManager.Core.Services.Graph
         private readonly ILogger<GraphBulkOperationsService> _logger;
         private readonly GraphApiConfiguration _graphConfig;
 
-        // Graph API Batch limits
-        private const int MaxBatchSize = 20; // Graph API limit
+        // Limity Graph API Batch
+        private const int MaxBatchSize = 20; // Limit Graph API
         private const int MaxConcurrentBatches = 5;
         private const int DefaultRetryDelayMs = 1000;
         private const int MaxRetryDelayMs = 30000;
@@ -2086,11 +2086,11 @@ namespace TeamsManager.Core.Services.Graph
                         if (batchResponse?.HasError == true)
                         {
                             // Sprawdź czy błąd można powtórzyć
-                            var canRetry = batchResponse.Status == 429 || // Too Many Requests
-                                          batchResponse.Status == 500 || // Internal Server Error
-                                          batchResponse.Status == 502 || // Bad Gateway
-                                          batchResponse.Status == 503 || // Service Unavailable
-                                          batchResponse.Status == 504;   // Gateway Timeout
+                            var canRetry = batchResponse.Status == 429 || // Zbyt wiele żądań
+                                          batchResponse.Status == 500 || // Błąd wewnętrzny serwera
+                                          batchResponse.Status == 502 || // Błędna brama
+                                          batchResponse.Status == 503 || // Usługa niedostępna
+                                          batchResponse.Status == 504;   // Przekroczono czas oczekiwania bramy
 
                             if (canRetry && retryCount < operation.MaxRetries)
                             {

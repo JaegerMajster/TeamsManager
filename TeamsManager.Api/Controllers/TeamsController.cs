@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
-using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
@@ -9,13 +9,10 @@ using TeamsManager.Api.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Linq; // Dla .Select()
+using System.Linq;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze (np. TeamsManager.Contracts lub TeamsManager.Api.Dtos)
-
     public class CreateTeamRequestDto
     {
         public string DisplayName { get; set; } = string.Empty;
@@ -30,21 +27,19 @@ namespace TeamsManager.Api.Controllers
 
     public class UpdateTeamRequestDto
     {
-        // Zakładamy, że ID zespołu jest przekazywane w URL, a nie w ciele
+
         public string DisplayName { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string OwnerUpn { get; set; } = string.Empty;
         public TeamVisibility Visibility { get; set; } = TeamVisibility.Private;
         public string? SchoolTypeId { get; set; }
         public string? SchoolYearId { get; set; }
-        public string? TemplateId { get; set; } // Może być potrzebne, jeśli pozwalamy na zmianę szablonu
+        public string? TemplateId { get; set; }
         public string? AcademicYear { get; set; }
         public string? Semester { get; set; }
         public bool RequiresApproval { get; set; }
         public int? MaxMembers { get; set; }
         public TeamStatus Status { get; set; } = TeamStatus.Active;
-        // Uwaga: Status zespołu (Active/Archived) jest zarządzany przez dedykowane endpointy Archive/Restore
-        // Status jest tu dla kompletności DTO, ale UpdateTeam go ignoruje
     }
 
     public class AddMemberRequestDto
@@ -58,16 +53,14 @@ namespace TeamsManager.Api.Controllers
         public string Reason { get; set; } = string.Empty;
     }
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/Teams
-    [Authorize] // Większość operacji na zespołach wymaga autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class TeamsController : ControllerBase
     {
         private readonly ITeamService _teamService;
-        private readonly ICurrentUserService _currentUserService; // Do pobierania UPN użytkownika wykonującego żądanie, jeśli potrzebne
+        private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<TeamsController> _logger;
 
         public TeamsController(
@@ -98,7 +91,7 @@ namespace TeamsManager.Api.Controllers
                 requestDto.Description,
                 requestDto.OwnerUpn,
                 requestDto.Visibility,
-                accessToken, // Przekazanie tokenu
+                accessToken,
                 requestDto.TeamTemplateId,
                 requestDto.SchoolTypeId,
                 requestDto.SchoolYearId,
@@ -118,7 +111,7 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> GetTeamById(string teamId, [FromQuery] bool includeMembers = false, [FromQuery] bool includeChannels = false)
         {
             _logger.LogInformation("Pobieranie zespołu o ID: {TeamId}", teamId);
-            var accessToken = await HttpContext.GetBearerTokenAsync(); // Token może być potrzebny dla forceRefresh z Graph
+            var accessToken = await HttpContext.GetBearerTokenAsync();
 
             var team = await _teamService.GetTeamByIdAsync(teamId, includeMembers, includeChannels, accessToken: accessToken);
             if (team == null)
@@ -355,7 +348,7 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Zespół ID: {TeamId} usunięty (zarchiwizowany) pomyślnie.", teamId);
-                return Ok(new { Message = "Zespół usunięty (zarchiwizowany) pomyślnie." }); // Lub NoContent()
+                return Ok(new { Message = "Zespół usunięty (zarchiwizowany) pomyślnie." });
             }
             _logger.LogWarning("Nie udało się usunąć zespołu ID: {TeamId}.", teamId);
             return BadRequest(new { Message = "Nie udało się usunąć zespołu." });
@@ -376,14 +369,13 @@ namespace TeamsManager.Api.Controllers
             if (teamMember != null)
             {
                 _logger.LogInformation("Członek {UserUpn} dodany do zespołu ID: {TeamId} pomyślnie.", requestDto.UserUpn, teamId);
-                // Zwraca 201 Created z lokalizacją (jeśli mamy endpoint GetMember) lub obiektem członka
-                return Ok(teamMember); // Prostsze niż CreatedAtAction dla członka
+                return Ok(teamMember);
             }
             _logger.LogWarning("Nie udało się dodać członka {UserUpn} do zespołu ID: {TeamId}.", requestDto.UserUpn, teamId);
             return BadRequest(new { Message = "Nie udało się dodać członka do zespołu." });
         }
 
-        [HttpDelete("{teamId}/members/{userId}")] // Można użyć UPN zamiast userId, jeśli jest wygodniejsze
+        [HttpDelete("{teamId}/members/{userId}")]
         public async Task<IActionResult> RemoveMember(string teamId, string userId)
         {
             _logger.LogInformation("Żądanie usunięcia członka ID/UPN: {UserId} z zespołu ID: {TeamId}", userId, teamId);
@@ -394,14 +386,11 @@ namespace TeamsManager.Api.Controllers
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
-            // W ITeamService metoda RemoveMemberAsync przyjmuje userId (GUID).
-            // Jeśli przekazujemy tu UPN, serwis musiałby najpierw zamienić UPN na ID użytkownika.
-            // Dla uproszczenia zakładam, że przekazujemy ID użytkownika.
             var success = await _teamService.RemoveMemberAsync(teamId, userId, accessToken);
             if (success)
             {
                 _logger.LogInformation("Członek ID: {UserId} usunięty z zespołu ID: {TeamId} pomyślnie.", userId, teamId);
-                return Ok(new { Message = "Członek usunięty pomyślnie." }); // Lub NoContent()
+                return Ok(new { Message = "Członek usunięty pomyślnie." });
             }
             _logger.LogWarning("Nie udało się usunąć członka ID: {UserId} z zespołu ID: {TeamId}.", userId, teamId);
             return BadRequest(new { Message = "Nie udało się usunąć członka z zespołu." });

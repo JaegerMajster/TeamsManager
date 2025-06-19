@@ -10,9 +10,6 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class CreateSchoolTypeRequestDto
     {
         public string ShortName { get; set; } = string.Empty;
@@ -24,7 +21,6 @@ namespace TeamsManager.Api.Controllers
 
     public class UpdateSchoolTypeRequestDto
     {
-        // Id typu szkoły będzie pobierane z URL
         public string ShortName { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
@@ -33,12 +29,10 @@ namespace TeamsManager.Api.Controllers
         public bool IsActive { get; set; } = true;
     }
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/SchoolTypes
-    [Authorize] // Wszystkie operacje na typach szkół domyślnie wymagają autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class SchoolTypesController : ControllerBase
     {
         private readonly ISchoolTypeService _schoolTypeService;
@@ -110,7 +104,6 @@ namespace TeamsManager.Api.Controllers
                 return NotFound(new { Message = $"Typ szkoły o ID '{schoolTypeId}' nie został znaleziony." });
             }
 
-            // Zastosuj zmiany z DTO na istniejącym obiekcie
             existingSchoolType.ShortName = requestDto.ShortName;
             existingSchoolType.FullName = requestDto.FullName;
             existingSchoolType.Description = requestDto.Description;
@@ -122,7 +115,7 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Typ szkoły ID: {SchoolTypeId} zaktualizowany pomyślnie.", schoolTypeId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować typu szkoły ID: {SchoolTypeId}.", schoolTypeId);
             return BadRequest(new { Message = "Nie udało się zaktualizować typu szkoły." });
@@ -145,7 +138,7 @@ namespace TeamsManager.Api.Controllers
                 {
                     return NotFound(new { Message = $"Typ szkoły o ID '{schoolTypeId}' nie został znaleziony." });
                 }
-                _logger.LogWarning("Nie udało się usunąć (zdezaktywować) typu szkoły ID: {SchoolTypeId}. Możliwe, że był już nieaktywny lub wystąpił inny problem.", schoolTypeId);
+                _logger.LogWarning("Nie udało się usunąć (zdezaktywować) typu szkoły ID: {SchoolTypeId}.", schoolTypeId);
                 return BadRequest(new { Message = "Nie udało się usunąć (zdezaktywować) typu szkoły." });
             }
             catch (InvalidOperationException ex)

@@ -15,7 +15,6 @@ namespace TeamsManager.Core.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzania połączeniem z Microsoft Graph API.
-    /// Implementuje TASK 2.1.1 - utworzenie GraphConnectionService.
     /// </summary>
     public class GraphConnectionService : IGraphConnectionService
     {
@@ -40,7 +39,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.2 - Implementacja zarządzania tokenami Graph API
+        /// Sprawdza czy token Graph API jest ważny
         /// </summary>
         public async Task<bool> IsTokenValidAsync()
         {
@@ -97,7 +96,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.2 - Implementacja zarządzania tokenami Graph API
+        /// Odświeża token Graph API jeśli jest to potrzebne
         /// </summary>
         public async Task<bool> RefreshTokenIfNeededAsync()
         {
@@ -135,7 +134,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.3 - Implementacja diagnostyki połączenia Graph
+        /// Pobiera informacje o zdrowiu połączenia z Graph API
         /// </summary>
         public async Task<GraphConnectionHealthInfo> GetConnectionHealthAsync()
         {
@@ -163,9 +162,9 @@ namespace TeamsManager.Core.Services.Graph
                 catch (CircuitBreakerOpenException ex)
                 {
                     healthInfo.IsConnected = false;
-                    healthInfo.LastError = $"Circuit breaker is open: {ex.Message}";
+                    healthInfo.LastError = $"Wyłącznik bezpieczeństwa jest otwarty: {ex.Message}";
                     healthInfo.Status = GraphHealthStatus.Critical;
-                    _logger.LogWarning("Circuit breaker is open for Graph API connection health check");
+                    _logger.LogWarning("Wyłącznik bezpieczeństwa jest otwarty dla sprawdzania zdrowia połączenia Graph API");
                 }
                 catch (Exception ex)
                 {
@@ -218,8 +217,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.3 - Implementacja diagnostyki połączenia Graph
-        /// Pobiera szczegółowe informacje diagnostyczne Graph API
+        /// Pobiera szczegółowe informacje diagnostyczne o połączeniu Graph API
         /// </summary>
         public async Task<GraphDiagnosticInfo> GetDiagnosticInfoAsync()
         {
@@ -373,8 +371,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.4 - Implementacja walidacji uprawnień Graph
-        /// Pobiera szczegółowe informacje o uprawnieniach aplikacji
+        /// Sprawdza uprawnienia Graph API dla bieżącego użytkownika
         /// </summary>
         public async Task<GraphPermissionInfo> GetPermissionInfoAsync()
         {
@@ -525,18 +522,17 @@ namespace TeamsManager.Core.Services.Graph
                     {
                         HasUserReadPermission = false,
                         HasTeamReadPermission = false,
-                                            HasTeamManagePermission = false,
-                    HasUserManagePermission = false,
-                    HasDirectoryReadPermission = false,
-                    HasGroupReadPermission = false,
-                    HasGroupWritePermission = false,
-                    Status = GraphHealthStatus.Critical
+                        HasTeamManagePermission = false,
+                        HasUserManagePermission = false,
+                        HasDirectoryReadPermission = false,
+                        HasGroupReadPermission = false,
+                        HasGroupWritePermission = false,
+                        Status = GraphHealthStatus.Critical
                     });
             }
         }
 
         /// <summary>
-        /// TASK 2.1.5 - Implementacja health check Graph API
         /// Wykonuje kompleksowy test połączenia z Graph API
         /// </summary>
         public async Task<GraphConnectionTestResult> TestConnectionAsync()
@@ -728,7 +724,6 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.5 - Implementacja health check Graph API
         /// Sprawdza dostępność konkretnego endpointu Graph API
         /// </summary>
         public async Task<GraphApiAvailability> CheckEndpointAvailabilityAsync(string endpoint)
@@ -822,8 +817,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.2 - Implementacja zarządzania tokenami Graph API
-        /// Pobiera kontekst aktualnego użytkownika z Graph API
+        /// Pobiera kontekst użytkownika z Graph API
         /// </summary>
         public async Task<GraphUserContext> GetUserContextAsync()
         {
@@ -889,8 +883,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.5 - Implementacja health check Graph API
-        /// Pobiera informacje o rate limiting Graph API
+        /// Pobiera informacje o statusie rate limiting Graph API
         /// </summary>
         public async Task<GraphRateLimitStatus> GetRateLimitStatusAsync()
         {
@@ -965,8 +958,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.5 - Implementacja health check Graph API
-        /// Wykonuje batch request do Graph API
+        /// Wykonuje żądanie batch do Graph API
         /// </summary>
         public async Task<GraphBatchResponse> ExecuteBatchRequestAsync(IEnumerable<GraphBatchRequest> requests)
         {
@@ -1068,8 +1060,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.1.3 - Implementacja diagnostyki połączenia Graph
-        /// Analizuje wyjątek i tworzy szczegółowy opis błędu Graph API
+        /// Analizuje błąd Graph API i zwraca szczegółowe informacje
         /// </summary>
         public GraphApiError AnalyzeGraphError(Exception exception)
         {

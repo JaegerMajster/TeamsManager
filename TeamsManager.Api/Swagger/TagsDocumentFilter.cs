@@ -10,7 +10,6 @@ namespace TeamsManager.Api.Swagger
     {
         public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
         {
-            // Definiowanie tagów z opisami i ikonami
             var tagDescriptions = new Dictionary<string, (string Description, int Order)>
             {
                 ["Users"] = ("👥 **Zarządzanie użytkownikami**\n\nOperacje CRUD dla użytkowników systemu, zarządzanie rolami i uprawnieniami.", 1),
@@ -27,13 +26,11 @@ namespace TeamsManager.Api.Swagger
                 ["Diagnostics"] = ("🔍 **Diagnostyka Graph API**\n\nMonitorowanie i diagnostyka połączeń z Microsoft Graph API.", 12)
             };
 
-            // Jeśli dokument nie ma tagów, utwórz listę
             if (swaggerDoc.Tags == null)
             {
                 swaggerDoc.Tags = new List<OpenApiTag>();
             }
 
-            // Dodaj lub zaktualizuj tagi
             foreach (var (tagName, (description, order)) in tagDescriptions)
             {
                 var existingTag = swaggerDoc.Tags.FirstOrDefault(t => t.Name == tagName);
@@ -51,14 +48,12 @@ namespace TeamsManager.Api.Swagger
                 }
             }
 
-            // Sortuj tagi według zdefiniowanej kolejności
             swaggerDoc.Tags = swaggerDoc.Tags
                 .OrderBy(tag => tagDescriptions.ContainsKey(tag.Name) 
                     ? tagDescriptions[tag.Name].Order 
                     : 999)
                 .ToList();
 
-            // Dodaj informacje o serwerach API
             if (swaggerDoc.Servers?.Any() != true)
             {
                 swaggerDoc.Servers = new List<OpenApiServer>
@@ -76,10 +71,8 @@ namespace TeamsManager.Api.Swagger
                 };
             }
 
-            // Dodaj dodatkowe informacje do metadanych dokumentu
             if (swaggerDoc.Info != null)
             {
-                // Sprawdź czy klucz już istnieje przed dodaniem
                 if (!swaggerDoc.Info.Extensions.ContainsKey("x-logo"))
                 {
                     swaggerDoc.Info.Extensions.Add("x-logo", new Microsoft.OpenApi.Any.OpenApiObject
@@ -89,7 +82,6 @@ namespace TeamsManager.Api.Swagger
                     });
                 }
 
-                // Dodaj informacje o autorach i wersji (z sprawdzeniem)
                 if (!swaggerDoc.Info.Extensions.ContainsKey("x-api-id"))
                 {
                     swaggerDoc.Info.Extensions.Add("x-api-id", new Microsoft.OpenApi.Any.OpenApiString("teamsmanager-api"));
@@ -100,7 +92,6 @@ namespace TeamsManager.Api.Swagger
                 }
             }
 
-            // Ustaw zewnętrzną dokumentację
             swaggerDoc.ExternalDocs = new OpenApiExternalDocs
             {
                 Description = "📖 Dokumentacja TeamsManager na GitHub",

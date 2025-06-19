@@ -201,7 +201,7 @@ namespace TeamsManager.Core.Models.Graph
         public double? UsagePercentage { get; set; }
     }
 
-    // GraphRateLimitInfo USUNIĘTE - zastąpione przez GraphRateLimitStatus (konsolidacja DRY)
+
 
     /// <summary>
     /// Żądanie batch Graph API.
@@ -544,7 +544,7 @@ namespace TeamsManager.Core.Models.Graph
         public int? Count { get; set; }
     }
 
-    // GraphConnectionStatus USUNIĘTE - zastąpione przez GraphConnectionHealthInfo (konsolidacja DRY)
+
 
     /// <summary>
     /// Metryki Graph API (rozszerzone).
@@ -658,14 +658,6 @@ namespace TeamsManager.Core.Models.Graph
         public string Status { get; set; } = "Aktywny";
     }
 
-    // GraphTokenInfo USUNIĘTE - używana jest definicja z IGraphTokenManager.cs (konsolidacja DRY)
-
-    // GraphEndpointInfo USUNIĘTE - zastąpione przez GraphApiAvailability (konsolidacja DRY)
-
-    // GraphQuotaInfo USUNIĘTE - zastąpione przez GraphRateLimitStatus (konsolidacja DRY)
-
-    // ===== DODATKOWE MODELE DIAGNOSTYCZNE =====
-
     /// <summary>
     /// Informacje o zdrowiu połączenia z Graph API.
     /// Konsoliduje GraphConnectionStatus i GraphConnectionHealthInfo.
@@ -716,10 +708,6 @@ namespace TeamsManager.Core.Models.Graph
         /// Czy połączenie jest zdrowe (IsConnected i IsTokenValid).
         /// </summary>
         public bool IsHealthy => IsConnected && IsTokenValid;
-
-
-
-
     }
 
     /// <summary>
@@ -807,8 +795,6 @@ namespace TeamsManager.Core.Models.Graph
         public bool HasGraphToken => IsAuthenticated;
         public bool HasUserCreationPermissions => HasRequiredPermissions;
         public string ConnectionStatus => IsConnected ? "Connected" : "Disconnected";
-
-
     }
 
     /// <summary>
@@ -907,8 +893,6 @@ namespace TeamsManager.Core.Models.Graph
         /// </summary>
         public int PassedTests => PassedTestsCount;
         public int TotalTests => TotalTestsCount;
-
-
     }
 
     /// <summary>

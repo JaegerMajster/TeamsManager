@@ -55,31 +55,31 @@ namespace TeamsManager.Api.HealthChecks
                     var service = _serviceProvider.GetService(serviceType);
                     if (service == null)
                     {
-                        errors.Add($"Service {serviceType.Name} is not registered");
-                        _logger.LogError("Service {ServiceType} is not registered in DI container", serviceType.Name);
+                        errors.Add($"Serwis {serviceType.Name} nie jest zarejestrowany");
+                        _logger.LogError("Serwis {ServiceType} nie jest zarejestrowany w kontenerze DI", serviceType.Name);
                     }
                     else
                     {
-                        _logger.LogDebug("Service {ServiceType} successfully resolved", serviceType.Name);
+                        _logger.LogDebug("Serwis {ServiceType} pomyślnie rozwiązany", serviceType.Name);
                     }
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"Error resolving {serviceType.Name}: {ex.Message}");
-                    _logger.LogError(ex, "Error resolving service {ServiceType}", serviceType.Name);
+                    errors.Add($"Błąd podczas rozwiązywania {serviceType.Name}: {ex.Message}");
+                    _logger.LogError(ex, "Błąd podczas rozwiązywania serwisu {ServiceType}", serviceType.Name);
                 }
             }
 
             if (errors.Any())
             {
                 return Task.FromResult(HealthCheckResult.Unhealthy(
-                    "DI configuration issues detected",
+                    "Wykryto problemy z konfiguracją DI",
                     data: new Dictionary<string, object> { ["errors"] = errors }
                 ));
             }
 
-            _logger.LogInformation("All critical services are properly registered in DI container");
-            return Task.FromResult(HealthCheckResult.Healthy("All critical services are properly registered"));
+            _logger.LogInformation("Wszystkie krytyczne serwisy są poprawnie zarejestrowane w kontenerze DI");
+            return Task.FromResult(HealthCheckResult.Healthy("Wszystkie krytyczne serwisy są poprawnie zarejestrowane"));
         }
     }
 } 

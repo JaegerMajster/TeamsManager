@@ -1,5 +1,4 @@
-﻿// Plik: TeamsManager.Api/Hubs/NotificationHub.cs
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
@@ -14,7 +13,6 @@ namespace TeamsManager.Api.Hubs
     {
         private readonly ILogger<NotificationHub> _logger;
         
-        // [P2-OPTIMIZATION] Track connections for better performance
         private static readonly ConcurrentDictionary<string, string> _connections = new();
         private static readonly ConcurrentDictionary<string, DateTime> _connectionTimes = new();
 
@@ -24,7 +22,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// [P2-REALTIME] Handle new connections with group management
+        /// Obsługa nowych połączeń z zarządzaniem grupami
         /// </summary>
         public override async Task OnConnectedAsync()
         {
@@ -34,42 +32,35 @@ namespace TeamsManager.Api.Hubs
                          Context.User?.FindFirst(ClaimTypes.Email)?.Value ??
                          Context.User?.Identity?.Name;
 
-            _logger.LogInformation("[P2-SIGNALR] New connection: {ConnectionId}, User: {UserUpn}", 
+            _logger.LogInformation("Nowe połączenie: {ConnectionId}, Użytkownik: {UserUpn}", 
                 connectionId, userUpn);
 
             try
             {
-                // Track connection
                 if (!string.IsNullOrWhiteSpace(userUpn))
                 {
                     _connections[connectionId] = userUpn;
                     _connectionTimes[connectionId] = DateTime.UtcNow;
 
-                    // Add to user-specific group
                     await Groups.AddToGroupAsync(connectionId, $"User_{userUpn}");
-                    _logger.LogDebug("[P2-SIGNALR] Added to user group: User_{UserUpn}", userUpn);
+                    _logger.LogDebug("Dodano do grupy użytkownika: User_{UserUpn}", userUpn);
 
-                    // Add to role-based groups
                     var userRoles = Context.User?.FindAll(ClaimTypes.Role)?.Select(c => c.Value) ?? 
                                    Enumerable.Empty<string>();
 
                     foreach (var role in userRoles)
                     {
                         await Groups.AddToGroupAsync(connectionId, role);
-                        _logger.LogDebug("[P2-SIGNALR] Added to role group: {Role}", role);
+                        _logger.LogDebug("Dodano do grupy roli: {Role}", role);
                     }
 
-                    // Add administrators to admin group
                     if (userRoles.Contains("Administrator") || userRoles.Contains("Admin"))
                     {
                         await Groups.AddToGroupAsync(connectionId, "Administrators");
-                        _logger.LogDebug("[P2-SIGNALR] Added to Administrators group");
+                        _logger.LogDebug("Dodano do grupy Administratorów");
                     }
 
-                    // Add all users to general group
                     await Groups.AddToGroupAsync(connectionId, "AllUsers");
-
-                    // Send welcome message
                     await Clients.Caller.SendAsync("ReceiveNotification", new
                     {
                         Type = "ConnectionEstablished",
@@ -84,17 +75,17 @@ namespace TeamsManager.Api.Hubs
                 }
 
                 await base.OnConnectedAsync();
-                _logger.LogInformation("[P2-SIGNALR] Connection setup completed for {UserUpn}", userUpn);
+                _logger.LogInformation("Konfiguracja połączenia zakończona dla {UserUpn}", userUpn);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[P2-SIGNALR] Error during connection setup for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd podczas konfiguracji połączenia dla {UserUpn}", userUpn);
                 throw;
             }
         }
 
         /// <summary>
-        /// [P2-REALTIME] Handle disconnections with cleanup
+        /// Obsługa rozłączeń z czyszczeniem
         /// </summary>
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
@@ -103,44 +94,41 @@ namespace TeamsManager.Api.Hubs
 
             if (exception != null)
             {
-                _logger.LogError(exception, "[P2-SIGNALR] Disconnection with error. ConnectionId: {ConnectionId}, User: {UserUpn}", 
+                _logger.LogError(exception, "Rozłączenie z błędem. ConnectionId: {ConnectionId}, Użytkownik: {UserUpn}", 
                     connectionId, userUpn);
             }
             else
             {
-                _logger.LogInformation("[P2-SIGNALR] Normal disconnection. ConnectionId: {ConnectionId}, User: {UserUpn}", 
+                _logger.LogInformation("Normalne rozłączenie. ConnectionId: {ConnectionId}, Użytkownik: {UserUpn}", 
                     connectionId, userUpn);
             }
 
             try
             {
-                // Calculate session duration
                 if (_connectionTimes.TryGetValue(connectionId, out var connectionTime))
                 {
                     var sessionDuration = DateTime.UtcNow - connectionTime;
-                    _logger.LogInformation("[P2-SIGNALR] Session duration for {UserUpn}: {Duration}", 
+                    _logger.LogInformation("Czas trwania sesji dla {UserUpn}: {Duration}", 
                         userUpn, sessionDuration);
                     _connectionTimes.TryRemove(connectionId, out _);
                 }
 
-                // Cleanup connection tracking
                 _connections.TryRemove(connectionId, out _);
 
-                // Groups are automatically cleaned up by SignalR, but we log for monitoring
-                _logger.LogDebug("[P2-SIGNALR] Connection cleanup completed for {UserUpn}", userUpn);
+                _logger.LogDebug("Czyszczenie połączenia zakończone dla {UserUpn}", userUpn);
 
                 await base.OnDisconnectedAsync(exception);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[P2-SIGNALR] Error during disconnection cleanup for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd podczas czyszczenia rozłączenia dla {UserUpn}", userUpn);
             }
         }
 
-        #region P2 Client-callable Methods
+        #region Metody wywoływane przez klienta
 
         /// <summary>
-        /// [P2-REALTIME] Client can request to join specific notification groups
+        /// Klient może poprosić o dołączenie do określonych grup powiadomień
         /// </summary>
         public async Task JoinNotificationGroup(string groupName)
         {
@@ -152,11 +140,10 @@ namespace TeamsManager.Api.Hubs
 
             try
             {
-                // Validate group name (security check)
                 if (IsAllowedGroup(groupName))
                 {
                     await Groups.AddToGroupAsync(connectionId, groupName);
-                    _logger.LogInformation("[P2-SIGNALR] User {UserUpn} joined group: {GroupName}", userUpn, groupName);
+                    _logger.LogInformation("Użytkownik {UserUpn} dołączył do grupy: {GroupName}", userUpn, groupName);
 
                     await Clients.Caller.SendAsync("GroupJoined", new
                     {
@@ -167,19 +154,19 @@ namespace TeamsManager.Api.Hubs
                 }
                 else
                 {
-                    _logger.LogWarning("[P2-SIGNALR] User {UserUpn} attempted to join unauthorized group: {GroupName}", 
+                    _logger.LogWarning("Użytkownik {UserUpn} próbował dołączyć do nieautoryzowanej grupy: {GroupName}", 
                         userUpn, groupName);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[P2-SIGNALR] Error joining group {GroupName} for user {UserUpn}", 
+                _logger.LogError(ex, "Błąd dołączania do grupy {GroupName} dla użytkownika {UserUpn}", 
                     groupName, userUpn);
             }
         }
 
         /// <summary>
-        /// [P2-REALTIME] Client can leave notification groups
+        /// Klient może opuścić grupy powiadomień
         /// </summary>
         public async Task LeaveNotificationGroup(string groupName)
         {
@@ -192,7 +179,7 @@ namespace TeamsManager.Api.Hubs
             try
             {
                 await Groups.RemoveFromGroupAsync(connectionId, groupName);
-                _logger.LogInformation("[P2-SIGNALR] User {UserUpn} left group: {GroupName}", userUpn, groupName);
+                _logger.LogInformation("Użytkownik {UserUpn} opuścił grupę: {GroupName}", userUpn, groupName);
 
                 await Clients.Caller.SendAsync("GroupLeft", new
                 {
@@ -203,13 +190,13 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[P2-SIGNALR] Error leaving group {GroupName} for user {UserUpn}", 
+                _logger.LogError(ex, "Błąd opuszczania grupy {GroupName} dla użytkownika {UserUpn}", 
                     groupName, userUpn);
             }
         }
 
         /// <summary>
-        /// [P2-MONITORING] Get connection statistics
+        /// Pobieranie statystyk połączeń
         /// </summary>
         public async Task GetConnectionStats()
         {
@@ -231,24 +218,23 @@ namespace TeamsManager.Api.Hubs
             };
 
             await Clients.Caller.SendAsync("ConnectionStats", stats);
-            _logger.LogDebug("[P2-SIGNALR] Connection stats sent to {UserUpn}", userUpn);
+            _logger.LogDebug("Statystyki połączeń wysłane do {UserUpn}", userUpn);
         }
 
         #endregion
 
-        #region Helper Methods
+        #region Metody pomocnicze
 
         private static bool IsAllowedGroup(string groupName)
         {
-            // [P2-SECURITY] Define allowed group patterns
             var allowedPatterns = new[]
             {
-                "User_",           // User-specific groups
-                "Department_",     // Department-specific groups  
-                "Team_",          // Team-specific groups
-                "Project_",       // Project-specific groups
-                "AllUsers",       // General group
-                "Notifications"   // General notifications
+                "User_",
+                "Department_",
+                "Team_",
+                "Project_",
+                "AllUsers",
+                "Notifications"
             };
 
             return allowedPatterns.Any(pattern => groupName.StartsWith(pattern, StringComparison.OrdinalIgnoreCase)) ||
@@ -256,7 +242,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// [P2-MONITORING] Get current hub metrics
+        /// Pobieranie aktualnych metryk hub
         /// </summary>
         public static HubMetrics GetHubMetrics()
         {
@@ -276,7 +262,7 @@ namespace TeamsManager.Api.Hubs
     }
 
     /// <summary>
-    /// [P2-MONITORING] Hub metrics model
+    /// Model metryk hub
     /// </summary>
     public class HubMetrics
     {

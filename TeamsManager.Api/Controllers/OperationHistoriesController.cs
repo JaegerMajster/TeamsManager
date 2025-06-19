@@ -11,27 +11,21 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // Dla tego kontrolera DTO mogą nie być potrzebne, jeśli parametry są proste
-    // i przekazywane przez QueryString.
-
     public class OperationHistoryFilterDto
     {
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
         public OperationType? OperationType { get; set; }
         public OperationStatus? OperationStatus { get; set; }
-        public string? CreatedBy { get; set; } // UPN użytkownika
+        public string? CreatedBy { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
     }
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/OperationHistories
-    [Authorize] // Dostęp do historii operacji domyślnie wymaga autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class OperationHistoriesController : ControllerBase
     {
         private readonly IOperationHistoryService _operationHistoryService;
@@ -104,10 +98,6 @@ namespace TeamsManager.Api.Controllers
             return Ok(history);
         }
 
-        // Uwaga: Ten kontroler jest głównie do odczytu historii.
-        // Logowanie operacji (tworzenie wpisów OperationHistory) odbywa się
-        // wewnątrz serwisów aplikacyjnych (np. TeamService, UserService itp.)
-        // podczas wykonywania przez nie operacji biznesowych.
-        // Nie ma potrzeby udostępniania endpointu POST do tworzenia wpisów historii bezpośrednio przez API.
+
     }
 }

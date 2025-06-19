@@ -13,7 +13,6 @@ namespace TeamsManager.Api.Controllers
     /// <summary>
     /// Kontroler API dla orkiestratora monitorowania zdrowia systemu
     /// Główne endpointy dla operacji diagnostycznych, naprawy automatycznej i optymalizacji
-    /// Następuje wzorce z SchoolYearProcessController, TeamLifecycleController i BulkUserManagementController
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]

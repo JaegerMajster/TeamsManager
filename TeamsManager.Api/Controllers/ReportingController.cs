@@ -237,20 +237,21 @@ namespace TeamsManager.Api.Controllers
         {
             try
             {
+                _logger.LogInformation("[ReportingAPI] Pobieranie statusu aktywnych procesów raportowania");
+
                 var currentUserUpn = _currentUserService.GetCurrentUserUpn();
-                _logger.LogDebug("[ReportingAPI] Pobieranie statusu procesów raportowania dla {UserUpn}", currentUserUpn);
+                _logger.LogDebug("[ReportingAPI] Pobieranie statusu procesów dla {UserUpn}", currentUserUpn);
 
                 var processes = await _orchestrator.GetActiveProcessesStatusAsync();
-                
-                _logger.LogInformation("[ReportingAPI] Zwrócono {ProcessCount} aktywnych procesów raportowania dla {UserUpn}", 
-                    processes.Count(), currentUserUpn);
+
+                _logger.LogInformation("[ReportingAPI] Znaleziono {ProcessCount} aktywnych procesów raportowania", processes.Count());
 
                 return Ok(processes);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ReportingAPI] Błąd podczas pobierania statusu procesów raportowania");
-                return StatusCode(500, $"Błąd wewnętrzny: {ex.Message}");
+                return StatusCode(500, new { Message = $"Błąd wewnętrzny: {ex.Message}" });
             }
         }
 
@@ -274,31 +275,34 @@ namespace TeamsManager.Api.Controllers
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(processId))
-                {
-                    return BadRequest(ProcessCancelResponse.CreateError("", "ID procesu nie może być pusty"));
-                }
+                _logger.LogInformation("[ReportingAPI] Anulowanie procesu raportowania {ProcessId}", processId);
 
                 var currentUserUpn = _currentUserService.GetCurrentUserUpn();
-                _logger.LogDebug("[ReportingAPI] Anulowanie procesu raportowania {ProcessId} przez {UserUpn}", processId, currentUserUpn);
+                _logger.LogDebug("[ReportingAPI] Anulowanie procesu {ProcessId} przez {UserUpn}", processId, currentUserUpn);
 
-                var success = await _orchestrator.CancelProcessAsync(processId);
-                
-                if (success)
+                var result = await _orchestrator.CancelProcessAsync(processId);
+
+                if (result.Success)
                 {
-                    _logger.LogInformation("[ReportingAPI] Proces raportowania {ProcessId} został anulowany przez {UserUpn}", processId, currentUserUpn);
-                    return Ok(ProcessCancelResponse.CreateSuccess(processId, "Proces raportowania został anulowany", "Reporting"));
+                    _logger.LogInformation("[ReportingAPI] Proces raportowania {ProcessId} anulowany pomyślnie", processId);
+                    return Ok(result);
                 }
                 else
                 {
-                    _logger.LogWarning("[ReportingAPI] Nie można anulować procesu raportowania {ProcessId} - proces nie istnieje lub już się zakończył", processId);
-                    return NotFound(ProcessCancelResponse.CreateError(processId, "Proces nie istnieje lub już się zakończył", "Reporting"));
+                    _logger.LogWarning("[ReportingAPI] Nie udało się anulować procesu {ProcessId}: {Error}", processId, result.ErrorMessage);
+                    
+                    if (result.ErrorMessage?.Contains("nie znaleziono") == true)
+                    {
+                        return NotFound(new { Message = result.ErrorMessage });
+                    }
+                    
+                    return BadRequest(new { Message = result.ErrorMessage ?? "Nie udało się anulować procesu" });
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ReportingAPI] Błąd podczas anulowania procesu raportowania {ProcessId}", processId);
-                return StatusCode(500, ProcessCancelResponse.CreateError(processId, $"Błąd wewnętrzny: {ex.Message}", "Reporting"));
+                return StatusCode(500, new { Message = $"Błąd wewnętrzny: {ex.Message}" });
             }
         }
 
@@ -311,8 +315,6 @@ namespace TeamsManager.Api.Controllers
                 ReportFormat.PDF => "application/pdf",
                 ReportFormat.Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 ReportFormat.CSV => "text/csv",
-                ReportFormat.JSON => "application/json",
-                ReportFormat.HTML => "text/html",
                 _ => "application/pdf"
             };
         }
@@ -325,7 +327,6 @@ namespace TeamsManager.Api.Controllers
                 ExportFileFormat.CSV => "text/csv",
                 ExportFileFormat.JSON => "application/json",
                 ExportFileFormat.XML => "application/xml",
-                ExportFileFormat.ZIP => "application/zip",
                 _ => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             };
         }
@@ -342,6 +343,7 @@ namespace TeamsManager.Api.Controllers
         /// ID roku szkolnego
         /// </summary>
         [Required(ErrorMessage = "ID roku szkolnego jest wymagane")]
+        [StringLength(50, ErrorMessage = "ID roku szkolnego nie może być dłuższe niż 50 znaków")]
         public string SchoolYearId { get; set; } = string.Empty;
 
         /// <summary>
@@ -359,12 +361,14 @@ namespace TeamsManager.Api.Controllers
         /// Data początkowa okresu
         /// </summary>
         [Required(ErrorMessage = "Data początkowa jest wymagana")]
+        [DataType(DataType.Date, ErrorMessage = "Nieprawidłowy format daty początkowej")]
         public DateTime FromDate { get; set; }
 
         /// <summary>
         /// Data końcowa okresu
         /// </summary>
         [Required(ErrorMessage = "Data końcowa jest wymagana")]
+        [DataType(DataType.Date, ErrorMessage = "Nieprawidłowy format daty końcowej")]
         public DateTime ToDate { get; set; }
 
         /// <summary>
@@ -382,7 +386,8 @@ namespace TeamsManager.Api.Controllers
         /// Typ raportu compliance
         /// </summary>
         [Required(ErrorMessage = "Typ raportu compliance jest wymagany")]
-        public ComplianceReportType Type { get; set; }
+        [StringLength(50, ErrorMessage = "Typ raportu nie może być dłuższy niż 50 znaków")]
+        public string Type { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -394,7 +399,7 @@ namespace TeamsManager.Api.Controllers
         /// Opcje eksportu danych
         /// </summary>
         [Required(ErrorMessage = "Opcje eksportu są wymagane")]
-        public ExportOptions Options { get; set; } = new ExportOptions();
+        public ExportOptions Options { get; set; } = new();
     }
 
     #endregion

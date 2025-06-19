@@ -1,4 +1,3 @@
-// Plik: TeamsManager.Api/Program.cs
 using Microsoft.Identity.Client;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
@@ -9,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
-using System.IO;        // Dla Path i File
-using System.Text.Json; // Dla JsonSerializer
+using System.IO;
+using System.Text.Json;
 using TeamsManager.Api.Configuration;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Data;
@@ -29,14 +28,14 @@ using Swashbuckle.AspNetCore.Annotations;
 using Microsoft.OpenApi.Models;
 using TeamsManager.Api.Swagger;
 using TeamsManager.Core.Extensions;
-using TeamsManager.Api.Hubs; // <-- Dodane dla NotificationHub
-using TeamsManager.Api.Services; // <-- Dodane dla SignalRNotificationService
-using TeamsManager.Api.HealthChecks; // <-- Dodane dla DependencyInjectionHealthCheck
-using TeamsManager.Core.Abstractions.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
-using TeamsManager.Core.Abstractions.Services.Cache; // <-- Dodane dla CacheInvalidationService (Etap 7/8)
-using TeamsManager.Core.Services.Synchronization; // <-- Dodane dla synchronizatorów (Etap 4/8)
-using TeamsManager.Core.Services.Cache; // <-- Dodane dla implementacji Cache (Etap 7/8)
-using TeamsManager.Core.Models.Graph; // <-- Dodane dla GraphTeam, GraphUser, GraphChannel
+using TeamsManager.Api.Hubs;
+using TeamsManager.Api.Services;
+using TeamsManager.Api.HealthChecks;
+using TeamsManager.Core.Abstractions.Services.Synchronization;
+using TeamsManager.Core.Abstractions.Services.Cache;
+using TeamsManager.Core.Services.Synchronization;
+using TeamsManager.Core.Services.Cache;
+using TeamsManager.Core.Models.Graph;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using TeamsManager.Core.Common;
@@ -44,8 +43,6 @@ using TeamsManager.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Wczytaj konfigurację OAuth na samym początku
-// W środowisku Test pomijamy walidację konfiguracji OAuth
 var skipValidation = builder.Environment.EnvironmentName == "Test";
 var oauthApiConfig = ApiAuthConfig.LoadApiOAuthConfig(builder.Configuration, skipValidation);
 
@@ -54,26 +51,21 @@ if (string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.TenantId) ||
     string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientSecret) ||
     string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.Audience))
 {
-    var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API w Program.cs] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
+    var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
                        "nie zostały w pełni skonfigurowane. Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie. " +
                        "Sprawdź appsettings.json, User Secrets lub inne źródła konfiguracji.";
     Console.Error.WriteLine(errorMessage);
 }
 
-// ----- POCZĘTEK SEKCJI REJESTRACJI SERWISÓW -----
 builder.Services.AddControllers();
 
-// ========== DODANIE HEALTH CHECKS ==========
 builder.Services.AddHealthChecks()
     .AddCheck<DependencyInjectionHealthCheck>("di_check")
     .AddCheck<GraphConnectionHealthCheck>("graph_connection", 
         failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
         tags: new[] { "graph", "external" });
-// ==========================================
 
-// ========== NOWA LINIA - Dodanie usług SignalR ==========
 builder.Services.AddSignalR();
-// ========================================================
 
 builder.Services.AddApiVersioning(config =>
 {
@@ -102,7 +94,7 @@ builder.Services.AddSwaggerGen(options => {
 ## 📋 Opis API
 API dla aplikacji TeamsManager - kompleksowe zarządzanie zespołami Microsoft Teams w środowisku edukacyjnym.
 (...)
-        ", // Skrócono dla zwięzłości
+        ",
         Contact = new Microsoft.OpenApi.Models.OpenApiContact
         {
             Name = "TeamsManager Support",
@@ -123,7 +115,7 @@ API dla aplikacji TeamsManager - kompleksowe zarządzanie zespołami Microsoft T
         Description = @"
 ## 🚀 TeamsManager API v2.0 (Przyszła wersja)
 (...)
-        ", // Skrócono dla zwięzłości
+        ",
         Contact = new Microsoft.OpenApi.Models.OpenApiContact
         {
             Name = "TeamsManager Support",
@@ -142,7 +134,7 @@ API dla aplikacji TeamsManager - kompleksowe zarządzanie zespołami Microsoft T
         Description = @"
 ## 🔐 Uwierzytelnianie JWT Bearer Token
 (...)
-        " // Skrócono dla zwięzłości
+        "
     });
 
     options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -210,7 +202,7 @@ builder.Services.AddMemoryCache();
 // Rejestracja Unit of Work
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
-// Rejestracja Repozytoriów - ZACHOWUJEMY dla kompatybilności wstecznej!
+// Rejestracja repozytoriów
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ITeamRepository, TeamRepository>();
@@ -224,8 +216,7 @@ builder.Services.AddScoped<IGenericRepository<Department>, GenericRepository<Dep
 builder.Services.AddScoped<IGenericRepository<UserSchoolType>, GenericRepository<UserSchoolType>>();
 builder.Services.AddScoped<IGenericRepository<UserSubject>, GenericRepository<UserSubject>>();
 
-// ========== FINALIZACJA SIGNALR - Zmiana na SignalRNotificationService ==========
-// Wzorzec: Conditional Registration - sprawdź IsProd dla finalnej rejestracji
+// Konfiguracja SignalR Notification Service
 if (builder.Environment.IsProduction() || builder.Configuration.GetValue<bool>("SignalR:Enabled", true))
 {
     builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
@@ -234,10 +225,8 @@ else
 {
     builder.Services.AddScoped<INotificationService, StubNotificationService>();
 }
-// ================================================================================
 
-// ========== REJESTRACJA ADMIN NOTIFICATION SERVICE (ETAP 5/7) ==========
-// Rejestracja Admin Notification Service
+// Konfiguracja Admin Notification Service
 if (builder.Environment.IsDevelopment() || !builder.Configuration.GetValue<bool>("AdminNotifications:Enabled", false))
 {
     builder.Services.AddScoped<IAdminNotificationService, StubAdminNotificationService>();
@@ -246,21 +235,17 @@ else
 {
     builder.Services.AddScoped<IAdminNotificationService, GraphAdminNotificationService>();
 }
-// ====================================================================
 
-// ========== NOWA REJESTRACJA - Synchronizatory Graph-DB (Etap 4/8) ==========
+// Rejestracja synchronizatorów Graph-DB
 builder.Services.AddScoped<IGraphSynchronizer<Team, GraphTeam>, TeamSynchronizer>();
 builder.Services.AddScoped<IGraphSynchronizer<User, GraphUser>, UserSynchronizer>();
 builder.Services.AddScoped<IGraphSynchronizer<Channel, GraphChannel>, ChannelSynchronizer>();
 
-// ETAP 7/8: Centralizacja inwalidacji cache
+// Centralizacja inwalidacji cache
 builder.Services.AddScoped<ICacheInvalidationService, CacheInvalidationService>();
-// W przyszłości dodaj więcej synchronizatorów:
-// builder.Services.AddScoped<IGraphSynchronizer<User>, UserSynchronizer>();
-// ===========================================================================
 
-// Rejestracja Serwisów Aplikacyjnych - Graph API Services
-builder.Services.AddGraphServices(includeAdminNotificationService: true); // Rejestruje wszystkie Graph API services
+// Rejestracja Graph API Services
+builder.Services.AddGraphServices(includeAdminNotificationService: true);
 
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IUserService, UserService>();
@@ -273,30 +258,15 @@ builder.Services.AddScoped<IOperationHistoryService, OperationHistoryService>();
 builder.Services.AddScoped<IApplicationSettingService, ApplicationSettingService>();
 builder.Services.AddScoped<IChannelService, ChannelService>();
 
-// ========== NOWA REJESTRACJA - Orkiestrator Procesów Szkolnych ==========
+// Rejestracja orkiestratorów
 builder.Services.AddScoped<ISchoolYearProcessOrchestrator, SchoolYearProcessOrchestrator>();
-// ========================================================================
-
-// ========== NOWA REJESTRACJA - Orkiestrator Importu Danych ==========
 builder.Services.AddScoped<IDataImportOrchestrator, DataImportOrchestrator>();
-
-// Rejestracja TeamLifecycleOrchestrator (orkiestrator cyklu życia zespołów)
 builder.Services.AddScoped<ITeamLifecycleOrchestrator, TeamLifecycleOrchestrator>();
-
-// ========== NOWA REJESTRACJA - Orkiestrator Zarządzania Użytkownikami ==========
 builder.Services.AddScoped<IBulkUserManagementOrchestrator, BulkUserManagementOrchestrator>();
-// ================================================================================
-
-// ========== NOWA REJESTRACJA - Orkiestrator Monitorowania Zdrowia ==========
 builder.Services.AddScoped<IHealthMonitoringOrchestrator, HealthMonitoringOrchestrator>();
-// ============================================================================
-
-// ========== NOWA REJESTRACJA - Orkiestrator Raportowania ==========
 builder.Services.AddScoped<IReportingOrchestrator, ReportingOrchestrator>();
-// ===================================================================
 
-// ========== NOWA OPTYMALIZACJA: HTTP RESILIENCE ==========
-// Konfiguracja Modern HTTP Resilience z Microsoft.Extensions.Http.Resilience
+// Konfiguracja HTTP Resilience dla Microsoft Graph
 builder.Services.AddHttpClient("MicrosoftGraph", client =>
 {
     client.BaseAddress = new Uri("https://graph.microsoft.com/");
@@ -305,7 +275,7 @@ builder.Services.AddHttpClient("MicrosoftGraph", client =>
 })
 .AddStandardResilienceHandler(options =>
 {
-    // Retry Policy
+    // Polityka ponawiania
     options.Retry.ShouldHandle = args => args.Outcome switch
     {
         { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
@@ -336,11 +306,9 @@ builder.Services.AddHttpClient("MicrosoftGraph", client =>
     // Timeout
     options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
     
-    // Rate Limiter dla Graph API - pozostawiono bez dodatkowego rate limitera
-    // RateLimiter w Polly może być skonfigurowany jeśli potrzebny
 });
 
-// Dodatkowy HttpClient dla zewnętrznych API
+// HttpClient dla zewnętrznych API
 builder.Services.AddHttpClient("ExternalApis")
 .AddStandardResilienceHandler(options =>
 {
@@ -350,13 +318,11 @@ builder.Services.AddHttpClient("ExternalApis")
     options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
     options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
 });
-// =========================================================
 
-// ========== REJESTRACJA NOWOCZESNYCH SERWISÓW ==========
-// Modern HTTP Service zastępujący stare wzorce resilience
+// Rejestracja nowoczesnych serwisów HTTP
 builder.Services.AddScoped<IModernHttpService, ModernHttpService>();
 
-// Modern Circuit Breaker kompatybilny z HTTP Resilience
+// Modern Circuit Breaker
 builder.Services.AddSingleton<ModernCircuitBreaker>(provider =>
 {
     var logger = provider.GetRequiredService<ILogger<ModernCircuitBreaker>>();
@@ -383,7 +349,7 @@ builder.Services.AddScoped<IConfidentialClientApplication>(provider =>
         .Build();
 });
 
-// Enhanced Token Manager - używa GraphApiConfiguration
+// Enhanced Token Manager
 builder.Services.AddScoped<ITokenManager>(provider =>
 {
     var confidentialClientApp = provider.GetRequiredService<IConfidentialClientApplication>();
@@ -406,7 +372,7 @@ builder.Services.AddCors(options => {
         }
         else
         {
-            policy.AllowAnyOrigin() // ZMIEŃ NA PRODUKCJI!
+            policy.AllowAnyOrigin() // TODO: Zmienić na produkcji na konkretne domeny
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         }
@@ -442,13 +408,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     path.StartsWithSegments("/notificationHub"))
                 {
                     context.Token = accessToken;
-                    Console.WriteLine($"[API Auth] SignalR JWT token extracted from query string for path: {path}");
+                    Console.WriteLine($"[API Auth] SignalR JWT token wyodrębniony z query string dla ścieżki: {path}");
                 }
                 return Task.CompletedTask;
             },
             OnAuthenticationFailed = context => {
-                Console.WriteLine($"[API Auth] BŁĄD autentykacji: {context.Exception.Message}");
-                System.Diagnostics.Debug.WriteLine($"[API Auth] BŁĄD autentykacji: {context.Exception.ToString()}");
+                Console.WriteLine($"[API Auth] BŁĄD uwierzytelniania: {context.Exception.Message}");
+                System.Diagnostics.Debug.WriteLine($"[API Auth] BŁĄD uwierzytelniania: {context.Exception.ToString()}");
                 if (context.Exception is SecurityTokenInvalidAudienceException)
                 {
                     Console.WriteLine($"[API Auth] Błędny Audience. Oczekiwano: {options.Audience}, Otrzymano w tokenie: {(context.Exception as SecurityTokenInvalidAudienceException)?.InvalidAudience}");
@@ -468,20 +434,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
-    // ... ewentualne polityki ...
+    // TODO: Dodać polityki autoryzacji jeśli potrzebne
 });
-// ----- KONIEC SEKCJI REJESTRACJI SERWISÓW -----
 
 var app = builder.Build();
 
-// ========== DODANIE WERYFIKACJI DI PODCZAS STARTU ==========
+// Weryfikacja konfiguracji Dependency Injection podczas startu
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     
     logger.LogInformation("=== Weryfikacja konfiguracji DI ===");
     
-    // Sprawdź krytyczne serwisy
+    // Sprawdzenie krytycznych serwisów
     var criticalServices = new[]
     {
         ("IOperationHistoryService", typeof(IOperationHistoryService)),
@@ -513,13 +478,13 @@ using (var scope = app.Services.CreateScope())
             }
             else
             {
-                logger.LogError($"❌ {name} - NOT REGISTERED");
+                logger.LogError($"❌ {name} - NIE ZAREJESTROWANY");
                 allServicesOk = false;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"❌ {name} - ERROR");
+            logger.LogError(ex, $"❌ {name} - BŁĄD");
             allServicesOk = false;
         }
     }
@@ -535,9 +500,8 @@ using (var scope = app.Services.CreateScope())
     
     logger.LogInformation("=== Koniec weryfikacji DI ===");
 }
-// ============================================================
 
-// ----- POCZĘTEK SEKCJI KONFIGURACJI HTTP PIPELINE -----
+// Konfiguracja HTTP Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -571,10 +535,10 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// ========== MAPOWANIE HEALTH CHECKS ==========
+// Mapowanie Health Checks
 app.MapHealthChecks("/health");
 
-// Dodatkowy endpoint ze szczegółowymi informacjami
+// Endpoint ze szczegółowymi informacjami o zdrowiu systemu
 app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>
@@ -604,16 +568,12 @@ app.MapHealthChecks("/health/detailed", new Microsoft.AspNetCore.Diagnostics.Hea
                 }));
     }
 });
-// =============================================
 
-// ========== NOWA LINIA - Mapowanie Huba SignalR ==========
+// Mapowanie hubów SignalR
 app.MapHub<NotificationHub>("/notificationHub");
 app.MapHub<MonitoringHub>("/monitoringHub");
-// =========================================================
-
-// ----- KONIEC SEKCJI KONFIGURACJI HTTP PIPELINE -----
 
 app.Run();
 
-// Dodane dla testów integracyjnych
+// Klasa dla testów integracyjnych
 public partial class Program { }

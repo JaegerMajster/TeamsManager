@@ -13,7 +13,6 @@ namespace TeamsManager.Core.Services.Graph
 {
     /// <summary>
     /// Serwis zarządzania zespołami Microsoft Teams przez Graph API.
-    /// TASK 2.2.1 - Utworzenie GraphTeamManagementService.
     /// Implementuje IGraphTeamManagementService z pełnym wsparciem dla Graph API endpoints.
     /// </summary>
     public class GraphTeamManagementService : IGraphTeamManagementService
@@ -38,7 +37,7 @@ namespace TeamsManager.Core.Services.Graph
         #region Team Operations
 
         /// <summary>
-        /// TASK 2.2.2 - Implementacja POST /v1.0/teams - tworzenie zespołów
+        /// Tworzy nowy zespół Microsoft Teams
         /// Graph API Endpoint: POST /v1.0/teams
         /// </summary>
         public async Task<GraphTeam?> CreateTeamAsync(
@@ -135,7 +134,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (ArgumentException)
             {
-                // Re-throw ArgumentException (validation errors) - nie loguj ich jako błędy
+                // Ponownie rzuć ArgumentException (błędy walidacji)
                 throw;
             }
             catch (GraphConnectionException ex)
@@ -154,7 +153,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.3 - Implementacja PATCH /v1.0/teams/{id} - aktualizacja zespołów
+        /// Aktualizuje właściwości zespołu Microsoft Teams
         /// Graph API Endpoint: PATCH /v1.0/teams/{team-id}
         /// </summary>
         public async Task<bool> UpdateTeamPropertiesAsync(
@@ -281,7 +280,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (ArgumentException)
             {
-                // Re-throw ArgumentException (validation errors)
+                // Ponownie rzuć ArgumentException (błędy walidacji)
                 throw;
             }
             catch (GraphConnectionException ex)
@@ -331,7 +330,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (ArgumentException)
             {
-                // Re-throw ArgumentException (validation errors)
+                // Ponownie rzuć ArgumentException (błędy walidacji)
                 throw;
             }
             catch (GraphConnectionException ex)
@@ -382,7 +381,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (ArgumentException)
             {
-                // Re-throw ArgumentException (validation errors)
+                // Ponownie rzuć ArgumentException (błędy walidacji)
                 throw;
             }
             catch (GraphConnectionException ex)
@@ -401,9 +400,8 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.4 - Implementacja GET /v1.0/teams - pobieranie zespołów
+        /// Pobiera szczegóły zespołu Microsoft Teams
         /// Graph API Endpoint: GET /v1.0/teams/{team-id}
-        /// TASK 2.5.2 - Dodano cache dla Graph API responses
         /// </summary>
         public async Task<GraphTeam?> GetTeamAsync(string teamId)
         {
@@ -459,7 +457,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (ArgumentException)
             {
-                // Re-throw ArgumentException (validation errors)
+                // Ponownie rzuć ArgumentException (błędy walidacji)
                 throw;
             }
             catch (GraphConnectionException ex)
@@ -478,7 +476,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.4 - Implementacja GET /v1.0/teams - pobieranie zespołów
+        /// Pobiera wszystkie zespoły Microsoft Teams
         /// Graph API Endpoint: GET /v1.0/me/joinedTeams
         /// </summary>
         public async Task<List<GraphTeam>?> GetAllTeamsAsync()
@@ -538,8 +536,8 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.4 - Implementacja GET /v1.0/teams - pobieranie zespołów
-        /// Graph API Endpoint: GET /v1.0/users/{user-id}/ownedObjects
+        /// Pobiera zespoły należące do określonego właściciela
+        /// Graph API Endpoint: GET /v1.0/teams
         /// </summary>
         public async Task<List<GraphTeam>?> GetTeamsByOwnerAsync(string ownerUpn)
         {
@@ -549,7 +547,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrEmpty(ownerUpn))
                 {
-                    throw new ArgumentException("Owner UPN nie może być pusty", nameof(ownerUpn));
+                    throw new ArgumentException("UPN właściciela nie może być pusty", nameof(ownerUpn));
                 }
 
                 // Sprawdź połączenie
@@ -618,9 +616,8 @@ namespace TeamsManager.Core.Services.Graph
         #region Team Member Management
 
         /// <summary>
-        /// TASK 2.2.6 - Pobiera wszystkich członków zespołu
+        /// Pobiera wszystkich członków zespołu Microsoft Teams
         /// Graph API Endpoint: GET /v1.0/teams/{team-id}/members
-        /// TASK 2.5.2 - Dodano cache dla Graph API responses
         /// </summary>
         public async Task<List<GraphTeamMember>?> GetTeamMembersAsync(string teamId)
         {
@@ -658,7 +655,7 @@ namespace TeamsManager.Core.Services.Graph
                 {
                     _logger.LogWarning("Brak członków w zespole {TeamId}", teamId);
                     var emptyList = new List<GraphTeamMember>();
-                    // Cache empty result for short time to avoid repeated calls
+                    // Zachowaj pusty wynik w cache na krótki czas aby uniknąć powtarzających się wywołań
                     _cacheService.Set(cacheKey, emptyList, _cacheService.GetShortTermCacheOptions().AbsoluteExpirationRelativeToNow);
                     return emptyList;
                 }
@@ -695,8 +692,8 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.6 - Pobiera pojedynczego członka zespołu
-        /// Graph API Endpoint: GET /v1.0/teams/{team-id}/members
+        /// Pobiera pojedynczego członka zespołu Microsoft Teams
+        /// Graph API Endpoint: GET /v1.0/teams/{team-id}/members/{membership-id}
         /// </summary>
         public async Task<GraphTeamMember?> GetTeamMemberAsync(string teamId, string userUpn)
         {
@@ -711,7 +708,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrEmpty(userUpn))
                 {
-                    throw new ArgumentException("User UPN nie może być pusty", nameof(userUpn));
+                    throw new ArgumentException("UPN użytkownika nie może być pusty", nameof(userUpn));
                 }
 
                 // Pobierz wszystkich członków i znajdź odpowiedniego
@@ -752,7 +749,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.6 - Implementacja POST /v1.0/teams/{id}/members - dodawanie członków
+        /// Dodaje członka do zespołu Microsoft Teams
         /// Graph API Endpoint: POST /v1.0/teams/{team-id}/members
         /// </summary>
         public async Task<bool> AddTeamMemberAsync(string teamId, string userUpn, string role = "Member")
@@ -768,7 +765,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrEmpty(userUpn))
                 {
-                    throw new ArgumentException("User UPN nie może być pusty", nameof(userUpn));
+                    throw new ArgumentException("UPN użytkownika nie może być pusty", nameof(userUpn));
                 }
 
                 if (string.IsNullOrEmpty(role))
@@ -837,7 +834,7 @@ namespace TeamsManager.Core.Services.Graph
         }
 
         /// <summary>
-        /// TASK 2.2.7 - Implementacja DELETE /v1.0/teams/{id}/members/{userId} - usuwanie członków
+        /// Usuwa członka z zespołu Microsoft Teams
         /// Graph API Endpoint: DELETE /v1.0/teams/{team-id}/members/{membership-id}
         /// </summary>
         public async Task<bool> RemoveTeamMemberAsync(string teamId, string userUpn)
@@ -853,7 +850,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrEmpty(userUpn))
                 {
-                    throw new ArgumentException("User UPN nie może być pusty", nameof(userUpn));
+                    throw new ArgumentException("UPN użytkownika nie może być pusty", nameof(userUpn));
                 }
 
                 // Sprawdź połączenie
@@ -923,7 +920,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrEmpty(userUpn))
                 {
-                    throw new ArgumentException("User UPN nie może być pusty", nameof(userUpn));
+                    throw new ArgumentException("UPN użytkownika nie może być pusty", nameof(userUpn));
                 }
 
                 if (string.IsNullOrEmpty(newRole))
@@ -1172,7 +1169,7 @@ namespace TeamsManager.Core.Services.Graph
         #region Channel Operations
 
         /// <summary>
-        /// TASK 2.2.5 - Implementacja POST /v1.0/teams/{id}/channels - tworzenie kanałów
+        /// Tworzy nowy kanał w zespole Microsoft Teams
         /// Graph API Endpoint: POST /v1.0/teams/{team-id}/channels
         /// </summary>
         public async Task<GraphChannel?> CreateTeamChannelAsync(

@@ -11,8 +11,6 @@ namespace TeamsManager.Api.Controllers
 {
     /// <summary>
     /// Kontroler zarządzania masowymi operacjami na użytkownikach
-    /// Zapewnia RESTful API dla BulkUserManagementOrchestrator
-    /// Następuje wzorce z TeamLifecycleController i SchoolYearProcessController
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
@@ -34,10 +32,8 @@ namespace TeamsManager.Api.Controllers
         }
 
         /// <summary>
-        /// Masowy onboarding użytkowników - kompleksowy proces wprowadzania nowych użytkowników
+        /// Masowy onboarding użytkowników
         /// </summary>
-        /// <param name="request">Dane żądania onboardingu</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-onboarding")]
         [ProducesResponseType(typeof(BulkUserOnboardingResponse), 200)]
         [ProducesResponseType(401)]
@@ -49,7 +45,6 @@ namespace TeamsManager.Api.Controllers
                 _logger.LogInformation("✅ API: Rozpoczynam masowy onboarding {Count} użytkowników", 
                     request.Plans?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
@@ -57,14 +52,12 @@ namespace TeamsManager.Api.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -96,10 +89,8 @@ namespace TeamsManager.Api.Controllers
         }
 
         /// <summary>
-        /// Masowy offboarding użytkowników - kompleksowy proces usuwania użytkowników z organizacji
+        /// Masowy offboarding użytkowników
         /// </summary>
-        /// <param name="request">Dane żądania offboardingu</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-offboarding")]
         [ProducesResponseType(typeof(BulkUserOffboardingResponse), 200)]
         [ProducesResponseType(401)]
@@ -111,7 +102,6 @@ namespace TeamsManager.Api.Controllers
                 _logger.LogInformation("✅ API: Rozpoczynam masowy offboarding {Count} użytkowników", 
                     request.UserIds?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
@@ -119,14 +109,12 @@ namespace TeamsManager.Api.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -159,10 +147,8 @@ namespace TeamsManager.Api.Controllers
         }
 
         /// <summary>
-        /// Masowa zmiana ról użytkowników w systemie
+        /// Masowa zmiana ról użytkowników
         /// </summary>
-        /// <param name="request">Dane żądania zmiany ról</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-role-change")]
         [ProducesResponseType(typeof(BulkRoleChangeResponse), 200)]
         [ProducesResponseType(401)]
@@ -174,7 +160,6 @@ namespace TeamsManager.Api.Controllers
                 _logger.LogInformation("✅ API: Rozpoczynam masową zmianę ról {Count} użytkowników", 
                     request.Changes?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
@@ -182,14 +167,12 @@ namespace TeamsManager.Api.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -221,10 +204,8 @@ namespace TeamsManager.Api.Controllers
         }
 
         /// <summary>
-        /// Masowe operacje członkostwa w zespołach (dodawanie/usuwanie z wielu zespołów)
+        /// Masowe operacje członkostwa w zespołach
         /// </summary>
-        /// <param name="request">Dane żądania operacji członkostwa</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-team-membership")]
         [ProducesResponseType(typeof(BulkTeamMembershipResponse), 200)]
         [ProducesResponseType(401)]
@@ -233,10 +214,9 @@ namespace TeamsManager.Api.Controllers
         {
             try
             {
-                _logger.LogInformation("✅ API: Rozpoczynam masowe operacje członkostwa {Count} operacji", 
+                _logger.LogInformation("✅ API: Rozpoczynam masowe operacje członkostwa {Count} użytkowników", 
                     request.Operations?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
@@ -244,14 +224,12 @@ namespace TeamsManager.Api.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -283,9 +261,8 @@ namespace TeamsManager.Api.Controllers
         }
 
         /// <summary>
-        /// Pobiera status aktualnie wykonywanych procesów zarządzania użytkownikami
+        /// Status aktywnych procesów
         /// </summary>
-        /// <returns>Lista statusów aktywnych procesów</returns>
         [HttpGet("status")]
         [ProducesResponseType(typeof(IEnumerable<UserManagementProcessStatus>), 200)]
         [ProducesResponseType(401)]
@@ -294,25 +271,20 @@ namespace TeamsManager.Api.Controllers
         {
             try
             {
+                _logger.LogInformation("📊 API: Pobieranie statusu aktywnych procesów zarządzania użytkownikami");
                 var processes = await _orchestrator.GetActiveProcessesStatusAsync();
-                
-                _logger.LogInformation("📊 API: Pobrano status {Count} aktywnych procesów zarządzania użytkownikami", 
-                    processes.Count());
-
                 return Ok(processes);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ API: Błąd podczas pobierania statusu procesów zarządzania użytkownikami");
+                _logger.LogError(ex, "❌ API: Błąd podczas pobierania statusu procesów");
                 return StatusCode(500, "Wystąpił błąd podczas pobierania statusu procesów");
             }
         }
 
         /// <summary>
-        /// Anuluje aktywny proces zarządzania użytkownikami (jeśli to możliwe)
+        /// Anulowanie procesu
         /// </summary>
-        /// <param name="processId">ID procesu do anulowania</param>
-        /// <returns>Wynik anulowania procesu</returns>
         [HttpDelete("{processId}")]
         [ProducesResponseType(typeof(CancelProcessResponse), 200)]
         [ProducesResponseType(400)]
@@ -325,256 +297,115 @@ namespace TeamsManager.Api.Controllers
             {
                 if (string.IsNullOrWhiteSpace(processId))
                 {
-                    return BadRequest("ID procesu nie może być pusty");
+                    return BadRequest(new CancelProcessResponse 
+                    { 
+                        Success = false, 
+                        Message = "ID procesu jest wymagane" 
+                    });
                 }
 
-                var result = await _orchestrator.CancelProcessAsync(processId);
+                _logger.LogInformation("🛑 API: Anulowanie procesu zarządzania użytkownikami {ProcessId}", processId);
+                var success = await _orchestrator.CancelProcessAsync(processId);
 
-                if (result)
+                if (success)
                 {
-                    _logger.LogInformation("✅ API: Anulowano proces zarządzania użytkownikami {ProcessId}", processId);
-                    return Ok(new CancelProcessResponse
-                    {
-                        Success = true,
-                        Message = $"Proces {processId} został anulowany"
+                    _logger.LogInformation("✅ API: Proces {ProcessId} anulowany pomyślnie", processId);
+                    return Ok(new CancelProcessResponse 
+                    { 
+                        Success = true, 
+                        Message = "Proces został anulowany pomyślnie" 
                     });
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ API: Nie można anulować procesu {ProcessId} - proces nie istnieje lub nie może być anulowany", processId);
-                    return NotFound(new CancelProcessResponse
-                    {
-                        Success = false,
-                        Message = $"Proces {processId} nie istnieje lub nie może być anulowany"
+                    _logger.LogWarning("⚠️ API: Nie udało się anulować procesu {ProcessId}", processId);
+                    return NotFound(new CancelProcessResponse 
+                    { 
+                        Success = false, 
+                        Message = "Proces nie został znaleziony lub już się zakończył" 
                     });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ API: Błąd podczas anulowania procesu zarządzania użytkownikami {ProcessId}", processId);
-                return StatusCode(500, "Wystąpił błąd podczas anulowania procesu");
+                _logger.LogError(ex, "❌ API: Błąd podczas anulowania procesu {ProcessId}", processId);
+                return StatusCode(500, new CancelProcessResponse 
+                { 
+                    Success = false, 
+                    Message = "Wystąpił błąd wewnętrzny serwera" 
+                });
             }
         }
     }
 
-    #region Request/Response DTOs
-
-    /// <summary>
-    /// Żądanie masowego onboardingu użytkowników
-    /// </summary>
     public class BulkUserOnboardingRequest
     {
-        /// <summary>
-        /// Lista planów onboardingu użytkowników
-        /// </summary>
         [Required(ErrorMessage = "Lista planów onboardingu jest wymagana")]
-        [MinLength(1, ErrorMessage = "Musi zawierać co najmniej jeden plan onboardingu")]
         public UserOnboardingPlan[]? Plans { get; set; }
     }
 
-    /// <summary>
-    /// Odpowiedź masowego onboardingu użytkowników
-    /// </summary>
     public class BulkUserOnboardingResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Data przetworzenia żądania
-        /// </summary>
         public DateTime ProcessedAt { get; set; }
-
-        /// <summary>
-        /// Łączna liczba planów onboardingu
-        /// </summary>
         public int TotalPlans { get; set; }
-
-        /// <summary>
-        /// Liczba pomyślnych onboardingów
-        /// </summary>
         public int SuccessfulOnboardings { get; set; }
-
-        /// <summary>
-        /// Liczba nieudanych onboardingów
-        /// </summary>
         public int FailedOnboardings { get; set; }
-
-        /// <summary>
-        /// Lista komunikatów błędów
-        /// </summary>
         public List<string> Errors { get; set; } = new List<string>();
     }
 
-    /// <summary>
-    /// Żądanie masowego offboardingu użytkowników
-    /// </summary>
     public class BulkUserOffboardingRequest
     {
-        /// <summary>
-        /// Lista ID użytkowników do offboardingu
-        /// </summary>
         [Required(ErrorMessage = "Lista ID użytkowników jest wymagana")]
-        [MinLength(1, ErrorMessage = "Musi zawierać co najmniej jeden ID użytkownika")]
         public string[]? UserIds { get; set; }
-
-        /// <summary>
-        /// Opcje procesu offboardingu
-        /// </summary>
         public OffboardingOptions? Options { get; set; }
     }
 
-    /// <summary>
-    /// Odpowiedź masowego offboardingu użytkowników
-    /// </summary>
     public class BulkUserOffboardingResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Data przetworzenia żądania
-        /// </summary>
         public DateTime ProcessedAt { get; set; }
-
-        /// <summary>
-        /// Łączna liczba użytkowników
-        /// </summary>
         public int TotalUsers { get; set; }
-
-        /// <summary>
-        /// Liczba pomyślnych offboardingów
-        /// </summary>
         public int SuccessfulOffboardings { get; set; }
-
-        /// <summary>
-        /// Liczba nieudanych offboardingów
-        /// </summary>
         public int FailedOffboardings { get; set; }
-
-        /// <summary>
-        /// Lista komunikatów błędów
-        /// </summary>
         public List<string> Errors { get; set; } = new List<string>();
     }
 
-    /// <summary>
-    /// Żądanie masowej zmiany ról użytkowników
-    /// </summary>
     public class BulkRoleChangeRequest
     {
-        /// <summary>
-        /// Lista zmian ról użytkowników
-        /// </summary>
         [Required(ErrorMessage = "Lista zmian ról jest wymagana")]
-        [MinLength(1, ErrorMessage = "Musi zawierać co najmniej jedną zmianę roli")]
         public UserRoleChange[]? Changes { get; set; }
     }
 
-    /// <summary>
-    /// Odpowiedź masowej zmiany ról użytkowników
-    /// </summary>
     public class BulkRoleChangeResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Data przetworzenia żądania
-        /// </summary>
         public DateTime ProcessedAt { get; set; }
-
-        /// <summary>
-        /// Łączna liczba zmian ról
-        /// </summary>
         public int TotalChanges { get; set; }
-
-        /// <summary>
-        /// Liczba pomyślnych zmian ról
-        /// </summary>
         public int SuccessfulChanges { get; set; }
-
-        /// <summary>
-        /// Liczba nieudanych zmian ról
-        /// </summary>
         public int FailedChanges { get; set; }
-
-        /// <summary>
-        /// Lista komunikatów błędów
-        /// </summary>
         public List<string> Errors { get; set; } = new List<string>();
     }
 
-    /// <summary>
-    /// Żądanie masowych operacji członkostwa w zespołach
-    /// </summary>
     public class BulkTeamMembershipRequest
     {
-        /// <summary>
-        /// Lista operacji członkostwa
-        /// </summary>
         [Required(ErrorMessage = "Lista operacji członkostwa jest wymagana")]
-        [MinLength(1, ErrorMessage = "Musi zawierać co najmniej jedną operację")]
         public TeamMembershipOperation[]? Operations { get; set; }
     }
 
-    /// <summary>
-    /// Odpowiedź masowych operacji członkostwa w zespołach
-    /// </summary>
     public class BulkTeamMembershipResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Data przetworzenia żądania
-        /// </summary>
         public DateTime ProcessedAt { get; set; }
-
-        /// <summary>
-        /// Łączna liczba operacji
-        /// </summary>
         public int TotalOperations { get; set; }
-
-        /// <summary>
-        /// Liczba pomyślnych operacji
-        /// </summary>
         public int SuccessfulOperations { get; set; }
-
-        /// <summary>
-        /// Liczba nieudanych operacji
-        /// </summary>
         public int FailedOperations { get; set; }
-
-        /// <summary>
-        /// Lista komunikatów błędów
-        /// </summary>
         public List<string> Errors { get; set; } = new List<string>();
     }
 
-    /// <summary>
-    /// Odpowiedź dla anulowania procesu
-    /// </summary>
     public class CancelProcessResponse
     {
-        /// <summary>
-        /// Czy anulowanie się powiodło
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Komunikat wyniku
-        /// </summary>
         public string Message { get; set; } = string.Empty;
     }
-
-    #endregion
 } 

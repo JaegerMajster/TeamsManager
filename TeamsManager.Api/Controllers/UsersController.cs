@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
-using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
@@ -9,12 +9,11 @@ using TeamsManager.Api.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Linq; // Dla .Select()
+using System.Linq;
+using System.ComponentModel.DataAnnotations;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
 
     public class CreateUserRequestDto
     {
@@ -23,9 +22,8 @@ namespace TeamsManager.Api.Controllers
         public string Upn { get; set; } = string.Empty;
         public UserRole Role { get; set; } = UserRole.Uczen;
         public string DepartmentId { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty; // Hasło dla nowego konta M365
+        public string Password { get; set; } = string.Empty;
         public bool SendWelcomeEmail { get; set; } = false;
-        // Opcjonalne pola, które mogą być ustawiane przy tworzeniu w M365 i lokalnie
         public string? Phone { get; set; }
         public string? AlternateEmail { get; set; }
         public string? ExternalId { get; set; }
@@ -38,7 +36,6 @@ namespace TeamsManager.Api.Controllers
 
     public class UpdateUserRequestDto
     {
-        // Id użytkownika będzie pobierane z URL
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string Upn { get; set; } = string.Empty;
@@ -52,7 +49,7 @@ namespace TeamsManager.Api.Controllers
         public string? Position { get; set; }
         public string? Notes { get; set; }
         public bool IsSystemAdmin { get; set; } = false;
-        public bool IsActive { get; set; } = true; // Pozwalamy na zmianę statusu aktywności
+        public bool IsActive { get; set; } = true;
     }
 
     public class AssignUserToSchoolTypeRequestDto
@@ -76,13 +73,10 @@ namespace TeamsManager.Api.Controllers
         public bool PerformM365Action { get; set; } = true;
     }
 
-
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/[controller]")]
-    [Authorize] // Wszystkie operacje na użytkownikach wymagają autoryzacji
+    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly IUserService _userService;
@@ -99,13 +93,11 @@ namespace TeamsManager.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-
-
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetUserById(string userId, [FromQuery] bool forceRefresh = false)
         {
             _logger.LogInformation("Pobieranie użytkownika o ID: {UserId}, forceRefresh: {ForceRefresh}", userId, forceRefresh);
-            var accessToken = await HttpContext.GetBearerTokenAsync(); // Potrzebny tylko jeśli forceRefresh = true i serwis odpytuje Graph
+            var accessToken = await HttpContext.GetBearerTokenAsync();
 
             var user = await _userService.GetUserByIdAsync(userId, forceRefresh, accessToken);
             if (user == null)
@@ -116,10 +108,9 @@ namespace TeamsManager.Api.Controllers
             return Ok(user);
         }
 
-        [HttpGet("upn/{upn}")] // Używamy ścieżki, aby uniknąć konfliktu z GetUserById
+        [HttpGet("upn/{upn}")]
         public async Task<IActionResult> GetUserByUpn(string upn, [FromQuery] bool forceRefresh = false)
         {
-            // Poprawka: dekodowanie UPN z URL
             var decodedUpn = System.Net.WebUtility.UrlDecode(upn);
             _logger.LogInformation("Pobieranie użytkownika o UPN: {UserUpn}, forceRefresh: {ForceRefresh}", decodedUpn, forceRefresh);
             var accessToken = await HttpContext.GetBearerTokenAsync();
@@ -180,8 +171,6 @@ namespace TeamsManager.Api.Controllers
 
             if (user != null)
             {
-                // Ustawienie dodatkowych pól, jeśli zostały przekazane w DTO
-                // Ta logika może być częścią serwisu lub obsługiwana tutaj
                 bool needsLocalUpdate = false;
                 if (requestDto.Phone != null) { user.Phone = requestDto.Phone; needsLocalUpdate = true; }
                 if (requestDto.AlternateEmail != null) { user.AlternateEmail = requestDto.AlternateEmail; needsLocalUpdate = true; }
@@ -191,18 +180,6 @@ namespace TeamsManager.Api.Controllers
                 if (requestDto.Position != null) { user.Position = requestDto.Position; needsLocalUpdate = true; }
                 if (requestDto.Notes != null) { user.Notes = requestDto.Notes; needsLocalUpdate = true; }
                 if (user.IsSystemAdmin != requestDto.IsSystemAdmin) { user.IsSystemAdmin = requestDto.IsSystemAdmin; needsLocalUpdate = true; }
-
-                if (needsLocalUpdate)
-                {
-                    // Ponieważ CreateUserAsync w M365 może nie ustawiać wszystkich tych pól,
-                    // możemy potrzebować drugiego wywołania UpdateUserAsync lub bezpośredniej aktualizacji lokalnej.
-                    // Dla uproszczenia, załóżmy, że CreateUserAsync zwraca obiekt User gotowy do aktualizacji.
-                    // W rzeczywistości, po utworzeniu w M365, ExternalId jest kluczowy.
-                    // Następnie można wywołać _userService.UpdateUserAsync(user, accessToken) aby zsynchronizować te dodatkowe pola,
-                    // jeśli Graph API CreateM365UserAsync ich nie ustawia.
-                    // Na razie pominiemy dodatkowe wywołanie UpdateUserAsync dla tych pól po utworzeniu w M365.
-                    // Zakładamy, że CreateUserAsync w serwisie odpowiednio zarządza zapisem lokalnym tych danych.
-                }
 
                 _logger.LogInformation("Użytkownik {UserUpn} (ID: {UserId}, ExternalID: {ExternalId}) utworzony pomyślnie.", user.UPN, user.Id, user.ExternalId ?? "N/A");
                 return CreatedAtAction(nameof(GetUserById), new { userId = user.Id }, user);
@@ -222,8 +199,6 @@ namespace TeamsManager.Api.Controllers
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
 
-            // Najpierw pobierz istniejącego użytkownika, aby upewnić się, że istnieje,
-            // i aby przekazać kompletny obiekt do serwisu aktualizacji.
             var existingUser = await _userService.GetUserByIdAsync(userId, accessToken: accessToken);
             if (existingUser == null)
             {
@@ -231,7 +206,6 @@ namespace TeamsManager.Api.Controllers
                 return NotFound(new { Message = $"Użytkownik o ID '{userId}' nie został znaleziony." });
             }
 
-            // Zastosuj zmiany z DTO na istniejącym obiekcie
             existingUser.FirstName = requestDto.FirstName;
             existingUser.LastName = requestDto.LastName;
             existingUser.UPN = requestDto.Upn;
@@ -251,7 +225,7 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Użytkownik ID: {UserId} zaktualizowany pomyślnie.", userId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować użytkownika ID: {UserId}.", userId);
             return BadRequest(new { Message = "Nie udało się zaktualizować użytkownika." });
@@ -268,7 +242,6 @@ namespace TeamsManager.Api.Controllers
                 return Unauthorized(new { Message = "Brak wymaganego tokenu dostępu." });
             }
             bool deactivateM365 = dto?.PerformM365Action ?? true;
-
 
             var success = await _userService.DeactivateUserAsync(userId, accessToken, deactivateM365);
             if (success)
@@ -306,7 +279,6 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> AssignUserToSchoolType(string userId, [FromBody] AssignUserToSchoolTypeRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie przypisania użytkownika {UserId} do typu szkoły {SchoolTypeId}", userId, requestDto.SchoolTypeId);
-            // Ta operacja nie wymaga bezpośredniego accessToken dla Graph API w obecnej implementacji serwisu
             var assignment = await _userService.AssignUserToSchoolTypeAsync(
                 userId,
                 requestDto.SchoolTypeId,
@@ -319,17 +291,16 @@ namespace TeamsManager.Api.Controllers
             if (assignment != null)
             {
                 _logger.LogInformation("Użytkownik {UserId} przypisany do typu szkoły {SchoolTypeId} pomyślnie.", userId, requestDto.SchoolTypeId);
-                return Ok(assignment); // Zwraca utworzone przypisanie
+                return Ok(assignment);
             }
             _logger.LogWarning("Nie udało się przypisać użytkownika {UserId} do typu szkoły {SchoolTypeId}.", userId, requestDto.SchoolTypeId);
             return BadRequest(new { Message = "Nie udało się przypisać użytkownika do typu szkoły." });
         }
 
-        [HttpDelete("schooltypes/{userSchoolTypeId}")] // ID samego przypisania
+        [HttpDelete("schooltypes/{userSchoolTypeId}")]
         public async Task<IActionResult> RemoveUserFromSchoolType(string userSchoolTypeId)
         {
             _logger.LogInformation("Żądanie usunięcia przypisania UserSchoolType ID: {UserSchoolTypeId}", userSchoolTypeId);
-            // Ta operacja nie wymaga accessToken dla Graph API
             var success = await _userService.RemoveUserFromSchoolTypeAsync(userSchoolTypeId);
             if (success)
             {
@@ -344,7 +315,6 @@ namespace TeamsManager.Api.Controllers
         public async Task<IActionResult> AssignTeacherToSubject(string teacherId, [FromBody] AssignTeacherToSubjectRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie przypisania nauczyciela {TeacherId} do przedmiotu {SubjectId}", teacherId, requestDto.SubjectId);
-            // Ta operacja nie wymaga accessToken dla Graph API
             var assignment = await _userService.AssignTeacherToSubjectAsync(
                 teacherId,
                 requestDto.SubjectId,
@@ -361,11 +331,10 @@ namespace TeamsManager.Api.Controllers
             return BadRequest(new { Message = "Nie udało się przypisać nauczyciela do przedmiotu." });
         }
 
-        [HttpDelete("subjects/{userSubjectId}")] // ID samego przypisania
+        [HttpDelete("subjects/{userSubjectId}")]
         public async Task<IActionResult> RemoveTeacherFromSubject(string userSubjectId)
         {
             _logger.LogInformation("Żądanie usunięcia przypisania UserSubject ID: {UserSubjectId}", userSubjectId);
-            // Ta operacja nie wymaga accessToken dla Graph API
             var success = await _userService.RemoveTeacherFromSubjectAsync(userSubjectId);
             if (success)
             {

@@ -10,8 +10,6 @@ namespace TeamsManager.API.Controllers
 {
     /// <summary>
     /// Kontroler API dla orkiestratora cyklu życia zespołów
-    /// Główne endpointy dla masowych operacji archiwizacji, przywracania i migracji
-    /// Następuje wzorce z SchoolYearProcessController
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
@@ -35,8 +33,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Masowa archiwizacja zespołów z opcjonalnym cleanup
         /// </summary>
-        /// <param name="request">Parametry archiwizacji</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-archive")]
         public async Task<IActionResult> BulkArchiveTeamsWithCleanup([FromBody] BulkArchiveRequest request)
         {
@@ -44,7 +40,6 @@ namespace TeamsManager.API.Controllers
             {
                 _logger.LogInformation("✅ API: Rozpoczynam masową archiwizację {Count} zespołów", request.TeamIds?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -52,14 +47,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -107,8 +100,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Masowe przywracanie zespołów z walidacją
         /// </summary>
-        /// <param name="request">Parametry przywracania</param>
-        /// <returns>Wynik operacji masowej</returns>
         [HttpPost("bulk-restore")]
         public async Task<IActionResult> BulkRestoreTeamsWithValidation([FromBody] BulkRestoreRequest request)
         {
@@ -116,7 +107,6 @@ namespace TeamsManager.API.Controllers
             {
                 _logger.LogInformation("✅ API: Rozpoczynam masowe przywracanie {Count} zespołów", request.TeamIds?.Length ?? 0);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -124,14 +114,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -179,8 +167,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Migracja zespołów między latami szkolnymi
         /// </summary>
-        /// <param name="request">Plan migracji</param>
-        /// <returns>Wynik operacji migracji</returns>
         [HttpPost("migrate")]
         public async Task<IActionResult> MigrateTeamsBetweenSchoolYears([FromBody] TeamMigrationRequest request)
         {
@@ -189,7 +175,6 @@ namespace TeamsManager.API.Controllers
                 _logger.LogInformation("✅ API: Rozpoczynam migrację {Count} zespołów z {From} do {To}", 
                     request.Plan?.TeamIds?.Length ?? 0, request.Plan?.FromSchoolYearId, request.Plan?.ToSchoolYearId);
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -197,14 +182,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -215,7 +198,7 @@ namespace TeamsManager.API.Controllers
 
                 if (result.IsSuccess)
                 {
-                    _logger.LogInformation("✅ API: Migracja zespołów zakończona sukcesem. Sukcesy: {Success}, Błędy: {Errors}", 
+                    _logger.LogInformation("✅ API: Migracja zakończona sukcesem. Sukcesy: {Success}, Błędy: {Errors}", 
                         result.SuccessfulOperations?.Count ?? 0, result.Errors?.Count ?? 0);
                     return Ok(new BulkOperationResponse
                     {
@@ -226,7 +209,7 @@ namespace TeamsManager.API.Controllers
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ API: Migracja zespołów zakończona z błędami: {ErrorMessage}", result.ErrorMessage);
+                    _logger.LogWarning("⚠️ API: Migracja zakończona z błędami: {ErrorMessage}", result.ErrorMessage);
                     return BadRequest(new BulkOperationResponse
                     {
                         Success = false,
@@ -249,8 +232,6 @@ namespace TeamsManager.API.Controllers
         /// <summary>
         /// Konsolidacja nieaktywnych zespołów
         /// </summary>
-        /// <param name="request">Opcje konsolidacji</param>
-        /// <returns>Wynik operacji konsolidacji</returns>
         [HttpPost("consolidate")]
         public async Task<IActionResult> ConsolidateInactiveTeams([FromBody] ConsolidationRequest request)
         {
@@ -258,7 +239,6 @@ namespace TeamsManager.API.Controllers
             {
                 _logger.LogInformation("✅ API: Rozpoczynam konsolidację nieaktywnych zespołów");
                 
-                // Pobierz token dostępu z nagłówka Authorization
                 var authHeader = HttpContext.Request.Headers.Authorization.ToString();
                 if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
@@ -266,14 +246,12 @@ namespace TeamsManager.API.Controllers
                 }
                 var apiAccessToken = authHeader.Substring("Bearer ".Length).Trim();
 
-                // Pobierz UPN użytkownika z claims
                 var userUpn = User.FindFirst("upn")?.Value ?? User.FindFirst("preferred_username")?.Value;
                 if (string.IsNullOrEmpty(userUpn))
                 {
                     return Unauthorized("Nie można określić tożsamości użytkownika");
                 }
 
-                // Pobierz token Graph przez OBO flow
                 var accessToken = await _tokenManager.GetValidAccessTokenAsync(userUpn, apiAccessToken);
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -316,24 +294,22 @@ namespace TeamsManager.API.Controllers
         }
 
         /// <summary>
-        /// Pobiera status aktywnych procesów cyklu życia zespołów
+        /// Status aktywnych procesów
         /// </summary>
-        /// <returns>Lista aktywnych procesów</returns>
         [HttpGet("status")]
         public async Task<IActionResult> GetActiveProcessesStatus()
         {
             try
             {
-                _logger.LogDebug("🔍 API: Pobieranie statusu aktywnych procesów cyklu życia");
+                _logger.LogInformation("✅ API: Pobieranie statusu aktywnych procesów");
                 
                 var processes = await _orchestrator.GetActiveProcessesStatusAsync();
                 
-                _logger.LogInformation("✅ API: Znaleziono {Count} aktywnych procesów cyklu życia", processes.Count());
                 return Ok(new ProcessStatusResponse
                 {
                     Success = true,
-                    Message = $"Znaleziono {processes.Count()} aktywnych procesów",
-                    Processes = processes.ToArray()
+                    Message = $"Znaleziono {processes?.Length ?? 0} aktywnych procesów",
+                    Processes = processes ?? Array.Empty<TeamLifecycleProcessStatus>()
                 });
             }
             catch (Exception ex)
@@ -348,51 +324,40 @@ namespace TeamsManager.API.Controllers
         }
 
         /// <summary>
-        /// Anuluje aktywny proces cyklu życia zespołów
+        /// Anulowanie procesu
         /// </summary>
-        /// <param name="processId">ID procesu do anulowania</param>
-        /// <returns>Wynik anulowania</returns>
         [HttpDelete("{processId}")]
         public async Task<IActionResult> CancelProcess(string processId)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(processId))
-                {
-                    return BadRequest(new CancelProcessResponse 
-                    { 
-                        Success = false, 
-                        Message = "ID procesu jest wymagane" 
-                    });
-                }
-
-                _logger.LogInformation("🔄 API: Próba anulowania procesu cyklu życia {ProcessId}", processId);
+                _logger.LogInformation("✅ API: Anulowanie procesu {ProcessId}", processId);
                 
                 var success = await _orchestrator.CancelProcessAsync(processId);
                 
                 if (success)
                 {
-                    _logger.LogInformation("✅ API: Proces {ProcessId} został anulowany", processId);
-                    return Ok(new CancelProcessResponse 
-                    { 
-                        Success = true, 
-                        Message = "Proces został anulowany" 
+                    _logger.LogInformation("✅ API: Proces {ProcessId} anulowany pomyślnie", processId);
+                    return Ok(new BulkOperationResponse
+                    {
+                        Success = true,
+                        Message = $"Proces {processId} został anulowany pomyślnie"
                     });
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ API: Nie można anulować procesu {ProcessId} - proces nie istnieje lub już się zakończył", processId);
-                    return NotFound(new CancelProcessResponse 
-                    { 
-                        Success = false, 
-                        Message = "Proces nie istnieje lub już się zakończył" 
+                    _logger.LogWarning("⚠️ API: Nie udało się anulować procesu {ProcessId}", processId);
+                    return BadRequest(new BulkOperationResponse
+                    {
+                        Success = false,
+                        Message = $"Nie udało się anulować procesu {processId}"
                     });
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ API: Błąd podczas anulowania procesu {ProcessId}", processId);
-                return StatusCode(500, new CancelProcessResponse 
+                return StatusCode(500, new BulkOperationResponse 
                 { 
                     Success = false, 
                     Message = "Wystąpił błąd wewnętrzny serwera" 
@@ -401,113 +366,47 @@ namespace TeamsManager.API.Controllers
         }
     }
 
-    #region Request/Response DTOs
-
-    /// <summary>
-    /// Request do masowej archiwizacji zespołów
-    /// </summary>
     public class BulkArchiveRequest
     {
-        /// <summary>
-        /// Lista ID zespołów do archiwizacji
-        /// </summary>
         [Required]
-        [MinLength(1, ErrorMessage = "Wymagany jest przynajmniej jeden zespół")]
         public string[] TeamIds { get; set; } = Array.Empty<string>();
-
-        /// <summary>
-        /// Opcje archiwizacji
-        /// </summary>
+        
         [Required]
         public ArchiveOptions Options { get; set; } = new ArchiveOptions();
     }
 
-    /// <summary>
-    /// Request do masowego przywracania zespołów
-    /// </summary>
     public class BulkRestoreRequest
     {
-        /// <summary>
-        /// Lista ID zespołów do przywrócenia
-        /// </summary>
         [Required]
-        [MinLength(1, ErrorMessage = "Wymagany jest przynajmniej jeden zespół")]
         public string[] TeamIds { get; set; } = Array.Empty<string>();
-
-        /// <summary>
-        /// Opcje przywracania
-        /// </summary>
+        
         [Required]
         public RestoreOptions Options { get; set; } = new RestoreOptions();
     }
 
-    /// <summary>
-    /// Request do migracji zespołów
-    /// </summary>
     public class TeamMigrationRequest
     {
-        /// <summary>
-        /// Plan migracji zespołów
-        /// </summary>
         [Required]
         public TeamMigrationPlan Plan { get; set; } = new TeamMigrationPlan();
     }
 
-    /// <summary>
-    /// Request do konsolidacji nieaktywnych zespołów
-    /// </summary>
     public class ConsolidationRequest
     {
-        /// <summary>
-        /// Opcje konsolidacji
-        /// </summary>
         [Required]
         public ConsolidationOptions Options { get; set; } = new ConsolidationOptions();
     }
 
-    /// <summary>
-    /// Odpowiedź dla operacji masowych
-    /// </summary>
     public class BulkOperationResponse
     {
-        /// <summary>
-        /// Czy operacja się powiodła
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Komunikat wyniku
-        /// </summary>
         public string Message { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Szczegółowy wynik operacji
-        /// </summary>
         public BulkOperationResult? Result { get; set; }
     }
 
-    /// <summary>
-    /// Odpowiedź dla statusu procesów
-    /// </summary>
     public class ProcessStatusResponse
     {
-        /// <summary>
-        /// Czy zapytanie się powiodło
-        /// </summary>
         public bool Success { get; set; }
-
-        /// <summary>
-        /// Komunikat wyniku
-        /// </summary>
         public string Message { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Lista aktywnych procesów
-        /// </summary>
         public TeamLifecycleProcessStatus[] Processes { get; set; } = Array.Empty<TeamLifecycleProcessStatus>();
     }
-
-
-
-    #endregion
 } 

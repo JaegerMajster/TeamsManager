@@ -100,13 +100,13 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
-                    _logger.LogWarning("Display name nie może być pusty");
+                    _logger.LogWarning("Nazwa wyświetlana nie może być pusta");
                     return null;
                 }
 
                 if (string.IsNullOrWhiteSpace(userPrincipalName))
                 {
-                    _logger.LogWarning("User Principal Name nie może być pusty");
+                    _logger.LogWarning("Główna nazwa użytkownika nie może być pusta");
                     return null;
                 }
 
@@ -204,7 +204,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userPrincipalName))
                 {
-                    _logger.LogWarning("User Principal Name nie może być pusty");
+                    _logger.LogWarning("Główna nazwa użytkownika nie może być pusta");
                     return false;
                 }
 
@@ -258,7 +258,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userPrincipalName))
                 {
-                    _logger.LogWarning("User Principal Name nie może być pusty");
+                    _logger.LogWarning("Główna nazwa użytkownika nie może być pusta");
                     return false;
                 }
 
@@ -396,7 +396,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -647,7 +647,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userId))
                 {
-                    _logger.LogWarning("User ID nie może być pusty");
+                    _logger.LogWarning("ID użytkownika nie może być pusty");
                     return null;
                 }
 
@@ -729,7 +729,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return null;
                 }
 
@@ -864,7 +864,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -934,7 +934,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -1014,7 +1014,7 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -1197,7 +1197,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -1259,7 +1259,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return false;
                 }
 
@@ -1339,7 +1339,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Walidacja parametrów
                 if (string.IsNullOrWhiteSpace(userUpn))
                 {
-                    _logger.LogWarning("User UPN nie może być pusty");
+                    _logger.LogWarning("UPN użytkownika nie może być pusty");
                     return null;
                 }
 
@@ -1627,7 +1627,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Pobiera użytkownika po UPN
-        /// TASK 2.5.2 - Dodano cache dla Graph API responses
         /// </summary>
         private async Task<GraphUser?> GetUserByUpnAsync(string userUpn)
         {

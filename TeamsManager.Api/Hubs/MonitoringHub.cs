@@ -16,7 +16,7 @@ namespace TeamsManager.Api.Hubs
         private readonly IOperationHistoryService _operationService;
         private readonly ILogger<MonitoringHub> _logger;
         
-        // Track connections for better performance (wzorzec z NotificationHub)
+        // Śledzenie połączeń dla lepszej wydajności
         private static readonly ConcurrentDictionary<string, string> _connections = new();
         private static readonly ConcurrentDictionary<string, DateTime> _connectionTimes = new();
 
@@ -31,56 +31,53 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Handle new monitoring connections
+        /// Obsługa nowych połączeń monitorowania
         /// </summary>
         public override async Task OnConnectedAsync()
         {
             var connectionId = Context.ConnectionId;
+            var userIdentifier = Context.UserIdentifier;
             var userUpn = Context.User?.FindFirst(ClaimTypes.Upn)?.Value ??
                          Context.User?.FindFirst(ClaimTypes.Email)?.Value ??
                          Context.User?.Identity?.Name;
 
-            _logger.LogInformation("[MONITORING-HUB] New monitoring connection: {ConnectionId}, User: {UserUpn}", 
+            _logger.LogInformation("Nowe połączenie monitorowania: {ConnectionId}, Użytkownik: {UserUpn}",
                 connectionId, userUpn);
 
             try
             {
-                // Track connection
                 if (!string.IsNullOrWhiteSpace(userUpn))
                 {
                     _connections[connectionId] = userUpn;
                     _connectionTimes[connectionId] = DateTime.UtcNow;
 
-                    // Add to monitoring group
                     await Groups.AddToGroupAsync(connectionId, "MonitoringClients");
                     
-                    // Add administrators to admin monitoring group
                     var userRoles = Context.User?.FindAll(ClaimTypes.Role)?.Select(c => c.Value) ?? 
                                    Enumerable.Empty<string>();
                     
                     if (userRoles.Contains("Administrator") || userRoles.Contains("Admin"))
                     {
                         await Groups.AddToGroupAsync(connectionId, "AdminMonitoring");
-                        _logger.LogDebug("[MONITORING-HUB] Added to AdminMonitoring group");
+                        _logger.LogDebug("Dodano do grupy AdminMonitoring");
                     }
 
-                    // Send initial system status
                     var initialStatus = await GetInitialSystemStatus();
                     await Clients.Caller.SendAsync("InitialSystemStatus", initialStatus);
                 }
 
                 await base.OnConnectedAsync();
-                _logger.LogInformation("[MONITORING-HUB] Monitoring connection setup completed for {UserUpn}", userUpn);
+                _logger.LogInformation("Konfiguracja połączenia monitorowania zakończona dla {UserUpn}", userUpn);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error during monitoring connection setup for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd podczas konfiguracji połączenia monitorowania dla {UserUpn}", userUpn);
                 throw;
             }
         }
 
         /// <summary>
-        /// Handle monitoring disconnections
+        /// Obsługa rozłączeń monitorowania
         /// </summary>
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
@@ -89,54 +86,50 @@ namespace TeamsManager.Api.Hubs
 
             if (exception != null)
             {
-                _logger.LogError(exception, "[MONITORING-HUB] Monitoring disconnection with error. ConnectionId: {ConnectionId}, User: {UserUpn}", 
+                _logger.LogError(exception, "Rozłączenie monitorowania z błędem. ConnectionId: {ConnectionId}, Użytkownik: {UserUpn}", 
                     connectionId, userUpn);
             }
             else
             {
-                _logger.LogInformation("[MONITORING-HUB] Normal monitoring disconnection. ConnectionId: {ConnectionId}, User: {UserUpn}", 
+                _logger.LogInformation("Normalne rozłączenie monitorowania. ConnectionId: {ConnectionId}, Użytkownik: {UserUpn}", 
                     connectionId, userUpn);
             }
 
             try
             {
-                // Calculate session duration
                 if (_connectionTimes.TryGetValue(connectionId, out var connectionTime))
                 {
                     var sessionDuration = DateTime.UtcNow - connectionTime;
-                    _logger.LogInformation("[MONITORING-HUB] Monitoring session duration for {UserUpn}: {Duration}", 
+                    _logger.LogInformation("Czas trwania sesji monitorowania dla {UserUpn}: {Duration}", 
                         userUpn, sessionDuration);
                     _connectionTimes.TryRemove(connectionId, out _);
                 }
 
-                // Cleanup connection tracking
                 _connections.TryRemove(connectionId, out _);
 
                 await base.OnDisconnectedAsync(exception);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error during monitoring disconnection cleanup for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd podczas czyszczenia rozłączenia monitorowania dla {UserUpn}", userUpn);
             }
         }
 
-        #region Client-callable Methods
+        #region Metody wywoływane przez klienta
 
         /// <summary>
-        /// Request comprehensive health check
+        /// Żądanie kompleksowego sprawdzenia stanu zdrowia
         /// </summary>
         public async Task RequestHealthCheck()
         {
             var userUpn = _connections.TryGetValue(Context.ConnectionId, out var upn) ? upn : "Unknown";
-            _logger.LogInformation("[MONITORING-HUB] Health check requested by {UserUpn}", userUpn);
+            _logger.LogInformation("Sprawdzenie stanu zdrowia zażądane przez {UserUpn}", userUpn);
 
             try
             {
-                // Note: W rzeczywistej implementacji potrzebujemy accessToken
-                // Na razie używamy pustego string jako placeholder
+                // TODO: W rzeczywistej implementacji potrzebujemy accessToken
                 var result = await _healthOrchestrator.RunComprehensiveHealthCheckAsync("");
                 
-                // Broadcast to all monitoring clients
                 await Clients.Group("MonitoringClients").SendAsync("HealthCheckResult", new
                 {
                     Result = result,
@@ -146,7 +139,7 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error executing health check for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd wykonywania sprawdzenia stanu zdrowia dla {UserUpn}", userUpn);
                 await Clients.Caller.SendAsync("HealthCheckError", new
                 {
                     ErrorMessage = ex.Message,
@@ -156,12 +149,12 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Request auto repair
+        /// Żądanie automatycznej naprawy
         /// </summary>
         public async Task RequestAutoRepair()
         {
             var userUpn = _connections.TryGetValue(Context.ConnectionId, out var upn) ? upn : "Unknown";
-            _logger.LogInformation("[MONITORING-HUB] Auto repair requested by {UserUpn}", userUpn);
+            _logger.LogInformation("Automatyczna naprawa zażądana przez {UserUpn}", userUpn);
 
             try
             {
@@ -176,7 +169,6 @@ namespace TeamsManager.Api.Hubs
 
                 var result = await _healthOrchestrator.AutoRepairCommonIssuesAsync(repairOptions, "");
                 
-                // Broadcast to monitoring clients
                 await Clients.Group("MonitoringClients").SendAsync("AutoRepairResult", new
                 {
                     Result = result,
@@ -186,7 +178,7 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error executing auto repair for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd wykonywania automatycznej naprawy dla {UserUpn}", userUpn);
                 await Clients.Caller.SendAsync("AutoRepairError", new
                 {
                     ErrorMessage = ex.Message,
@@ -196,7 +188,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Get active operations
+        /// Pobranie aktywnych operacji
         /// </summary>
         public async Task GetActiveOperations()
         {
@@ -216,7 +208,7 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error getting active operations for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd pobierania aktywnych operacji dla {UserUpn}", userUpn);
                 await Clients.Caller.SendAsync("ActiveOperationsError", new
                 {
                     ErrorMessage = ex.Message,
@@ -226,12 +218,12 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Request cache optimization
+        /// Żądanie optymalizacji cache
         /// </summary>
         public async Task RequestCacheOptimization()
         {
             var userUpn = _connections.TryGetValue(Context.ConnectionId, out var upn) ? upn : "Unknown";
-            _logger.LogInformation("[MONITORING-HUB] Cache optimization requested by {UserUpn}", userUpn);
+            _logger.LogInformation("Optymalizacja cache zażądana przez {UserUpn}", userUpn);
 
             try
             {
@@ -246,7 +238,7 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error executing cache optimization for {UserUpn}", userUpn);
+                _logger.LogError(ex, "Błąd wykonywania optymalizacji cache dla {UserUpn}", userUpn);
                 await Clients.Caller.SendAsync("CacheOptimizationError", new
                 {
                     ErrorMessage = ex.Message,
@@ -256,7 +248,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Get monitoring statistics
+        /// Pobranie statystyk monitorowania
         /// </summary>
         public async Task GetMonitoringStats()
         {
@@ -279,15 +271,15 @@ namespace TeamsManager.Api.Hubs
             };
 
             await Clients.Caller.SendAsync("MonitoringStats", stats);
-            _logger.LogDebug("[MONITORING-HUB] Monitoring stats sent to {UserUpn}", userUpn);
+            _logger.LogDebug("Statystyki monitorowania wysłane do {UserUpn}", userUpn);
         }
 
         #endregion
 
-        #region Server-side Broadcasting Methods
+        #region Metody rozgłaszania po stronie serwera
 
         /// <summary>
-        /// Broadcast health status update to all monitoring clients
+        /// Rozgłoszenie aktualizacji stanu zdrowia do wszystkich klientów monitorowania
         /// </summary>
         public static async Task BroadcastHealthUpdate(IHubContext<MonitoringHub> hubContext, object healthUpdate)
         {
@@ -299,7 +291,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Broadcast operation progress update
+        /// Rozgłoszenie aktualizacji postępu operacji
         /// </summary>
         public static async Task BroadcastOperationUpdate(IHubContext<MonitoringHub> hubContext, object operationUpdate)
         {
@@ -311,7 +303,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Broadcast system metrics update
+        /// Rozgłoszenie aktualizacji metryk systemu
         /// </summary>
         public static async Task BroadcastMetricsUpdate(IHubContext<MonitoringHub> hubContext, object metricsUpdate)
         {
@@ -323,7 +315,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Broadcast system alert
+        /// Rozgłoszenie alertu systemowego
         /// </summary>
         public static async Task BroadcastSystemAlert(IHubContext<MonitoringHub> hubContext, object systemAlert)
         {
@@ -336,13 +328,12 @@ namespace TeamsManager.Api.Hubs
 
         #endregion
 
-        #region Helper Methods
+        #region Metody pomocnicze
 
         private async Task<object> GetInitialSystemStatus()
         {
             try
             {
-                // Get basic system status
                 var activeOperations = await _operationService.GetActiveOperationsAsync();
                 var processStatuses = await _healthOrchestrator.GetActiveProcessesStatusAsync();
                 
@@ -356,7 +347,7 @@ namespace TeamsManager.Api.Hubs
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[MONITORING-HUB] Error getting initial system status");
+                _logger.LogError(ex, "Błąd pobierania początkowego statusu systemu");
                 return new
                 {
                     SystemStatus = "Error",
@@ -367,7 +358,7 @@ namespace TeamsManager.Api.Hubs
         }
 
         /// <summary>
-        /// Get hub metrics for monitoring
+        /// Pobranie metryk hub dla monitorowania
         /// </summary>
         public static MonitoringHubMetrics GetHubMetrics()
         {
@@ -394,7 +385,7 @@ namespace TeamsManager.Api.Hubs
     }
 
     /// <summary>
-    /// Metrics for monitoring hub
+    /// Metryki dla hub monitorowania
     /// </summary>
     public class MonitoringHubMetrics
     {

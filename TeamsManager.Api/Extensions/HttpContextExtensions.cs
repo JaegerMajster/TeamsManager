@@ -26,7 +26,7 @@ namespace TeamsManager.Api.Extensions
             if (httpContext == null)
                 return null;
 
-            // Sprawdź cache per-request
+            // Sprawdzenie cache per-request
             if (httpContext.Items.TryGetValue(BearerTokenCacheKey, out var cachedToken))
             {
                 return cachedToken as string;
@@ -36,13 +36,12 @@ namespace TeamsManager.Api.Extensions
 
             try
             {
-                // PIERWSZY SPOSÓB: Próba użycia ASP.NET Core authentication system
-                // UWAGA: Prawdopodobnie nie będzie działać z obecną konfiguracją JWT
+                // Próba użycia ASP.NET Core authentication system
                 token = await httpContext.GetTokenAsync("access_token");
                 
                 if (!string.IsNullOrEmpty(token))
                 {
-                    // Zapisz w cache i zwróć
+                    // Zapisanie w cache i zwrócenie
                     httpContext.Items[BearerTokenCacheKey] = token;
                     return token;
                 }
@@ -50,18 +49,17 @@ namespace TeamsManager.Api.Extensions
             catch (InvalidOperationException)
             {
                 // GetTokenAsync może rzucić wyjątek jeśli authentication scheme nie wspiera token storage
-                // To jest oczekiwane z konfiguracją JWT Bearer - ignorujemy i przechodzimy do fallback
+                // Ignorujemy i przechodzimy do fallback
             }
             catch (Exception)
             {
                 // Każdy inny błąd też ignorujemy i używamy fallback
             }
 
-            // DRUGI SPOSÓB: Fallback - ręczne parsowanie nagłówka Authorization
-            // Ten sposób ZAWSZE powinien działać i jest zgodny z obecną implementacją
+            // Fallback - ręczne parsowanie nagłówka Authorization
             token = ParseBearerTokenFromHeader(httpContext);
 
-            // Zapisz w cache (nawet jeśli null)
+            // Zapisanie w cache (nawet jeśli null)
             httpContext.Items[BearerTokenCacheKey] = token;
 
             return token;
@@ -81,19 +79,18 @@ namespace TeamsManager.Api.Extensions
 
         /// <summary>
         /// Parsuje Bearer token z nagłówka Authorization
-        /// Implementacja kompatybilna z obecną logiką w kontrolerach
         /// </summary>
         /// <param name="httpContext">Kontekst HTTP</param>
         /// <returns>Bearer token bez prefiksu "Bearer " lub null jeśli nie znaleziono</returns>
         private static string? ParseBearerTokenFromHeader(HttpContext httpContext)
         {
-            // Sprawdź czy nagłówek Authorization istnieje
+            // Sprawdzenie czy nagłówek Authorization istnieje
             if (!httpContext.Request.Headers.TryGetValue("Authorization", out var authHeaderValues))
             {
                 return null;
             }
 
-            // Pobierz pierwszy nagłówek Authorization (zgodnie z wzorcem FirstOrDefault)
+            // Pobranie pierwszego nagłówka Authorization
             var authHeader = authHeaderValues.FirstOrDefault()?.ToString();
             
             if (string.IsNullOrEmpty(authHeader))
@@ -101,16 +98,16 @@ namespace TeamsManager.Api.Extensions
                 return null;
             }
 
-            // Sprawdź czy zaczyna się od "Bearer " (case-insensitive)
+            // Sprawdzenie czy zaczyna się od "Bearer " (case-insensitive)
             if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
 
-            // Wyciągnij token i usuń spacje
+            // Wyciągnięcie tokenu i usunięcie spacji
             var token = authHeader.Substring("Bearer ".Length).Trim();
             
-            // Zwróć token lub null jeśli pusty
+            // Zwrócenie tokenu lub null jeśli pusty
             return string.IsNullOrEmpty(token) ? null : token;
         }
     }

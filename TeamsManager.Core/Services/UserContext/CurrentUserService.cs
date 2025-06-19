@@ -1,5 +1,4 @@
-﻿// Plik: TeamsManager.Core/Services/UserContext/CurrentUserService.cs
-using Microsoft.AspNetCore.Http; // Potrzebne dla IHttpContextAccessor i HttpContext
+﻿using Microsoft.AspNetCore.Http; // Potrzebne dla IHttpContextAccessor i HttpContext
 using System.Security.Claims;    // Potrzebne dla ClaimsPrincipal i standardowych typów oświadczeń
 using TeamsManager.Core.Abstractions;
 using System; // Dla ArgumentNullException
@@ -48,7 +47,7 @@ namespace TeamsManager.Core.Services.UserContext
 
                 if (!string.IsNullOrEmpty(upnClaim))
                 {
-                    System.Diagnostics.Debug.WriteLine($"CurrentUserService (HTTP Context): Zwracam UPN z oświadczenia: {upnClaim}");
+                    System.Diagnostics.Debug.WriteLine($"CurrentUserService (kontekst HTTP): Zwracam UPN z oświadczenia: {upnClaim}");
                     return upnClaim;
                 }
 
@@ -57,16 +56,16 @@ namespace TeamsManager.Core.Services.UserContext
                 var identityName = _httpContextAccessor.HttpContext.User.Identity.Name;
                 if (!string.IsNullOrEmpty(identityName))
                 {
-                    System.Diagnostics.Debug.WriteLine($"CurrentUserService (HTTP Context): Zwracam UPN z User.Identity.Name: {identityName}");
+                    System.Diagnostics.Debug.WriteLine($"CurrentUserService (kontekst HTTP): Zwracam UPN z User.Identity.Name: {identityName}");
                     return identityName;
                 }
-                System.Diagnostics.Debug.WriteLine("CurrentUserService (HTTP Context): Użytkownik uwierzytelniony, ale nie znaleziono oświadczenia UPN.");
+                System.Diagnostics.Debug.WriteLine("CurrentUserService (kontekst HTTP): Użytkownik uwierzytelniony, ale nie znaleziono oświadczenia UPN.");
             }
 
             // Priorytet 2: Użytkownik ustawiony ręcznie (np. w testach lub w UI przed pełnym DI dla API)
             if (_manualUserUpn != null)
             {
-                System.Diagnostics.Debug.WriteLine($"CurrentUserService (Manual): Zwracam ręcznie ustawiony UPN: {_manualUserUpn}");
+                System.Diagnostics.Debug.WriteLine($"CurrentUserService (ręczne): Zwracam ręcznie ustawiony UPN: {_manualUserUpn}");
                 return _manualUserUpn;
             }
 
@@ -84,11 +83,11 @@ namespace TeamsManager.Core.Services.UserContext
             // 3. Potencjalnych zadań w tle/konsolowych używających Core.
             var oldUpn = _manualUserUpn;
             _manualUserUpn = upn;
-            System.Diagnostics.Debug.WriteLine($"CurrentUserService (Manual): UPN zmieniony z '{oldUpn ?? "null"}' na '{upn ?? "null"}'");
+            System.Diagnostics.Debug.WriteLine($"CurrentUserService (ręczne): UPN zmieniony z '{oldUpn ?? "null"}' na '{upn ?? "null"}'");
 
             if (_httpContextAccessor?.HttpContext != null)
             {
-                System.Diagnostics.Debug.WriteLine("CurrentUserService (Manual): Ostrzeżenie - SetCurrentUserUpn wywołane w obecności HttpContext. " +
+                System.Diagnostics.Debug.WriteLine("CurrentUserService (ręczne): Ostrzeżenie - SetCurrentUserUpn wywołane w obecności HttpContext. " +
                                                    "GetCurrentUserUpn() dla tego żądania HTTP nadal będzie próbował odczytać użytkownika z tokenu.");
             }
         }

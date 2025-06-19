@@ -12,7 +12,6 @@ namespace TeamsManager.Api.Swagger
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
-            // Sprawdź czy kontroler lub metoda wymaga autoryzacji
             var hasAuthorize = context.MethodInfo.DeclaringType?.GetCustomAttributes(true)
                 .Union(context.MethodInfo.GetCustomAttributes(true))
                 .OfType<AuthorizeAttribute>()
@@ -22,22 +21,17 @@ namespace TeamsManager.Api.Swagger
                 .OfType<AllowAnonymousAttribute>()
                 .Any();
 
-            // Jeśli ma AllowAnonymous, to nie wymaga autoryzacji
             if (hasAllowAnonymous)
             {
-                // Dodaj informację o braku wymagania autoryzacji
                 operation.Summary = operation.Summary?.TrimEnd() + " 🌐";
                 operation.Description = (operation.Description ?? "") + "\n\n**🌐 Endpoint publiczny** - nie wymaga uwierzytelniania.";
                 return;
             }
 
-            // Jeśli wymaga autoryzacji
             if (hasAuthorize)
             {
-                // Dodaj ikony autoryzacji do summary
                 operation.Summary = operation.Summary?.TrimEnd() + " 🔒";
                 
-                // Dodaj informacje o wymaganiach autoryzacji do opisu
                 var authInfo = "\n\n**🔒 Wymaga uwierzytelniania**\n\n" +
                               "- **Typ**: JWT Bearer Token z Azure AD\n" +
                               "- **Uprawnienia**: Zgodnie z rolą użytkownika\n" +
@@ -47,7 +41,6 @@ namespace TeamsManager.Api.Swagger
 
                 operation.Description = (operation.Description ?? "") + authInfo;
 
-                // Dodaj responses dla błędów autoryzacji jeśli nie istnieją
                 if (!operation.Responses.ContainsKey("401"))
                 {
                     operation.Responses.Add("401", new OpenApiResponse
@@ -104,7 +97,6 @@ namespace TeamsManager.Api.Swagger
                     });
                 }
 
-                // Dodaj security requirement jeśli nie istnieje globalnie
                 if (operation.Security?.Any() != true)
                 {
                     operation.Security = new List<OpenApiSecurityRequirement>
@@ -127,7 +119,6 @@ namespace TeamsManager.Api.Swagger
                 }
             }
 
-            // Dodaj informacje o wersjonowaniu
             if (operation.Tags?.Any(tag => tag.Name.Contains("v1")) == true)
             {
                 operation.Description = (operation.Description ?? "") + 

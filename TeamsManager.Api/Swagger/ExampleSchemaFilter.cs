@@ -15,7 +15,6 @@ namespace TeamsManager.Api.Swagger
         {
             if (context.Type == null) return;
 
-            // Przykłady dla głównych modeli
             if (context.Type == typeof(User))
             {
                 schema.Example = new OpenApiObject
@@ -92,7 +91,6 @@ namespace TeamsManager.Api.Swagger
                 };
             }
 
-            // Przykłady dla DTO
             AddDtoExamples(schema, context);
         }
 

@@ -242,23 +242,15 @@ namespace TeamsManager.Api.Controllers
                 requestDto.Name,
                 requestDto.Description,
                 requestDto.ParentDepartmentId,
-                requestDto.DepartmentCode
-            // Pozostałe pola z DTO (Email, Phone, Location, SortOrder) można by przekazać do serwisu,
-            // gdyby CreateDepartmentAsync je przyjmował, lub ustawić na obiekcie department po utworzeniu, przed zapisem.
-            // Dla uproszczenia, obecna sygnatura CreateDepartmentAsync nie przyjmuje tych dodatkowych pól.
+                requestDto.DepartmentCode,
+                requestDto.Email,
+                requestDto.Phone,
+                requestDto.Location,
+                requestDto.SortOrder
             );
 
             if (department != null)
             {
-                // Jeśli CreateDepartmentAsync nie ustawia wszystkich pól z DTO, można je tu ustawić przed zwróceniem:
-                if (requestDto.Email != null) department.Email = requestDto.Email;
-                if (requestDto.Phone != null) department.Phone = requestDto.Phone;
-                if (requestDto.Location != null) department.Location = requestDto.Location;
-                department.SortOrder = requestDto.SortOrder;
-                // Po ustawieniu dodatkowych pól, jeśli CreateDepartmentAsync nie zapisuje zmian,
-                // trzeba by wywołać UpdateDepartmentAsync lub zapewnić zapis w serwisie.
-                // Zakładając, że CreateDepartmentAsync przygotowuje obiekt do zapisu, a zapis nastąpi na wyższym poziomie.
-
                 _logger.LogInformation("Dział '{DepartmentName}' (ID: {DepartmentId}) utworzony pomyślnie.", department.Name, department.Id);
                 return CreatedAtAction(nameof(GetDepartmentById), new { departmentId = department.Id }, department);
             }
@@ -271,7 +263,6 @@ namespace TeamsManager.Api.Controllers
         {
             _logger.LogInformation("Żądanie aktualizacji działu ID: {DepartmentId}", departmentId);
 
-            // Najpierw pobierz istniejący dział, aby upewnić się, że istnieje.
             var existingDepartment = await _departmentService.GetDepartmentByIdAsync(departmentId);
             if (existingDepartment == null)
             {
@@ -279,7 +270,7 @@ namespace TeamsManager.Api.Controllers
                 return NotFound(new { Message = $"Dział o ID '{departmentId}' nie został znaleziony." });
             }
 
-            // Zastosuj zmiany z DTO na istniejącym obiekcie
+            // Mapowanie z DTO na obiekt encji
             existingDepartment.Name = requestDto.Name;
             existingDepartment.Description = requestDto.Description;
             existingDepartment.ParentDepartmentId = requestDto.ParentDepartmentId;
@@ -294,10 +285,9 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Dział ID: {DepartmentId} zaktualizowany pomyślnie.", departmentId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować działu ID: {DepartmentId}.", departmentId);
-            // Serwis powinien zalogować dokładniejszy powód błędu
             return BadRequest(new { Message = "Nie udało się zaktualizować działu." });
         }
 
@@ -313,28 +303,53 @@ namespace TeamsManager.Api.Controllers
                     _logger.LogInformation("Dział ID: {DepartmentId} usunięty (zdezaktywowany) pomyślnie.", departmentId);
                     return Ok(new { Message = "Dział usunięty (zdezaktywowany) pomyślnie." });
                 }
-                // Jeśli serwis zwrócił false, to znaczy, że dział nie istniał lub nie można go było usunąć (np. był już nieaktywny)
-                // Serwis powinien zalogować dokładniejszy powód.
-                // Można też sprawdzić, czy dział istnieje przed próbą usunięcia, aby zwrócić 404.
-                var department = await _departmentService.GetDepartmentByIdAsync(departmentId); // Sprawdź czy istnieje (nawet jeśli nieaktywny)
+
+                var department = await _departmentService.GetDepartmentByIdAsync(departmentId);
                 if (department == null)
                 {
                     return NotFound(new { Message = $"Dział o ID '{departmentId}' nie został znaleziony." });
                 }
-                _logger.LogWarning("Nie udało się usunąć (zdezaktywować) działu ID: {DepartmentId}. Możliwe, że był już nieaktywny lub wystąpił inny problem.", departmentId);
-                return BadRequest(new { Message = "Nie udało się usunąć (zdezaktywować) działu. Sprawdź logi serwera lub czy dział nie był już nieaktywny." });
-
+                _logger.LogWarning("Nie udało się usunąć (zdezaktywować) działu ID: {DepartmentId}.", departmentId);
+                return BadRequest(new { Message = "Nie udało się usunąć (zdezaktywować) działu." });
             }
-            catch (InvalidOperationException ex) // Przechwytywanie wyjątku z serwisu (np. gdy dział ma poddziały)
+            catch (InvalidOperationException ex)
             {
                 _logger.LogWarning("Nie można usunąć działu ID {DepartmentId}: {ErrorMessage}", departmentId, ex.Message);
-                return Conflict(new { Message = ex.Message }); // 409 Conflict
+                return Conflict(new { Message = ex.Message });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Nieoczekiwany błąd podczas usuwania działu ID: {DepartmentId}", departmentId);
                 return StatusCode(StatusCodes.Status500InternalServerError, new { Message = "Wystąpił nieoczekiwany błąd serwera." });
             }
+        }
+
+        [HttpPost("{departmentId}/users/{userId}")]
+        public async Task<IActionResult> AssignUserToDepartment(string departmentId, string userId)
+        {
+            _logger.LogInformation("Żądanie przypisania użytkownika {UserId} do działu {DepartmentId}", userId, departmentId);
+            var success = await _departmentService.AssignUserToDepartmentAsync(userId, departmentId);
+            if (success)
+            {
+                _logger.LogInformation("Użytkownik {UserId} przypisany do działu {DepartmentId} pomyślnie.", userId, departmentId);
+                return Ok(new { Message = "Użytkownik pomyślnie przypisany do działu." });
+            }
+            _logger.LogWarning("Nie udało się przypisać użytkownika {UserId} do działu {DepartmentId}.", userId, departmentId);
+            return BadRequest(new { Message = "Nie udało się przypisać użytkownika do działu." });
+        }
+
+        [HttpDelete("{departmentId}/users/{userId}")]
+        public async Task<IActionResult> RemoveUserFromDepartment(string departmentId, string userId)
+        {
+            _logger.LogInformation("Żądanie usunięcia użytkownika {UserId} z działu {DepartmentId}", userId, departmentId);
+            var success = await _departmentService.RemoveUserFromDepartmentAsync(userId, departmentId);
+            if (success)
+            {
+                _logger.LogInformation("Użytkownik {UserId} usunięty z działu {DepartmentId} pomyślnie.", userId, departmentId);
+                return Ok(new { Message = "Użytkownik pomyślnie usunięty z działu." });
+            }
+            _logger.LogWarning("Nie udało się usunąć użytkownika {UserId} z działu {DepartmentId}.", userId, departmentId);
+            return BadRequest(new { Message = "Nie udało się usunąć użytkownika z działu." });
         }
     }
 }

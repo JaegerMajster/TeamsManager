@@ -59,20 +59,20 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<Department?> GetDepartmentByIdAsync(string departmentId, bool includeSubDepartments, bool includeUsers, bool forceRefresh)
         {
-            _logger.LogInformation("Pobieranie działu {DepartmentId}. Poddziały: {IncludeSubDepartments}, Użytkownicy: {IncludeUsers}, Wymuszenie odświeżenia: {ForceRefresh}", departmentId, includeSubDepartments, includeUsers, forceRefresh); //
-            string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId; //
+            _logger.LogInformation("Pobieranie działu {DepartmentId}. Poddziały: {IncludeSubDepartments}, Użytkownicy: {IncludeUsers}, Wymuszenie odświeżenia: {ForceRefresh}", departmentId, includeSubDepartments, includeUsers, forceRefresh);
+            string cacheKey = DepartmentByIdCacheKeyPrefix + departmentId;
 
             if (!forceRefresh && _graphCacheService.TryGetValue<Department>(cacheKey, out Department? cachedDepartment) && cachedDepartment != null)
             {
-                _logger.LogDebug("Dział {DepartmentId} znaleziony w cache.", departmentId); //
+                _logger.LogDebug("Dział {DepartmentId} znaleziony w cache.", departmentId);
                 // Jeśli dział jest w cache, ale potrzebujemy dodatkowych danych, dociągnij je
                 if (includeSubDepartments && (cachedDepartment.SubDepartments == null || !cachedDepartment.SubDepartments.Any()))
                 {
-                    cachedDepartment.SubDepartments = (await GetSubDepartmentsAsync(departmentId, forceRefresh)).ToList(); //
+                    cachedDepartment.SubDepartments = (await GetSubDepartmentsAsync(departmentId, forceRefresh)).ToList();
                 }
                 if (includeUsers && (cachedDepartment.Users == null || !cachedDepartment.Users.Any()))
                 {
-                    cachedDepartment.Users = (await GetUsersInDepartmentAsync(departmentId, forceRefresh)).ToList(); //
+                    cachedDepartment.Users = (await GetUsersInDepartmentAsync(departmentId, forceRefresh)).ToList();
                 }
                 return cachedDepartment;
             }
@@ -81,7 +81,7 @@ namespace TeamsManager.Core.Services
             if (department != null)
             {
                 _graphCacheService.Set(cacheKey, department);
-                _logger.LogDebug("Dział {DepartmentId} zapisany w cache.", departmentId); //
+                _logger.LogDebug("Dział {DepartmentId} zapisany w cache.", departmentId);
             }
 
             // Jeśli dział istnieje, dociągnij opcjonalne powiązania
@@ -89,13 +89,13 @@ namespace TeamsManager.Core.Services
             {
                 if (includeSubDepartments)
                 {
-                    department.SubDepartments = (await GetSubDepartmentsAsync(departmentId, forceRefresh)).ToList(); //
-                    _logger.LogDebug("Załadowano {Count} poddziałów dla działu {DepartmentId}. forceRefresh: {ForceRefresh}", department.SubDepartments.Count, departmentId, forceRefresh); //
+                    department.SubDepartments = (await GetSubDepartmentsAsync(departmentId, forceRefresh)).ToList();
+                    _logger.LogDebug("Załadowano {Count} poddziałów dla działu {DepartmentId}. forceRefresh: {ForceRefresh}", department.SubDepartments.Count, departmentId, forceRefresh);
                 }
                 if (includeUsers)
                 {
-                    department.Users = (await GetUsersInDepartmentAsync(departmentId, forceRefresh)).ToList(); //
-                    _logger.LogDebug("Załadowano {Count} użytkowników dla działu {DepartmentId}. forceRefresh: {ForceRefresh}", department.Users.Count, departmentId, forceRefresh); //
+                    department.Users = (await GetUsersInDepartmentAsync(departmentId, forceRefresh)).ToList();
+                    _logger.LogDebug("Załadowano {Count} użytkowników dla działu {DepartmentId}. forceRefresh: {ForceRefresh}", department.Users.Count, departmentId, forceRefresh);
                 }
             }
             return department;
@@ -105,18 +105,18 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<Department>> GetAllDepartmentsAsync(bool onlyRootDepartments = false, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie wszystkich aktywnych działów. Tylko główne: {OnlyRoot}, Wymuszenie odświeżenia: {ForceRefresh}", onlyRootDepartments, forceRefresh); //
-            string cacheKey = onlyRootDepartments ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey; //
+            _logger.LogInformation("Pobieranie wszystkich aktywnych działów. Tylko główne: {OnlyRoot}, Wymuszenie odświeżenia: {ForceRefresh}", onlyRootDepartments, forceRefresh);
+            string cacheKey = onlyRootDepartments ? AllDepartmentsRootOnlyCacheKey : AllDepartmentsAllCacheKey;
 
             if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedDepartments) && cachedDepartments != null)
             {
-                _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) znaleziona w cache.", onlyRootDepartments); //
+                _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) znaleziona w cache.", onlyRootDepartments);
                 return cachedDepartments;
             }
 
             var departments = await _departmentRepository.FindAsync(d => d.IsActive && (onlyRootDepartments ? d.ParentDepartmentId == null : true));
             _graphCacheService.Set(cacheKey, departments);
-            _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) zapisana w cache. Znaleziono {Count} działów.", onlyRootDepartments, departments.Count()); //
+            _logger.LogDebug("Lista działów (OnlyRoot={OnlyRoot}) zapisana w cache. Znaleziono {Count} działów.", onlyRootDepartments, departments.Count());
             return departments;
         }
 
@@ -124,18 +124,18 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<Department>> GetSubDepartmentsAsync(string parentDepartmentId, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie poddziałów dla działu {ParentDepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", parentDepartmentId, forceRefresh); //
-            string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentDepartmentId; //
+            _logger.LogInformation("Pobieranie poddziałów dla działu {ParentDepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", parentDepartmentId, forceRefresh);
+            string cacheKey = SubDepartmentsByParentIdCacheKeyPrefix + parentDepartmentId;
 
             if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<Department>>(cacheKey, out IEnumerable<Department>? cachedSubDepartments) && cachedSubDepartments != null)
             {
-                _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} znalezione w cache.", parentDepartmentId); //
+                _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} znalezione w cache.", parentDepartmentId);
                 return cachedSubDepartments;
             }
 
             var subDepartments = await _departmentRepository.FindAsync(d => d.ParentDepartmentId == parentDepartmentId && d.IsActive);
             _graphCacheService.Set(cacheKey, subDepartments);
-            _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} zapisane w cache. Znaleziono {Count} poddziałów.", parentDepartmentId, subDepartments.Count()); //
+            _logger.LogDebug("Poddziały dla działu {ParentDepartmentId} zapisane w cache. Znaleziono {Count} poddziałów.", parentDepartmentId, subDepartments.Count());
             return subDepartments;
         }
 
@@ -143,18 +143,18 @@ namespace TeamsManager.Core.Services
         /// <remarks>Ta metoda wykorzystuje cache. Użyj forceRefresh = true, aby pominąć cache.</remarks>
         public async Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId, bool forceRefresh = false)
         {
-            _logger.LogInformation("Pobieranie użytkowników dla działu {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh); //
-            string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId; //
+            _logger.LogInformation("Pobieranie użytkowników dla działu {DepartmentId}. Wymuszenie odświeżenia: {ForceRefresh}", departmentId, forceRefresh);
+            string cacheKey = UsersInDepartmentCacheKeyPrefix + departmentId;
 
             if (!forceRefresh && _graphCacheService.TryGetValue<IEnumerable<User>>(cacheKey, out IEnumerable<User>? cachedUsers) && cachedUsers != null)
             {
-                _logger.LogDebug("Użytkownicy dla działu {DepartmentId} znalezieni w cache.", departmentId); //
+                _logger.LogDebug("Użytkownicy dla działu {DepartmentId} znalezieni w cache.", departmentId);
                 return cachedUsers;
             }
 
             var users = await _userRepository.FindAsync(u => u.DepartmentId == departmentId && u.IsActive);
             _graphCacheService.Set(cacheKey, users);
-            _logger.LogDebug("Użytkownicy dla działu {DepartmentId} zapisani w cache. Znaleziono {Count} użytkowników.", departmentId, users.Count()); //
+            _logger.LogDebug("Użytkownicy dla działu {DepartmentId} zapisani w cache. Znaleziono {Count} użytkowników.", departmentId, users.Count());
             return users;
         }
 

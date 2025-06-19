@@ -49,7 +49,7 @@ namespace TeamsManager.Core.Services.Graph
             _metrics = new GraphServiceMetrics();
             _performanceMetricsEnabled = _configuration.EnablePerformanceMetrics;
 
-            _logger.LogInformation("GraphService initialized with all Graph API services");
+            _logger.LogInformation("GraphService zainicjalizowany ze wszystkimi serwisami Graph API");
         }
 
         #region IGraphService Properties
@@ -99,24 +99,24 @@ namespace TeamsManager.Core.Services.Graph
         {
             if (string.IsNullOrWhiteSpace(accessToken))
             {
-                _logger.LogError("Access token is null or empty");
+                _logger.LogError("Token dostępu jest pusty lub null");
                 return false;
             }
 
             try
             {
-                _logger.LogInformation("Attempting to connect to Microsoft Graph with access token");
+                _logger.LogInformation("Próba połączenia z Microsoft Graph używając tokenu dostępu");
 
                 // Test connection using connection service
                 var isValid = await _connectionService.IsTokenValidAsync();
                 if (isValid)
                 {
-                    _logger.LogInformation("Successfully connected to Microsoft Graph");
+                    _logger.LogInformation("Pomyślnie połączono z Microsoft Graph");
                     await UpdateMetricsAsync("ConnectWithAccessToken", true, 0);
                     return true;
                 }
 
-                _logger.LogWarning("Failed to connect to Microsoft Graph - token validation failed");
+                _logger.LogWarning("Nie udało się połączyć z Microsoft Graph - walidacja tokenu nie powiodła się");
                 await UpdateMetricsAsync("ConnectWithAccessToken", false, 0);
                 return false;
             }
@@ -124,7 +124,7 @@ namespace TeamsManager.Core.Services.Graph
             {
                 await UpdateMetricsAsync("ConnectWithAccessToken", false, 0);
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException("Error connecting to Microsoft Graph", ex),
+                    new GraphConnectionException("Błąd podczas łączenia z Microsoft Graph", ex),
                     () => ConnectWithAccessTokenAsync(accessToken, scopes),
                     _logger,
                     "ConnectWithAccessToken",
@@ -147,12 +147,12 @@ namespace TeamsManager.Core.Services.Graph
         {
             if (string.IsNullOrEmpty(apiAccessToken))
             {
-                return GraphOperationResult<T>.CreateError("API access token is required");
+                return GraphOperationResult<T>.CreateError("Token dostępu API jest wymagany");
             }
 
             if (operation == null)
             {
-                return GraphOperationResult<T>.CreateError("Operation is required");
+                return GraphOperationResult<T>.CreateError("Operacja jest wymagana");
             }
 
             var stopwatch = Stopwatch.StartNew();
@@ -160,7 +160,7 @@ namespace TeamsManager.Core.Services.Graph
 
             try
             {
-                _logger.LogInformation("Executing operation with auto-connect: {Operation}", description);
+                _logger.LogInformation("Wykonywanie operacji z automatycznym połączeniem: {Operation}", description);
 
                 // Check if we need to refresh token
                 if (!IsConnected)
@@ -169,7 +169,7 @@ namespace TeamsManager.Core.Services.Graph
                     if (!connected)
                     {
                         return GraphOperationResult<T>.CreateError(
-                            "Failed to establish connection to Microsoft Graph",
+                            "Nie udało się nawiązać połączenia z Microsoft Graph",
                             executionTimeMs: stopwatch.ElapsedMilliseconds);
                     }
                 }
@@ -190,14 +190,14 @@ namespace TeamsManager.Core.Services.Graph
                 await UpdateMetricsAsync(description, false, stopwatch.ElapsedMilliseconds);
 
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException($"Error executing operation with auto-connect: {description}", ex),
+                    new GraphConnectionException($"Błąd podczas wykonywania operacji z automatycznym połączeniem: {description}", ex),
                     async () => {
                         return await ExecuteWithAutoConnectAsync(apiAccessToken, operation, operationDescription);
                     },
                     _logger,
                     "ExecuteWithAutoConnect",
                     defaultValue: GraphOperationResult<T>.CreateError(
-                        $"Failed to execute operation with auto-connect: {description}",
+                        $"Nie udało się wykonać operacji z automatycznym połączeniem: {description}",
                         ex.Message
                     )
                 );
@@ -222,12 +222,12 @@ namespace TeamsManager.Core.Services.Graph
         {
             if (string.IsNullOrWhiteSpace(apiAccessToken))
             {
-                return GraphOperationResult<T>.CreateError("API access token is required");
+                return GraphOperationResult<T>.CreateError("Token dostępu API jest wymagany");
             }
 
             if (batchOperations == null || batchOperations.Length == 0)
             {
-                return GraphOperationResult<T>.CreateError("Batch operations are required");
+                return GraphOperationResult<T>.CreateError("Operacje batch są wymagane");
             }
 
             var stopwatch = Stopwatch.StartNew();
@@ -235,7 +235,7 @@ namespace TeamsManager.Core.Services.Graph
 
             try
             {
-                _logger.LogInformation("Executing batch operation with {Count} operations: {Operation}", 
+                _logger.LogInformation("Wykonywanie operacji batch z {Count} operacjami: {Operation}", 
                     batchOperations.Length, description);
 
                 // Check rate limiting if enabled
@@ -244,7 +244,7 @@ namespace TeamsManager.Core.Services.Graph
                     var rateLimitStatus = await GetGlobalRateLimitStatusAsync();
                     if (rateLimitStatus.IsLimitReached)
                     {
-                        _logger.LogWarning("Rate limit reached, waiting before executing batch operation");
+                        _logger.LogWarning("Osiągnięto limit żądań, oczekiwanie przed wykonaniem operacji batch");
                         var retrySeconds = rateLimitStatus.RetryAfterSeconds ?? 60; // Domyślnie 60 sekund jeśli null
                         await Task.Delay(TimeSpan.FromSeconds((double)retrySeconds));
                     }
@@ -277,7 +277,7 @@ namespace TeamsManager.Core.Services.Graph
                 }
                 else
                 {
-                    var errorMessage = $"Batch operation partially failed: {batchResponse.SuccessfulCount}/{batchResponse.Responses.Count} requests succeeded";
+                    var errorMessage = $"Operacja batch częściowo nie powiodła się: {batchResponse.SuccessfulCount}/{batchResponse.Responses.Count} żądań zakończyło się sukcesem";
                     return GraphOperationResult<T>.CreateError(
                         errorMessage,
                         executionTimeMs: stopwatch.ElapsedMilliseconds);
@@ -289,7 +289,7 @@ namespace TeamsManager.Core.Services.Graph
                 await UpdateMetricsAsync(description, false, stopwatch.ElapsedMilliseconds);
 
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException($"Error executing batch operation: {description}", ex),
+                    new GraphConnectionException($"Błąd podczas wykonywania operacji batch: {description}", ex),
                     () => ExecuteBatchOperationAsync<T>(apiAccessToken, batchOperations, respectRateLimit, operationDescription),
                     _logger,
                     "ExecuteBatchOperation",
@@ -330,7 +330,7 @@ namespace TeamsManager.Core.Services.Graph
             lock (_metricsLock)
             {
                 _metrics = new GraphServiceMetrics();
-                _logger.LogInformation("Performance metrics reset");
+                _logger.LogInformation("Metryki wydajności zostały zresetowane");
             }
         }
 
@@ -342,7 +342,7 @@ namespace TeamsManager.Core.Services.Graph
         {
             _performanceMetricsEnabled = enabled;
             _configuration.EnablePerformanceMetrics = enabled;
-            _logger.LogInformation("Performance metrics enabled: {Enabled}", enabled);
+            _logger.LogInformation("Metryki wydajności włączone: {Enabled}", enabled);
         }
 
         #endregion
@@ -370,7 +370,7 @@ namespace TeamsManager.Core.Services.Graph
 
             try
             {
-                _logger.LogInformation("Starting cache warming for {Count} endpoints", options.Endpoints.Count);
+                _logger.LogInformation("Rozpoczynanie wstępnego ładowania cache dla {Count} endpointów", options.Endpoints.Count);
 
                 var warmedCount = 0;
                 var errors = new List<string>();
@@ -390,7 +390,7 @@ namespace TeamsManager.Core.Services.Graph
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to warm cache for endpoint: {Endpoint}", endpoint);
+                        _logger.LogWarning(ex, "Nie udało się wstępnie załadować cache dla endpointu: {Endpoint}", endpoint);
                         errors.Add($"Endpoint {endpoint}: {ex.Message}");
                     }
                 }
@@ -402,7 +402,7 @@ namespace TeamsManager.Core.Services.Graph
                 result.DurationMs = stopwatch.ElapsedMilliseconds;
                 result.Errors = errors;
 
-                _logger.LogInformation("Cache warming completed: {Warmed}/{Total} endpoints in {Duration}ms", 
+                _logger.LogInformation("Wstępne ładowanie cache zakończone: {Warmed}/{Total} endpointów w {Duration}ms", 
                     warmedCount, options.Endpoints.Count, stopwatch.ElapsedMilliseconds);
 
                 return result;
@@ -411,7 +411,7 @@ namespace TeamsManager.Core.Services.Graph
             {
                 stopwatch.Stop();
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException("Error warming cache", ex),
+                    new GraphConnectionException("Błąd podczas wstępnego ładowania cache", ex),
                     () => WarmCacheAsync(options),
                     _logger,
                     "WarmCache",
@@ -433,11 +433,11 @@ namespace TeamsManager.Core.Services.Graph
             try
             {
                 _cacheService.InvalidateAllCache();
-                _logger.LogInformation("All Graph API cache invalidated");
+                _logger.LogInformation("Cały cache Graph API został unieważniony");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all cache");
+                _logger.LogError(ex, "Błąd podczas unieważniania całego cache");
             }
         }
 
@@ -453,7 +453,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting cache status");
+                _logger.LogError(ex, "Błąd podczas pobierania statusu cache");
                 return new GraphCacheMetrics();
             }
         }
@@ -478,13 +478,13 @@ namespace TeamsManager.Core.Services.Graph
                 {
                     IsConnected = false,
                     Status = GraphHealthStatus.Critical,
-                    Errors = new List<string> { "API access token is required" }
+                    Errors = new List<string> { "Token dostępu API jest wymagany" }
                 };
             }
 
             try
             {
-                _logger.LogInformation("Starting Graph API connection diagnostics");
+                _logger.LogInformation("Rozpoczynanie diagnostyki połączenia Graph API");
 
                 // Use connection service for diagnostics
                 var healthInfo = await _connectionService.GetConnectionHealthAsync();
@@ -507,14 +507,14 @@ namespace TeamsManager.Core.Services.Graph
                 }
 
                 stopwatch.Stop();
-                _logger.LogInformation("Graph API diagnostics completed: Status = {Status}", diagnosticInfo.Status);
+                _logger.LogInformation("Diagnostyka Graph API zakończona: Status = {Status}", diagnosticInfo.Status);
                 return diagnosticInfo;
             }
             catch (Exception ex)
             {
                 stopwatch.Stop();
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException("Error diagnosing connection", ex),
+                    new GraphConnectionException("Błąd podczas diagnostyki połączenia", ex),
                     () => DiagnoseConnectionAsync(apiAccessToken),
                     _logger,
                     "DiagnoseConnection",

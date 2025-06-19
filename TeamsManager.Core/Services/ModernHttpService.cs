@@ -50,7 +50,7 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(url))
             {
-                throw new ArgumentException("URL cannot be null or empty", nameof(url));
+                throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
             using var client = GetHttpClient(url);
@@ -58,14 +58,14 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Making GET request to: {Url}", url);
+                _logger.LogDebug("Wykonywanie żądania GET do: {Url}", url);
                 var response = await client.GetAsync(url);
-                _logger.LogDebug("GET request completed. Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("Żądanie GET zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during GET request to: {Url}", url);
+                _logger.LogError(ex, "Błąd podczas żądania GET do: {Url}", url);
                 throw;
             }
         }
@@ -77,7 +77,7 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(url))
             {
-                throw new ArgumentException("URL cannot be null or empty", nameof(url));
+                throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
             using var client = GetHttpClient(url);
@@ -85,15 +85,15 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Making POST request to: {Url}", url);
+                _logger.LogDebug("Wykonywanie żądania POST do: {Url}", url);
                 var httpContent = new StringContent(content ?? string.Empty, Encoding.UTF8, "application/json");
                 var response = await client.PostAsync(url, httpContent);
-                _logger.LogDebug("POST request completed. Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("Żądanie POST zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during POST request to: {Url}", url);
+                _logger.LogError(ex, "Błąd podczas żądania POST do: {Url}", url);
                 throw;
             }
         }
@@ -105,7 +105,7 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(url))
             {
-                throw new ArgumentException("URL cannot be null or empty", nameof(url));
+                throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
             using var client = GetHttpClient(url);
@@ -113,15 +113,15 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Making PATCH request to: {Url}", url);
+                _logger.LogDebug("Wykonywanie żądania PATCH do: {Url}", url);
                 var httpContent = new StringContent(content ?? string.Empty, Encoding.UTF8, "application/json");
                 var response = await client.PatchAsync(url, httpContent);
-                _logger.LogDebug("PATCH request completed. Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("Żądanie PATCH zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during PATCH request to: {Url}", url);
+                _logger.LogError(ex, "Błąd podczas żądania PATCH do: {Url}", url);
                 throw;
             }
         }
@@ -133,7 +133,7 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(url))
             {
-                throw new ArgumentException("URL cannot be null or empty", nameof(url));
+                throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
             using var client = GetHttpClient(url);
@@ -141,14 +141,14 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Making DELETE request to: {Url}", url);
+                _logger.LogDebug("Wykonywanie żądania DELETE do: {Url}", url);
                 var response = await client.DeleteAsync(url);
-                _logger.LogDebug("DELETE request completed. Status: {StatusCode}", response.StatusCode);
+                _logger.LogDebug("Żądanie DELETE zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during DELETE request to: {Url}", url);
+                _logger.LogError(ex, "Błąd podczas żądania DELETE do: {Url}", url);
                 throw;
             }
         }
@@ -189,7 +189,7 @@ namespace TeamsManager.Core.Services
             // Walidacja argumentów
             if (string.IsNullOrEmpty(endpoint))
             {
-                throw new ArgumentException("Endpoint cannot be null or empty", nameof(endpoint));
+                throw new ArgumentException("Endpoint nie może być null lub pusty", nameof(endpoint));
             }
 
             using var client = _httpClient;
@@ -202,7 +202,7 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Making GET request to Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogDebug("Wykonywanie żądania GET do endpointu Graph API: {Endpoint}", endpoint);
                 
                 var response = await client.GetAsync(endpoint);
                 
@@ -214,29 +214,29 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Successfully received response from Graph API endpoint: {Endpoint}", endpoint);
+                    _logger.LogDebug("Pomyślnie otrzymano odpowiedź z endpointu Graph API: {Endpoint}", endpoint);
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("Graph API request failed. Endpoint: {Endpoint}, StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Żądanie Graph API nie powiodło się. Endpoint: {Endpoint}, StatusCode: {StatusCode}, Reason: {Reason}",
                         endpoint, response.StatusCode, response.ReasonPhrase);
                     return null;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when calling Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas wywołania endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when calling Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Przekroczenie czasu podczas wywołania endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when calling Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas wywołania endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
         }
@@ -264,7 +264,7 @@ namespace TeamsManager.Core.Services
                 var jsonContent = JsonSerializer.Serialize(data);
                 var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 
-                _logger.LogDebug("Making POST request to Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogDebug("Wykonywanie żądania POST do endpointu Graph API: {Endpoint}", endpoint);
                 
                 var response = await client.PostAsync(endpoint, httpContent);
                 
@@ -276,29 +276,29 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Successfully posted to Graph API endpoint: {Endpoint}", endpoint);
+                    _logger.LogDebug("Pomyślnie wysłano żądanie POST do endpointu Graph API: {Endpoint}", endpoint);
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("Graph API POST failed. Endpoint: {Endpoint}, StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Żądanie POST Graph API nie powiodło się. Endpoint: {Endpoint}, StatusCode: {StatusCode}, Reason: {Reason}",
                         endpoint, response.StatusCode, response.ReasonPhrase);
                     return null;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when posting to Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas wysyłania POST do endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when posting to Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Przekroczenie czasu podczas wysyłania POST do endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when posting to Graph API endpoint: {Endpoint}", endpoint);
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas wysyłania POST do endpointu Graph API: {Endpoint}", endpoint);
                 throw;
             }
         }
@@ -311,19 +311,19 @@ namespace TeamsManager.Core.Services
             // Walidacja argumentów
             if (string.IsNullOrEmpty(url))
             {
-                throw new ArgumentException("URL cannot be null or empty", nameof(url));
+                throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
             if (!Uri.IsWellFormedUriString(url, UriKind.Absolute))
             {
-                throw new ArgumentException("URL must be a valid absolute URI", nameof(url));
+                throw new ArgumentException("URL musi być prawidłowym bezwzględnym URI", nameof(url));
             }
 
             using var client = _httpClient;
             
             try
             {
-                _logger.LogDebug("Making GET request to external API: {Url}", url);
+                _logger.LogDebug("Wykonywanie żądania GET do zewnętrznego API: {Url}", url);
                 
                 var response = await client.GetAsync(url);
                 
@@ -335,19 +335,19 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Successfully received response from external API: {Url}", url);
+                    _logger.LogDebug("Pomyślnie otrzymano odpowiedź z zewnętrznego API: {Url}", url);
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("External API request failed. Url: {Url}, StatusCode: {StatusCode}",
+                    _logger.LogWarning("Żądanie do zewnętrznego API nie powiodło się. Url: {Url}, StatusCode: {StatusCode}",
                         url, response.StatusCode);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error when calling external API: {Url}", url);
+                _logger.LogError(ex, "Błąd podczas wywołania zewnętrznego API: {Url}", url);
                 throw;
             }
         }

@@ -30,35 +30,33 @@ namespace TeamsManager.Api.HealthChecks
                 
                 _logger.LogInformation("Rozpoczęto sprawdzanie stanu połączenia Graph API");
 
-                // Wykonaj diagnostykę połączenia Graph API
                 var diagnosticInfo = await _connectionService.DiagnoseConnectionAsync();
                 
                 if (diagnosticInfo == null)
                 {
                     _logger.LogError("DiagnoseConnectionAsync zwróciło null");
                     return HealthCheckResult.Unhealthy(
-                        "Unable to retrieve Graph API connection diagnostics",
+                        "Nie można pobrać diagnostyki połączenia Graph API",
                         data: new Dictionary<string, object>
                         {
-                            ["error"] = "Diagnostic info is null",
+                            ["error"] = "Informacje diagnostyczne są null",
                             ["timestamp"] = DateTime.UtcNow
                         });
                 }
 
-                // Sprawdź stan połączenia na podstawie GraphDiagnosticInfo
                 if (diagnosticInfo.IsConnected && diagnosticInfo.IsAuthenticated && diagnosticInfo.HasRequiredPermissions)
                 {
                     _logger.LogInformation("Test połączenia Graph API zakończony sukcesem");
                     return HealthCheckResult.Healthy(
-                        "Graph API connection is active and functional",
+                        "Połączenie Graph API jest aktywne i funkcjonalne",
                         data: new Dictionary<string, object>
                         {
                             ["connected"] = true,
                             ["authenticated"] = diagnosticInfo.IsAuthenticated,
                             ["hasPermissions"] = diagnosticInfo.HasRequiredPermissions,
-                                                ["isConnected"] = diagnosticInfo.IsConnected,
-                    ["status"] = diagnosticInfo.Status.ToString(),
-                    ["lastChecked"] = diagnosticInfo.LastChecked,
+                            ["isConnected"] = diagnosticInfo.IsConnected,
+                            ["status"] = diagnosticInfo.Status.ToString(),
+                            ["lastChecked"] = diagnosticInfo.LastChecked,
                             ["timestamp"] = DateTime.UtcNow
                         });
                 }
@@ -67,22 +65,21 @@ namespace TeamsManager.Api.HealthChecks
                     _logger.LogWarning("Test połączenia Graph API nie powiódł się. Connected: {Connected}, Authenticated: {Authenticated}, HasPermissions: {HasPermissions}", 
                         diagnosticInfo.IsConnected, diagnosticInfo.IsAuthenticated, diagnosticInfo.HasRequiredPermissions);
                     return HealthCheckResult.Degraded(
-                        $"Graph API connection test failed. Connected: {diagnosticInfo.IsConnected}, Authenticated: {diagnosticInfo.IsAuthenticated}, HasPermissions: {diagnosticInfo.HasRequiredPermissions}",
+                        $"Test połączenia Graph API nie powiódł się. Connected: {diagnosticInfo.IsConnected}, Authenticated: {diagnosticInfo.IsAuthenticated}, HasPermissions: {diagnosticInfo.HasRequiredPermissions}",
                         data: new Dictionary<string, object>
                         {
                             ["connected"] = diagnosticInfo.IsConnected,
                             ["authenticated"] = diagnosticInfo.IsAuthenticated,
                             ["hasPermissions"] = diagnosticInfo.HasRequiredPermissions,
-                                                ["isConnected"] = diagnosticInfo.IsConnected,
-                    ["status"] = diagnosticInfo.Status.ToString(),
-                    ["errorCount"] = diagnosticInfo.Errors.Count,
+                            ["isConnected"] = diagnosticInfo.IsConnected,
+                            ["status"] = diagnosticInfo.Status.ToString(),
+                            ["errorCount"] = diagnosticInfo.Errors.Count,
                             ["timestamp"] = DateTime.UtcNow
                         });
                 }
             }
             catch (OperationCanceledException)
             {
-                // Re-throw cancellation exceptions
                 throw;
             }
             catch (Exception ex)

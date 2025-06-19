@@ -10,9 +10,6 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class CreateTeamTemplateRequestDto
     {
         public string Name { get; set; } = string.Empty;
@@ -32,7 +29,6 @@ namespace TeamsManager.Api.Controllers
 
     public class UpdateTeamTemplateRequestDto
     {
-        // Id szablonu będzie pobierane z URL
         public string Name { get; set; } = string.Empty;
         public string TemplateContent { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
@@ -61,12 +57,10 @@ namespace TeamsManager.Api.Controllers
         public string NewTemplateName { get; set; } = string.Empty;
     }
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/TeamTemplates
-    [Authorize] // Wszystkie operacje na szablonach zespołów domyślnie wymagają autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class TeamTemplatesController : ControllerBase
     {
         private readonly ITeamTemplateService _teamTemplateService;
@@ -127,9 +121,8 @@ namespace TeamsManager.Api.Controllers
             var template = await _teamTemplateService.GetDefaultTemplateForSchoolTypeAsync(schoolTypeId);
             if (template == null)
             {
-                // To niekoniecznie błąd, po prostu może nie być domyślnego szablonu
                 _logger.LogInformation("Nie znaleziono domyślnego szablonu dla typu szkoły ID: {SchoolTypeId}", schoolTypeId);
-                return Ok(null); // lub NotFound, w zależności od oczekiwań klienta
+                return Ok(null);
             }
             return Ok(template);
         }
@@ -146,23 +139,17 @@ namespace TeamsManager.Api.Controllers
                 requestDto.IsUniversal,
                 requestDto.SchoolTypeId,
                 requestDto.Category
-            // Pozostałe pola z DTO (Language, MaxLength etc.) można by przekazać do serwisu,
-            // gdyby CreateTemplateAsync je przyjmował, lub ustawić na obiekcie template po utworzeniu.
             );
 
             if (template != null)
             {
-                // Jeśli serwis nie ustawia wszystkich pól z DTO, można je tu uzupełnić
                 if (requestDto.Language != null) template.Language = requestDto.Language;
                 if (requestDto.MaxLength.HasValue) template.MaxLength = requestDto.MaxLength;
                 template.RemovePolishChars = requestDto.RemovePolishChars;
                 if (requestDto.Prefix != null) template.Prefix = requestDto.Prefix;
                 if (requestDto.Suffix != null) template.Suffix = requestDto.Suffix;
-                if (requestDto.Separator != null) template.Separator = requestDto.Separator; // Powinno być not null
+                if (requestDto.Separator != null) template.Separator = requestDto.Separator;
                 template.SortOrder = requestDto.SortOrder;
-
-                // Jeśli serwis nie zapisuje od razu, a tylko przygotowuje obiekt, to tutaj byłby zapis.
-                // Zakładamy, że CreateTemplateAsync w serwisie również obsługuje zapis lub przygotowuje obiekt do zapisu na wyższym poziomie.
 
                 _logger.LogInformation("Szablon zespołu '{TemplateName}' (ID: {TemplateId}) utworzony pomyślnie.", template.Name, template.Id);
                 return CreatedAtAction(nameof(GetTemplateById), new { templateId = template.Id }, template);
@@ -183,13 +170,12 @@ namespace TeamsManager.Api.Controllers
                 return NotFound(new { Message = $"Szablon zespołu o ID '{templateId}' nie został znaleziony." });
             }
 
-            // Mapowanie z DTO na obiekt encji
             existingTemplate.Name = requestDto.Name;
             existingTemplate.Template = requestDto.TemplateContent;
             existingTemplate.Description = requestDto.Description;
             existingTemplate.IsDefault = requestDto.IsDefault;
             existingTemplate.IsUniversal = requestDto.IsUniversal;
-            existingTemplate.SchoolTypeId = requestDto.SchoolTypeId; // Serwis powinien obsłużyć logikę powiązania z SchoolType
+            existingTemplate.SchoolTypeId = requestDto.SchoolTypeId;
             existingTemplate.ExampleOutput = requestDto.ExampleOutput;
             existingTemplate.Category = requestDto.Category;
             existingTemplate.Language = requestDto.Language;
@@ -205,7 +191,7 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Szablon zespołu ID: {TemplateId} zaktualizowany pomyślnie.", templateId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować szablonu zespołu ID: {TemplateId}.", templateId);
             return BadRequest(new { Message = "Nie udało się zaktualizować szablonu zespołu." });
@@ -243,16 +229,17 @@ namespace TeamsManager.Api.Controllers
             var generatedName = await _teamTemplateService.GenerateTeamNameFromTemplateAsync(templateId, requestDto.Values);
             if (generatedName != null)
             {
+                _logger.LogInformation("Nazwa zespołu wygenerowana pomyślnie z szablonu ID: {TemplateId}", templateId);
                 return Ok(new { GeneratedName = generatedName });
             }
-            _logger.LogWarning("Nie udało się wygenerować nazwy z szablonu ID: {TemplateId}. Szablon może nie istnieć lub jest nieaktywny.", templateId);
-            return NotFound(new { Message = $"Nie udało się wygenerować nazwy. Szablon o ID '{templateId}' nie istnieje lub jest nieaktywny." });
+            _logger.LogWarning("Nie udało się wygenerować nazwy zespołu z szablonu ID: {TemplateId}.", templateId);
+            return BadRequest(new { Message = "Nie udało się wygenerować nazwy zespołu z szablonu." });
         }
 
         [HttpPost("{originalTemplateId}/clone")]
         public async Task<IActionResult> CloneTemplate(string originalTemplateId, [FromBody] CloneTeamTemplateRequestDto requestDto)
         {
-            _logger.LogInformation("Żądanie sklonowania szablonu ID: {OriginalTemplateId} do nowej nazwy: {NewTemplateName}", originalTemplateId, requestDto.NewTemplateName);
+            _logger.LogInformation("Żądanie klonowania szablonu zespołu ID: {OriginalTemplateId} jako '{NewTemplateName}'", originalTemplateId, requestDto.NewTemplateName);
             if (string.IsNullOrWhiteSpace(requestDto.NewTemplateName))
             {
                 return BadRequest(new { Message = "Nowa nazwa dla sklonowanego szablonu jest wymagana." });
@@ -261,12 +248,11 @@ namespace TeamsManager.Api.Controllers
             var clonedTemplate = await _teamTemplateService.CloneTemplateAsync(originalTemplateId, requestDto.NewTemplateName);
             if (clonedTemplate != null)
             {
-                _logger.LogInformation("Szablon ID: {OriginalTemplateId} sklonowany pomyślnie do nowego szablonu ID: {ClonedTemplateId} o nazwie '{NewTemplateName}'", originalTemplateId, clonedTemplate.Id, clonedTemplate.Name);
+                _logger.LogInformation("Szablon zespołu ID: {OriginalTemplateId} sklonowany pomyślnie jako '{NewTemplateName}' (ID: {ClonedTemplateId})", originalTemplateId, clonedTemplate.Name, clonedTemplate.Id);
                 return CreatedAtAction(nameof(GetTemplateById), new { templateId = clonedTemplate.Id }, clonedTemplate);
             }
-            _logger.LogWarning("Nie udało się sklonować szablonu ID: {OriginalTemplateId}", originalTemplateId);
-            // Serwis powinien logować dokładniejszy powód niepowodzenia
-            return BadRequest(new { Message = "Nie udało się sklonować szablonu. Sprawdź logi serwera (np. czy szablon oryginalny istnieje lub czy nowa nazwa nie jest już zajęta)." });
+            _logger.LogWarning("Nie udało się sklonować szablonu zespołu ID: {OriginalTemplateId}.", originalTemplateId);
+            return BadRequest(new { Message = "Nie udało się sklonować szablonu zespołu." });
         }
     }
 }

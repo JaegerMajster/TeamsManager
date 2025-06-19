@@ -48,7 +48,7 @@ namespace TeamsManager.Core.Services.Graph
             _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            _logger.LogInformation("GraphCacheService initialized with advanced Graph API caching features");
+            _logger.LogInformation("GraphCacheService zainicjalizowany z zaawansowanymi funkcjami cache Graph API");
         }
 
         #region User ID Resolution (Critical P0 functionality)
@@ -61,7 +61,7 @@ namespace TeamsManager.Core.Services.Graph
         {
             if (string.IsNullOrWhiteSpace(userUpn))
             {
-                _logger.LogWarning("GetUserIdAsync called with empty UPN");
+                _logger.LogWarning("GetUserIdAsync wywołane z pustym UPN");
                 return null;
             }
 
@@ -69,11 +69,11 @@ namespace TeamsManager.Core.Services.Graph
             
             if (!forceRefresh && TryGetValue<string>(cacheKey, out var cachedUserId))
             {
-                _logger.LogDebug("User ID found in cache for UPN: {UserUpn}", userUpn);
+                _logger.LogDebug("ID użytkownika znalezione w cache dla UPN: {UserUpn}", userUpn);
                 return cachedUserId;
             }
 
-            _logger.LogDebug("User ID not in cache for UPN: {UserUpn}, would need Graph API call", userUpn);
+            _logger.LogDebug("ID użytkownika nie w cache dla UPN: {UserUpn}, potrzebne wywołanie Graph API", userUpn);
             
             // W rzeczywistej implementacji tutaj byłoby wywołanie Graph API
             // Na potrzeby tego przykładu zwracamy null - implementacja Graph API będzie w innych serwisach
@@ -87,7 +87,7 @@ namespace TeamsManager.Core.Services.Graph
         {
             if (string.IsNullOrWhiteSpace(userUpn) || string.IsNullOrWhiteSpace(userId))
             {
-                _logger.LogWarning("SetUserId called with empty UPN or UserId");
+                _logger.LogWarning("SetUserId wywołane z pustym UPN lub UserId");
                 return;
             }
 
@@ -100,12 +100,11 @@ namespace TeamsManager.Core.Services.Graph
 
             Set(cacheKey, userId, MediumTermDuration, etag, rateLimitInfo);
             
-            _logger.LogDebug("User ID cached for UPN: {UserUpn} with ETag: {ETag}", userUpn, etag);
+            _logger.LogDebug("ID użytkownika zapisane w cache dla UPN: {UserUpn} z ETag: {ETag}", userUpn, etag);
         }
 
         /// <summary>
         /// Pobiera wiele ID użytkowników z cache
-        /// TASK 2.5.3 - Rozszerzenie User ID resolution cache
         /// </summary>
         public async Task<Dictionary<string, string?>> GetUserIdsAsync(IEnumerable<string> userUpns, bool forceRefresh = false)
         {
@@ -133,7 +132,7 @@ namespace TeamsManager.Core.Services.Graph
 
             if (upnsToFetch.Any())
             {
-                _logger.LogDebug("Need to fetch {Count} user IDs from Graph API: {UserUpns}", 
+                _logger.LogDebug("Trzeba pobrać {Count} ID użytkowników z Graph API: {UserUpns}", 
                     upnsToFetch.Count, string.Join(", ", upnsToFetch));
             }
 
@@ -142,7 +141,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Zapisuje wiele ID użytkowników w cache
-        /// TASK 2.5.3 - Rozszerzenie User ID resolution cache
         /// </summary>
         public void SetUserIds(Dictionary<string, string> userIdMappings, string? etag = null)
         {
@@ -157,12 +155,11 @@ namespace TeamsManager.Core.Services.Graph
                 }
             }
 
-            _logger.LogDebug("Cached {Count} user ID mappings", userIdMappings.Count);
+            _logger.LogDebug("Zapisano w cache {Count} mapowań ID użytkowników", userIdMappings.Count);
         }
 
         /// <summary>
         /// Sprawdza czy User ID jest w cache
-        /// TASK 2.5.3 - Rozszerzenie User ID resolution cache
         /// </summary>
         public bool HasUserIdInCache(string userUpn)
         {
@@ -175,7 +172,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Pobiera statystyki User ID cache
-        /// TASK 2.5.3 - Rozszerzenie User ID resolution cache
         /// </summary>
         public UserIdCacheStats GetUserIdCacheStats()
         {
@@ -236,13 +232,13 @@ namespace TeamsManager.Core.Services.Graph
             catch (GraphConnectionException ex)
             {
                 // Cache service nie wykonuje bezpośrednich wywołań Graph API, więc przekazujemy błąd dalej
-                _logger.LogWarning(ex, "GraphConnectionException in cache operation for key: {CacheKey}", key);
+                _logger.LogWarning(ex, "GraphConnectionException w operacji cache dla klucza: {CacheKey}", key);
                 value = default;
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting value from cache for key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd pobierania wartości z cache dla klucza: {CacheKey}", key);
                 value = default;
                 return false;
             }
@@ -280,14 +276,14 @@ namespace TeamsManager.Core.Services.Graph
             catch (GraphConnectionException ex)
             {
                 // Cache service nie wykonuje bezpośrednich wywołań Graph API, więc przekazujemy błąd dalej
-                _logger.LogWarning(ex, "GraphConnectionException in cache operation for key: {CacheKey}", key);
+                _logger.LogWarning(ex, "GraphConnectionException w operacji cache dla klucza: {CacheKey}", key);
                 value = default;
                 metadata = null;
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting value with metadata from cache for key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd pobierania wartości z metadanymi z cache dla klucza: {CacheKey}", key);
                 value = default;
                 metadata = null;
                 return false;
@@ -326,7 +322,7 @@ namespace TeamsManager.Core.Services.Graph
                 // Dodaj callback dla usunięcia z cache
                 options.RegisterPostEvictionCallback((key, value, reason, state) =>
                 {
-                    _logger.LogDebug("Cache entry evicted: {Key}, Reason: {Reason}", key, reason);
+                    _logger.LogDebug("Wpis cache usunięty: {Key}, Powód: {Reason}", key, reason);
                     RemoveKeyFromPatternTracking(key.ToString()!);
                 });
 
@@ -335,17 +331,17 @@ namespace TeamsManager.Core.Services.Graph
                 // Dodaj klucz do śledzenia wzorców
                 AddKeyToPatternTracking(key);
                 
-                _logger.LogDebug("Value cached with key: {CacheKey}, ETag: {ETag}, Duration: {Duration}", 
+                _logger.LogDebug("Wartość zapisana w cache z kluczem: {CacheKey}, ETag: {ETag}, Czas trwania: {Duration}", 
                     key, etag, cacheDuration);
             }
             catch (GraphConnectionException ex)
             {
                 // Cache service nie wykonuje bezpośrednich wywołań Graph API, więc przekazujemy błąd dalej
-                _logger.LogWarning(ex, "GraphConnectionException in cache set operation for key: {CacheKey}", key);
+                _logger.LogWarning(ex, "GraphConnectionException w operacji zapisu cache dla klucza: {CacheKey}", key);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error setting value in cache for key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd zapisywania wartości w cache dla klucza: {CacheKey}", key);
             }
         }
 
@@ -364,16 +360,16 @@ namespace TeamsManager.Core.Services.Graph
                     _metrics.InvalidationCount++;
                 }
                 
-                _logger.LogDebug("Cache entry removed: {CacheKey}", key);
+                _logger.LogDebug("Wpis cache usunięty: {CacheKey}", key);
             }
             catch (GraphConnectionException ex)
             {
                 // Cache service nie wykonuje bezpośrednich wywołań Graph API, więc przekazujemy błąd dalej
-                _logger.LogWarning(ex, "GraphConnectionException in cache remove operation for key: {CacheKey}", key);
+                _logger.LogWarning(ex, "GraphConnectionException w operacji usuwania cache dla klucza: {CacheKey}", key);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing cache entry: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd usuwania wpisu cache: {CacheKey}", key);
             }
         }
 
@@ -470,11 +466,11 @@ namespace TeamsManager.Core.Services.Graph
                     _metrics.Reset();
                 }
                 
-                _logger.LogInformation("All Graph API cache invalidated - removed {Count} keys", allKeys.Count);
+                _logger.LogInformation("Cały cache Graph API unieważniony - usunięto {Count} kluczy", allKeys.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all cache");
+                _logger.LogError(ex, "Błąd unieważniania całego cache");
             }
         }
 
@@ -538,23 +534,22 @@ namespace TeamsManager.Core.Services.Graph
                 if (keysToInvalidate.Any())
                 {
                     BatchInvalidateKeys(keysToInvalidate.Distinct(), operationName);
-                    _logger.LogDebug("Pattern invalidation removed {Count} keys for pattern: {Pattern}", 
+                    _logger.LogDebug("Unieważnienie wzorca usunęło {Count} kluczy dla wzorca: {Pattern}", 
                         keysToInvalidate.Count, pattern);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in pattern invalidation for pattern: {Pattern}", pattern);
+                _logger.LogError(ex, "Błąd w unieważnianiu wzorca dla wzorca: {Pattern}", pattern);
             }
         }
 
         #endregion
 
-        #region Team/Group Metadata Cache (TASK 2.5.4)
+        #region Team/Group Metadata Cache
 
         /// <summary>
         /// Pobiera metadane zespołu z cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public bool TryGetTeamMetadata(string teamId, out TeamMetadata? metadata)
         {
@@ -568,7 +563,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Zapisuje metadane zespołu w cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public void SetTeamMetadata(string teamId, TeamMetadata metadata, string? etag = null)
         {
@@ -585,12 +579,11 @@ namespace TeamsManager.Core.Services.Graph
             // Metadane zespołu zmieniają się rzadko - long-term cache
             Set(cacheKey, metadata, LongTermDuration, etag, rateLimitInfo);
             
-            _logger.LogDebug("Team metadata cached for team: {TeamId}", teamId);
+            _logger.LogDebug("Metadane zespołu zapisane w cache dla zespołu: {TeamId}", teamId);
         }
 
         /// <summary>
         /// Pobiera metadane grupy z cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public bool TryGetGroupMetadata(string groupId, out GroupMetadata? metadata)
         {
@@ -604,7 +597,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Zapisuje metadane grupy w cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public void SetGroupMetadata(string groupId, GroupMetadata metadata, string? etag = null)
         {
@@ -621,12 +613,11 @@ namespace TeamsManager.Core.Services.Graph
             // Metadane grupy zmieniają się rzadko - long-term cache
             Set(cacheKey, metadata, LongTermDuration, etag, rateLimitInfo);
             
-            _logger.LogDebug("Group metadata cached for group: {GroupId}", groupId);
+            _logger.LogDebug("Metadane grupy zapisane w cache dla grupy: {GroupId}", groupId);
         }
 
         /// <summary>
         /// Pobiera ustawienia zespołu z cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public bool TryGetTeamSettings(string teamId, out GraphTeamSettings? settings)
         {
@@ -640,7 +631,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Zapisuje ustawienia zespołu w cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public void SetTeamSettings(string teamId, GraphTeamSettings settings, string? etag = null)
         {
@@ -657,12 +647,11 @@ namespace TeamsManager.Core.Services.Graph
             // Ustawienia zespołu zmieniają się rzadko - long-term cache
             Set(cacheKey, settings, LongTermDuration, etag, rateLimitInfo);
             
-            _logger.LogDebug("Team settings cached for team: {TeamId}", teamId);
+            _logger.LogDebug("Ustawienia zespołu zapisane w cache dla zespołu: {TeamId}", teamId);
         }
 
         /// <summary>
         /// Pobiera statystyki Team/Group metadata cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public TeamGroupCacheStats GetTeamGroupCacheStats()
         {
@@ -702,7 +691,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Wstępnie ładuje metadane zespołów do cache
-        /// TASK 2.5.4 - Team/Group metadata cache
         /// </summary>
         public async Task WarmTeamMetadataCacheAsync(IEnumerable<string> teamIds, Func<string, Task<TeamMetadata?>> metadataLoader)
         {
@@ -719,17 +707,17 @@ namespace TeamsManager.Core.Services.Graph
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error warming team metadata cache for team: {TeamId}", teamId);
+                    _logger.LogError(ex, "Błąd wstępnego ładowania cache metadanych zespołu dla zespołu: {TeamId}", teamId);
                 }
             });
 
             await Task.WhenAll(tasks);
-            _logger.LogDebug("Team metadata cache warming completed for {Count} teams", teamIds.Count());
+            _logger.LogDebug("Wstępne ładowanie cache metadanych zespołu zakończone dla {Count} zespołów", teamIds.Count());
         }
 
         #endregion
 
-        #region TTL Management (TASK 2.5.5)
+        #region TTL Management
 
         /// <summary>
         /// Zwraca pozostały czas życia wpisu cache
@@ -748,7 +736,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting remaining TTL for cache key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd pobierania pozostałego TTL dla klucza cache: {CacheKey}", key);
                 return null;
             }
         }
@@ -765,7 +753,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error extending TTL for cache key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd przedłużania TTL dla klucza cache: {CacheKey}", key);
                 return false; 
             }
         }
@@ -782,14 +770,13 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error setting TTL for cache key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd ustawiania TTL dla klucza cache: {CacheKey}", key);
                 return false;
             }
         }
 
         /// <summary>
         /// Pobiera wpisy cache wygasające w określonym czasie
-        /// TASK 2.5.5 - TTL management
         /// </summary>
         public List<CacheExpiryInfo> GetExpiringEntries(TimeSpan withinTime)
         {
@@ -823,19 +810,18 @@ namespace TeamsManager.Core.Services.Graph
                     }
                 }
 
-                _logger.LogDebug("Found {Count} entries expiring within {WithinTime}", expiringEntries.Count, withinTime);
+                _logger.LogDebug("Znaleziono {Count} wpisów wygasających w ciągu {WithinTime}", expiringEntries.Count, withinTime);
                 return expiringEntries.OrderBy(e => e.ExpiresAt).ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting expiring entries");
+                _logger.LogError(ex, "Błąd pobierania wpisów wygasających");
                 return expiringEntries;
             }
         }
 
         /// <summary>
         /// Automatycznie przedłuża TTL dla często używanych wpisów
-        /// TASK 2.5.5 - TTL management
         /// </summary>
         public int AutoExtendFrequentlyUsedEntries(TimeSpan withinTime, int minAccessCount = 5, TimeSpan extensionTime = default)
         {
@@ -850,14 +836,14 @@ namespace TeamsManager.Core.Services.Graph
                 if (ExtendTtl(entry.Key, extensionTime))
                 {
                     extendedCount++;
-                    _logger.LogDebug("Auto-extended TTL for frequently used entry: {Key} (accessed {AccessCount} times)", 
+                    _logger.LogDebug("Automatycznie przedłużono TTL dla często używanego wpisu: {Key} (dostęp {AccessCount} razy)", 
                         entry.Key, entry.AccessCount);
                 }
             }
 
             if (extendedCount > 0)
             {
-                _logger.LogInformation("Auto-extended TTL for {Count} frequently used cache entries", extendedCount);
+                _logger.LogInformation("Automatycznie przedłużono TTL dla {Count} często używanych wpisów cache", extendedCount);
             }
 
             return extendedCount;
@@ -865,7 +851,6 @@ namespace TeamsManager.Core.Services.Graph
 
         /// <summary>
         /// Czyści wygasłe wpisy cache
-        /// TASK 2.5.5 - TTL management
         /// </summary>
         public int CleanupExpiredEntries()
         {
@@ -896,14 +881,14 @@ namespace TeamsManager.Core.Services.Graph
 
                 if (cleanedCount > 0)
                 {
-                    _logger.LogInformation("Cleaned up {Count} expired cache entries", cleanedCount);
+                    _logger.LogInformation("Wyczyszczono {Count} wygasłych wpisów cache", cleanedCount);
                 }
 
                 return cleanedCount;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during cache cleanup");
+                _logger.LogError(ex, "Błąd podczas czyszczenia cache");
                 return cleanedCount;
             }
         }
@@ -933,7 +918,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting TTL stats");
+                _logger.LogError(ex, "Błąd pobierania statystyk TTL");
                 // Zwróć podstawowe statystyki nawet w przypadku błędu
                 return new TtlStats
                 {
@@ -1029,12 +1014,12 @@ namespace TeamsManager.Core.Services.Graph
                     Remove(key);
                 }
                 
-                _logger.LogDebug("Batch invalidated {Count} cache keys for operation: {Operation}", 
+                _logger.LogDebug("Grupowo unieważniono {Count} kluczy cache dla operacji: {Operation}", 
                     keys.Count, operationName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in batch invalidation for operation: {Operation}", operationName);
+                _logger.LogError(ex, "Błąd w grupowym unieważnianiu dla operacji: {Operation}", operationName);
             }
         }
 
@@ -1050,7 +1035,7 @@ namespace TeamsManager.Core.Services.Graph
                     var endpoint = ExtractEndpointFromCacheKey(cacheKey);
                     if (!string.IsNullOrEmpty(endpoint) && !CanMakeGraphRequest(endpoint))
                     {
-                        _logger.LogDebug("Skipping cache warming due to rate limit: {CacheKey}", cacheKey);
+                        _logger.LogDebug("Pomijanie wstępnego ładowania cache z powodu rate limit: {CacheKey}", cacheKey);
                         return;
                     }
                 }
@@ -1058,18 +1043,18 @@ namespace TeamsManager.Core.Services.Graph
                 // Sprawdź czy już jest w cache
                 if (_memoryCache.TryGetValue(cacheKey, out _))
                 {
-                    _logger.LogDebug("Cache key already exists, skipping warming: {CacheKey}", cacheKey);
+                    _logger.LogDebug("Klucz cache już istnieje, pomijanie wstępnego ładowania: {CacheKey}", cacheKey);
                     return;
                 }
 
                 var data = await dataLoader();
                 Set(cacheKey, data, duration);
                 
-                _logger.LogDebug("Cache warmed for key: {CacheKey}", cacheKey);
+                _logger.LogDebug("Cache wstępnie załadowany dla klucza: {CacheKey}", cacheKey);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error warming cache for key: {CacheKey}", cacheKey);
+                _logger.LogError(ex, "Błąd wstępnego ładowania cache dla klucza: {CacheKey}", cacheKey);
             }
         }
 
@@ -1125,7 +1110,7 @@ namespace TeamsManager.Core.Services.Graph
 
             _rateLimitInfo.AddOrUpdate(endpoint, cacheRateLimitInfo, (key, existing) => cacheRateLimitInfo);
             
-            _logger.LogDebug("Rate limit info updated for endpoint: {Endpoint}, Remaining: {Remaining}", 
+            _logger.LogDebug("Informacje o rate limit zaktualizowane dla endpointu: {Endpoint}, Pozostało: {Remaining}", 
                 endpoint, rateLimitInfo.RemainingRequests);
         }
 
@@ -1164,12 +1149,12 @@ namespace TeamsManager.Core.Services.Graph
             {
                 if (!TryGetValueWithMetadata<object>(key, out _, out var metadata))
                 {
-                    return GraphCacheValidationResult.Invalid("Cache entry not found");
+                    return GraphCacheValidationResult.Invalid("Wpis cache nie znaleziony");
                 }
 
                 if (metadata == null)
                 {
-                    return GraphCacheValidationResult.Invalid("Cache metadata not found");
+                    return GraphCacheValidationResult.Invalid("Metadane cache nie znalezione");
                 }
 
                 // Sprawdź wygaśnięcie czasowe
@@ -1183,7 +1168,7 @@ namespace TeamsManager.Core.Services.Graph
                 {
                     if (!string.Equals(metadata.ETag, currentETag, StringComparison.OrdinalIgnoreCase))
                     {
-                        return GraphCacheValidationResult.Invalid("ETag mismatch", metadata.ETag, currentETag);
+                        return GraphCacheValidationResult.Invalid("Niezgodność ETag", metadata.ETag, currentETag);
                     }
                 }
 
@@ -1191,8 +1176,8 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error validating cache for key: {CacheKey}", key);
-                return GraphCacheValidationResult.Invalid($"Validation error: {ex.Message}");
+                _logger.LogError(ex, "Błąd walidacji cache dla klucza: {CacheKey}", key);
+                return GraphCacheValidationResult.Invalid($"Błąd walidacji: {ex.Message}");
             }
         }
 
@@ -1222,17 +1207,17 @@ namespace TeamsManager.Core.Services.Graph
                             // Ponownie zapisz z nowym ETag
                             Set(key, value, null, newETag, metadata.RateLimitInfo);
                             
-                            _logger.LogDebug("ETag updated for cache key: {CacheKey}, New ETag: {ETag}", key, newETag);
+                            _logger.LogDebug("ETag zaktualizowany dla klucza cache: {CacheKey}, Nowy ETag: {ETag}", key, newETag);
                             return;
                         }
                     }
                 }
                 
-                _logger.LogWarning("Could not update ETag - cache entry not found or invalid: {CacheKey}", key);
+                _logger.LogWarning("Nie można zaktualizować ETag - wpis cache nie znaleziony lub nieprawidłowy: {CacheKey}", key);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating ETag for cache key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd aktualizacji ETag dla klucza cache: {CacheKey}", key);
             }
         }
 
@@ -1252,7 +1237,7 @@ namespace TeamsManager.Core.Services.Graph
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking cache expiration for key: {CacheKey}", key);
+                _logger.LogError(ex, "Błąd sprawdzania wygaśnięcia cache dla klucza: {CacheKey}", key);
                 return true; // W przypadku błędu zakładamy że wygasł
             }
         }
@@ -1397,11 +1382,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateSettingByKey_{settingKey}");
-                _logger.LogDebug("Invalidated cache for setting: {SettingKey}", settingKey);
+                _logger.LogDebug("Unieważniono cache dla ustawienia: {SettingKey}", settingKey);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for setting: {SettingKey}", settingKey);
+                _logger.LogError(ex, "Błąd unieważniania cache dla ustawienia: {SettingKey}", settingKey);
             }
         }
 
@@ -1426,11 +1411,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllDepartmentLists");
-                _logger.LogDebug("Invalidated all department lists cache");
+                _logger.LogDebug("Unieważniono cache wszystkich list departamentów");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all department lists cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich list departamentów");
             }
         }
 
@@ -1452,11 +1437,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveSettingsList");
                 InvalidateByPattern("*settings*active*", "InvalidateAllActiveSettingsList");
-                _logger.LogDebug("Invalidated all active settings list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych ustawień");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active settings list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych ustawień");
             }
         }
 
@@ -1478,11 +1463,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateSettingsByCategory_{category}");
                 InvalidateByPattern($"*settings*{category}*", $"InvalidateSettingsByCategory_{category}");
-                _logger.LogDebug("Invalidated cache for settings category: {Category}", category);
+                _logger.LogDebug("Unieważniono cache dla kategorii ustawień: {Category}", category);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for settings category: {Category}", category);
+                _logger.LogError(ex, "Błąd unieważniania cache dla kategorii ustawień: {Category}", category);
             }
         }
 
@@ -1507,11 +1492,11 @@ namespace TeamsManager.Core.Services.Graph
                 // Również unieważnij listy departamentów, ponieważ mogą zawierać ten departament
                 InvalidateAllDepartmentLists();
                 
-                _logger.LogDebug("Invalidated cache for department: {DepartmentId}", departmentId);
+                _logger.LogDebug("Unieważniono cache dla departamentu: {DepartmentId}", departmentId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for department: {DepartmentId}", departmentId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla departamentu: {DepartmentId}", departmentId);
             }
         }
 
@@ -1533,11 +1518,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateUsersByRole_{role}");
                 InvalidateByPattern($"*users*{role}*", $"InvalidateUsersByRole_{role}");
-                _logger.LogDebug("Invalidated cache for users with role: {Role}", role);
+                _logger.LogDebug("Unieważniono cache dla użytkowników z rolą: {Role}", role);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for users with role: {Role}", role);
+                _logger.LogError(ex, "Błąd unieważniania cache dla użytkowników z rolą: {Role}", role);
             }
         }
 
@@ -1559,11 +1544,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveUsersList");
                 InvalidateByPattern("*users*active*", "InvalidateAllActiveUsersList");
-                _logger.LogDebug("Invalidated all active users list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych użytkowników");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active users list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych użytkowników");
             }
         }
 
@@ -1585,11 +1570,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateUserListCache");
                 InvalidateByPattern("*users*list*", "InvalidateUserListCache");
-                _logger.LogDebug("Invalidated user list cache");
+                _logger.LogDebug("Unieważniono cache listy użytkowników");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating user list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache listy użytkowników");
             }
         }
 
@@ -1615,11 +1600,11 @@ namespace TeamsManager.Core.Services.Graph
                 InvalidateAllActiveUsersList();
                 InvalidateUserListCache();
                 
-                _logger.LogDebug("Invalidated cache for user and related data: {UserId}", userId);
+                _logger.LogDebug("Unieważniono cache dla użytkownika i powiązanych danych: {UserId}", userId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for user and related data: {UserId}", userId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla użytkownika i powiązanych danych: {UserId}", userId);
             }
         }
 
@@ -1640,11 +1625,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateSubDepartments_{parentDepartmentId}");
-                _logger.LogDebug("Invalidated cache for subdepartments of: {ParentDepartmentId}", parentDepartmentId);
+                _logger.LogDebug("Unieważniono cache dla subdepartamentów: {ParentDepartmentId}", parentDepartmentId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for subdepartments of: {ParentDepartmentId}", parentDepartmentId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla subdepartamentów: {ParentDepartmentId}", parentDepartmentId);
             }
         }
 
@@ -1666,11 +1651,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveSchoolYearsList");
                 InvalidateByPattern("*schoolyear*active*", "InvalidateAllActiveSchoolYearsList");
-                _logger.LogDebug("Invalidated all active school years list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych lat szkolnych");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active school years list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych lat szkolnych");
             }
         }
 
@@ -1691,11 +1676,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateCurrentSchoolYear");
-                _logger.LogDebug("Invalidated current school year cache");
+                _logger.LogDebug("Unieważniono cache bieżącego roku szkolnego");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating current school year cache");
+                _logger.LogError(ex, "Błąd unieważniania cache bieżącego roku szkolnego");
             }
         }
 
@@ -1720,11 +1705,11 @@ namespace TeamsManager.Core.Services.Graph
                 // Również unieważnij listy lat szkolnych
                 InvalidateAllActiveSchoolYearsList();
                 
-                _logger.LogDebug("Invalidated cache for school year: {SchoolYearId}", schoolYearId);
+                _logger.LogDebug("Unieważniono cache dla roku szkolnego: {SchoolYearId}", schoolYearId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for school year: {SchoolYearId}", schoolYearId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla roku szkolnego: {SchoolYearId}", schoolYearId);
             }
         }
 
@@ -1745,11 +1730,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateTeachersForSubject_{subjectId}");
-                _logger.LogDebug("Invalidated cache for teachers of subject: {SubjectId}", subjectId);
+                _logger.LogDebug("Unieważniono cache dla nauczycieli przedmiotu: {SubjectId}", subjectId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for teachers of subject: {SubjectId}", subjectId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla nauczycieli przedmiotu: {SubjectId}", subjectId);
             }
         }
 
@@ -1771,11 +1756,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveSubjectsList");
                 InvalidateByPattern("*subject*active*", "InvalidateAllActiveSubjectsList");
-                _logger.LogDebug("Invalidated all active subjects list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych przedmiotów");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active subjects list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych przedmiotów");
             }
         }
 
@@ -1801,11 +1786,11 @@ namespace TeamsManager.Core.Services.Graph
                 InvalidateAllActiveSubjectsList();
                 InvalidateTeachersForSubject(subjectId);
                 
-                _logger.LogDebug("Invalidated cache for subject: {SubjectId}", subjectId);
+                _logger.LogDebug("Unieważniono cache dla przedmiotu: {SubjectId}", subjectId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for subject: {SubjectId}", subjectId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla przedmiotu: {SubjectId}", subjectId);
             }
         }
 
@@ -1827,11 +1812,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveSchoolTypesList");
                 InvalidateByPattern("*schooltype*active*", "InvalidateAllActiveSchoolTypesList");
-                _logger.LogDebug("Invalidated all active school types list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych typów szkół");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active school types list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych typów szkół");
             }
         }
 
@@ -1856,11 +1841,11 @@ namespace TeamsManager.Core.Services.Graph
                 // Również unieważnij listy typów szkół
                 InvalidateAllActiveSchoolTypesList();
                 
-                _logger.LogDebug("Invalidated cache for school type: {SchoolTypeId}", schoolTypeId);
+                _logger.LogDebug("Unieważniono cache dla typu szkoły: {SchoolTypeId}", schoolTypeId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for school type: {SchoolTypeId}", schoolTypeId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla typu szkoły: {SchoolTypeId}", schoolTypeId);
             }
         }
 
@@ -1885,11 +1870,11 @@ namespace TeamsManager.Core.Services.Graph
                 // Również unieważnij listy szablonów
                 InvalidateAllActiveTeamTemplatesList();
                 
-                _logger.LogDebug("Invalidated cache for team template: {TemplateId}", templateId);
+                _logger.LogDebug("Unieważniono cache dla szablonu zespołu: {TemplateId}", templateId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for team template: {TemplateId}", templateId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla szablonu zespołu: {TemplateId}", templateId);
             }
         }
 
@@ -1911,11 +1896,11 @@ namespace TeamsManager.Core.Services.Graph
 
                 BatchInvalidateKeys(keysToInvalidate, "InvalidateAllActiveTeamTemplatesList");
                 InvalidateByPattern("*teamtemplate*active*", "InvalidateAllActiveTeamTemplatesList");
-                _logger.LogDebug("Invalidated all active team templates list cache");
+                _logger.LogDebug("Unieważniono cache wszystkich aktywnych szablonów zespołów");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating all active team templates list cache");
+                _logger.LogError(ex, "Błąd unieważniania cache wszystkich aktywnych szablonów zespołów");
             }
         }
 
@@ -1936,11 +1921,11 @@ namespace TeamsManager.Core.Services.Graph
                 };
 
                 BatchInvalidateKeys(keysToInvalidate, $"InvalidateTeamTemplatesBySchoolType_{schoolTypeId}");
-                _logger.LogDebug("Invalidated cache for team templates of school type: {SchoolTypeId}", schoolTypeId);
+                _logger.LogDebug("Unieważniono cache dla szablonów zespołów według typu szkoły: {SchoolTypeId}", schoolTypeId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error invalidating cache for team templates of school type: {SchoolTypeId}", schoolTypeId);
+                _logger.LogError(ex, "Błąd unieważniania cache dla szablonów zespołów według typu szkoły: {SchoolTypeId}", schoolTypeId);
             }
         }
 

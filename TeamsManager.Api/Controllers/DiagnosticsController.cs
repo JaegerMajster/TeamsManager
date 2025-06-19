@@ -9,7 +9,6 @@ namespace TeamsManager.Api.Controllers
 {
     /// <summary>
     /// Kontroler do diagnostyki systemu Graph API
-    /// Kontroler diagnostyki Graph API
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
@@ -71,14 +70,12 @@ namespace TeamsManager.Api.Controllers
                 
                 var diagnostic = await _graphConnectionService.GetDiagnosticInfoAsync();
                 
-                // Dodaj informacje o testowanych endpointach jeśli podano
                 if (testEndpoints != null && testEndpoints.Any())
                 {
                     foreach (var endpoint in testEndpoints)
                     {
                         try
                         {
-                            // Sprawdź dostępność endpointu używając CheckEndpointAvailabilityAsync
                             var availability = await _graphConnectionService.CheckEndpointAvailabilityAsync(endpoint);
                             diagnostic.AdditionalInfo[$"Endpoint_{endpoint}"] = availability.IsAvailable;
                             
@@ -124,7 +121,6 @@ namespace TeamsManager.Api.Controllers
                 
                 var permissionInfo = await _graphConnectionService.GetPermissionInfoAsync();
                 
-                // Sprawdź czy wszystkie wymagane uprawnienia są dostępne
                 var hasAllPermissions = permissions.All(p => permissionInfo.HasPermission(p));
                 permissionInfo.HasRequiredPermissions = hasAllPermissions;
                 

@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Asp.Versioning; // Dla atrybutu ApiVersion
+using Asp.Versioning;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
@@ -10,9 +10,6 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class CreateSubjectRequestDto
     {
         public string Name { get; set; } = string.Empty;
@@ -25,7 +22,6 @@ namespace TeamsManager.Api.Controllers
 
     public class UpdateSubjectRequestDto
     {
-        // Id przedmiotu będzie pobierane z URL
         public string Name { get; set; } = string.Empty;
         public string? Code { get; set; }
         public string? Description { get; set; }
@@ -35,12 +31,10 @@ namespace TeamsManager.Api.Controllers
         public bool IsActive { get; set; } = true;
     }
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/Subjects
-    [Authorize] // Wszystkie operacje na przedmiotach domyślnie wymagają autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class SubjectsController : ControllerBase
     {
         private readonly ISubjectService _subjectService;
@@ -126,7 +120,7 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Przedmiot ID: {SubjectId} zaktualizowany pomyślnie.", subjectId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować przedmiotu ID: {SubjectId}.", subjectId);
             return BadRequest(new { Message = "Nie udało się zaktualizować przedmiotu." });
@@ -142,15 +136,14 @@ namespace TeamsManager.Api.Controllers
                 _logger.LogInformation("Przedmiot ID: {SubjectId} usunięty (zdezaktywowany) pomyślnie.", subjectId);
                 return Ok(new { Message = "Przedmiot usunięty (zdezaktywowany) pomyślnie." });
             }
-            // Serwis DeleteSubjectAsync powinien zwrócić false jeśli przedmiot nie istnieje lub już jest nieaktywny
-            // Sprawdźmy, czy przedmiot w ogóle istnieje, aby zwrócić odpowiedni kod błędu
+            // Sprawdzenie czy przedmiot istnieje
             var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
             if (subject == null)
             {
                 _logger.LogWarning("Nie można usunąć przedmiotu ID: {SubjectId} - nie znaleziono.", subjectId);
                 return NotFound(new { Message = $"Przedmiot o ID '{subjectId}' nie został znaleziony." });
             }
-            _logger.LogWarning("Nie udało się usunąć (zdezaktywować) przedmiotu ID: {SubjectId}. Możliwe, że był już nieaktywny lub wystąpił inny problem.", subjectId);
+            _logger.LogWarning("Nie udało się usunąć (zdezaktywować) przedmiotu ID: {SubjectId}.", subjectId);
             return BadRequest(new { Message = "Nie udało się usunąć (zdezaktywować) przedmiotu." });
         }
 
@@ -159,8 +152,6 @@ namespace TeamsManager.Api.Controllers
         {
             _logger.LogInformation("Pobieranie nauczycieli dla przedmiotu ID: {SubjectId}", subjectId);
             var teachers = await _subjectService.GetTeachersForSubjectAsync(subjectId);
-            // GetTeachersForSubjectAsync zwróci pustą listę jeśli przedmiot nie istnieje, jest nieaktywny lub nie ma nauczycieli.
-            // Nie ma potrzeby zwracać 404, chyba że chcemy jawnie sprawdzić istnienie przedmiotu.
             return Ok(teachers);
         }
     }

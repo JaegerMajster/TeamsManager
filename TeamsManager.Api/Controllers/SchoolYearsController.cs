@@ -10,9 +10,6 @@ using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class CreateSchoolYearRequestDto
     {
         public string Name { get; set; } = string.Empty;
@@ -23,12 +20,10 @@ namespace TeamsManager.Api.Controllers
         public DateTime? FirstSemesterEnd { get; set; }
         public DateTime? SecondSemesterStart { get; set; }
         public DateTime? SecondSemesterEnd { get; set; }
-        // IsCurrent jest zarządzane przez dedykowany endpoint SetCurrentSchoolYear
     }
 
     public class UpdateSchoolYearRequestDto
     {
-        // Id roku szkolnego będzie pobierane z URL
         public string Name { get; set; } = string.Empty;
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
@@ -38,15 +33,12 @@ namespace TeamsManager.Api.Controllers
         public DateTime? SecondSemesterStart { get; set; }
         public DateTime? SecondSemesterEnd { get; set; }
         public bool IsActive { get; set; } = true;
-        // IsCurrent nie jest tutaj modyfikowane, użyj dedykowanego endpointu
     }
-
-    // --- Kontroler ---
 
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/SchoolYears
-    [Authorize] // Wszystkie operacje na latach szkolnych domyślnie wymagają autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class SchoolYearsController : ControllerBase
     {
         private readonly ISchoolYearService _schoolYearService;
@@ -92,8 +84,6 @@ namespace TeamsManager.Api.Controllers
             if (schoolYear == null)
             {
                 _logger.LogInformation("Nie znaleziono bieżącego roku szkolnego.");
-                // Zwracamy 200 OK z nullem lub pustym obiektem, zamiast 404,
-                // ponieważ brak bieżącego roku nie jest błędem, a informacją.
                 return Ok(null);
             }
             return Ok(schoolYear);
@@ -136,7 +126,6 @@ namespace TeamsManager.Api.Controllers
                 return NotFound(new { Message = $"Rok szkolny o ID '{schoolYearId}' nie został znaleziony." });
             }
 
-            // Mapowanie z DTO do obiektu encji
             existingSchoolYear.Name = requestDto.Name;
             existingSchoolYear.StartDate = requestDto.StartDate;
             existingSchoolYear.EndDate = requestDto.EndDate;
@@ -146,13 +135,12 @@ namespace TeamsManager.Api.Controllers
             existingSchoolYear.SecondSemesterStart = requestDto.SecondSemesterStart;
             existingSchoolYear.SecondSemesterEnd = requestDto.SecondSemesterEnd;
             existingSchoolYear.IsActive = requestDto.IsActive;
-            // Flaga IsCurrent jest zarządzana przez dedykowany endpoint
 
             var success = await _schoolYearService.UpdateSchoolYearAsync(existingSchoolYear);
             if (success)
             {
                 _logger.LogInformation("Rok szkolny ID: {SchoolYearId} zaktualizowany pomyślnie.", schoolYearId);
-                return NoContent(); // 204 No Content
+                return NoContent();
             }
             _logger.LogWarning("Nie udało się zaktualizować roku szkolnego ID: {SchoolYearId}.", schoolYearId);
             return BadRequest(new { Message = "Nie udało się zaktualizować roku szkolnego." });
@@ -169,7 +157,6 @@ namespace TeamsManager.Api.Controllers
                 return Ok(new { Message = $"Rok szkolny ID '{schoolYearId}' został ustawiony jako bieżący." });
             }
             _logger.LogWarning("Nie udało się ustawić roku szkolnego ID: {SchoolYearId} jako bieżący.", schoolYearId);
-            // Serwis powinien logować dokładniejszy powód (np. rok nie istnieje, nieaktywny)
             return BadRequest(new { Message = "Nie udało się ustawić roku szkolnego jako bieżący." });
         }
 
@@ -197,7 +184,7 @@ namespace TeamsManager.Api.Controllers
             catch (InvalidOperationException ex)
             {
                 _logger.LogWarning("Nie można usunąć roku szkolnego ID {SchoolYearId}: {ErrorMessage}", schoolYearId, ex.Message);
-                return Conflict(new { Message = ex.Message }); // 409 Conflict, np. gdy rok jest bieżący lub ma aktywne zespoły
+                return Conflict(new { Message = ex.Message });
             }
             catch (Exception ex)
             {

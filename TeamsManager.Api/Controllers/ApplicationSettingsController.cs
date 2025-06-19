@@ -1,19 +1,16 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
-using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Models;
-using TeamsManager.Core.Enums; // Dla SettingType
+using TeamsManager.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace TeamsManager.Api.Controllers
 {
-    // --- Data Transfer Objects (DTO) ---
-    // W docelowym projekcie te klasy powinny znaleźć się w osobnym projekcie/folderze
-
     public class SaveSettingRequestDto
     {
         public string Key { get; set; } = string.Empty;
@@ -21,15 +18,11 @@ namespace TeamsManager.Api.Controllers
         public SettingType Type { get; set; } = SettingType.String;
         public string? Description { get; set; }
         public string? Category { get; set; }
-        // Pozostałe właściwości ApplicationSetting jak IsRequired, IsVisible, DefaultValue, etc.
-        // mogą być zarządzane przez bardziej zaawansowane DTO lub bezpośrednio na obiekcie ApplicationSetting
-        // jeśli serwis UpdateSettingAsync przyjmuje pełny obiekt.
     }
 
     public class UpdateSettingRequestDto
     {
-        // Id ustawienia będzie pobierane z URL lub Key
-        public string Key { get; set; } = string.Empty; // Klucz może być użyty do identyfikacji, jeśli ID nie jest znane klientowi
+        public string Key { get; set; } = string.Empty;
         public string Value { get; set; } = string.Empty;
         public string? Description { get; set; }
         public SettingType Type { get; set; } = SettingType.String;
@@ -44,12 +37,10 @@ namespace TeamsManager.Api.Controllers
     }
 
 
-    // --- Kontroler ---
-
     [ApiController]
     [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")] // Trasa bazowa: /api/v1.0/ApplicationSettings
-    [Authorize] // Dostęp do ustawień aplikacji zazwyczaj wymaga autoryzacji
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [Authorize]
     public class ApplicationSettingsController : ControllerBase
     {
         private readonly IApplicationSettingService _applicationSettingService;
@@ -69,7 +60,7 @@ namespace TeamsManager.Api.Controllers
         [HttpGet("key/{key}")]
         public async Task<IActionResult> GetSettingByKey(string key)
         {
-            // Poprawka: dekodowanie klucza z URL, jeśli może zawierać znaki specjalne
+            // Dekodowanie klucza z URL
             var decodedKey = System.Net.WebUtility.UrlDecode(key);
             _logger.LogInformation("Pobieranie ustawienia aplikacji o kluczu: {SettingKey}", decodedKey);
             var setting = await _applicationSettingService.GetSettingByKeyAsync(decodedKey);
@@ -99,7 +90,6 @@ namespace TeamsManager.Api.Controllers
         }
 
         [HttpPost]
-        // [Authorize(Roles = "Administrator")] // Przykładowe ograniczenie tylko dla adminów
         public async Task<IActionResult> SaveSetting([FromBody] SaveSettingRequestDto requestDto)
         {
             _logger.LogInformation("Żądanie zapisania/aktualizacji ustawienia: Klucz={SettingKey}", requestDto.Key);
@@ -115,12 +105,10 @@ namespace TeamsManager.Api.Controllers
             if (success)
             {
                 _logger.LogInformation("Ustawienie o kluczu: {SettingKey} zapisane/zaktualizowane pomyślnie.", requestDto.Key);
-                // Pobierz zapisane ustawienie, aby zwrócić je w odpowiedzi
+                // Pobranie zapisanego ustawienia do zwrócenia w odpowiedzi
                 var savedSetting = await _applicationSettingService.GetSettingByKeyAsync(requestDto.Key);
                 if (savedSetting != null)
                 {
-                    // Zwraca 201 Created jeśli nowy, lub 200 OK jeśli zaktualizowano (lub zawsze 200/204)
-                    // Dla uproszczenia, zwracamy 200 OK z obiektem.
                     return Ok(savedSetting);
                 }
                 return Ok(new { Message = $"Ustawienie '{requestDto.Key}' zostało przetworzone." });

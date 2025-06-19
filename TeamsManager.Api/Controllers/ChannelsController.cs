@@ -1,13 +1,12 @@
-﻿// Plik: TeamsManager.Api/Controllers/ChannelsController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
-using TeamsManager.Core.Abstractions; // Dla ICurrentUserService
+using TeamsManager.Core.Abstractions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Api.Extensions;
 using System;
 using System.Threading.Tasks;
-using System.Collections.Generic; // Dodane dla List w DTO
+using System.Collections.Generic;
 using TeamsManager.Core.Models;
 
 namespace TeamsManager.Api.Controllers
@@ -17,14 +16,12 @@ namespace TeamsManager.Api.Controllers
         public string DisplayName { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool IsPrivate { get; set; } = false;
-        // Można dodać np. Owner UPN jeśli tworzymy kanał prywatny i chcemy od razu dodać właściciela
     }
 
     public class UpdateChannelRequestDto
     {
         public string? NewDisplayName { get; set; }
         public string? NewDescription { get; set; }
-        // Inne właściwości, które można aktualizować, np. IsFavoriteByDefault (jeśli Graph API na to pozwala przez to polecenie)
     }
 
 
@@ -129,11 +126,10 @@ namespace TeamsManager.Api.Controllers
             }
 
             _logger.LogInformation("API: Kanał '{DisplayName}' (GraphID: {ChannelGraphId}) utworzony pomyślnie w zespole ID: {TeamId}.", createdChannel.DisplayName, createdChannel.Id, teamId);
-            // Zwracamy nowy obiekt Channel z lokalnej bazy (który powinien mieć GraphID jako Id)
             return CreatedAtAction(nameof(GetTeamChannelById), new { teamId = teamId, channelGraphId = createdChannel.Id }, createdChannel);
         }
 
-        [HttpPut("{channelId}")] // Używamy channelId (GraphID)
+        [HttpPut("{channelId}")]
         public async Task<IActionResult> UpdateTeamChannel(string teamId, string channelId, [FromBody] UpdateChannelRequestDto requestDto)
         {
             _logger.LogInformation("API: Żądanie aktualizacji kanału GraphID: {ChannelId} w zespole ID: {TeamId}", channelId, teamId);
@@ -144,13 +140,11 @@ namespace TeamsManager.Api.Controllers
                 return Unauthorized(new { Message = "Brak tokenu dostępu." });
             }
 
-            if (string.IsNullOrWhiteSpace(requestDto.NewDisplayName) && requestDto.NewDescription == null) // Sprawdzamy czy NewDescription jest null, bo może być ""
+            if (string.IsNullOrWhiteSpace(requestDto.NewDisplayName) && requestDto.NewDescription == null)
             {
                 return BadRequest(new { Message = "Należy podać przynajmniej nową nazwę lub nowy opis." });
             }
 
-            // Serwis UpdateTeamChannelAsync przyjmuje channelId.
-            // currentDisplayName nie jest już potrzebne w sygnaturze serwisu, jeśli operujemy na ID.
             var updatedChannel = await _channelService.UpdateTeamChannelAsync(teamId, channelId, accessToken, requestDto.NewDisplayName, requestDto.NewDescription);
 
             if (updatedChannel != null)
@@ -162,7 +156,7 @@ namespace TeamsManager.Api.Controllers
             return BadRequest(new { Message = "Nie udało się zaktualizować kanału." });
         }
 
-        [HttpDelete("{channelId}")] // Używamy channelId (GraphID)
+        [HttpDelete("{channelId}")]
         public async Task<IActionResult> RemoveTeamChannel(string teamId, string channelId)
         {
             _logger.LogInformation("API: Żądanie usunięcia kanału GraphID: {ChannelId} z zespołu ID: {TeamId}", channelId, teamId);
@@ -181,8 +175,7 @@ namespace TeamsManager.Api.Controllers
                 return Ok(new { Message = "Kanał usunięty pomyślnie." });
             }
             _logger.LogWarning("API: Nie udało się usunąć kanału GraphID: {ChannelId} z zespołu ID: {TeamId}.", channelId, teamId);
-            // Serwis powinien zalogować dokładniejszy błąd (np. kanał nie znaleziony, próba usunięcia Generalnego, błąd Graph)
-            // Możemy też zwrócić NotFound jeśli serwis by to sygnalizował.
+            
             var channelExists = await _channelService.GetTeamChannelByIdAsync(teamId, channelId, accessToken, forceRefresh: true);
             if (channelExists == null)
             {
