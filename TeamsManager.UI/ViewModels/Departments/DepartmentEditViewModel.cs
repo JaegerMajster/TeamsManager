@@ -607,7 +607,11 @@ namespace TeamsManager.UI.ViewModels.Departments
                         Model.Name, 
                         Model.Description ?? string.Empty, 
                         null, // parentDepartmentId - nie używamy już hierarchii działów
-                        Model.DepartmentCode);
+                        Model.DepartmentCode,
+                        Model.Email,
+                        Model.Phone,
+                        Model.Location,
+                        Model.SortOrder);
                     
                     if (createdDepartment != null)
                     {

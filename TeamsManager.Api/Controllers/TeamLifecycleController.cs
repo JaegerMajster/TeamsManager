@@ -308,8 +308,8 @@ namespace TeamsManager.API.Controllers
                 return Ok(new ProcessStatusResponse
                 {
                     Success = true,
-                    Message = $"Znaleziono {processes?.Length ?? 0} aktywnych procesów",
-                    Processes = processes ?? Array.Empty<TeamLifecycleProcessStatus>()
+                    Message = $"Znaleziono {processes?.Count() ?? 0} aktywnych procesów",
+                    Processes = processes?.ToArray() ?? Array.Empty<TeamLifecycleProcessStatus>()
                 });
             }
             catch (Exception ex)

@@ -163,7 +163,11 @@ namespace TeamsManager.Core.Services
             string name,
             string description,
             string? parentDepartmentId = null,
-            string? departmentCode = null)
+            string? departmentCode = null,
+            string? email = null,
+            string? phone = null,
+            string? location = null,
+            int sortOrder = 0)
         {
             var currentUserUpn = _currentUserService.GetCurrentUserUpn() ?? "system";
             _logger.LogInformation("Rozpoczynanie tworzenia działu: '{DepartmentName}'", name);
@@ -221,6 +225,10 @@ namespace TeamsManager.Core.Services
                     ParentDepartmentId = parentDepartmentId,
                     ParentDepartment = parentDepartment,
                     DepartmentCode = departmentCode,
+                    Email = email,
+                    Phone = phone,
+                    Location = location,
+                    SortOrder = sortOrder,
                     CreatedBy = currentUserUpn,
                     IsActive = true
                 };
@@ -645,6 +653,95 @@ namespace TeamsManager.Core.Services
         /// <inheritdoc />
         public Task<IEnumerable<User>> GetUsersInDepartmentAsync(string departmentId)
             => GetUsersInDepartmentAsync(departmentId, false);
+
+        /// <inheritdoc />
+        public async Task<bool> AssignUserToDepartmentAsync(string userId, string departmentId)
+        {
+            _logger.LogInformation("Przypisywanie użytkownika {UserId} do działu {DepartmentId}", userId, departmentId);
+
+            try
+            {
+                // Sprawdź czy użytkownik istnieje
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null || !user.IsActive)
+                {
+                    _logger.LogWarning("Nie można przypisać użytkownika {UserId} - nie istnieje lub jest nieaktywny", userId);
+                    return false;
+                }
+
+                // Sprawdź czy dział istnieje
+                var department = await _departmentRepository.GetByIdAsync(departmentId);
+                if (department == null || !department.IsActive)
+                {
+                    _logger.LogWarning("Nie można przypisać użytkownika do działu {DepartmentId} - dział nie istnieje lub jest nieaktywny", departmentId);
+                    return false;
+                }
+
+                // Zaktualizuj użytkownika
+                user.DepartmentId = departmentId;
+                user.ModifiedBy = _currentUserService.GetCurrentUserUpn() ?? "system";
+                user.ModifiedDate = DateTime.UtcNow;
+
+                _userRepository.Update(user);
+                await _userRepository.SaveChangesAsync();
+
+                // Invaliduj cache
+                _graphCacheService.InvalidateUserAndRelatedData(userId);
+                _graphCacheService.InvalidateAllDepartmentLists();
+
+                _logger.LogInformation("Użytkownik {UserId} został przypisany do działu {DepartmentId}", userId, departmentId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas przypisywania użytkownika {UserId} do działu {DepartmentId}", userId, departmentId);
+                return false;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> RemoveUserFromDepartmentAsync(string userId, string departmentId)
+        {
+            _logger.LogInformation("Usuwanie użytkownika {UserId} z działu {DepartmentId}", userId, departmentId);
+
+            try
+            {
+                // Sprawdź czy użytkownik istnieje
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning("Nie można usunąć użytkownika {UserId} z działu - użytkownik nie istnieje", userId);
+                    return false;
+                }
+
+                // Sprawdź czy użytkownik jest w tym dziale
+                if (user.DepartmentId != departmentId)
+                {
+                    _logger.LogWarning("Użytkownik {UserId} nie jest przypisany do działu {DepartmentId}", userId, departmentId);
+                    return false;
+                }
+
+                // Usuń przypisanie
+                user.DepartmentId = null;
+                user.ModifiedBy = _currentUserService.GetCurrentUserUpn() ?? "system";
+                user.ModifiedDate = DateTime.UtcNow;
+
+                _userRepository.Update(user);
+                await _userRepository.SaveChangesAsync();
+
+                // Invaliduj cache
+                _graphCacheService.InvalidateUserAndRelatedData(userId);
+                _graphCacheService.InvalidateAllDepartmentLists();
+
+                _logger.LogInformation("Użytkownik {UserId} został usunięty z działu {DepartmentId}", userId, departmentId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas usuwania użytkownika {UserId} z działu {DepartmentId}", userId, departmentId);
+                return false;
+            }
+        }
 
         #endregion
     }

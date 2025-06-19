@@ -71,12 +71,20 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <param name="description">Opis działu.</param>
         /// <param name="parentDepartmentId">Opcjonalny identyfikator działu nadrzędnego.</param>
         /// <param name="departmentCode">Opcjonalny kod działu.</param>
+        /// <param name="email">Opcjonalny adres email działu.</param>
+        /// <param name="phone">Opcjonalny numer telefonu działu.</param>
+        /// <param name="location">Opcjonalna lokalizacja działu.</param>
+        /// <param name="sortOrder">Kolejność sortowania.</param>
         /// <returns>Utworzony obiekt Department lub null, jeśli operacja się nie powiodła.</returns>
         Task<Department?> CreateDepartmentAsync(
             string name,
             string description,
             string? parentDepartmentId,
-            string? departmentCode);
+            string? departmentCode,
+            string? email,
+            string? phone,
+            string? location,
+            int sortOrder);
 
         /// <summary>
         /// Asynchronicznie aktualizuje dane istniejącego działu.
@@ -126,5 +134,21 @@ namespace TeamsManager.Core.Abstractions.Services
         /// Odświeża cache działów (jeśli jest używany).
         /// </summary>
         Task RefreshCacheAsync();
+
+        /// <summary>
+        /// Asynchronicznie przypisuje użytkownika do działu.
+        /// </summary>
+        /// <param name="userId">Identyfikator użytkownika.</param>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <returns>True, jeśli przypisanie się powiodło.</returns>
+        Task<bool> AssignUserToDepartmentAsync(string userId, string departmentId);
+
+        /// <summary>
+        /// Asynchronicznie usuwa przypisanie użytkownika do działu.
+        /// </summary>
+        /// <param name="userId">Identyfikator użytkownika.</param>
+        /// <param name="departmentId">Identyfikator działu.</param>
+        /// <returns>True, jeśli usunięcie przypisania się powiodło.</returns>
+        Task<bool> RemoveUserFromDepartmentAsync(string userId, string departmentId);
     }
 }

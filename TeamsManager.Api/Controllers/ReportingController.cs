@@ -280,23 +280,17 @@ namespace TeamsManager.Api.Controllers
                 var currentUserUpn = _currentUserService.GetCurrentUserUpn();
                 _logger.LogDebug("[ReportingAPI] Anulowanie procesu {ProcessId} przez {UserUpn}", processId, currentUserUpn);
 
-                var result = await _orchestrator.CancelProcessAsync(processId);
+                var success = await _orchestrator.CancelProcessAsync(processId);
 
-                if (result.Success)
+                if (success)
                 {
                     _logger.LogInformation("[ReportingAPI] Proces raportowania {ProcessId} anulowany pomyślnie", processId);
-                    return Ok(result);
+                    return Ok(ProcessCancelResponse.CreateSuccess(processId, "Proces został anulowany pomyślnie", "Raportowanie"));
                 }
                 else
                 {
-                    _logger.LogWarning("[ReportingAPI] Nie udało się anulować procesu {ProcessId}: {Error}", processId, result.ErrorMessage);
-                    
-                    if (result.ErrorMessage?.Contains("nie znaleziono") == true)
-                    {
-                        return NotFound(new { Message = result.ErrorMessage });
-                    }
-                    
-                    return BadRequest(new { Message = result.ErrorMessage ?? "Nie udało się anulować procesu" });
+                    _logger.LogWarning("[ReportingAPI] Nie udało się anulować procesu {ProcessId}", processId);
+                    return BadRequest(ProcessCancelResponse.CreateError(processId, "Nie udało się anulować procesu", "Raportowanie"));
                 }
             }
             catch (Exception ex)
@@ -386,8 +380,7 @@ namespace TeamsManager.Api.Controllers
         /// Typ raportu compliance
         /// </summary>
         [Required(ErrorMessage = "Typ raportu compliance jest wymagany")]
-        [StringLength(50, ErrorMessage = "Typ raportu nie może być dłuższy niż 50 znaków")]
-        public string Type { get; set; } = string.Empty;
+        public ComplianceReportType Type { get; set; } = ComplianceReportType.DataProtection;
     }
 
     /// <summary>

@@ -216,7 +216,7 @@ namespace TeamsManager.API.Controllers
             try
             {
                 _logger.LogInformation("📊 API: Pobieranie statusu aktywnych procesów");
-                var processes = await _orchestrator.GetActiveProcessesAsync();
+                var processes = await _orchestrator.GetActiveProcessesStatusAsync();
                 return Ok(processes);
             }
             catch (Exception ex)

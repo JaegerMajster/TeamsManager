@@ -63,7 +63,11 @@ namespace TeamsManager.UI.Scripts
                 "Wydział Techniczny",
                 "Główny wydział techniczny szkoły",
                 null, // brak rodzica - dział główny
-                "TECH"
+                "TECH",
+                "tech@szkola.edu.pl",
+                "+48 123 456 700",
+                "Budynek główny",
+                1
             );
             
             if (mainDepartment != null)
@@ -75,14 +79,22 @@ namespace TeamsManager.UI.Scripts
                     "Informatyka",
                     "Dział informatyki i programowania",
                     mainDepartment.Id,
-                    "IT"
+                    "IT",
+                    "it@szkola.edu.pl",
+                    "+48 123 456 701",
+                    "Budynek A, piętro 2",
+                    2
                 );
                 
                 var mechDepartment = await departmentService.CreateDepartmentAsync(
                     "Mechanika",
                     "Dział mechaniki i automatyki",
                     mainDepartment.Id,
-                    "MECH"
+                    "MECH",
+                    "mech@szkola.edu.pl",
+                    "+48 123 456 702",
+                    "Budynek B, piętro 1",
+                    3
                 );
                 
                 if (itDepartment != null)
@@ -94,7 +106,11 @@ namespace TeamsManager.UI.Scripts
                         "Programowanie Web",
                         "Specjalizacja w technologiach webowych",
                         itDepartment.Id,
-                        "WEB"
+                        "WEB",
+                        "web@szkola.edu.pl",
+                        "+48 123 456 703",
+                        "Budynek A, sala 201",
+                        4
                     );
                     
                     if (webDepartment != null)

@@ -144,7 +144,8 @@ namespace TeamsManager.Tests.Controllers
             };
             
             _mockDepartmentService.Setup(s => s.CreateDepartmentAsync(
-                createDto.Name, createDto.Description, createDto.ParentDepartmentId, createDto.DepartmentCode))
+                createDto.Name, createDto.Description, createDto.ParentDepartmentId, createDto.DepartmentCode, 
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
                                  .ReturnsAsync(createdDepartment);
 
             // Act
@@ -164,7 +165,8 @@ namespace TeamsManager.Tests.Controllers
             var createDto = new CreateDepartmentRequestDto { Name = "Test Department" };
             
             _mockDepartmentService.Setup(s => s.CreateDepartmentAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
                                  .ReturnsAsync((Department?)null);
 
             // Act
