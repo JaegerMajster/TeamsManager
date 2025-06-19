@@ -4,10 +4,10 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:converters="clr-namespace:TeamsManager.UI.Converters"
         Title="Konfiguracja TeamsManager" 
-        Width="800"
-        SizeToContent="Height"
+        Width="1000"
+        Height="750"
+        MinWidth="900"
         MinHeight="600"
-        MaxHeight="900"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BackgroundDark}"
         FontFamily="{DynamicResource MaterialDesignFont}"
@@ -64,12 +64,11 @@
             
             <!-- Główna zawartość -->
             <ScrollViewer Grid.Row="1" 
-                         VerticalScrollBarVisibility="Auto" 
+                         VerticalScrollBarVisibility="Visible" 
                          HorizontalScrollBarVisibility="Disabled"
-                         Padding="40,16,40,46">
-                <Grid MaxWidth="720">
+                         Padding="24,16,24,46">
+                <Grid MaxWidth="920">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -80,7 +79,7 @@
                     <!-- Ikona konfiguracji -->
                     <Border Grid.Row="0" 
                            HorizontalAlignment="Center"
-                           Margin="0,0,0,24">
+                           Margin="0,24,0,24">
                         <Border Background="{DynamicResource AccentBlue}"
                                 Width="80" Height="80"
                                 CornerRadius="40">
@@ -93,215 +92,447 @@
                     </Border>
 
                     <!-- Status walidacji -->
-                    <Border Grid.Row="1"
-                           Margin="0,0,0,24"
-                           Background="{DynamicResource BackgroundMedium}"
-                           CornerRadius="8"
-                           Padding="16">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <materialDesign:PackIcon Kind="CheckboxMarkedCircleOutline" 
-                                                       Width="20" Height="20"
-                                                       VerticalAlignment="Center"
-                                                       Foreground="{Binding ValidationStatusColor}"
-                                                       Margin="0,0,8,0"/>
-                                <TextBlock Text="Status konfiguracji" 
-                                         Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
-                                         VerticalAlignment="Center"/>
-                            </StackPanel>
-                            
-                            <TextBlock Text="{Binding ValidationResult.Summary}" 
-                                      Style="{StaticResource MaterialDesignBody1TextBlock}"
-                                      Foreground="{Binding ValidationStatusColor}"
-                                      Margin="0,0,0,8"/>
-                            
-                            <!-- Brakujące konfiguracje -->
-                            <ItemsControl ItemsSource="{Binding ValidationResult.MissingConfigurations}" 
-                                         Visibility="{Binding HasMissingConfigurations, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{DynamicResource AccentRed}"
-                                               CornerRadius="4"
-                                               Padding="8,4"
-                                               Margin="0,2">
-                                            <StackPanel Orientation="Horizontal">
-                                                <materialDesign:PackIcon Kind="AlertCircle" 
-                                                                       Width="16" Height="16" 
-                                                                       Foreground="White" 
-                                                                       VerticalAlignment="Center" 
-                                                                       Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding}" 
-                                                         Style="{StaticResource MaterialDesignBody2TextBlock}"
-                                                         Foreground="White"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                    <materialDesign:Card Grid.Row="1" 
+                                        Margin="24,0,24,24" 
+                                        materialDesign:ElevationAssist.Elevation="Dp2"
+                                        Background="#FF2D2D30">
+                        <Expander IsExpanded="True"
+                                 Style="{StaticResource MaterialDesignExpander}"
+                                 Background="Transparent">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="CheckboxMarkedCircleOutline" 
+                                                           Width="24" Height="24"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{Binding ValidationStatusColor}"
+                                                           Margin="0,0,12,0"/>
+                                    <TextBlock Text="Status konfiguracji" 
+                                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                             VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <StackPanel Margin="24,0,24,20">
+                                <TextBlock Text="{Binding ValidationResult.Summary}" 
+                                          Style="{StaticResource MaterialDesignBody1TextBlock}"
+                                          FontWeight="Medium"
+                                          Foreground="{Binding ValidationStatusColor}"
+                                          Margin="0,0,0,12"/>
+                                
+                                <!-- Brakujące konfiguracje -->
+                                <ItemsControl ItemsSource="{Binding ValidationResult.MissingConfigurations}" 
+                                             Visibility="{Binding HasMissingConfigurations, Converter={StaticResource BoolToVisibilityConverter}}"
+                                             Margin="0,0,0,8">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource AccentRed}"
+                                                   CornerRadius="4"
+                                                   Padding="8,4"
+                                                   Margin="0,2">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <materialDesign:PackIcon Kind="AlertCircle" 
+                                                                           Width="16" Height="16" 
+                                                                           Foreground="White" 
+                                                                           VerticalAlignment="Center" 
+                                                                           Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding}" 
+                                                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                             Foreground="White"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
 
-                            <!-- Ostrzeżenia -->
-                            <ItemsControl ItemsSource="{Binding ValidationResult.Warnings}" 
-                                         Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{DynamicResource WarningOrange}"
-                                               CornerRadius="4"
-                                               Padding="8,4"
-                                               Margin="0,2">
-                                            <StackPanel Orientation="Horizontal">
-                                                <materialDesign:PackIcon Kind="Alert" 
-                                                                       Width="16" Height="16" 
-                                                                       Foreground="White" 
-                                                                       VerticalAlignment="Center" 
-                                                                       Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding}" 
-                                                         Style="{StaticResource MaterialDesignBody2TextBlock}"
-                                                         Foreground="White"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
+                                <!-- Ostrzeżenia -->
+                                <ItemsControl ItemsSource="{Binding ValidationResult.Warnings}" 
+                                             Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource WarningOrange}"
+                                                   CornerRadius="4"
+                                                   Padding="8,4"
+                                                   Margin="0,2">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <materialDesign:PackIcon Kind="Alert" 
+                                                                           Width="16" Height="16" 
+                                                                           Foreground="White" 
+                                                                           VerticalAlignment="Center" 
+                                                                           Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding}" 
+                                                             Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                                             Foreground="White"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
+                    </materialDesign:Card>
+
+                    <!-- Instrukcje konfiguracji Azure AD -->
+                    <materialDesign:Card Grid.Row="2" 
+                                        Margin="24,0,24,24" 
+                                        materialDesign:ElevationAssist.Elevation="Dp2"
+                                        Background="#FF2D2D30">
+                        <Expander IsExpanded="False"
+                                 Style="{StaticResource MaterialDesignExpander}"
+                                 Background="Transparent">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="BookOpenPageVariant" 
+                                                           Width="24" Height="24"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AccentBlue}"
+                                                           Margin="0,0,12,0"/>
+                                    <TextBlock Text="Instrukcje konfiguracji Azure AD" 
+                                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                             VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <ScrollViewer MaxHeight="600" VerticalScrollBarVisibility="Auto" Margin="24,0,24,20">
+                                <StackPanel>
+                                    <!-- Wprowadzenie -->
+                                    <Border Background="#FF1E3A8A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <StackPanel>
+                                            <TextBlock Text="📋 Przegląd konfiguracji" FontWeight="Bold" Foreground="White" 
+                                                     Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="0,0,0,8"/>
+                                            <TextBlock TextWrapping="Wrap" Foreground="White" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                TeamsManager wymaga dwóch aplikacji w Azure AD do przepływu On-Behalf-Of (OBO):<LineBreak/>
+                                                <Run FontWeight="Bold">1. TeamsManager UI</Run> - aplikacja kliencka (publiczna)<LineBreak/>
+                                                <Run FontWeight="Bold">2. TeamsManager API</Run> - aplikacja serwera (poufna)<LineBreak/><LineBreak/>
+                                                Postępuj zgodnie z instrukcjami poniżej, aby skonfigurować obie aplikacje.
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Krok 1: Rejestracja aplikacji UI -->
+                                    <Border Background="#FF2A2A3A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <StackPanel>
+                                            <TextBlock Text="🔹 Krok 1: Rejestracja aplikacji UI" FontWeight="Bold" Foreground="#FF87CEEB" 
+                                                     Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
+                                            
+                                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                <Run FontWeight="Bold">Krok 1.1:</Run> Przejdź do <Run FontWeight="Bold">Azure Portal</Run> → <Run FontWeight="Bold">Azure Active Directory</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.2:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"App registrations"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.3:</Run> Kliknij <Run FontWeight="Bold">"+ New registration"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.4:</Run> Wypełnij formularz:<LineBreak/>
+                                                &#160;&#160;• Name: <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
+                                                &#160;&#160;• Supported account types: <Run FontWeight="Bold">"Accounts in this organizational directory only"</Run><LineBreak/>
+                                                &#160;&#160;• Redirect URI: <Run FontWeight="Bold">"Public client/native (mobile &amp; desktop)" → "http://localhost"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 1.5:</Run> Kliknij <Run FontWeight="Bold">"Register"</Run>
+                                            </TextBlock>
+                                            
+                                            <Border Background="#FF2D4A2D" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="✅ SKOPIUJ TERAZ:" FontWeight="Bold" Foreground="#FF90EE90" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#FF90EE90" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        Na stronie przeglądu nowo utworzonej aplikacji UI znajdź sekcję <Run FontWeight="Bold">"Essentials"</Run>.<LineBreak/>
+                                                        Skopiuj wartość <Run FontWeight="Bold">"Application (client) ID"</Run> i wklej ją do pola <Run FontWeight="Bold">"UI Client ID"</Run> w sekcji Azure AD poniżej.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Krok 2: Rejestracja aplikacji API -->
+                                    <Border Background="#FF3A2A2A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <StackPanel>
+                                            <TextBlock Text="🔹 Krok 2: Rejestracja aplikacji API" FontWeight="Bold" Foreground="#FFFF9A56" 
+                                                     Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
+                                            
+                                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                <Run FontWeight="Bold">Krok 2.1:</Run> Wróć do listy <Run FontWeight="Bold">"App registrations"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.2:</Run> Kliknij ponownie <Run FontWeight="Bold">"+ New registration"</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.3:</Run> Wypełnij formularz:<LineBreak/>
+                                                &#160;&#160;• Name: <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
+                                                &#160;&#160;• Supported account types: <Run FontWeight="Bold">"Accounts in this organizational directory only"</Run><LineBreak/>
+                                                &#160;&#160;• Redirect URI: <Run FontWeight="Bold">pozostaw puste</Run><LineBreak/>
+                                                <Run FontWeight="Bold">Krok 2.4:</Run> Kliknij <Run FontWeight="Bold">"Register"</Run>
+                                            </TextBlock>
+                                            
+                                            <Border Background="#FF2D4A2D" CornerRadius="4" Padding="12" Margin="0,0,0,12">
+                                                <StackPanel>
+                                                    <TextBlock Text="✅ SKOPIUJ TERAZ:" FontWeight="Bold" Foreground="#FF90EE90" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#FF90EE90" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        Na stronie przeglądu nowo utworzonej aplikacji API znajdź sekcję <Run FontWeight="Bold">"Essentials"</Run>.<LineBreak/>
+                                                        Skopiuj wartość <Run FontWeight="Bold">"Application (client) ID"</Run> i wklej ją do pola <Run FontWeight="Bold">"API Client ID"</Run> w sekcji Azure AD poniżej.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                            
+                                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                <Run FontWeight="Bold">Krok 2.5:</Run> Teraz utwórz Client Secret:<LineBreak/>
+                                                &#160;&#160;• W menu po lewej kliknij <Run FontWeight="Bold">"Certificates &amp; secrets"</Run><LineBreak/>
+                                                &#160;&#160;• W sekcji "Client secrets" kliknij <Run FontWeight="Bold">"+ New client secret"</Run><LineBreak/>
+                                                &#160;&#160;• Description: <Run FontWeight="Bold">"TeamsManager Secret"</Run><LineBreak/>
+                                                &#160;&#160;• Expires: <Run FontWeight="Bold">"24 months"</Run><LineBreak/>
+                                                &#160;&#160;• Kliknij <Run FontWeight="Bold">"Add"</Run>
+                                            </TextBlock>
+                                            
+                                            <Border Background="#FF4A2D2D" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="⚠️ WAŻNE - SKOPIUJ NATYCHMIAST:" FontWeight="Bold" Foreground="#FFFF6B6B" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#FFFF6B6B" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        Po utworzeniu sekretu skopiuj jego <Run FontWeight="Bold">VALUE</Run> (nie ID!) i wklej do pola <Run FontWeight="Bold">"Client Secret"</Run> poniżej.<LineBreak/>
+                                                        <Run FontWeight="Bold">Ta wartość będzie widoczna tylko raz!</Run>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Krok 3: Konfiguracja uprawnień -->
+                                    <Border Background="#FF2A3A2A" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <StackPanel>
+                                            <TextBlock Text="🔹 Krok 3: Konfiguracja uprawnień" FontWeight="Bold" Foreground="#FF90EE90" 
+                                                     Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
+                                            
+                                            <!-- Uprawnienia dla UI -->
+                                            <Border Background="#FF2A2A3A" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                                <StackPanel>
+                                                    <TextBlock Text="🔹 Dla aplikacji UI (TeamsManager UI):" FontWeight="Bold" Foreground="#FF87CEEB" Margin="0,0,0,8"/>
+                                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        <Run FontWeight="Bold">Krok 3.1:</Run> Przejdź do aplikacji <Run FontWeight="Bold">"TeamsManager UI"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.2:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"API permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.3:</Run> Kliknij <Run FontWeight="Bold">"+ Add a permission"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.4:</Run> Wybierz <Run FontWeight="Bold">"Microsoft Graph"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.5:</Run> Wybierz <Run FontWeight="Bold">"Delegated permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.6:</Run> Znajdź i zaznacz te uprawnienia:<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">User.Read</Run> (w sekcji "User")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Team.ReadWrite.All</Run> (w sekcji "Team")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Group.ReadWrite.All</Run> (w sekcji "Group")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Directory.Read.All</Run> (w sekcji "Directory")<LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.7:</Run> Kliknij <Run FontWeight="Bold">"Add permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.8:</Run> Kliknij <Run FontWeight="Bold">"Grant admin consent for [nazwa organizacji]"</Run>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                            
+                                            <!-- Uprawnienia dla API -->
+                                            <Border Background="#FF3A2A2A" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                                <StackPanel>
+                                                    <TextBlock Text="🔹 Dla aplikacji API (TeamsManager API):" FontWeight="Bold" Foreground="#FFFF9A56" Margin="0,0,0,8"/>
+                                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        <Run FontWeight="Bold">Krok 3.9:</Run> Przejdź do aplikacji <Run FontWeight="Bold">"TeamsManager API"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.10:</Run> W menu po lewej kliknij <Run FontWeight="Bold">"API permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.11:</Run> Kliknij <Run FontWeight="Bold">"+ Add a permission"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.12:</Run> Wybierz <Run FontWeight="Bold">"Microsoft Graph"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.13:</Run> Wybierz <Run FontWeight="Bold">"Application permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.14:</Run> Znajdź i zaznacz te uprawnienia:<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Team.ReadWrite.All</Run> (w sekcji "Team")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Group.ReadWrite.All</Run> (w sekcji "Group")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">User.Read.All</Run> (w sekcji "User")<LineBreak/>
+                                                        &#160;&#160;• <Run FontWeight="Bold">Directory.Read.All</Run> (w sekcji "Directory")<LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.15:</Run> Kliknij <Run FontWeight="Bold">"Add permissions"</Run><LineBreak/>
+                                                        <Run FontWeight="Bold">Krok 3.16:</Run> Kliknij <Run FontWeight="Bold">"Grant admin consent for [nazwa organizacji]"</Run>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                            
+                                            <Border Background="#FF4A2D2D" CornerRadius="4" Padding="12">
+                                                <StackPanel>
+                                                    <TextBlock Text="⚠️ WYMAGANE UPRAWNIENIA ADMINISTRATORA" FontWeight="Bold" Foreground="#FFFF6B6B" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="#FFFF6B6B" Style="{StaticResource MaterialDesignBody2TextBlock}">
+                                                        Te uprawnienia wymagają zatwierdzenia przez administratora organizacji.<LineBreak/>
+                                                        Bez nich aplikacja nie będzie mogła zarządzać zespołami Microsoft Teams.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Krok 4: Finalizacja -->
+                                    <Border Background="#FF1E3A8A" CornerRadius="6" Padding="16">
+                                        <StackPanel>
+                                            <TextBlock Text="🔹 Krok 4: Finalizacja konfiguracji" FontWeight="Bold" Foreground="White" 
+                                                     Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Margin="0,0,0,12"/>
+                                            
+                                            <TextBlock TextWrapping="Wrap" Foreground="White" Style="{StaticResource MaterialDesignBody2TextBlock}" Margin="0,0,0,8">
+                                                <Run FontWeight="Bold">Krok 4.1:</Run> Skopiuj <Run FontWeight="Bold">Tenant ID</Run> z Azure Portal:<LineBreak/>
+                                                &#160;&#160;• Przejdź do <Run FontWeight="Bold">Azure Active Directory</Run> → <Run FontWeight="Bold">Overview</Run><LineBreak/>
+                                                &#160;&#160;• Skopiuj <Run FontWeight="Bold">"Tenant ID"</Run> i wklej do pola <Run FontWeight="Bold">"Tenant ID"</Run> poniżej<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.2:</Run> Ustaw <Run FontWeight="Bold">Audience</Run> na: <Run FontWeight="Bold">api://[API Client ID]</Run><LineBreak/>
+                                                &#160;&#160;• Gdzie [API Client ID] to ID aplikacji TeamsManager API<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.3:</Run> Kliknij <Run FontWeight="Bold">"WALIDUJ"</Run> aby sprawdzić konfigurację<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.4:</Run> Jeśli wszystko jest poprawne, kliknij <Run FontWeight="Bold">"ZAPISZ"</Run>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Expander>
+                    </materialDesign:Card>
 
                     <!-- Konfiguracja Azure AD -->
-                    <GroupBox Grid.Row="2" 
-                             Header="Konfiguracja Azure AD"
-                             Style="{StaticResource MaterialDesignGroupBox}"
-                             Margin="0,0,0,24">
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            
-                            <!-- Client ID UI -->
-                            <TextBox Grid.Row="0"
-                                    Margin="0,0,0,16"
-                                    Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding UiClientId, UpdateSourceTrigger=PropertyChanged}"
-                                    materialDesign:HintAssist.Hint="UI Client ID *"
-                                    materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Identyfikator aplikacji UI z Azure AD"
-                                    materialDesign:TextFieldAssist.HasClearButton="True"/>
-                            
-                            <!-- Client ID API -->
-                            <TextBox Grid.Row="1"
-                                    Margin="0,0,0,16"
-                                    Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding ApiClientId, UpdateSourceTrigger=PropertyChanged}"
-                                    materialDesign:HintAssist.Hint="API Client ID *"
-                                    materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Identyfikator aplikacji API z Azure AD"
-                                    materialDesign:TextFieldAssist.HasClearButton="True"/>
-                            
-                            <!-- Tenant ID -->
-                            <TextBox Grid.Row="2"
-                                    Margin="0,0,0,16"
-                                    Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding TenantId, UpdateSourceTrigger=PropertyChanged}"
-                                    materialDesign:HintAssist.Hint="Tenant ID *"
-                                    materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Identyfikator dzierżawy Azure AD"
-                                    materialDesign:TextFieldAssist.HasClearButton="True"/>
-                            
-                            <!-- Client Secret -->
-                            <TextBox Grid.Row="3"
-                                    Margin="0,0,0,16"
-                                    Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}"
-                                    materialDesign:HintAssist.Hint="Client Secret *"
-                                    materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Tajny klucz aplikacji API (dla OBO flow)"
-                                    materialDesign:TextFieldAssist.HasClearButton="True"/>
-                            
-                            <!-- Audience -->
-                            <TextBox Grid.Row="4"
-                                    Margin="0,0,0,16"
-                                    Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                    Text="{Binding Audience, UpdateSourceTrigger=PropertyChanged}"
-                                    materialDesign:HintAssist.Hint="Audience *"
-                                    materialDesign:HintAssist.IsFloating="True"
-                                    materialDesign:HintAssist.HelperText="Docelowa grupa odbiorców tokenów"
-                                    materialDesign:TextFieldAssist.HasClearButton="True"/>
-                        </Grid>
-                    </GroupBox>
+                    <materialDesign:Card Grid.Row="3" 
+                                        Margin="24,0,24,24" 
+                                        materialDesign:ElevationAssist.Elevation="Dp2"
+                                        Background="#FF2D2D30">
+                        <Expander IsExpanded="False"
+                                 Style="{StaticResource MaterialDesignExpander}"
+                                 Background="Transparent">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="MicrosoftAzure" 
+                                                           Width="24" Height="24"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AccentBlue}"
+                                                           Margin="0,0,12,0"/>
+                                    <TextBlock Text="Konfiguracja Azure AD" 
+                                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                             VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <Grid Margin="24,0,24,20">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <!-- Client ID UI -->
+                                <TextBox Grid.Row="0"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding UiClientId, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="UI Client ID *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji UI z Azure AD"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                                
+                                <!-- Client ID API -->
+                                <TextBox Grid.Row="1"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding ApiClientId, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="API Client ID *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Identyfikator aplikacji API z Azure AD"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                                
+                                <!-- Tenant ID -->
+                                <TextBox Grid.Row="2"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding TenantId, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="Tenant ID *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Identyfikator dzierżawy Azure AD"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                                
+                                <!-- Client Secret -->
+                                <TextBox Grid.Row="3"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding ClientSecret, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="Client Secret *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Tajny klucz aplikacji API (dla OBO flow)"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                                
+                                <!-- Audience -->
+                                <TextBox Grid.Row="4"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding Audience, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="Audience *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Docelowa grupa odbiorców tokenów"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                            </Grid>
+                        </Expander>
+                    </materialDesign:Card>
 
                     <!-- Konfiguracja aplikacji -->
-                    <GroupBox Grid.Row="3" 
-                             Header="Konfiguracja aplikacji"
-                             Style="{StaticResource MaterialDesignGroupBox}"
-                             Margin="0,0,0,24">
-                        <Grid Margin="16">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            
-                            <!-- Nazwa i wersja -->
-                            <Grid Grid.Row="0" Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                    <materialDesign:Card Grid.Row="4" 
+                                        Margin="24,0,24,24" 
+                                        materialDesign:ElevationAssist.Elevation="Dp2"
+                                        Background="#FF2D2D30">
+                        <Expander IsExpanded="False"
+                                 Style="{StaticResource MaterialDesignExpander}"
+                                 Background="Transparent">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Application" 
+                                                           Width="24" Height="24"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AccentBlue}"
+                                                           Margin="0,0,12,0"/>
+                                    <TextBlock Text="Konfiguracja aplikacji" 
+                                             Style="{StaticResource MaterialDesignHeadline6TextBlock}"
+                                             VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <Grid Margin="24,0,24,20">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
                                 
-                                <TextBox Grid.Column="0"
-                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding ApplicationName, UpdateSourceTrigger=PropertyChanged}"
-                                        materialDesign:HintAssist.Hint="Nazwa aplikacji"
-                                        materialDesign:HintAssist.IsFloating="True"/>
+                                <!-- Nazwa i wersja -->
+                                <Grid Grid.Row="0" Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBox Grid.Column="0"
+                                            Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                            Text="{Binding ApplicationName, UpdateSourceTrigger=PropertyChanged}"
+                                            materialDesign:HintAssist.Hint="Nazwa aplikacji"
+                                            materialDesign:HintAssist.IsFloating="True"/>
+                                    
+                                    <TextBox Grid.Column="2"
+                                            Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                            Text="{Binding Version, UpdateSourceTrigger=PropertyChanged}"
+                                            materialDesign:HintAssist.Hint="Wersja"
+                                            materialDesign:HintAssist.IsFloating="True"/>
+                                </Grid>
                                 
-                                <TextBox Grid.Column="2"
-                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding Version, UpdateSourceTrigger=PropertyChanged}"
-                                        materialDesign:HintAssist.Hint="Wersja"
-                                        materialDesign:HintAssist.IsFloating="True"/>
+                                <!-- Środowisko -->
+                                <ComboBox Grid.Row="1" Margin="0,0,0,16"
+                                         Style="{StaticResource MaterialDesignOutlinedComboBox}"
+                                         SelectedValue="{Binding Environment}"
+                                         materialDesign:HintAssist.Hint="Środowisko"
+                                         materialDesign:HintAssist.IsFloating="True">
+                                    <ComboBoxItem>Development</ComboBoxItem>
+                                    <ComboBoxItem>Staging</ComboBoxItem>
+                                    <ComboBoxItem>Production</ComboBoxItem>
+                                </ComboBox>
+                                
+                                <!-- API Base URL i Timeout -->
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBox Grid.Column="0"
+                                            Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                            Text="{Binding ApiBaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                                            materialDesign:HintAssist.Hint="API Base URL"
+                                            materialDesign:HintAssist.IsFloating="True"/>
+                                    
+                                    <TextBox Grid.Column="2"
+                                            Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                            Text="{Binding ApiTimeout, UpdateSourceTrigger=PropertyChanged}"
+                                            materialDesign:HintAssist.Hint="Timeout (s)"
+                                            materialDesign:HintAssist.IsFloating="True"/>
+                                </Grid>
                             </Grid>
-                            
-                            <!-- Środowisko -->
-                            <ComboBox Grid.Row="1" Margin="0,0,0,16"
-                                     Style="{StaticResource MaterialDesignOutlinedComboBox}"
-                                     SelectedValue="{Binding Environment}"
-                                     materialDesign:HintAssist.Hint="Środowisko"
-                                     materialDesign:HintAssist.IsFloating="True">
-                                <ComboBoxItem>Development</ComboBoxItem>
-                                <ComboBoxItem>Staging</ComboBoxItem>
-                                <ComboBoxItem>Production</ComboBoxItem>
-                            </ComboBox>
-                            
-                            <!-- API Base URL i Timeout -->
-                            <Grid Grid.Row="2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="120"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <TextBox Grid.Column="0"
-                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding ApiBaseUrl, UpdateSourceTrigger=PropertyChanged}"
-                                        materialDesign:HintAssist.Hint="API Base URL"
-                                        materialDesign:HintAssist.IsFloating="True"/>
-                                
-                                <TextBox Grid.Column="2"
-                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                                        Text="{Binding ApiTimeout, UpdateSourceTrigger=PropertyChanged}"
-                                        materialDesign:HintAssist.Hint="Timeout (s)"
-                                        materialDesign:HintAssist.IsFloating="True"/>
-                            </Grid>
-                        </Grid>
-                    </GroupBox>
+                        </Expander>
+                    </materialDesign:Card>
                 </Grid>
             </ScrollViewer>
             
             <!-- Footer z przyciskami -->
-            <Border Grid.Row="2" 
+            <Border Grid.Row="5" 
                    Background="{DynamicResource BackgroundMedium}"
                    BorderBrush="{DynamicResource BorderDark}"
                    BorderThickness="0,1,0,0">
@@ -356,7 +587,7 @@
             </Border>
             
             <!-- Loading Overlay -->
-            <Grid Grid.RowSpan="3"
+            <Grid Grid.RowSpan="6"
                  Visibility="{Binding IsLoading, 
                             Converter={StaticResource BoolToVisibilityConverter}}"
                  Background="#80000000">

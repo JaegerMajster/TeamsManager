@@ -42,6 +42,8 @@ using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Common;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Broker;
+using TeamsManager.UI.Models.Configuration;
+using TeamsManager.UI.Services.Configuration;
 
 namespace TeamsManager.UI
 {
@@ -105,6 +107,10 @@ namespace TeamsManager.UI
             services.AddSingleton<AdvancedEncryptionService>();
             services.AddSingleton<IConfigurationManagerV2, ConfigurationManagerV2>();
             services.AddSingleton<ConfigurationInitializer>();
+            
+            // Okno i ViewModel konfiguracji
+            services.AddTransient<ConfigurationSetupWindow>();
+            services.AddTransient<ConfigurationSetupViewModel>();
 
             services.AddSingleton<IMsalConfigurationProvider, MsalConfigurationProvider>();
             
@@ -765,9 +771,18 @@ namespace TeamsManager.UI
                     if (configResult != true)
                     {
                         // Użytkownik anulował konfigurację - zamknij aplikację
-                        MessageBox.Show("Konfiguracja jest wymagana do uruchomienia aplikacji.",
-                                      "Konfiguracja wymagana", MessageBoxButton.OK, MessageBoxImage.Information);
-                        Environment.Exit(0);
+                        MessageBox.Show("Aplikacja zostanie zamknięta, ponieważ konfiguracja jest wymagana do prawidłowego działania.",
+                                      "Konfiguracja anulowana", MessageBoxButton.OK, MessageBoxImage.Information);
+                        
+                        // Bezpieczne zamknięcie aplikacji
+                        try
+                        {
+                            this.Shutdown();
+                        }
+                        catch
+                        {
+                            Environment.Exit(0);
+                        }
                         return;
                     }
                     
@@ -775,7 +790,14 @@ namespace TeamsManager.UI
                 }
                 
                 // Przywróć normalny ShutdownMode i uruchom główne okno
-                System.Windows.Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
+                try
+                {
+                    this.ShutdownMode = ShutdownMode.OnLastWindowClose;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[APP] Nie można ustawić ShutdownMode: {ex.Message}");
+                }
                 
                 System.Diagnostics.Debug.WriteLine("=== APP: Tworzenie MainShellWindow przez DI ===");
                 Console.WriteLine("=== APP: Tworzenie MainShellWindow przez DI ===");
@@ -860,7 +882,16 @@ namespace TeamsManager.UI
                     "Błąd krytyczny",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
-                System.Windows.Application.Current.Shutdown();
+                
+                // Bezpieczne zamknięcie aplikacji
+                try
+                {
+                    this.Shutdown();
+                }
+                catch
+                {
+                    Environment.Exit(1);
+                }
             }
         }
     }
