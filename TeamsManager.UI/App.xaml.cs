@@ -13,6 +13,7 @@ using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Views;
 using TeamsManager.UI.Views.Shell;
 using TeamsManager.UI.ViewModels.Shell;
+using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.Views.Dashboard;
 using TeamsManager.UI.ViewModels.Dashboard;
 using TeamsManager.Core.Abstractions.Services;
@@ -254,9 +255,11 @@ namespace TeamsManager.UI
 
             services.AddTransient<ManualTestingWindow>();
             services.AddTransient<LoginWindow>();
+            services.AddTransient<ConfigurationSetupWindow>();
 
             services.AddSingleton<ViewModels.Shell.MainShellViewModel>();
             services.AddTransient<Views.Shell.MainShellWindow>();
+            services.AddTransient<ConfigurationSetupViewModel>();
 
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
@@ -742,7 +745,7 @@ namespace TeamsManager.UI
             }
         }
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
@@ -750,6 +753,26 @@ namespace TeamsManager.UI
             {
                 System.Diagnostics.Debug.WriteLine("=== APP: OnStartup rozpoczęta ===");
                 Console.WriteLine("=== APP: OnStartup rozpoczęta ===");
+                
+                // Sprawdź czy konfiguracja jest kompletna
+                var isConfigComplete = await ConfigurationSetupWindow.CheckConfigurationAsync(ServiceProvider);
+                if (!isConfigComplete)
+                {
+                    System.Diagnostics.Debug.WriteLine("=== APP: Konfiguracja niekompletna - pokazuję okno konfiguracji ===");
+                    
+                    // Pokaż okno konfiguracji
+                    var configResult = ConfigurationSetupWindow.ShowConfigurationDialog(null, ServiceProvider);
+                    if (configResult != true)
+                    {
+                        // Użytkownik anulował konfigurację - zamknij aplikację
+                        MessageBox.Show("Konfiguracja jest wymagana do uruchomienia aplikacji.",
+                                      "Konfiguracja wymagana", MessageBoxButton.OK, MessageBoxImage.Information);
+                        Environment.Exit(0);
+                        return;
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine("=== APP: Konfiguracja zakończona pomyślnie ===");
+                }
                 
                 // Przywróć normalny ShutdownMode i uruchom główne okno
                 System.Windows.Application.Current.ShutdownMode = ShutdownMode.OnLastWindowClose;
