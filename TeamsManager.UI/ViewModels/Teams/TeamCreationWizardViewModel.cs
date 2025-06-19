@@ -102,7 +102,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         public ObservableCollection<SchoolType> SchoolTypes { get; } = new();
         public ObservableCollection<SchoolYear> SchoolYears { get; } = new();
         
-        // Step 2: Template
+
         private bool _useTemplate;
         public bool UseTemplate
         {
@@ -231,10 +231,10 @@ namespace TeamsManager.UI.ViewModels.Teams
             AddMembersCommand = new RelayCommand(AddSelectedMembers);
             RemoveMembersCommand = new RelayCommand(RemoveSelectedMembers);
             
-            // Subscribe to template value changes
+
             TemplateValues.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowTemplateValues));
             
-            // Load initial data
+
             _ = LoadInitialData();
         }
         
@@ -281,7 +281,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 
                 FilterAvailableUsers();
                 
-                // Load universal templates initially
+
                 var universalTemplates = templates.Where(t => t.IsUniversal).ToList();
                 Templates.Clear();
                 foreach (var template in universalTemplates)
@@ -424,7 +424,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 if (SelectedOwner != null && SelectedTemplate.Placeholders.Contains("Nauczyciel"))
                     values["Nauczyciel"] = SelectedOwner.LastName;
                 
-                // Add user-provided values
+                // Dodaj wartości podane przez użytkownika
                 foreach (var templateValue in TemplateValues)
                 {
                     if (!string.IsNullOrWhiteSpace(templateValue.Value))
@@ -531,7 +531,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 {
                     CreatedTeam = createdTeam;
                     
-                    // Add members if any selected
+                    // Dodaj członków jeśli zostali wybrani
                     if (SelectedMembers.Any())
                     {
                         var memberUpns = SelectedMembers.Select(m => m.UPN).ToList();

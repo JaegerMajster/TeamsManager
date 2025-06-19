@@ -551,20 +551,20 @@ namespace TeamsManager.Core.Services.Graph
 
             try
             {
-                _logger.LogInformation("Performing comprehensive Graph API health check");
+                _logger.LogInformation("Wykonywanie kompleksowego sprawdzenia zdrowia Graph API");
 
                 // Use connection service for health check
                 var healthInfo = await _connectionService.GetConnectionHealthAsync();
 
                 stopwatch.Stop();
-                _logger.LogInformation("Graph API health check completed: Healthy = {IsHealthy}", healthInfo.IsHealthy);
+                _logger.LogInformation("Sprawdzenie zdrowia Graph API zakończone: Zdrowy = {IsHealthy}", healthInfo.IsHealthy);
                 return healthInfo;
             }
             catch (Exception ex)
             {
                 stopwatch.Stop();
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException("Error performing health check", ex),
+                    new GraphConnectionException("Błąd podczas sprawdzania zdrowia", ex),
                     () => PerformHealthCheckAsync(apiAccessToken),
                     _logger,
                     "PerformHealthCheck",
@@ -622,7 +622,7 @@ namespace TeamsManager.Core.Services.Graph
             catch (Exception ex)
             {
                 return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(
-                    new GraphConnectionException("Error getting global rate limit status", ex),
+                    new GraphConnectionException("Błąd podczas pobierania globalnego statusu rate limit", ex),
                     () => GetGlobalRateLimitStatusAsync(),
                     _logger,
                     "GetGlobalRateLimitStatus",
@@ -717,7 +717,7 @@ namespace TeamsManager.Core.Services.Graph
 
             if (!configuration.IsValid())
             {
-                throw new ArgumentException("Configuration is not valid", nameof(configuration));
+                throw new ArgumentException("Konfiguracja jest nieprawidłowa", nameof(configuration));
             }
 
             _configuration = configuration;

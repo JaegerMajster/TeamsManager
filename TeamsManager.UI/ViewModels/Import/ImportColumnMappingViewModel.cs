@@ -132,7 +132,7 @@ namespace TeamsManager.UI.ViewModels.Import
                 if (string.IsNullOrEmpty(firstLine)) return;
 
                 var columns = firstLine.Split(_importOptions.CsvDelimiter);
-                var sampleLine = reader.ReadLine(); // Druga linia jako przykład danych
+                var sampleLine = reader.ReadLine();
                 var sampleValues = sampleLine?.Split(_importOptions.CsvDelimiter) ?? new string[columns.Length];
 
                 for (int i = 0; i < columns.Length; i++)
@@ -391,7 +391,7 @@ namespace TeamsManager.UI.ViewModels.Import
 
         private void UpdateMappingValidation()
         {
-            // Sprawdź czy wszystkie wymagane pola są zmapowane
+
             var requiredFields = ColumnMappings
                 .Where(cm => cm.IsRequired)
                 .Select(cm => cm.TargetField)

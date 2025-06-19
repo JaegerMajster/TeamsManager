@@ -62,7 +62,7 @@ namespace TeamsManager.Api.Swagger
                                 Example = new Microsoft.OpenApi.Any.OpenApiObject
                                 {
                                     ["message"] = new Microsoft.OpenApi.Any.OpenApiString("Unauthorized"),
-                                    ["detail"] = new Microsoft.OpenApi.Any.OpenApiString("Bearer token is required")
+                                    ["detail"] = new Microsoft.OpenApi.Any.OpenApiString("Token Bearer jest wymagany")
                                 }
                             }
                         }
@@ -84,13 +84,13 @@ namespace TeamsManager.Api.Swagger
                                     Properties = new Dictionary<string, OpenApiSchema>
                                     {
                                         ["message"] = new OpenApiSchema { Type = "string", Example = new Microsoft.OpenApi.Any.OpenApiString("Forbidden") },
-                                        ["detail"] = new OpenApiSchema { Type = "string", Example = new Microsoft.OpenApi.Any.OpenApiString("Insufficient permissions for this operation") }
+                                        ["detail"] = new OpenApiSchema { Type = "string", Example = new Microsoft.OpenApi.Any.OpenApiString("Niewystarczające uprawnienia dla tej operacji") }
                                     }
                                 },
                                 Example = new Microsoft.OpenApi.Any.OpenApiObject
                                 {
                                     ["message"] = new Microsoft.OpenApi.Any.OpenApiString("Forbidden"),
-                                    ["detail"] = new Microsoft.OpenApi.Any.OpenApiString("Insufficient permissions for this operation")
+                                    ["detail"] = new Microsoft.OpenApi.Any.OpenApiString("Niewystarczające uprawnienia dla tej operacji")
                                 }
                             }
                         }

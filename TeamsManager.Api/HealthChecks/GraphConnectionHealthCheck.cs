@@ -86,7 +86,7 @@ namespace TeamsManager.Api.HealthChecks
             {
                 _logger.LogError(ex, "Błąd podczas sprawdzania stanu połączenia Graph API");
                 return HealthCheckResult.Unhealthy(
-                    "Graph API health check failed",
+                    "Sprawdzenie stanu Graph API nie powiodło się",
                     exception: ex,
                     data: new Dictionary<string, object>
                     {

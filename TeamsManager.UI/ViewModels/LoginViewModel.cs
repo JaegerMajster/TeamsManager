@@ -46,8 +46,7 @@ namespace TeamsManager.UI.ViewModels
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
             _userSynchronizationService = userSynchronizationService ?? throw new ArgumentNullException(nameof(userSynchronizationService));
             
-            // Test czy serwis synchronizacji jest poprawnie wstrzyknięty
-            Console.WriteLine($"=== LOGINVIEWMODEL: UserSynchronizationService wstrzyknięty: {_userSynchronizationService != null} ===");
+
             
             // Inicjalizacja komend
             LoginCommand = new RelayCommand(async _ => await LoginAsync(), _ => CanLogin);
@@ -204,7 +203,7 @@ namespace TeamsManager.UI.ViewModels
                     
                     _currentUserService.SetCurrentUserUpn(userUpn);
                     
-                    // Sprawdź czy UPN został poprawnie ustawiony
+        
                     var currentUpn = _currentUserService.GetCurrentUserUpn();
                     _logger.LogInformation("UPN po ustawieniu: {CurrentUpn}", currentUpn);
                     

@@ -13,7 +13,7 @@ namespace TeamsManager.UI.Services
 {
     /// <summary>
     /// Serwis monitorowania specjalnie dostosowany do aplikacji TeamsManager
-    /// Skupiony na kluczowych komponentach: Graph API, Teams Operations, Authentication (Etap 5.2)
+    /// Skupiony na kluczowych komponentach: Graph API, Teams Operations, Authentication
     /// Implementuje monitoring Graph API
     /// </summary>
     public interface ITeamsManagerMonitoringService
@@ -24,7 +24,7 @@ namespace TeamsManager.UI.Services
         Task<IEnumerable<TeamsManagerAlert>> GetRecentAlertsAsync();
         Task<TeamsManagerDashboardSummary> GetDashboardSummaryAsync();
         
-        // Graph API Diagnostic Methods (Etap 5.2.1)
+
         Task<GraphDiagnosticInfo?> GetGraphDiagnosticsAsync();
         Task<GraphHealthStatus?> GetGraphHealthStatusAsync();
         Task<GraphMetricsInfo?> GetGraphMetricsAsync();
@@ -54,7 +54,7 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogDebug("Pobieranie danych zdrowia systemu TeamsManager (Graph API)");
 
-                // Pobierz diagnostykę z Graph API (Etap 5.2.1)
+    
                 var diagnostics = await _apiService.GetExtendedGraphConnectionDiagnosticsAsync();
                 var health = await _apiService.GetGraphConnectionHealthAsync();
                 var permissions = await _apiService.ValidateGraphPermissionsAsync(new[] { "User.Read", "Group.Read.All", "Directory.Read.All", "Team.ReadBasic.All" });
@@ -299,7 +299,7 @@ namespace TeamsManager.UI.Services
                     });
                 }
 
-                // Przykładowe alerty dla demonstracji
+    
                 alerts.AddRange(new[]
                 {
                     new TeamsManagerAlert
@@ -630,7 +630,7 @@ namespace TeamsManager.UI.Services
         public int ErrorsLastHour { get; set; }
         public int WarningsLastHour { get; set; }
         
-        // Graph API Rate Limiting (Etap 5.2.1)
+        
         public int RateLimitRemaining { get; set; }
         public DateTime RateLimitResetTime { get; set; }
         public bool IsThrottled { get; set; }

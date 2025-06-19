@@ -17,7 +17,7 @@ namespace TeamsManager.UI.Models.SchoolYearModels
             _schoolYear = schoolYear ?? throw new ArgumentNullException(nameof(schoolYear));
         }
 
-        // ===== WŁAŚCIWOŚCI PODSTAWOWE =====
+
         public string Id => _schoolYear.Id;
         
         public string Name
@@ -96,7 +96,7 @@ namespace TeamsManager.UI.Models.SchoolYearModels
             }
         }
 
-        // ===== WŁAŚCIWOŚCI SEMESTRÓW =====
+
         public DateTime? FirstSemesterStart
         {
             get => _schoolYear.FirstSemesterStart;
@@ -157,7 +157,7 @@ namespace TeamsManager.UI.Models.SchoolYearModels
             }
         }
 
-        // ===== WŁAŚCIWOŚCI OBLICZANE =====
+
         
         /// <summary>
         /// Nazwa wyświetlana (z ikoną dla bieżącego roku)
@@ -233,21 +233,21 @@ namespace TeamsManager.UI.Models.SchoolYearModels
                 
                 var now = DateTime.Now.Date;
                 
-                // Sprawdź pierwszy semestr
+    
                 if (FirstSemesterStart.HasValue && FirstSemesterEnd.HasValue)
                 {
                     if (now >= FirstSemesterStart.Value.Date && now <= FirstSemesterEnd.Value.Date)
                         return "I semestr";
                 }
                 
-                // Sprawdź drugi semestr
+    
                 if (SecondSemesterStart.HasValue && SecondSemesterEnd.HasValue)
                 {
                     if (now >= SecondSemesterStart.Value.Date && now <= SecondSemesterEnd.Value.Date)
                         return "II semestr";
                 }
                 
-                // Sprawdź okresy między semestrami
+    
                 if (FirstSemesterEnd.HasValue && SecondSemesterStart.HasValue)
                 {
                     if (now > FirstSemesterEnd.Value.Date && now < SecondSemesterStart.Value.Date)
@@ -299,7 +299,7 @@ namespace TeamsManager.UI.Models.SchoolYearModels
             }
         }
 
-        // ===== DOSTĘP DO MODELU CORE =====
+
         public SchoolYear ToSchoolYear() => _schoolYear;
 
         public void UpdateFromSchoolYear(SchoolYear schoolYear)
@@ -312,7 +312,7 @@ namespace TeamsManager.UI.Models.SchoolYearModels
             OnPropertyChanged(string.Empty); // Odśwież wszystkie właściwości
         }
 
-        // ===== IMPLEMENTACJA INotifyPropertyChanged =====
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected virtual void OnPropertyChanged(string? propertyName = null)

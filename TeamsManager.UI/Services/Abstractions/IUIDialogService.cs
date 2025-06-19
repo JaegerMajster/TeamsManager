@@ -8,7 +8,7 @@ namespace TeamsManager.UI.Services.Abstractions
     /// </summary>
     public interface IUIDialogService
     {
-        // ===== NOWY UNIWERSALNY SYSTEM DIALOGÓW =====
+    
         
         /// <summary>
         /// Wyświetla uniwersalny dialog z opcjami konfiguracji
@@ -47,7 +47,7 @@ namespace TeamsManager.UI.Services.Abstractions
         Task<DialogResponse> ShowQuestionAsync(string title, string message, string? details = null,
             string? primaryText = null, string? secondaryText = null);
 
-        // ===== STARY SYSTEM (ZACHOWANY DLA KOMPATYBILNOŚCI) =====
+
         
         /// <summary>
         /// Wyświetla dialog błędu (stary system - do usunięcia)
@@ -79,7 +79,7 @@ namespace TeamsManager.UI.Services.Abstractions
         [System.Obsolete("Użyj ShowConfirmationAsync zamiast tego")]
         Task<bool> ShowConfirmationDialog(string title, string message);
 
-        // ===== OVERLAY ŁADOWANIA =====
+
 
         /// <summary>
         /// Wyświetla overlay ładowania

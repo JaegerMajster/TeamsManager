@@ -256,7 +256,7 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
                                 "Ta operacja spowoduje dezaktywację typu szkoły.\n" +
                                 "Powiązane zespoły i szablony pozostaną niezmienione.";
 
-            // TODO: Użyć Material Design Dialog
+
             var result = System.Windows.MessageBox.Show(
                 confirmMessage,
                 "Potwierdź usunięcie",
@@ -298,7 +298,7 @@ namespace TeamsManager.UI.ViewModels.SchoolTypes
 
             _logger.LogInformation("Wyświetlanie szczegółów typu szkoły: {SchoolTypeId}", SelectedSchoolType.Id);
             
-            // TODO: Implementacja wyświetlania szczegółów
+
             // Może otworzyć dialog tylko do odczytu lub przejść do widoku szczegółów
         }
 

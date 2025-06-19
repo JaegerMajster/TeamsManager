@@ -518,7 +518,6 @@ namespace TeamsManager.UI.ViewModels.Teams
             var teamIds = SelectedTeams.Select(t => t.Id).ToArray();
             TotalItems = teamIds.Length;
 
-            // Symulacja progress updates (w rzeczywistości byłby callback z orchestratora)
             _ = SimulateProgressAsync();
 
             return await _lifecycleOrchestrator.BulkArchiveTeamsWithCleanupAsync(
@@ -591,8 +590,6 @@ namespace TeamsManager.UI.ViewModels.Teams
 
         private async Task SimulateProgressAsync()
         {
-            // W rzeczywistej implementacji byłby callback z orchestratora
-            // To tylko symulacja dla demonstracji UI
             while (IsProcessing && ProcessedItems < TotalItems)
             {
                 await Task.Delay(500);
@@ -600,7 +597,6 @@ namespace TeamsManager.UI.ViewModels.Teams
                 ProgressPercentage = TotalItems > 0 ? (double)ProcessedItems / TotalItems * 100 : 0;
                 ProgressStatus = $"Przetwarzanie zespołu {ProcessedItems} z {TotalItems}...";
 
-                // Symulacja błędów
                 if (ProcessedItems % 7 == 0 && !DryRun)
                 {
                     ErrorCount++;
@@ -610,7 +606,7 @@ namespace TeamsManager.UI.ViewModels.Teams
 
         private async Task ShowResultsAsync(BulkOperationResult result)
         {
-            // Tu można pokazać dialog z wynikami lub zaktualizować UI
+
             var successCount = result.SuccessfulOperations?.Count ?? 0;
             var errorCount = result.Errors?.Count ?? 0;
 

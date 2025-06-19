@@ -54,8 +54,8 @@ namespace TeamsManager.Core.Models.Graph
         /// <returns>String reprezentujący licencję</returns>
         public override string ToString()
         {
-            var displayName = !string.IsNullOrEmpty(DisplayName) ? DisplayName : SkuPartNumber ?? "Unknown License";
-            var status = IsActive ? "Active" : State ?? "Unknown";
+            var displayName = !string.IsNullOrEmpty(DisplayName) ? DisplayName : SkuPartNumber ?? "Nieznana licencja";
+            var status = IsActive ? "Aktywna" : State ?? "Nieznany";
             return $"{displayName} ({status})";
         }
     }

@@ -141,7 +141,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                     {
                         Name = "Graph API Cache",
                         Description = "Status cache Graph API",
-                        Status = "Healthy", // Zakładamy że jeśli mamy healthInfo to cache działa
+                        Status = "Healthy",
                         ResponseTime = 0,
                         LastChecked = DateTime.Now
                     });
@@ -151,7 +151,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                     {
                         Name = "Local Database",
                         Description = "Lokalna baza danych TeamsManager",
-                        Status = "Healthy", // Zakładamy że jeśli mamy healthInfo to baza działa
+                        Status = "Healthy",
                         ResponseTime = 0,
                         LastChecked = DateTime.Now
                     });
@@ -305,7 +305,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                     // Aktualizuj UI na głównym wątku
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        // Dodaj komponent wyniku testu Graph API
+
                         var existingTestComponent = Components.FirstOrDefault(c => c.Name == "Graph API Connection Test");
                         if (existingTestComponent != null)
                         {
@@ -467,7 +467,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                 // Ustaw wiadomość powiadomienia
                 LastNotification = $"{title}: {message}";
                 
-                // Opcjonalnie: pokaż MessageBox tylko dla krytycznych błędów
+    
                 if (title == "Błąd" && message.Contains("Krytyczny"))
                 {
                     System.Windows.MessageBox.Show(message, title, System.Windows.MessageBoxButton.OK, 

@@ -19,7 +19,7 @@ namespace TeamsManager.UI.Models
         public string? ApiEndpoint { get; set; }
         public string Priority { get; set; } = "Medium"; // High, Medium, Low
         
-        // Nowe właściwości dla automatycznych testów
+
         public bool HasAutomaticExecution { get; set; } = false;
         public string? AutoExecuteButtonText { get; set; }
     }

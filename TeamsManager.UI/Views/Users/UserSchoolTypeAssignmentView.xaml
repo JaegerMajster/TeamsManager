@@ -63,22 +63,22 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Path=TotalWorkloadPercentage, 
                                                      Converter={StaticResource GreaterThanConverter}, 
-                                                     ConverterParameter=100}" 
+                                                     ConverterParameter=100, Mode=OneWay}" 
                                                      Value="True">
                                             <Setter Property="Foreground" Value="{DynamicResource AccentRed}"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Path=TotalWorkloadPercentage, 
                                                      Converter={StaticResource GreaterThanConverter}, 
-                                                     ConverterParameter=80}" 
+                                                     ConverterParameter=80, Mode=OneWay}" 
                                                      Value="True">
                                             <Setter Property="Foreground" Value="{DynamicResource WarningOrange}"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
-                            <Run Text="{Binding TotalWorkloadPercentage, StringFormat='{}{0:0}%'}"/>
+                            <Run Text="{Binding TotalWorkloadPercentage, StringFormat='{}{0:0}%', Mode=OneWay}"/>
                         </TextBlock>
-                        <ProgressBar Value="{Binding TotalWorkloadPercentage}" 
+                        <ProgressBar Value="{Binding TotalWorkloadPercentage, Mode=OneWay}" 
                                      Maximum="100"
                                      Height="8"
                                      Margin="0,8,0,0"

@@ -34,7 +34,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         { 
             get 
             {
-                // Używamy non-breaking spaces dla wcięcia
+    
                 var indent = new string('\u00A0', Level * 4);
                 return indent + Unit.Name;
             } 
@@ -429,7 +429,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             get 
             {
                 // W trybie Add używaj WYŁĄCZNIE _workingParentUnitId (bez fallback)
-                // W trybie Edit można użyć fallback do Model?.ParentUnitId
+    
                 var value = IsAddMode ? _workingParentUnitId : (_workingParentUnitId ?? Model?.ParentUnitId);
                 // Konwertuj null na pusty string dla ComboBox (opcja "Brak")
                 return value ?? string.Empty;
@@ -1069,7 +1069,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                     var parentUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(currentParentUnitId);
                     if (parentUnit != null && !string.IsNullOrEmpty(parentUnit.Code))
                     {
-                        // Używamy kodu jednostki nadrzędnej jako prefiksu
+            
                         codeParts.Add(parentUnit.Code);
                     }
                     else if (parentUnit != null && !string.IsNullOrEmpty(parentUnit.Name))
@@ -1101,7 +1101,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
         /// <summary>
         /// Normalizuje nazwę jednostki do użycia w kodzie
         /// Formatowanie: PascalCase z pierwszą wielką literą każdego słowa
-        /// Przykład: "LO semestr I" => "LOSemestrI"
+
         /// </summary>
         private string NormalizeUnitName(string name)
         {
@@ -1153,7 +1153,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
             {
                 var allUnits = await _organizationalUnitService.GetAllOrganizationalUnitsAsync();
                 
-                // Sprawdź czy istnieje inna jednostka z tym samym kodem
+    
                 var conflictingUnits = allUnits.Where(u => 
                     u.Code == code && 
                     u.Id != Model.Id // Wyklucz siebie (w przypadku edycji)
@@ -1185,7 +1185,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
                     Model.Code = code;
                 }
 
-                // Sprawdź konflikty
+    
                 if (!string.IsNullOrEmpty(code))
                 {
                     var hasConflict = await CheckCodeConflictAsync(code);

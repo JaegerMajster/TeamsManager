@@ -110,12 +110,12 @@ namespace TeamsManager.Application.Services
                 {
                     ProcessId = processId,
                     ProcessType = "BulkArchiveWithCleanup",
-                    Status = "Running",
+                    Status = "W trakcie",
                     StartedAt = DateTime.UtcNow,
                     TotalItems = teamIds!.Length,
                     ProcessedItems = 0,
                     FailedItems = 0,
-                    CurrentOperation = "Initializing",
+                    CurrentOperation = "Inicjalizacja",
                     AffectedTeamIds = teamIds
                 };
                 _activeProcesses[processId] = processStatus;
@@ -125,7 +125,7 @@ namespace TeamsManager.Application.Services
                 try
                 {
                     // 3. Walidacja zespołów (wzorzec business validation)
-                    processStatus.CurrentOperation = "Validating teams";
+                    processStatus.CurrentOperation = "Walidacja zespołów";
                     await UpdateProcessStatusAsync(processId, processStatus);
 
                     var validTeams = new List<Team>();
@@ -173,7 +173,7 @@ namespace TeamsManager.Application.Services
                     }
 
                     processStatus.TotalItems = validTeams.Count;
-                    processStatus.CurrentOperation = "Processing teams";
+                    processStatus.CurrentOperation = "Przetwarzanie zespołów";
                     await UpdateProcessStatusAsync(processId, processStatus);
 
                     var successfulOperations = new List<BulkOperationSuccess>();
@@ -220,7 +220,7 @@ namespace TeamsManager.Application.Services
                     // 6. Cleanup operations (jeśli włączone)
                     if (options.CleanupChannels || options.RemoveInactiveMembers)
                     {
-                        processStatus.CurrentOperation = "Cleanup operations";
+                        processStatus.CurrentOperation = "Operacje czyszczenia";
                         await UpdateProcessStatusAsync(processId, processStatus);
 
                         var cleanupResults = await PerformGraphCleanupOperationsAsync(
@@ -233,7 +233,7 @@ namespace TeamsManager.Application.Services
                     }
 
                     // 7. Finalizacja procesu (wzorzec finalization)
-                    processStatus.Status = errors.Any() ? "Completed with errors" : "Completed";
+                    processStatus.Status = errors.Any() ? "Zakończono z błędami" : "Zakończono";
                     processStatus.CompletedAt = DateTime.UtcNow;
                     await UpdateProcessStatusAsync(processId, processStatus);
 
@@ -268,7 +268,7 @@ namespace TeamsManager.Application.Services
                 
                 if (_activeProcesses.TryGetValue(processId, out var status))
                 {
-                    status.Status = "Failed";
+                    status.Status = "Nieudane";
                     status.CompletedAt = DateTime.UtcNow;
                     status.ErrorMessage = ex.Message;
                 }
@@ -341,10 +341,10 @@ namespace TeamsManager.Application.Services
                 {
                     ProcessId = processId,
                     ProcessType = "BulkRestoreWithValidation",
-                    Status = "Running",
+                    Status = "W trakcie",
                     StartedAt = DateTime.UtcNow,
                     TotalItems = teamIds!.Length,
-                    CurrentOperation = "Validating teams",
+                    CurrentOperation = "Walidacja zespołów",
                     AffectedTeamIds = teamIds
                 };
                 _activeProcesses[processId] = processStatus;
@@ -413,7 +413,7 @@ namespace TeamsManager.Application.Services
                     }
 
                     processStatus.TotalItems = validTeams.Count;
-                    processStatus.CurrentOperation = "Restoring teams";
+                    processStatus.CurrentOperation = "Przywracanie zespołów";
                     await UpdateProcessStatusAsync(processId, processStatus);
 
                     var successfulOperations = new List<BulkOperationSuccess>();
@@ -474,7 +474,7 @@ namespace TeamsManager.Application.Services
                     }
 
                     // Finalizacja
-                    processStatus.Status = errors.Any() ? "Completed with errors" : "Completed";
+                    processStatus.Status = errors.Any() ? "Zakończono z błędami" : "Zakończono";
                     processStatus.CompletedAt = DateTime.UtcNow;
                     await UpdateProcessStatusAsync(processId, processStatus);
 
@@ -499,7 +499,7 @@ namespace TeamsManager.Application.Services
                 
                 if (_activeProcesses.TryGetValue(processId, out var status))
                 {
-                    status.Status = "Failed";
+                    status.Status = "Nieudane";
                     status.CompletedAt = DateTime.UtcNow;
                     status.ErrorMessage = ex.Message;
                 }
@@ -573,10 +573,10 @@ namespace TeamsManager.Application.Services
                 {
                     ProcessId = processId,
                     ProcessType = "TeamMigration",
-                    Status = "Running",
+                    Status = "W trakcie",
                     StartedAt = DateTime.UtcNow,
                     TotalItems = plan.TeamIds!.Length,
-                    CurrentOperation = "Preparing migration",
+                    CurrentOperation = "Przygotowywanie migracji",
                     AffectedTeamIds = plan.TeamIds
                 };
                 _activeProcesses[processId] = processStatus;
@@ -629,8 +629,7 @@ namespace TeamsManager.Application.Services
                                     // Archiwizacja oryginalnego zespołu (jeśli włączone)
                                     if (plan.ArchiveSourceTeams)
                                     {
-                                        // Tutaj można by implementować logikę archiwizacji
-                                        // ale nie tworzę duplikatów - zespół już został zaktualizowany
+                                        // Logika archiwizacji - zespół już został zaktualizowany
                                     }
                                 }
                                 else
@@ -661,7 +660,7 @@ namespace TeamsManager.Application.Services
                         await UpdateProcessStatusAsync(processId, processStatus);
                     }
 
-                    processStatus.Status = errors.Any() ? "Completed with errors" : "Completed";
+                    processStatus.Status = errors.Any() ? "Zakończono z błędami" : "Zakończono";
                     processStatus.CompletedAt = DateTime.UtcNow;
                     await UpdateProcessStatusAsync(processId, processStatus);
 
@@ -716,9 +715,9 @@ namespace TeamsManager.Application.Services
                 {
                     ProcessId = processId,
                     ProcessType = "ConsolidateInactiveTeams",
-                    Status = "Running",
+                    Status = "W trakcie",
                     StartedAt = DateTime.UtcNow,
-                    CurrentOperation = "Finding inactive teams"
+                    CurrentOperation = "Wyszukiwanie nieaktywnych zespołów"
                 };
                 _activeProcesses[processId] = processStatus;
 
@@ -749,7 +748,7 @@ namespace TeamsManager.Application.Services
                     }
 
                     processStatus.TotalItems = inactiveTeams.Count;
-                    processStatus.CurrentOperation = "Consolidating teams";
+                    processStatus.CurrentOperation = "Konsolidacja zespołów";
                     processStatus.AffectedTeamIds = inactiveTeams.Select(t => t.Id).ToArray();
                     await UpdateProcessStatusAsync(processId, processStatus);
 
@@ -769,7 +768,7 @@ namespace TeamsManager.Application.Services
                     var teamIds = inactiveTeams.Select(t => t.Id).ToArray();
                     var archiveResult = await BulkArchiveTeamsWithCleanupAsync(teamIds, archiveOptions, apiAccessToken);
 
-                    processStatus.Status = "Completed";
+                    processStatus.Status = "Zakończono";
                     processStatus.CompletedAt = DateTime.UtcNow;
                     processStatus.ProcessedItems = teamIds.Length;
                     await UpdateProcessStatusAsync(processId, processStatus);
@@ -814,7 +813,7 @@ namespace TeamsManager.Application.Services
                 
                 if (_activeProcesses.TryGetValue(processId, out var status))
                 {
-                    status.Status = "Cancelled";
+                    status.Status = "Anulowano";
                     status.CompletedAt = DateTime.UtcNow;
                 }
 

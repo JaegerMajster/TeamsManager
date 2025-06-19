@@ -779,7 +779,7 @@ namespace TeamsManager.Application.Services
             {
                 try
                 {
-                    var results = await _teamService.RemoveUsersFromTeamAsync(kvp.Key, kvp.Value, "Offboarding process", apiAccessToken);
+                    var results = await _teamService.RemoveUsersFromTeamAsync(kvp.Key, kvp.Value, "Proces offboardingu", apiAccessToken);
                     
                     foreach (var result in results)
                     {
@@ -873,7 +873,7 @@ namespace TeamsManager.Application.Services
                     // - Backup plików OneDrive
                     // - Eksport historii operacji
                     
-                    await Task.Delay(100); // Symulacja operacji backup
+                    await Task.Delay(100);
                     
                     successfulOperations.Add(new BulkOperationSuccess
                     {

@@ -53,14 +53,14 @@ namespace TeamsManager.Core.Common
                 {
                     if (DateTime.UtcNow - _openedAt < _openDuration)
                     {
-                        _logger.LogWarning("Circuit breaker is open for operation: {OperationName}. Will retry after {RetryTime}",
+                        _logger.LogWarning("Circuit breaker jest otwarty dla operacji: {OperationName}. Ponowna próba po {RetryTime}",
                             operationName ?? "Unknown", _openedAt.Add(_openDuration));
-                        throw new CircuitBreakerOpenException($"Circuit breaker is open. Will retry after {_openedAt.Add(_openDuration):HH:mm:ss}");
+                        throw new CircuitBreakerOpenException($"Circuit breaker jest otwarty. Ponowna próba po {_openedAt.Add(_openDuration):HH:mm:ss}");
                     }
                     
                     var oldState = _state;
                     _state = CircuitState.HalfOpen;
-                    _logger.LogInformation("Circuit breaker transitioning from Open to HalfOpen for operation: {OperationName}", operationName ?? "Unknown");
+                    _logger.LogInformation("Circuit breaker przechodzi ze stanu Open do HalfOpen dla operacji: {OperationName}", operationName ?? "Unknown");
                     StateChanged?.Invoke(this, new CircuitBreakerStateChangedEventArgs(oldState, _state));
                 }
 
@@ -106,7 +106,7 @@ namespace TeamsManager.Core.Common
             
             if (oldState != _state)
             {
-                _logger.LogInformation("Circuit breaker closed successfully for operation: {OperationName}", operationName ?? "Unknown");
+                _logger.LogInformation("Circuit breaker zamknięty pomyślnie dla operacji: {OperationName}", operationName ?? "Unknown");
                 StateChanged?.Invoke(this, new CircuitBreakerStateChangedEventArgs(oldState, _state));
             }
         }
@@ -116,7 +116,7 @@ namespace TeamsManager.Core.Common
             _failureCount++;
             _lastFailureTime = DateTime.UtcNow;
             
-            _logger.LogWarning(exception, "Circuit breaker recorded failure #{FailureCount} for operation: {OperationName}", 
+            _logger.LogWarning(exception, "Circuit breaker zarejestrował błąd #{FailureCount} dla operacji: {OperationName}", 
                 _failureCount, operationName ?? "Unknown");
             
             FailureRecorded?.Invoke(this, new CircuitBreakerFailureEventArgs(_failureCount, _failureThreshold));
@@ -129,7 +129,7 @@ namespace TeamsManager.Core.Common
                 
                 if (oldState != _state)
                 {
-                    _logger.LogError("Circuit breaker opened due to {FailureCount} failures for operation: {OperationName}. Will remain open until {OpenUntil}",
+                    _logger.LogError("Circuit breaker otwarty z powodu {FailureCount} błędów dla operacji: {OperationName}. Pozostanie otwarty do {OpenUntil}",
                         _failureCount, operationName ?? "Unknown", _openedAt.Add(_openDuration));
                     StateChanged?.Invoke(this, new CircuitBreakerStateChangedEventArgs(oldState, _state));
                 }
@@ -142,7 +142,7 @@ namespace TeamsManager.Core.Common
             _failureCount = 0;
             _state = CircuitState.Closed;
             
-            _logger.LogInformation("Circuit breaker manually reset");
+            _logger.LogInformation("Circuit breaker zresetowany ręcznie");
             
             if (oldState != _state)
             {

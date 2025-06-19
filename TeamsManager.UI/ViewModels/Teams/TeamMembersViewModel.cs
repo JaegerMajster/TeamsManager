@@ -106,7 +106,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 TeamMemberRole.Owner 
             };
 
-            // Setup filtered view
+                            // Skonfiguruj widok z filtrowaniem
             FilteredAvailableUsers = CollectionViewSource.GetDefaultView(AvailableUsers);
             FilteredAvailableUsers.Filter = FilterUsers;
 
@@ -159,7 +159,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 // Load all active users
                 var allUsers = await _userService.GetAllActiveUsersAsync();
                 
-                // Get current member IDs
+                // Pobierz ID bieżących członków
                 var memberUserIds = _team.Members
                     .Where(m => m.IsActive)
                     .Select(m => m.UserId)
@@ -230,7 +230,7 @@ namespace TeamsManager.UI.ViewModels.Teams
 
                 if (newMember != null)
                 {
-                    // Update UI collections
+                    // Aktualizuj kolekcje UI
                     TeamMembers.Add(newMember);
                     AvailableUsers.Remove(SelectedAvailableUser);
                     SelectedAvailableUser = null;
@@ -262,7 +262,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         {
             if (member == null) return;
 
-            // Check if this is the last owner
+                            // Sprawdź czy to ostatni właściciel
             if (member.Role == TeamMemberRole.Owner && 
                 TeamMembers.Count(m => m.Role == TeamMemberRole.Owner) <= 1)
             {
@@ -344,7 +344,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     return;
                 }
 
-                // Add users to team
+                // Dodaj użytkowników do zespołu
                 var accessToken = await GetAccessTokenAsync();
                 if (string.IsNullOrEmpty(accessToken))
                 {

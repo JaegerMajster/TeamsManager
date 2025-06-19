@@ -38,7 +38,7 @@ namespace TeamsManager.UI.Scripts
                 // 4. DELETE - Usuwanie działów
                 await TestDeleteOperationsAsync(departmentService, logger);
                 
-                // 5. Migracja kodów działów
+    
                 var migrationService = serviceProvider.GetRequiredService<DepartmentCodeMigrationService>();
                 await TestCodeMigrationAsync(migrationService, logger);
                 
@@ -206,7 +206,7 @@ namespace TeamsManager.UI.Scripts
                 {
                     logger.LogInformation("✅ Pomyślnie zaktualizowano dział");
                     
-                    // Sprawdź czy zmiany zostały zapisane
+        
                     var updatedDepartment = await departmentService.GetDepartmentByIdAsync(departmentToUpdate.Id);
                     if (updatedDepartment != null)
                     {
@@ -246,7 +246,7 @@ namespace TeamsManager.UI.Scripts
             {
                 logger.LogInformation("🗑️ Próba usunięcia działu: {Name}", departmentToDelete.Name);
                 
-                // Sprawdź czy ma poddziały
+    
                 var subDepartments = await departmentService.GetSubDepartmentsAsync(departmentToDelete.Id);
                 if (subDepartments.Any())
                 {
@@ -260,7 +260,7 @@ namespace TeamsManager.UI.Scripts
                     {
                         logger.LogInformation("✅ Pomyślnie usunięto dział (logicznie)");
                         
-                        // Sprawdź czy dział został oznaczony jako nieaktywny
+            
                         var deletedDepartment = await departmentService.GetDepartmentByIdAsync(departmentToDelete.Id);
                         if (deletedDepartment != null)
                         {

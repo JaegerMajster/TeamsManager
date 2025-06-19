@@ -27,7 +27,7 @@ namespace TeamsManager.UI.Services.Configuration
                 var plainBytes = Encoding.UTF8.GetBytes(plainText);
 
                 // Zaszyfruj używając DPAPI
-                // null = brak dodatkowej entropii
+
                 // DataProtectionScope.CurrentUser = tylko bieżący użytkownik może odszyfrować
                 var encryptedBytes = ProtectedData.Protect(
                     plainBytes,
@@ -79,7 +79,7 @@ namespace TeamsManager.UI.Services.Configuration
             }
             catch (CryptographicException)
             {
-                // Nie można odszyfrować - być może dane były zaszyfrowane przez innego użytkownika
+
                 System.Diagnostics.Debug.WriteLine("Nie można odszyfrować danych - być może były zaszyfrowane przez innego użytkownika");
                 return string.Empty;
             }

@@ -188,7 +188,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
             HasUnacknowledgedAlerts = RecentAlerts.Any(a => !a.IsAcknowledged);
             OnPropertyChanged(nameof(UnacknowledgedAlertsCount));
             
-            // Update command states
+                            // Aktualizuj stany komend
             AcknowledgeAllCommand.RaiseCanExecuteChanged();
             ClearAlertsCommand.RaiseCanExecuteChanged();
         }

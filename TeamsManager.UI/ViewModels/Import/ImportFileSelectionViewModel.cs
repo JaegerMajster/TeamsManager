@@ -207,7 +207,7 @@ namespace TeamsManager.UI.ViewModels.Import
             {
                 ShowLoadingOverlay("Ładowanie pliku...");
 
-                // Sprawdź rozmiar pliku
+    
                 var fileInfo = new FileInfo(filePath);
                 var maxSizeBytes = ImportOptions.MaxFileSizeMB * 1024 * 1024;
                 
@@ -219,7 +219,7 @@ namespace TeamsManager.UI.ViewModels.Import
                     return;
                 }
 
-                // Sprawdź rozszerzenie
+    
                 var extension = Path.GetExtension(filePath).ToLowerInvariant();
                 if (SelectedDataType != null && !SelectedDataType.SupportedFormats.Contains(extension))
                 {
@@ -278,7 +278,7 @@ namespace TeamsManager.UI.ViewModels.Import
 
                 ShowLoadingOverlay("Generowanie szablonu...");
 
-                // TODO: Implement template download via API
+
                 await ShowInfoDialog("Szablon", 
                     $"Funkcja pobierania szablonu dla typu '{SelectedDataType.DisplayName}' " +
                     "zostanie zaimplementowana w przyszłych wersjach.\n\n" +

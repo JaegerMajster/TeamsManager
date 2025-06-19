@@ -72,7 +72,7 @@ namespace TeamsManager.UI.Views
                 SetWindowToDarkMode(helper.Handle);
             };
 
-            // Obsługa zamknięcia okna - automatyczne generowanie raportu
+
             this.Closing += async (s, e) =>
             {
                 await GenerateSessionReportOnCloseAsync();
@@ -83,7 +83,7 @@ namespace TeamsManager.UI.Views
             UserInfoText.Text = "Użytkownik: Inicjalizacja...";
             SessionInfoText.Text = $"Sesja rozpoczęta: {_sessionStartTime:yyyy-MM-dd HH:mm:ss}";
 
-            // Inicjalizacja serwisów i testów
+
             InitializeTestingServices();
             LoadDefaultTests();
         }
@@ -95,8 +95,7 @@ namespace TeamsManager.UI.Views
         {
             try
             {
-                // Utworzenie HttpClient - używamy default client bez specjalnej konfiguracji
-                // aby móc przełączać tokeny podczas testów
+
                 _httpClient = _httpClientFactory.CreateClient();
                 _logger.LogDebug("ManualTestingWindow: HttpClient utworzony przez factory");
             }
@@ -157,13 +156,13 @@ namespace TeamsManager.UI.Views
                     TestCases = new List<TestCase>()
                 };
 
-                // Dodaj testy według kategorii
+    
                 AddAuthenticationTests();
                 AddGraphApiTests();
                 AddTeamsManagementTests();
                 AddUITests();
 
-                // Załaduj testy do kategorycznych list
+    
                 LoadTestsToCategories();
                 UpdateStatistics();
                 
@@ -367,7 +366,7 @@ namespace TeamsManager.UI.Views
             TeamsManagementTestsList.Items.Clear();
             UiTestsList.Items.Clear();
 
-            // Załaduj testy do odpowiednich kategorii
+
             foreach (var test in _currentTestSuite.TestCases)
             {
                 var testViewModel = new TestCaseViewModel
@@ -398,7 +397,7 @@ namespace TeamsManager.UI.Views
 
         private void HamburgerButton_Click(object sender, RoutedEventArgs e)
         {
-            // Sprawdź stan wszystkich expanderów
+
             var allExpanders = new List<Expander> 
             { 
                 AuthCategoryExpander, 
@@ -483,7 +482,7 @@ namespace TeamsManager.UI.Views
 
                 _selectedTestCase = selectedViewModel.TestCase;
                 
-                // Animacja fade przy zmianie testu
+    
                 var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.1));
                 var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
                 
@@ -852,7 +851,7 @@ namespace TeamsManager.UI.Views
             
             var sessionEntry = new StringBuilder();
             
-            // Sprawdź czy plik istnieje, jeśli nie - dodaj nagłówek
+
             bool fileExists = File.Exists(markdownFile);
             if (!fileExists)
             {
@@ -860,7 +859,7 @@ namespace TeamsManager.UI.Views
                 sessionEntry.AppendLine();
             }
 
-            // Sprawdź czy dla tej sesji już istnieje tabela
+
             string sessionHeader = $"## Sesja testowa - {_sessionStartTime:yyyy-MM-dd HH:mm:ss}";
             string tableHeader = "| Czas wykonania | Nazwa testu | Wynik | Komunikat | Czas trwania | Użytkownik |";
             string tableSeparator = "|---|---|---|---|---|---|";
@@ -1026,7 +1025,7 @@ namespace TeamsManager.UI.Views
                     mainWindow.Focus();
                 }
                 
-                // Minimalizuj okno testów
+    
                 this.WindowState = WindowState.Minimized;
             }
             catch (Exception ex)

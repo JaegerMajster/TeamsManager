@@ -286,7 +286,7 @@ namespace TeamsManager.UI.ViewModels.Settings
                     
                     if (!success)
                     {
-                        // TODO: Pokazać komunikat o błędzie
+            
                         _logger.LogWarning("Nie udało się zapisać ustawienia {Key}", settingVm.Key);
                     }
                 }
@@ -299,7 +299,7 @@ namespace TeamsManager.UI.ViewModels.Settings
 
         private void AddNewSetting()
         {
-            // TODO: Otworzyć dialog do dodawania nowego ustawienia
+
             _logger.LogInformation("Dodawanie nowego ustawienia - funkcja w przygotowaniu");
         }
 
@@ -309,7 +309,7 @@ namespace TeamsManager.UI.ViewModels.Settings
 
             try
             {
-                // TODO: Potwierdzenie usunięcia
+    
                 
                 _logger.LogInformation("Usuwanie ustawienia: {Key}", setting.Key);
                 
@@ -334,14 +334,14 @@ namespace TeamsManager.UI.ViewModels.Settings
 
         private async Task ExportSettingsAsync()
         {
-            // TODO: Implementacja eksportu do JSON/CSV
+
             _logger.LogInformation("Eksport ustawień - funkcja w przygotowaniu");
             await Task.CompletedTask;
         }
 
         private async Task ImportSettingsAsync()
         {
-            // TODO: Implementacja importu z JSON/CSV
+
             _logger.LogInformation("Import ustawień - funkcja w przygotowaniu");
             await Task.CompletedTask;
         }

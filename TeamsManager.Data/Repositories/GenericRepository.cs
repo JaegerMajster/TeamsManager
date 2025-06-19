@@ -4,8 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using TeamsManager.Core.Abstractions.Data; // Dla IGenericRepository
-// Zakładamy, że BaseEntity jest w TeamsManager.Core.Models
+using TeamsManager.Core.Abstractions.Data;
 using TeamsManager.Core.Models;
 
 namespace TeamsManager.Data.Repositories
@@ -13,8 +12,8 @@ namespace TeamsManager.Data.Repositories
     /// <summary>
     /// Generyczna implementacja repozytorium dla podstawowych operacji CRUD.
     /// </summary>
-    /// <typeparam name="TEntity">Typ encji, która musi być klasą i opcjonalnie dziedziczyć z BaseEntity.</typeparam>
-    public class GenericRepository<TEntity> : IGenericRepository<TEntity> where TEntity : class // Można dodać: , BaseEntity
+    /// <typeparam name="TEntity">Typ encji, która musi być klasą.</typeparam>
+    public class GenericRepository<TEntity> : IGenericRepository<TEntity> where TEntity : class
     {
         protected readonly TeamsManagerDbContext _context;
         protected readonly DbSet<TEntity> _dbSet;
@@ -32,7 +31,6 @@ namespace TeamsManager.Data.Repositories
 
         public virtual async Task<TEntity?> GetByIdAsync(object id)
         {
-            // Dla stringowego ID, jak w BaseEntity
             return await _dbSet.FindAsync(id);
         }
 
@@ -48,18 +46,17 @@ namespace TeamsManager.Data.Repositories
 
         public virtual void Update(TEntity entity)
         {
-            _dbSet.Attach(entity); // Dołącza encję do kontekstu, jeśli jeszcze nie jest śledzona
-            _context.Entry(entity).State = EntityState.Modified; // Oznacza encję jako zmodyfikowaną
+            _dbSet.Attach(entity);
+            _context.Entry(entity).State = EntityState.Modified;
         }
 
         public virtual void Delete(TEntity entity)
         {
-            // Jeśli encja jest śledzona przez kontekst, wystarczy ją oznaczyć jako usuniętą
             if (_context.Entry(entity).State == EntityState.Detached)
             {
-                _dbSet.Attach(entity); // Dołącz, jeśli nie jest śledzona
+                _dbSet.Attach(entity);
             }
-            _dbSet.Remove(entity); // Oznacza encję jako usuniętą
+            _dbSet.Remove(entity);
         }
 
         public virtual async Task DeleteByIdAsync(object id)
@@ -96,8 +93,6 @@ namespace TeamsManager.Data.Repositories
             return await _context.SaveChangesAsync();
         }
 
-        // Metoda SaveChangesAsync nie jest tutaj implementowana.
-        // Zmiany będą zapisywane przez wywołanie _context.SaveChangesAsync()
-        // na wyższym poziomie (np. w serwisie lub jednostce pracy).
+
     }
 }

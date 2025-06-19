@@ -394,7 +394,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         {
             if (team == null) return;
             
-            // TODO: Implementacja edycji zespołu
+
             MessageBox.Show($"Edycja zespołu '{team.DisplayName}' - funkcjonalność w przygotowaniu.", "Informacja");
         }
         

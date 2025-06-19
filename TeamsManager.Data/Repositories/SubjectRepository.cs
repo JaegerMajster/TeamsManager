@@ -19,13 +19,11 @@ namespace TeamsManager.Data.Repositories
         /// <param name="context">Kontekst bazy danych.</param>
         public SubjectRepository(TeamsManagerDbContext context) : base(context)
         {
-            // _context jest już dostępne z klasy bazowej GenericRepository
         }
 
         // UWAGA: Decyzja architektoniczna - filtrowanie po IsActive
         // GetByIdAsync nadpisuje metodę bazową i ZAWSZE filtruje po IsActive dla spójności.
         // Jeśli potrzebujesz nieaktywnych przedmiotów, użyj GetByIdIncludingInactiveAsync.
-        // Ta zmiana zapewnia, że domyślnie wszystkie metody zwracają tylko aktywne przedmioty.
 
         /// <summary>
         /// Asynchronicznie pobiera aktywny przedmiot po jego ID.
@@ -66,7 +64,6 @@ namespace TeamsManager.Data.Repositories
         /// <returns>Znaleziony, aktywny przedmiot lub null, jeśli nie istnieje.</returns>
         public async Task<Subject?> GetByCodeAsync(string code)
         {
-            // Używamy _dbSet zamiast _context.Subjects dla spójności z GenericRepository
             return await _dbSet
                          .Include(s => s.DefaultSchoolType)
                          .FirstOrDefaultAsync(s => s.Code == code && s.IsActive);
@@ -79,14 +76,7 @@ namespace TeamsManager.Data.Repositories
         /// <returns>Kolekcja aktywnych nauczycieli przypisanych do przedmiotu.</returns>
         public async Task<IEnumerable<User>> GetTeachersAsync(string subjectId)
         {
-            // Sprawdzenie, czy sam przedmiot jest aktywny (opcjonalne, może być logiką serwisu)
-            // var subject = await _dbSet.FirstOrDefaultAsync(s => s.Id == subjectId && s.IsActive);
-            // if (subject == null) return Enumerable.Empty<User>();
-
-            // Pobierz przypisania UserSubject dla danego przedmiotu,
-            // które są aktywne i mają aktywnego, załadowanego użytkownika (nauczyciela).
-            // Dołącz także encję User, aby uniknąć problemu N+1.
-            var assignments = await _context.UserSubjects // Używamy _context do dostępu do innych DbSet
+            var assignments = await _context.UserSubjects
                                             .Include(us => us.User)
                                             .Where(us => us.SubjectId == subjectId &&
                                                          us.IsActive &&
@@ -94,7 +84,7 @@ namespace TeamsManager.Data.Repositories
                                                          us.User.IsActive)
                                             .ToListAsync();
 
-            return assignments.Select(us => us.User!) // User! jest bezpieczne dzięki warunkowi User != null w Where
+            return assignments.Select(us => us.User!)
                               .Distinct()
                               .ToList();
         }

@@ -458,7 +458,7 @@ namespace TeamsManager.UI.ViewModels.Shell
                             _logger.LogInformation("Auto-login pomyślny, ustawiam UPN: {UserUpn}", userUpn);
                             _currentUserService.SetCurrentUserUpn(userUpn);
                             
-                            // Sprawdź czy UPN został poprawnie ustawiony
+                
                             var currentUpn = _currentUserService.GetCurrentUserUpn();
                             _logger.LogInformation("UPN po auto-login: {CurrentUpn}", currentUpn);
                             
@@ -513,7 +513,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         {
             try
             {
-                // Sprawdź status cache
+    
                 var cacheStatus = MsalCacheHelper.GetCacheStatus();
                 if (cacheStatus.Exists)
                 {

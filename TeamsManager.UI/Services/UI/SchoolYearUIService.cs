@@ -338,7 +338,7 @@ namespace TeamsManager.UI.Services.UI
         {
             try
             {
-                // Sprawdź czy rok szkolny nie jest bieżący
+    
                 var currentYear = await _schoolYearService.GetCurrentSchoolYearAsync();
                 if (currentYear?.Id == schoolYearId)
                 {
@@ -350,7 +350,7 @@ namespace TeamsManager.UI.Services.UI
                     return false;
                 }
                 
-                // W przyszłości można dodać sprawdzenie czy rok ma przypisane zespoły
+    
                 // var teams = await _teamService.GetTeamsBySchoolYearAsync(schoolYearId);
                 // if (teams.Any()) { ... }
                 

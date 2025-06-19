@@ -355,7 +355,7 @@ namespace TeamsManager.Core.Models.Graph
             return new GraphCacheValidationResult
             {
                 IsValid = false,
-                InvalidationReason = "Cache expired",
+                InvalidationReason = "Cache wygasł",
                 ExpiresAt = expiresAt,
                 RecommendedAction = CacheValidationAction.RefreshFromGraph
             };

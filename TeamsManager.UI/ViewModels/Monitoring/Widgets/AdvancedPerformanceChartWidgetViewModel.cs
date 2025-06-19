@@ -398,13 +398,13 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                 var now = DateTime.UtcNow;
                 var point = new DateTimePoint(now, 0); // Will be updated below
 
-                // Update current values
+                // Aktualizuj bieżące wartości
                 CurrentCpuUsage = metrics.CpuUsagePercent;
                 CurrentMemoryUsage = metrics.MemoryUsagePercent;
                 CurrentNetworkThroughput = metrics.NetworkThroughputMbps;
                 CurrentResponseTime = metrics.AverageResponseTimeMs;
 
-                // Add new data points to chart
+                // Dodaj nowe punkty danych do wykresu
                 AddDataPoint(_cpuData, now, metrics.CpuUsagePercent);
                 AddDataPoint(_memoryData, now, metrics.MemoryUsagePercent);
                 AddDataPoint(_networkData, now, metrics.NetworkThroughputMbps / 10); // Scale for chart

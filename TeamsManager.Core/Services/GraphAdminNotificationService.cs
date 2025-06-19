@@ -63,7 +63,7 @@ namespace TeamsManager.Core.Services
             
             if (_isEnabled && !_adminEmails.Any())
             {
-                _logger.LogWarning("Admin notifications are enabled but no admin emails are configured!");
+                _logger.LogWarning("Powiadomienia administratora są włączone, ale nie skonfigurowano emaili administratorów!");
             }
         }
 

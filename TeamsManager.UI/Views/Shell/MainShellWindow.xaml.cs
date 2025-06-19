@@ -28,7 +28,7 @@ namespace TeamsManager.UI.Views.Shell
             // Dodaj obsługę kliknięcia na przycisk profilu
             UserProfileButton.Click += UserProfileButton_Click;
             
-            // Sprawdź auto-login po załadowaniu okna
+    
             Loaded += async (s, e) => {
                 _logger.LogInformation("=== MAINSHELLWINDOW: Event Loaded wywoływany ===");
                 Console.WriteLine("=== MAINSHELLWINDOW: Event Loaded wywoływany ===");
@@ -61,7 +61,7 @@ namespace TeamsManager.UI.Views.Shell
             _logger.LogInformation("=== MAINSHELLWINDOW: CheckAutoLoginAsync rozpoczęta ===");
             Console.WriteLine("=== MAINSHELLWINDOW: CheckAutoLoginAsync rozpoczęta ===");
             
-            // Sprawdź auto-login
+
             var autoLoginSuccess = await _viewModel.CheckAutoLoginAsync();
             
             _logger.LogInformation("=== MAINSHELLWINDOW: CheckAutoLoginAsync zakończona, wynik: {Result} ===", autoLoginSuccess);

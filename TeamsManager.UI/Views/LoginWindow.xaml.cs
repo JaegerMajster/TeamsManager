@@ -25,7 +25,7 @@ namespace TeamsManager.UI.Views
         {
             InitializeComponent();
             
-            // Utwórz ViewModel z wstrzykniętymi zależnościami
+
             _viewModel = new LoginViewModel(msalAuthService, configManager, logger, conditionalAccessAnalyzer, currentUserService, userSynchronizationService);
             DataContext = _viewModel;
             

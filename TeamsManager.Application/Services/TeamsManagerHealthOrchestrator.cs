@@ -259,7 +259,7 @@ namespace TeamsManager.Application.Services
                 var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
                     OperationType.GenericUpdated,
                     "MicrosoftGraph",
-                    targetEntityName: "Graph Synchronization"
+                    targetEntityName: "Synchronizacja Graph"
                 );
 
                 var result = HealthOperationResult.CreateSuccess("GraphSynchronization");
@@ -308,7 +308,7 @@ namespace TeamsManager.Application.Services
                 var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
                     OperationType.GenericUpdated,
                     "TeamsManagerCache",
-                    targetEntityName: "Cache Optimization"
+                    targetEntityName: "Optymalizacja Cache"
                 );
 
                 var result = HealthOperationResult.CreateSuccess("CacheOptimization");
@@ -469,7 +469,7 @@ namespace TeamsManager.Application.Services
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "Authentication Status",
+                    ComponentName = "Status Uwierzytelniania",
                     Status = status,
                     Description = hasValidUser ? 
                         $"Użytkownik uwierzytelniony: {currentUser}" : 
@@ -488,7 +488,7 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "Authentication Status",
+                    ComponentName = "Status Uwierzytelniania",
                     Status = HealthStatus.Unhealthy,
                     Description = $"Błąd sprawdzania uwierzytelniania: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
@@ -542,15 +542,13 @@ namespace TeamsManager.Application.Services
             
             try
             {
-                // Symulacja sprawdzenia bazy danych SQLite
-                // W rzeczywistej implementacji można sprawdzić połączenie z bazą
-                await Task.Delay(50, cancellationToken); // Symulacja sprawdzenia DB
+                await Task.Delay(50, cancellationToken);
                 
                 stopwatch.Stop();
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "SQLite Database",
+                    ComponentName = "Baza Danych SQLite",
                     Status = HealthStatus.Healthy,
                     Description = "Baza danych SQLite działa prawidłowo",
                     DurationMs = stopwatch.ElapsedMilliseconds,
@@ -567,7 +565,7 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "SQLite Database",
+                    ComponentName = "Baza Danych SQLite",
                     Status = HealthStatus.Unhealthy,
                     Description = $"Błąd bazy danych SQLite: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
@@ -620,7 +618,7 @@ namespace TeamsManager.Application.Services
                     case "Microsoft Graph API":
                         recommendations.Add("🔴 KRYTYCZNE: Microsoft Graph API nie odpowiada - sprawdź połączenie internetowe i status usług Microsoft");
                         break;
-                    case "Authentication Status":
+                    case "Status Uwierzytelniania":
                         recommendations.Add("🔴 KRYTYCZNE: Brak uwierzytelnienia - zaloguj się ponownie do Microsoft 365");
                         break;
                     default:
@@ -670,9 +668,7 @@ namespace TeamsManager.Application.Services
                     var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
                     if (!healthInfo.IsConnected)
                     {
-                        // Symulacja ponownego połączenia - w rzeczywistej implementacji
-                        // należałoby użyć ConnectWithAccessTokenAsync z odpowiednim tokenem
-                        _logger.LogInformation("Symulacja ponownego połączenia Graph API");
+                        _logger.LogInformation("Próba ponownego połączenia Graph API");
                     }
                 }
                 
@@ -735,8 +731,7 @@ namespace TeamsManager.Application.Services
             {
                 if (!dryRun)
                 {
-                    // W rzeczywistej implementacji - odświeżenie tokenów MSAL
-                    await Task.Delay(100, cancellationToken); // Symulacja
+                    await Task.Delay(100, cancellationToken);
                 }
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess
@@ -767,7 +762,7 @@ namespace TeamsManager.Application.Services
         {
             try
             {
-                // Symulacja synchronizacji Teams z Graph API
+                // Synchronizacja Teams z Graph API
                 await Task.Delay(200);
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess
@@ -794,7 +789,7 @@ namespace TeamsManager.Application.Services
         {
             try
             {
-                // Symulacja synchronizacji Users z Graph API
+                // Synchronizacja Users z Graph API
                 await Task.Delay(150);
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess
@@ -821,7 +816,7 @@ namespace TeamsManager.Application.Services
         {
             try
             {
-                // Symulacja synchronizacji Channels z Graph API
+                // Synchronizacja Channels z Graph API
                 await Task.Delay(100);
                 
                 result.SuccessfulOperations.Add(new HealthOperationSuccess

@@ -142,12 +142,12 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                     
                     var message = state switch
                     {
-                        Services.ConnectionState.Connected => "Connected to monitoring service",
-                        Services.ConnectionState.Connecting => "Connecting to monitoring service...",
-                        Services.ConnectionState.Reconnecting => "Reconnecting to monitoring service...",
-                        Services.ConnectionState.Disconnected => "Disconnected from monitoring service",
-                        Services.ConnectionState.Error => "Connection error",
-                        _ => $"Connection state: {state}"
+                        Services.ConnectionState.Connected => "Połączono z serwisem monitorowania",
+                        Services.ConnectionState.Connecting => "Łączenie z serwisem monitorowania...",
+                        Services.ConnectionState.Reconnecting => "Ponowne łączenie z serwisem monitorowania...",
+                        Services.ConnectionState.Disconnected => "Rozłączono z serwisem monitorowania",
+                        Services.ConnectionState.Error => "Błąd połączenia",
+                        _ => $"Stan połączenia: {state}"
                     };
                     
                     MessageQueue.Enqueue(message);
@@ -194,7 +194,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                 {
                     _logger.LogInformation("[MONITORING-DASHBOARD] Alert received");
                     AlertsViewModel.ProcessAlertUpdate(alert);
-                    MessageQueue.Enqueue("New system alert received");
+                    MessageQueue.Enqueue("Otrzymano nowy alert systemowy");
                 })
                 .DisposeWith(_disposables);
         }
@@ -220,14 +220,14 @@ namespace TeamsManager.UI.ViewModels.Monitoring
                 await Task.WhenAll(tasks);
                 
                 LastUpdateTime = DateTime.Now;
-                MessageQueue.Enqueue("Dashboard data refreshed");
+                MessageQueue.Enqueue("Dane dashboardu odświeżone");
                 
                 _logger.LogDebug("[MONITORING-DASHBOARD] Dashboard data refreshed successfully");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[MONITORING-DASHBOARD] Error refreshing dashboard data");
-                MessageQueue.Enqueue($"Refresh failed: {ex.Message}");
+                MessageQueue.Enqueue($"Odświeżanie nie powiodło się: {ex.Message}");
             }
             finally
             {

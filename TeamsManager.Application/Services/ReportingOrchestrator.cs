@@ -605,7 +605,6 @@ namespace TeamsManager.Application.Services
             if (options.DepartmentIds?.Any() == true)
             {
                 // Tymczasowo pomijamy filtrowanie po działach - wymaga to dodatkowej implementacji
-                // filteredTeams = filteredTeams.Where(t => options.DepartmentIds.Contains(t.DepartmentId));
             }
 
             return filteredTeams;
@@ -641,7 +640,6 @@ namespace TeamsManager.Application.Services
 
         private async Task<Stream> GenerateSchoolYearReportStreamAsync(SchoolYearReportData data, ReportOptions options)
         {
-            // Symulacja generowania raportu roku szkolnego
             var content = $"RAPORT ROKU SZKOLNEGO\n" +
                          $"===================\n\n" +
                          $"Rok szkolny: {data.SchoolYear.Name}\n" +
@@ -658,7 +656,6 @@ namespace TeamsManager.Application.Services
 
         private async Task<Stream> GenerateUserActivityReportStreamAsync(UserActivityReportData data)
         {
-            // Symulacja generowania raportu aktywności użytkowników
             var content = $"RAPORT AKTYWNOŚCI UŻYTKOWNIKÓW\n" +
                          $"============================\n\n" +
                          $"Okres: {data.FromDate:yyyy-MM-dd} - {data.ToDate:yyyy-MM-dd}\n" +

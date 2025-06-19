@@ -9,7 +9,7 @@ using TeamsManager.UI.Models.Monitoring;
 namespace TeamsManager.UI.Services
 {
     /// <summary>
-    /// Serwis danych monitorowania używający Graph API (Etap 5.2.2)
+    /// Serwis danych monitorowania używający Graph API
     /// </summary>
     public interface IMonitoringDataService
     {
@@ -45,7 +45,7 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogDebug("[MONITORING-DATA] Getting system health data from Graph API");
                 
-                // Najpierw spróbuj pobrać dane z Graph API (Etap 5.2.2)
+    
                 var diagnosticInfo = await _apiService.GetGraphConnectionDiagnosticsAsync();
                 
                 if (diagnosticInfo != null)
@@ -83,7 +83,7 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogDebug("[MONITORING-DATA] Getting TeamsManager performance metrics from Graph API");
 
-                // Pobierz rzeczywiste dane diagnostyczne z Graph API (Etap 5.2.2)
+    
                 var diagnosticInfo = await _apiService.GetExtendedGraphConnectionDiagnosticsAsync();
                 var healthInfo = await _apiService.GetGraphConnectionHealthAsync();
                 var rateLimitInfo = await _apiService.GetGraphRateLimitStatusAsync();
@@ -106,7 +106,7 @@ namespace TeamsManager.UI.Services
                         ErrorRate = metricsInfo?.ErrorRate ?? 0, // Graph API error rate
                         Timestamp = DateTime.UtcNow,
                         
-                        // Dodatkowe właściwości specyficzne dla TeamsManager (Graph API)
+        
                         TeamsManagerSpecific = new Dictionary<string, object>
                         {
                             ["GraphApiConnectionStatus"] = healthInfo.Status,
@@ -204,7 +204,7 @@ namespace TeamsManager.UI.Services
 
                 var alerts = new List<SystemAlert>();
 
-                // Pobierz rzeczywiste informacje o stanie systemu z Graph API (Etap 5.2.2)
+    
                 var diagnosticInfo = await _apiService.GetGraphConnectionDiagnosticsAsync();
                 var healthInfo = await _apiService.GetGraphConnectionHealthAsync();
                 var rateLimitInfo = await _apiService.GetGraphRateLimitStatusAsync();
@@ -287,7 +287,7 @@ namespace TeamsManager.UI.Services
                     }
                 }
 
-                // Dodaj przykładowe alerty systemowe jeśli lista jest pusta
+    
                 if (!alerts.Any())
                 {
                     alerts.Add(new SystemAlert
@@ -484,9 +484,8 @@ namespace TeamsManager.UI.Services
 
         private static double CalculateProcessProgress(HealthMonitoringProcessStatus process)
         {
-            // Symulacja postępu na podstawie czasu trwania
             var elapsed = DateTime.UtcNow - process.StartedAt;
-            var estimatedDuration = TimeSpan.FromMinutes(5); // Zakładamy 5 minut na proces
+            var estimatedDuration = TimeSpan.FromMinutes(5);
             
             var progress = Math.Min(100.0, (elapsed.TotalMilliseconds / estimatedDuration.TotalMilliseconds) * 100);
             return Math.Round(progress, 1);

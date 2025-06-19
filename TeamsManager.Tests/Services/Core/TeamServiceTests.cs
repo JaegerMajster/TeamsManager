@@ -44,7 +44,7 @@ namespace TeamsManager.Tests.Services.Core
         private readonly Mock<IGraphCacheService> _mockGraphCacheService;
         private readonly Mock<ICacheInvalidationService> _mockCacheInvalidationService;
         private readonly Mock<IUnitOfWork> _mockUnitOfWork;
-        private readonly Mock<IGraphSynchronizer<Team, Team>> _mockTeamSynchronizer;
+        private readonly Mock<IGraphSynchronizer<Team, GraphTeam>> _mockTeamSynchronizer;
         private readonly TeamService _teamService;
 
         public TeamServiceTests()
@@ -68,7 +68,7 @@ namespace TeamsManager.Tests.Services.Core
             _mockGraphCacheService = new Mock<IGraphCacheService>();
             _mockCacheInvalidationService = new Mock<ICacheInvalidationService>();
             _mockUnitOfWork = new Mock<IUnitOfWork>();
-            _mockTeamSynchronizer = new Mock<IGraphSynchronizer<Team, Team>>();
+            _mockTeamSynchronizer = new Mock<IGraphSynchronizer<Team, GraphTeam>>();
 
             _teamService = new TeamService(
                 _mockTeamRepository.Object,

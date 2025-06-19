@@ -6,7 +6,7 @@ namespace TeamsManager.UI.ViewModels.Teams
 {
     /// <summary>
     /// Model reprezentujący placeholder token w edytorze szablonów zespołów.
-    /// Zawiera informacje o placeholderze, jego opisie, przykładzie i aktualnej wartości.
+    /// Zawiera informacje o placeholderze, jego opisie i aktualnej wartości.
     /// </summary>
     public class PlaceholderToken : INotifyPropertyChanged
     {
@@ -41,7 +41,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         }
 
         /// <summary>
-        /// Przykładowa wartość placeholdera
+        /// Wartość placeholdera
         /// </summary>
         public string ExampleValue 
         { 

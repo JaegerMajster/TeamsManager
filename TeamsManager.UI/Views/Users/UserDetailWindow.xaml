@@ -113,7 +113,7 @@
                                                     <DataTrigger Binding="{Binding Model.HasAvatar}" Value="True">
                                                         <Setter Property="Fill">
                                                             <Setter.Value>
-                                                                <ImageBrush ImageSource="{Binding Model.AvatarImageSource}" Stretch="UniformToFill"/>
+                                                                <ImageBrush ImageSource="{Binding Model.AvatarImageSource, FallbackValue={x:Null}, TargetNullValue={x:Null}}" Stretch="UniformToFill"/>
                                                             </Setter.Value>
                                                         </Setter>
                                                     </DataTrigger>

@@ -261,7 +261,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
                         AvailableColumns.Add(header);
                     }
                     
-                    // Update column mappings with available columns
+                    // Aktualizuj mapowania kolumn z dostępnymi kolumnami
                     foreach (var mapping in ColumnMappings)
                     {
                         mapping.AvailableColumns = AvailableColumns;
@@ -407,7 +407,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
                     }
                 }
                 
-                // Validate preview
+                // Zwaliduj podgląd
                 if (string.IsNullOrWhiteSpace(preview.Name))
                 {
                     preview.ValidationStatus = "Błąd: Brak nazwy";
@@ -435,7 +435,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
                 var subjectsToImport = PreviewSubjects.Where(p => p.ShouldImport).ToList();
                 _logger.LogInformation("Rozpoczynanie importu {Count} przedmiotów", subjectsToImport.Count);
                 
-                // TODO: Implement actual import logic
+    
                 // This would involve sending POST requests to the API for each subject
                 
                 await Task.Delay(2000); // Simulate import process

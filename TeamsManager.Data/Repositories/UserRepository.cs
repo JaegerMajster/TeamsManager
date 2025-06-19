@@ -82,9 +82,7 @@ namespace TeamsManager.Data.Repositories
                                .ToListAsync();
         }
 
-        // Możesz tutaj zaimplementować inne specyficzne metody dla User,
-        // np. z bardziej złożonymi Include() dla pobierania powiązanych danych.
-        // Przykład:
+
         public override async Task<User?> GetByIdAsync(object id)
         {
             if (id is string stringId)

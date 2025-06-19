@@ -17,7 +17,7 @@ namespace TeamsManager.UI.Services
     /// </summary>
     public class UIDialogService : IUIDialogService
     {
-        // ===== NOWY UNIWERSALNY SYSTEM DIALOGÓW =====
+
 
         public async Task<DialogResponse> ShowDialogAsync(DialogOptions options)
         {
@@ -153,7 +153,7 @@ namespace TeamsManager.UI.Services
             return await ShowDialogAsync(options);
         }
 
-        // ===== STARY SYSTEM (ZACHOWANY DLA KOMPATYBILNOŚCI) =====
+
 
         [Obsolete("Użyj ShowErrorAsync zamiast tego")]
         public async Task ShowErrorDialog(string title, string message)
@@ -186,7 +186,7 @@ namespace TeamsManager.UI.Services
             return response.IsPrimary;
         }
 
-        // ===== OVERLAY ŁADOWANIA =====
+
 
         public void ShowLoadingOverlay(string message = "Ładowanie...")
         {
@@ -232,7 +232,7 @@ namespace TeamsManager.UI.Services
             });
         }
 
-        // ===== METODY POMOCNICZE =====
+
 
         private Window? GetActiveWindow()
         {

@@ -16,7 +16,7 @@ namespace TeamsManager.UI.Scripts
 
             try
             {
-                // Sprawdź czy tabela OrganizationalUnits istnieje
+    
                 try
                 {
                     var tableExists = await context.OrganizationalUnits.AnyAsync();
@@ -32,7 +32,7 @@ namespace TeamsManager.UI.Scripts
                     Console.WriteLine("✅ Migracje zostały zastosowane");
                 }
 
-                // Sprawdź czy już istnieje jednostka organizacyjna "Podstawowy"
+    
                 var existingUnit = await context.OrganizationalUnits
                     .FirstOrDefaultAsync(ou => ou.Name == "Podstawowy");
 

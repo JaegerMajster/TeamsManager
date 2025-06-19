@@ -14,7 +14,7 @@ namespace TeamsManager.UI.Views.Subjects
         {
             InitializeComponent();
             
-            // Get ViewModel from DI
+            // Pobierz ViewModel z DI
             DataContext = App.ServiceProvider.GetRequiredService<SubjectsViewModel>();
             
             Loaded += async (s, e) =>

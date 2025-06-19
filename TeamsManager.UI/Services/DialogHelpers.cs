@@ -9,7 +9,7 @@ namespace TeamsManager.UI.Services
     /// </summary>
     public static class DialogHelpers
     {
-        // ===== KOMUNIKATY BŁĘDÓW =====
+
 
         /// <summary>
         /// Wyświetla błąd walidacji
@@ -41,7 +41,7 @@ namespace TeamsManager.UI.Services
                 details);
         }
 
-        // ===== KOMUNIKATY SUKCESU =====
+
 
         /// <summary>
         /// Wyświetla sukces operacji
@@ -64,7 +64,7 @@ namespace TeamsManager.UI.Services
                 details);
         }
 
-        // ===== OSTRZEŻENIA =====
+
 
         /// <summary>
         /// Wyświetla ostrzeżenie o konflikcie danych
@@ -84,7 +84,7 @@ namespace TeamsManager.UI.Services
             return await dialogService.ShowWarningAsync("Ograniczenie systemu", message, details);
         }
 
-        // ===== POTWIERDZENIA =====
+
 
         /// <summary>
         /// Wyświetla potwierdzenie usunięcia
@@ -152,7 +152,7 @@ namespace TeamsManager.UI.Services
                 "Kontynuuj");
         }
 
-        // ===== PYTANIA NIESTANDARDOWE =====
+
 
         /// <summary>
         /// Wyświetla pytanie o zastąpienie istniejących danych
@@ -186,7 +186,7 @@ namespace TeamsManager.UI.Services
                 "Przerwij");
         }
 
-        // ===== INFORMACJE =====
+
 
         /// <summary>
         /// Wyświetla informację o zakończeniu operacji

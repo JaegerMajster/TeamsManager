@@ -53,7 +53,7 @@ namespace TeamsManager.UI.Services
         void ClearCache();
 
         /// <summary>
-        /// Get performance statistics
+        /// Pobierz statystyki wydajności
         /// </summary>
         OptimizationStatistics GetStatistics();
     }
@@ -159,7 +159,7 @@ namespace TeamsManager.UI.Services
             {
                 Interlocked.Increment(ref _metricsDataPushCount);
                 
-                // Add to buffer for batching
+                // Dodaj do bufora dla przetwarzania wsadowego
                 _metricsBuffer.Enqueue(data);
                 
                 // Limit buffer size
@@ -333,11 +333,11 @@ namespace TeamsManager.UI.Services
 
         private bool IsHealthDataSignificantlyDifferent(SystemHealthData existing, SystemHealthData new_data)
         {
-            // Check if overall status changed
+                            // Sprawdź czy ogólny status się zmienił
             if (existing.OverallStatus != new_data.OverallStatus)
                 return true;
 
-            // Check if any component status changed
+                            // Sprawdź czy status jakiegokolwiek komponentu się zmienił
             var existingComponentMap = existing.Components.ToDictionary(c => c.Name, c => c.Status);
             var newComponentMap = new_data.Components.ToDictionary(c => c.Name, c => c.Status);
 
@@ -350,7 +350,7 @@ namespace TeamsManager.UI.Services
                 }
             }
 
-            // Check for timing threshold (update at least every 30 seconds)
+            // Sprawdź próg czasowy (aktualizuj co najmniej co 30 sekund)
             return DateTime.UtcNow - existing.LastUpdate > TimeSpan.FromSeconds(30);
         }
 

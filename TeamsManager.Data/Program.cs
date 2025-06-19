@@ -87,7 +87,7 @@ namespace TeamsManager.Data
                     }
                     
                     // Test sprawdzenia czy to jest problem SimpleUserService
-                    Console.WriteLine("\n=== TEST SIMPLEUSERSERVICE LOGIC ===");
+                    Console.WriteLine("\n=== TEST LOGIKI SIMPLEUSERSERVICE ===");
                     try 
                     {
                         var query = context.Users.Include(u => u.Department).AsQueryable();
@@ -144,7 +144,7 @@ namespace TeamsManager.Data
             catch (Exception ex)
             {
                 Console.WriteLine($"\nBłąd: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"Ślad stosu: {ex.StackTrace}");
             }
             
             // ===== NOWY TEST: SYMULACJA KONFIGURACJI UI =====
@@ -158,8 +158,8 @@ namespace TeamsManager.Data
                 var uiBaseDirectory = Path.Combine(Directory.GetCurrentDirectory(), "..", "TeamsManager.UI", "bin", "Debug", "net9.0-windows");
                 var uiDbPath = Path.Combine(uiBaseDirectory, "teamsmanager_ui.db");
                 
-                Console.WriteLine($"UI Base Directory (symulowany): {uiBaseDirectory}");
-                Console.WriteLine($"UI Database Path: {uiDbPath}");
+                Console.WriteLine($"Katalog bazowy UI (symulowany): {uiBaseDirectory}");
+                Console.WriteLine($"Ścieżka bazy danych UI: {uiDbPath}");
                 Console.WriteLine($"Czy katalog UI istnieje: {Directory.Exists(uiBaseDirectory)}");
                 Console.WriteLine($"Czy baza UI istnieje: {File.Exists(uiDbPath)}");
                 
@@ -229,7 +229,7 @@ namespace TeamsManager.Data
             catch (Exception ex)
             {
                 Console.WriteLine($"Błąd podczas testu UI: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"Ślad stosu: {ex.StackTrace}");
             }
 
             Console.WriteLine("\nNaciśnij dowolny klawisz aby zakończyć...");
@@ -247,7 +247,7 @@ namespace TeamsManager.Data
                 var newDbPath = Path.Combine(appFolderPath, "teamsmanager.db");
                 
                 Console.WriteLine($"Nowa bezpieczna lokalizacja:");
-                Console.WriteLine($"- AppData: {appDataPath}");
+                Console.WriteLine($"- Dane aplikacji: {appDataPath}");
                 Console.WriteLine($"- Folder aplikacji: {appFolderPath}");
                 Console.WriteLine($"- Ścieżka bazy: {newDbPath}");
                 Console.WriteLine($"- Czy folder istnieje: {Directory.Exists(appFolderPath)}");
@@ -292,7 +292,7 @@ namespace TeamsManager.Data
                     Console.WriteLine("⚠️ Baza w nowej lokalizacji nie istnieje");
                 }
                 
-                Console.WriteLine("\n🎉 KONFIGURACJA GOTOWA DO PRODUCTION!");
+                Console.WriteLine("\n🎉 KONFIGURACJA GOTOWA DO PRODUKCJI!");
                 Console.WriteLine("Aplikacja będzie używać bezpiecznej lokalizacji:");
                 Console.WriteLine($"   {newDbPath}");
                 

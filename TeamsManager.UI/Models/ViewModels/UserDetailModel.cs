@@ -392,7 +392,7 @@ namespace TeamsManager.UI.Models.ViewModels
             if (Password.Length > 50)
                 return "Hasło może mieć maksymalnie 50 znaków";
             
-            // Sprawdź czy hasło zawiera przynajmniej jedną cyfrę i jedną literę
+
             bool hasDigit = Password.Any(char.IsDigit);
             bool hasLetter = Password.Any(char.IsLetter);
             

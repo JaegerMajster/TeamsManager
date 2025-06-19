@@ -369,8 +369,7 @@ namespace TeamsManager.Core.Services.Graph
                 method, ex.LimitType, ex.RetryAfterSeconds);
             
             // Aktualizuj informacje o rate limiting w Graph Service
-            // await graphService.Connection.UpdateRateLimitInfoAsync(ex.RetryAfterSeconds);
-            // Tymczasowo wyłączone - metoda nie jest zaimplementowana
+            await UpdateRateLimitInfoAsync(graphService, ex.RetryAfterSeconds);
             
             // Powiadom użytkownika
             await notificationService.SendNotificationToUserAsync(
@@ -598,14 +597,14 @@ namespace TeamsManager.Core.Services.Graph
                 // Loguj informacje o rate limiting
                 var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => { });
                 var logger = loggerFactory.CreateLogger("GraphExceptionHandler");
-                logger.LogWarning("Rate limit reached. Retry after {RetryAfter} seconds", retryAfterSeconds);
+                logger.LogWarning("Osiągnięto limit żądań. Ponowna próba za {RetryAfter} sekund", retryAfterSeconds);
             }
             catch (Exception ex)
             {
                 // Nie rzucaj wyjątku - to metoda pomocnicza
                 var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => { });
                 var logger = loggerFactory.CreateLogger("GraphExceptionHandler");
-                logger.LogError(ex, "Error updating rate limit info");
+                logger.LogError(ex, "Błąd aktualizacji informacji o limicie żądań");
             }
         }
 
@@ -622,14 +621,14 @@ namespace TeamsManager.Core.Services.Graph
                 // Loguj informacje o błędzie serwera
                 var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => { });
                 var logger = loggerFactory.CreateLogger("GraphExceptionHandler");
-                logger.LogWarning("Server error reported to Graph Service");
+                logger.LogWarning("Błąd serwera zgłoszony do Graph Service");
             }
             catch (Exception ex)
             {
                 // Nie rzucaj wyjątku - to metoda pomocnicza
                 var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => { });
                 var logger = loggerFactory.CreateLogger("GraphExceptionHandler");
-                logger.LogError(ex, "Error reporting server error");
+                logger.LogError(ex, "Błąd zgłaszania błędu serwera");
             }
         }
     }

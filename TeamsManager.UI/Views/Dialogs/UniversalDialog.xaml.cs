@@ -58,7 +58,7 @@ namespace TeamsManager.UI.Views.Dialogs
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            // Obsługa klawiszy Escape i Enter
+    
             if (e.Key == Key.Escape && DataContext is UniversalDialogViewModel viewModel)
             {
                 if (viewModel.ShowSecondaryButton && viewModel.IsSecondaryCancel)

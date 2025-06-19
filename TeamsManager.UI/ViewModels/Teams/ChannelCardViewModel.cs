@@ -55,7 +55,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             InitializeCommands();
         }
 
-        // ===== PROPERTIES =====
+
 
         public Channel Channel
         {
@@ -123,7 +123,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        // ===== UI BINDING PROPERTIES =====
+
 
         /// <summary>
         /// Icon for channel based on type and status
@@ -191,7 +191,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             EditingDisplayName != _originalDisplayName || 
             EditingDescription != _originalDescription;
 
-        // ===== COMMANDS =====
+
 
         public ICommand EditCommand { get; private set; } = null!;
         public ICommand SaveCommand { get; private set; } = null!;
@@ -222,7 +222,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 canExecute: _ => !Channel.IsGeneral && !IsLoading);
         }
 
-        // ===== COMMAND METHODS =====
+
 
         private void EnterEditMode()
         {
@@ -398,7 +398,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        // ===== HELPER METHODS =====
+
 
         /// <summary>
         /// Pobiera token dostępu z MSAL Auth Service
@@ -423,7 +423,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        // ===== PROPERTY CHANGED =====
+
 
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
@@ -431,7 +431,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         }
     }
 
-    // ===== EVENT ARGS =====
+    
 
     public class ChannelUpdatedEventArgs : EventArgs
     {

@@ -363,7 +363,7 @@ namespace TeamsManager.Application.Services
 
         private async Task<BulkOperationResult> SimulateUserImportAsync(List<UserImportData> userData, ImportProcessStatus processStatus)
         {
-            _logger.LogInformation("Orkiestrator: DryRun - symulacja importu {Count} użytkowników", userData.Count);
+            _logger.LogInformation("Orkiestrator: DryRun - próba importu {Count} użytkowników", userData.Count);
             
             processStatus.Status = "Completed";
             processStatus.CompletedAt = DateTime.UtcNow;

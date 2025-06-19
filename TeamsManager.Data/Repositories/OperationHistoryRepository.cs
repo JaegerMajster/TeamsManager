@@ -31,7 +31,7 @@ namespace TeamsManager.Data.Repositories
         public async Task<IEnumerable<OperationHistory>> GetHistoryByUserAsync(string userUpn, int? count = null)
         {
             var query = _dbSet
-               .Where(oh => oh.CreatedBy == userUpn) // Zakładamy, że CreatedBy to UPN użytkownika wykonującego
+               .Where(oh => oh.CreatedBy == userUpn)
                .OrderByDescending(oh => oh.StartedAt);
 
             if (count.HasValue)

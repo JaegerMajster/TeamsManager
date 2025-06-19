@@ -16,12 +16,12 @@ namespace TeamsManager.UI.Services
 {
     /// <summary>
     /// Serwis do komunikacji z API TeamsManager
-    /// Obsługuje endpointy diagnostyczne i monitorowania Graph API (Etap 5.1)
+    /// Obsługuje endpointy diagnostyczne i monitorowania Graph API
     /// Implementuje operacje Graph API
     /// </summary>
     public interface ITeamsManagerApiService
     {
-        // Graph API Diagnostic Methods (Etap 5.1.1)
+
         Task<GraphDiagnosticInfo?> GetGraphConnectionDiagnosticsAsync();
         Task<GraphDiagnosticInfo?> GetExtendedGraphConnectionDiagnosticsAsync(string[]? testEndpoints = null, bool includePermissions = true);
         Task<GraphPermissionInfo?> ValidateGraphPermissionsAsync(string[] requiredPermissions);
@@ -29,12 +29,11 @@ namespace TeamsManager.UI.Services
         Task<GraphDiagnosticInfo?> TestGraphOperationAsync(string operationType, Dictionary<string, object>? parameters = null);
         Task<object?> GetFullGraphDiagnosticReportAsync();
         
-        // Graph API Status and Configuration Methods (Etap 5.1.1)
+
         Task<GraphConnectionHealthInfo?> GetGraphStatusAsync();
         Task<GraphConnectionTestResult?> TestGraphConnectionAsync();
         Task<GraphPermissionInfo?> GetGraphPermissionsAsync();
         
-        // New Graph API Methods (Etap 5.1.2)
         Task<GraphRateLimitStatus?> GetGraphRateLimitStatusAsync();
         Task<GraphHealthStatus?> GetGraphHealthStatusAsync();
         Task<GraphBatchOperationResult?> ExecuteGraphBatchOperationAsync(GraphBatchRequest batchRequest);
@@ -369,7 +368,6 @@ namespace TeamsManager.UI.Services
             }
         }
 
-        // New Graph API Methods (Etap 5.1.2)
         public async Task<GraphRateLimitStatus?> GetGraphRateLimitStatusAsync()
         {
             try

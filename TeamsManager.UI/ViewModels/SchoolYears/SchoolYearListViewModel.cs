@@ -20,7 +20,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
         private readonly SchoolYearUIService _schoolYearUIService;
         private readonly ILogger<SchoolYearListViewModel> _logger;
 
-        // ===== WŁAŚCIWOŚCI DANYCH =====
+
         private ObservableCollection<SchoolYearDisplayModel> _schoolYears;
         private ICollectionView _schoolYearsView;
         private SchoolYearDisplayModel? _selectedSchoolYear;
@@ -54,7 +54,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             _ = LoadDataAsync();
         }
 
-        // ===== WŁAŚCIWOŚCI PUBLICZNE =====
+
 
         public ObservableCollection<SchoolYearDisplayModel> SchoolYears
         {
@@ -142,7 +142,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             }
         }
 
-        // ===== STATYSTYKI =====
+
 
         public int TotalSchoolYears => _schoolYears?.Count ?? 0;
         
@@ -152,7 +152,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
         
         public int FutureSchoolYears => _schoolYears?.Count(sy => sy.Status == "Przyszły") ?? 0;
 
-        // ===== KOMENDY =====
+
 
         public RelayCommand LoadDataCommand { get; }
         public RelayCommand RefreshCommand { get; }
@@ -162,7 +162,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
         public RelayCommand SetAsCurrentCommand { get; }
         public RelayCommand ClearSearchCommand { get; }
 
-        // ===== METODY PRYWATNE =====
+
 
         private async Task LoadDataAsync()
         {
@@ -246,9 +246,6 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
         private void AddNewSchoolYear()
         {
             _logger.LogInformation("Otwieranie formularza dodawania nowego roku szkolnego");
-            
-            // TODO: Implementacja okna dialogowego dla dodawania
-            // Będzie implementowana w Etapie 2
             StatusMessage = "Funkcja dodawania nowego roku szkolnego będzie dostępna w następnej wersji";
         }
 
@@ -257,9 +254,6 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             if (SelectedSchoolYear == null) return;
 
             _logger.LogInformation("Otwieranie formularza edycji roku szkolnego {Name}", SelectedSchoolYear.Name);
-            
-            // TODO: Implementacja okna dialogowego dla edycji
-            // Będzie implementowana w Etapie 2
             StatusMessage = $"Funkcja edycji roku szkolnego '{SelectedSchoolYear.Name}' będzie dostępna w następnej wersji";
         }
 
@@ -271,7 +265,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             {
                 _logger.LogInformation("Próba usunięcia roku szkolnego {Name}", SelectedSchoolYear.Name);
 
-                // Sprawdź czy można usunąć
+    
                 var canDelete = await _schoolYearUIService.CanDeleteSchoolYearAsync(SelectedSchoolYear.Id);
                 if (!canDelete)
                 {
@@ -279,8 +273,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
                     return;
                 }
 
-                // TODO: Dodać potwierdzenie użytkownika (MessageBox)
-                // Na razie tylko symulacja
+
                 StatusMessage = $"Potwierdź usunięcie roku szkolnego '{SelectedSchoolYear.Name}' - funkcja będzie dostępna w pełnej wersji";
 
                 /*
@@ -346,7 +339,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             SearchText = string.Empty;
         }
 
-        // ===== WALIDACJA KOMEND =====
+
 
         private bool CanEdit()
         {
@@ -363,7 +356,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
             return !IsLoading && SelectedSchoolYear != null && !SelectedSchoolYear.IsCurrent;
         }
 
-        // ===== FILTROWANIE =====
+
 
         private bool SchoolYearFilter(object item)
         {
@@ -378,7 +371,7 @@ namespace TeamsManager.UI.ViewModels.SchoolYears
                    schoolYear.Period.ToLowerInvariant().Contains(searchLower);
         }
 
-        // ===== METODY PUBLICZNE =====
+
 
         /// <summary>
         /// Odświeża dane z serwera

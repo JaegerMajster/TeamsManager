@@ -22,7 +22,7 @@ namespace TeamsManager.UI.Views.SchoolTypes
             _viewModel = new SchoolTypeEditViewModel(schoolType);
             DataContext = _viewModel;
 
-            // Obsługa zamknięcia okna
+    
             _viewModel.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(SchoolTypeEditViewModel.DialogResult))

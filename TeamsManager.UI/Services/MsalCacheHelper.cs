@@ -37,7 +37,7 @@ namespace TeamsManager.UI.Services
                 // Upewnij się że katalog istnieje
                 Directory.CreateDirectory(CacheDir);
                 
-                // Konfiguracja storage properties dla różnych platform
+    
                 var storageProperties = new StorageCreationPropertiesBuilder(CacheFileName, CacheDir)
                     .WithLinuxKeyring(
                         LinuxKeyRingSchema, 
@@ -58,7 +58,7 @@ namespace TeamsManager.UI.Services
                 logger.LogInformation("MSAL Token Cache Serialization enabled. Cache location: {CacheLocation}", 
                                     Path.Combine(CacheDir, CacheFileName));
                 
-                // Opcjonalnie: zarejestruj eventy cache
+    
                 RegisterCacheEvents(pca.UserTokenCache, logger);
             }
             catch (Exception ex)

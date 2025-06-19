@@ -34,7 +34,7 @@ namespace TeamsManager.UI.Views.Import
 
         private void BulkImportWizardWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Sprawdź czy import jest w toku
+    
             if (DataContext is BulkImportWizardViewModel viewModel && viewModel.IsImporting)
             {
                 var result = MessageBox.Show(

@@ -14,7 +14,7 @@ namespace TeamsManager.UI.Services
 {
     /// <summary>
     /// Prosta implementacja IUserService która pobiera użytkowników z lokalnej bazy danych.
-    /// Używana tymczasowo zamiast komunikacji z API.
+    /// Implementacja serwisu użytkowników.
     /// </summary>
     public class SimpleUserService : IUserService
     {
@@ -93,7 +93,7 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogInformation("Pobieranie wszystkich użytkowników z bazy danych (includeInactive: {IncludeInactive})", includeInactive);
 
-                // Sprawdź połączenie z bazą danych
+    
                 if (!await _context.Database.CanConnectAsync())
                 {
                     _logger.LogError("Nie można połączyć się z bazą danych");
@@ -158,7 +158,6 @@ namespace TeamsManager.UI.Services
 
                 _logger.LogInformation("Tworzenie użytkownika {UPN} w bazie danych", user.UPN);
 
-                // Sprawdź czy użytkownik już istnieje
                 var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UPN == user.UPN);
                 if (existingUser != null)
                 {
@@ -244,7 +243,6 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogInformation("Tworzenie użytkownika {FirstName} {LastName} ({UPN}) w bazie danych", firstName, lastName, upn);
 
-                // Sprawdź czy użytkownik już istnieje
                 var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UPN == upn);
                 if (existingUser != null)
                 {

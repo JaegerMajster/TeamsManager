@@ -218,7 +218,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                         RateLimitResetTime = rateLimitStatus.ResetTime ?? DateTime.Now;
                         IsThrottled = rateLimitStatus.IsThrottled;
                         
-                        // Sprawdź czy rate limit jest niski i wyślij powiadomienie
+            
                         CheckRateLimitNotifications(rateLimitStatus);
                     }
                 }
@@ -237,7 +237,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                         CacheHitRate = graphMetrics.CacheHitRate;
                         BatchOperationsToday = graphMetrics.BatchOperationsCount;
                         
-                        // Sprawdź metryki i wyślij powiadomienia jeśli potrzeba
+            
                         CheckMetricsNotifications(graphMetrics);
                     }
                 }
@@ -262,7 +262,7 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
                 ErrorsLastHour = Random.Shared.Next(0, 3);
                 WarningsLastHour = Random.Shared.Next(0, 8);
 
-                // Sprawdź błędy i wyślij powiadomienia
+    
                 CheckErrorNotifications();
 
                 _logger.LogDebug("[TEAMS-METRICS-WIDGET] Graph API metrics data refreshed successfully");
@@ -314,19 +314,19 @@ namespace TeamsManager.UI.ViewModels.Monitoring.Widgets
 
         private void CheckMetricsNotifications(dynamic graphMetrics)
         {
-            // Sprawdź wysokie użycie requestów
+
             if (graphMetrics.RequestsPerMinute > 100)
             {
                 ShowNotification("Wysokie Użycie", $"⚠️ Wysokie użycie Graph API: {graphMetrics.RequestsPerMinute} req/min", "Warning");
             }
             
-            // Sprawdź niski cache hit rate
+
             if (graphMetrics.CacheHitRate < 50)
             {
                 ShowNotification("Cache", $"⚠️ Niski cache hit rate: {graphMetrics.CacheHitRate:F1}%", "Warning");
             }
             
-            // Sprawdź batch operations
+
             if (graphMetrics.BatchOperationsCount > 50)
             {
                 ShowNotification("Batch Operations", $"ℹ️ Wysokie użycie batch operations: {graphMetrics.BatchOperationsCount}", "Info");

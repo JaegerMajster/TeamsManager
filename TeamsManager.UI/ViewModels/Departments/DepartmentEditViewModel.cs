@@ -46,7 +46,7 @@ namespace TeamsManager.UI.ViewModels.Departments
         private string? _codeConflictMessage;
         private bool _organizationalUnitSelectionMade;
         
-        // Nowe właściwości dla ulepszonego error handlingu
+
         private bool _hasNameConflict;
         private string? _nameConflictMessage;
         private bool _hasTeamsAssigned;
@@ -402,7 +402,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                 var currentValue = _workingIsActive != default ? _workingIsActive : (Model?.IsActive ?? true);
                 if (currentValue != value)
                 {
-                    // Jeśli próbujemy deaktywować dział, sprawdź zespoły
+        
                     if (!value && currentValue)
                     {
                         _ = ValidateTeamsBeforeDeactivationAsync(value);
@@ -601,12 +601,12 @@ namespace TeamsManager.UI.ViewModels.Departments
                 
                 if (IsAddMode)
                 {
-                    // Tymczasowo używamy CreateDepartmentAsync z parentDepartmentId = null, 
+         
                     // a potem aktualizujemy OrganizationalUnitId
                     var createdDepartment = await _departmentService.CreateDepartmentAsync(
                         Model.Name, 
                         Model.Description ?? string.Empty, 
-                        null, // parentDepartmentId - nie używamy już hierarchii działów
+                        null,
                         Model.DepartmentCode,
                         Model.Email,
                         Model.Phone,
@@ -840,7 +840,7 @@ namespace TeamsManager.UI.ViewModels.Departments
                     var organizationalUnit = await _organizationalUnitService.GetOrganizationalUnitByIdAsync(workingOrgUnitId);
                     if (organizationalUnit != null && !string.IsNullOrEmpty(organizationalUnit.Name))
                     {
-                        // Używamy znormalizowanej nazwy jednostki organizacyjnej jako prefiksu
+            
                         var normalizedUnitName = NormalizeDepartmentName(organizationalUnit.Name);
                         if (!string.IsNullOrEmpty(normalizedUnitName))
                         {
@@ -878,7 +878,7 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 var allDepartments = await _departmentService.GetAllDepartmentsAsync();
                 
-                // Sprawdź czy istnieje inny dział z tym samym kodem w tej samej jednostce organizacyjnej
+    
                 var conflictingDepartments = allDepartments.Where(d => 
                     d.DepartmentCode == code && 
                     d.OrganizationalUnitId == Model.OrganizationalUnitId &&
@@ -911,7 +911,6 @@ namespace TeamsManager.UI.ViewModels.Departments
                     Model.DepartmentCode = code;
                 }
 
-                // Sprawdź konflikty
                 if (!string.IsNullOrEmpty(code))
                 {
                     var hasConflict = await CheckCodeConflictAsync(code);
@@ -954,7 +953,7 @@ namespace TeamsManager.UI.ViewModels.Departments
             {
                 var allDepartments = await _departmentService.GetAllDepartmentsAsync();
                 
-                // Sprawdź konflikty w tej samej jednostce organizacyjnej
+
                 var conflictingDepartments = allDepartments.Where(d => 
                     d.Name.Equals(Model.Name, StringComparison.OrdinalIgnoreCase) && 
                     d.OrganizationalUnitId == Model.OrganizationalUnitId &&
@@ -1013,7 +1012,7 @@ namespace TeamsManager.UI.ViewModels.Departments
 
             try
             {
-                // Sprawdź bezpośrednio czy dział ma przypisane aktywne zespoły
+
                 var teamsInDepartment = await _teamService.GetTeamsByDepartmentAsync(Model.Id);
                 var activeTeams = teamsInDepartment.Where(t => t.IsActive).ToList();
 
@@ -1030,13 +1029,13 @@ namespace TeamsManager.UI.ViewModels.Departments
                     return;
                 }
 
-                // Jeśli nie ma bezpośrednio przypisanych zespołów, sprawdź czy użytkownicy z działu są członkami zespołów
+
                 var usersInDepartment = await _departmentService.GetUsersInDepartmentAsync(Model.Id);
                 var activeUsers = usersInDepartment.Where(u => u.IsActive).ToList();
 
                 if (activeUsers.Any())
                 {
-                    // Sprawdź czy którzyś z użytkowników ma aktywne członkostwa w zespołach
+
                     var usersWithTeams = activeUsers.Where(u => u.TeamMemberships?.Any(tm => tm.IsMembershipActive) == true).ToList();
                     
                     if (usersWithTeams.Any())

@@ -256,19 +256,19 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
 
         private bool ContainsSearchText(OrganizationalUnitTreeItemViewModel unit, string searchText)
         {
-            // Sprawdź nazwę jednostki
+
             if (unit.Name.ToLower().Contains(searchText))
                 return true;
 
-            // Sprawdź opis
+
             if (!string.IsNullOrEmpty(unit.Description) && unit.Description.ToLower().Contains(searchText))
                 return true;
 
-            // Sprawdź działy
+
             if (unit.Departments.Any(d => d.Name.ToLower().Contains(searchText)))
                 return true;
 
-            // Sprawdź podjednostki rekurencyjnie
+
             return unit.Children.Any(child => ContainsSearchText(child, searchText));
         }
 
@@ -406,7 +406,7 @@ namespace TeamsManager.UI.ViewModels.OrganizationalUnits
 
             try
             {
-                // Sprawdź czy można usunąć jednostkę
+    
                 var canDelete = await _organizationalUnitService.CanDeleteOrganizationalUnitAsync(SelectedOrganizationalUnit.Id);
                 
                 if (!canDelete)

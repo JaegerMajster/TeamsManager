@@ -552,7 +552,6 @@ namespace TeamsManager.UI.ViewModels.Teams
                 TemplateContent = tokenText;
             }
             
-            // Logowanie dla debugowania
             _logger.LogDebug("Wstawiono token {TokenName} do wzorca szablonu", token.Name);
         }
 
@@ -575,7 +574,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     Style = System.Windows.Application.Current.FindResource("BaseWindowStyle") as Style
                 };
 
-                // Tworzenie UserControl z danymi testowymi
+
                 var testDataControl = new UserControls.Teams.TestDataDialog
                 {
                     DataContext = this

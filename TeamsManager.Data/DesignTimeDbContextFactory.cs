@@ -14,7 +14,7 @@ namespace TeamsManager.Data
         {
             var optionsBuilder = new DbContextOptionsBuilder<TeamsManagerDbContext>();
             
-            // UŻYWAMY TEJ SAMEJ ŚCIEŻKI CO W APLIKACJI UI
+
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var appFolderPath = Path.Combine(appDataPath, "TeamsManager");
             
@@ -28,7 +28,7 @@ namespace TeamsManager.Data
             
             optionsBuilder.UseSqlite($"Data Source={dbPath}");
             
-            // Używamy konstruktora bez ICurrentUserService
+
             return new TeamsManagerDbContext(optionsBuilder.Options);
         }
     }

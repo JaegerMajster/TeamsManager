@@ -200,7 +200,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
         {
             try
             {
-                // Używamy GetActiveTeamsAsync zamiast GetAllAsync z filtrowaniem
+
                 var teams = await _teamService.GetActiveTeamsAsync(forceRefresh: false);
                 ActiveTeamsCount = teams?.Count() ?? 0;
             }
@@ -215,7 +215,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
         {
             try
             {
-                // Używamy GetAllActiveUsersAsync
+
                 var users = await _userService.GetAllActiveUsersAsync(forceRefresh: false);
                 TotalUsersCount = users?.Count() ?? 0;
             }
@@ -230,7 +230,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
         {
             try
             {
-                // Używamy GetHistoryByFilterAsync z filtrem na dzisiaj
+
                 var today = DateTime.Today;
                 var tomorrow = today.AddDays(1);
                 
@@ -322,7 +322,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
 
         private void CalculateActivity()
         {
-            // Przykładowa logika obliczania aktywności
+
             var yesterday = DateTime.Today.AddDays(-1);
             var yesterdayOps = RecentOperations.Count(o => o.ExecutedAt.Date == yesterday);
             
@@ -343,7 +343,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
         {
             Notifications.Clear();
             
-            // Przykładowe powiadomienia
+
             if (TodayOperationsCount == 0)
             {
                 AddNotification("Brak operacji wykonanych dzisiaj", NotificationType.Warning);
@@ -354,7 +354,7 @@ namespace TeamsManager.UI.ViewModels.Dashboard
                 AddNotification("Nie masz aktywnych zespołów", NotificationType.Info);
             }
             
-            // Sprawdź ostatnią synchronizację
+
             var lastSync = RecentOperations.FirstOrDefault(o => o.OperationType.Contains("Synchronizacja"));
             if (lastSync == null || (DateTime.Now - lastSync.ExecutedAt).TotalHours > 24)
             {
@@ -375,25 +375,21 @@ namespace TeamsManager.UI.ViewModels.Dashboard
         private void NavigateToCreateTeam()
         {
             _logger.LogInformation("Navigating to Create Team");
-            // TODO: Implementacja nawigacji w przyszłych etapach
         }
 
         private void NavigateToManageUsers()
         {
             _logger.LogInformation("Navigating to Manage Users");
-            // TODO: Implementacja nawigacji w przyszłych etapach
         }
 
         private void NavigateToReports()
         {
             _logger.LogInformation("Navigating to Reports");
-            // TODO: Implementacja nawigacji w przyszłych etapach
         }
 
         private void NavigateToOperationHistory()
         {
             _logger.LogInformation("Navigating to Operation History");
-            // TODO: Implementacja nawigacji w przyszłych etapach
         }
 
         #endregion

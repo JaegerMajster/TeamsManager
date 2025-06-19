@@ -15,6 +15,5 @@
         /// Może być ukryty i mieć ograniczoną funkcjonalność.
         /// </summary>
         Archived = 1
-        // W przyszłości można tu dodać inne statusy, np. ReadOnly, Deleted itp.
     }
 }

@@ -22,7 +22,7 @@ namespace TeamsManager.UI.Views.Teams
             _viewModel = viewModel;
             DataContext = _viewModel;
             
-            // Obsługa zamykania okna
+    
             _viewModel.RequestClose += OnRequestClose;
         }
 

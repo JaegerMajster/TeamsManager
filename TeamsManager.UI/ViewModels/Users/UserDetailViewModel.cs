@@ -227,15 +227,50 @@ namespace TeamsManager.UI.ViewModels.Users
             {
                 var departments = await _departmentService.GetAllDepartmentsAsync();
                 Departments.Clear();
-                foreach (var dept in departments.OrderBy(d => d.Name))
+                
+                // Jeśli nie ma działów, dodaj domyślny dział
+                if (!departments.Any())
                 {
-                    Departments.Add(dept);
+                    _logger.LogWarning("Brak działów w bazie danych. Może być potrzebna inicjalizacja danych.");
+                    
+                    // Dodaj domyślny dział jako fallback
+                    var defaultDepartment = new Department
+                    {
+                        Id = "temp-default",
+                        Name = "Brak działów - skontaktuj się z administratorem",
+                        Description = "Domyślny dział tymczasowy",
+                        IsActive = true
+                    };
+                    Departments.Add(defaultDepartment);
+                    
+                    _logger.LogInformation("Dodano tymczasowy domyślny dział dla formularza użytkownika");
+                }
+                else
+                {
+                    foreach (var dept in departments.OrderBy(d => d.Name))
+                    {
+                        Departments.Add(dept);
+                    }
+                    _logger.LogDebug("Załadowano {Count} działów", departments.Count());
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas ładowania działów");
-                throw;
+                
+                // Dodaj domyślny dział jako fallback w przypadku błędu
+                Departments.Clear();
+                var errorDepartment = new Department
+                {
+                    Id = "error-fallback",
+                    Name = "Błąd ładowania działów - sprawdź połączenie",
+                    Description = "Fallback dla błędu ładowania",
+                    IsActive = true
+                };
+                Departments.Add(errorDepartment);
+                
+                // NIE rzucaj wyjątku ponownie - pozwól formularzowi się otworzyć z fallback działem
+                _logger.LogInformation("Dodano fallback dział po błędzie - formularz może się otworzyć");
             }
         }
 
@@ -356,7 +391,7 @@ namespace TeamsManager.UI.ViewModels.Users
                         Model.Upn,
                         Model.Role,
                         Model.DepartmentId,
-                        Model.Password, // Używamy hasła z formularza
+                        Model.Password,
                         accessToken,
                         sendWelcomeEmail: false,
                         phone: Model.Phone,
@@ -415,7 +450,7 @@ namespace TeamsManager.UI.ViewModels.Users
                     var filePath = openFileDialog.FileName;
                     var fileInfo = new FileInfo(filePath);
 
-                    // Check file size (max 5MB)
+                    // Sprawdź rozmiar pliku (max 5MB)
                     if (fileInfo.Length > 5 * 1024 * 1024)
                     {
                         ErrorMessage = "Plik jest za duży. Maksymalny rozmiar to 5MB.";
@@ -443,8 +478,6 @@ namespace TeamsManager.UI.ViewModels.Users
             StatusMessage = "Zdjęcie profilowe zostało usunięte";
             UpdateCommandStates();
         }
-
-
 
         private string[] GetValidationErrors()
         {

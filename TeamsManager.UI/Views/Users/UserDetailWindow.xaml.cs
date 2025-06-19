@@ -20,7 +20,7 @@ namespace TeamsManager.UI.Views.Users
             _viewModel = viewModel;
             DataContext = _viewModel;
             
-            // Obsługa zamykania okna
+    
             _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
 

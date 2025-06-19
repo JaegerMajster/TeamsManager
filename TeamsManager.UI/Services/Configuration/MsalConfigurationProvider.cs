@@ -48,7 +48,7 @@ namespace TeamsManager.UI.Services.Configuration
             }
 
             _logger.LogError("Failed to load MSAL configuration from any source");
-            return new MsalConfiguration(); // Pusta konfiguracja
+            return new MsalConfiguration();
         }
 
         public bool TryLoadConfiguration(out MsalConfiguration? configuration)
@@ -70,7 +70,7 @@ namespace TeamsManager.UI.Services.Configuration
             {
                 _logger.LogInformation("Loaded MSAL config from developer file: {Path}", DeveloperConfigFileName);
                 
-                // Opcjonalnie skopiuj do AppData
+    
                 TryCopyToAppData(configuration!, appDataPath);
                 return true;
             }

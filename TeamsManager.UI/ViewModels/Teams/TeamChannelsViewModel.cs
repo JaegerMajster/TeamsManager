@@ -56,7 +56,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             SetupCollectionView();
         }
 
-        // ===== PROPERTIES =====
+
 
         /// <summary>
         /// Current team ID
@@ -158,7 +158,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         /// </summary>
         public int PrivateChannelsCount => Channels.Count(c => c.Channel.IsPrivate);
 
-        // ===== COMMANDS =====
+
 
         public ICommand LoadChannelsCommand { get; private set; } = null!;
         public ICommand CreateChannelCommand { get; private set; } = null!;
@@ -189,7 +189,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 canExecute: _ => !string.IsNullOrEmpty(SearchText));
         }
 
-        // ===== COLLECTION VIEW SETUP =====
+
 
         private void SetupCollectionView()
         {
@@ -207,7 +207,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 ChannelsView.SortDescriptions.Add(new SortDescription("Channel.SortOrder", ListSortDirection.Ascending));
                 ChannelsView.SortDescriptions.Add(new SortDescription("Channel.DisplayName", ListSortDirection.Ascending));
                 
-                // Set up filtering
+                // Skonfiguruj filtrowanie
                 ChannelsView.Filter = FilterChannels;
             }
         }
@@ -228,7 +228,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                    channelVm.Channel.StatusDescription.ToLower().Contains(searchTerm);
         }
 
-        // ===== COMMAND METHODS =====
+
 
         /// <summary>
         /// Load channels for the current team
@@ -270,7 +270,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                 }
                 Channels.Clear();
 
-                // Add new channel view models
+                // Dodaj nowe ViewModele kanałów
                 foreach (var channel in channels)
                 {
                     var channelVm = new ChannelCardViewModel(channel, _channelService, _notificationService, _currentUserService, _msalAuthService, _loggerFactory.CreateLogger<ChannelCardViewModel>());
@@ -279,7 +279,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     Channels.Add(channelVm);
                 }
 
-                // Update counts
+                // Aktualizuj liczniki
                 OnPropertyChanged(nameof(HasNoChannels));
                 OnPropertyChanged(nameof(ActiveChannelsCount));
                 OnPropertyChanged(nameof(PrivateChannelsCount));
@@ -306,13 +306,13 @@ namespace TeamsManager.UI.ViewModels.Teams
         }
 
         /// <summary>
-        /// Create a new channel
+        /// Utwórz nowy kanał
         /// </summary>
         private async Task CreateNewChannelAsync()
         {
-            // For now, show a simple input dialog
-            // In a real implementation, you would show a proper CreateChannelDialog
-            var channelName = "Nowy kanał"; // This should come from a dialog
+            // Na razie pokaż prosty dialog wprowadzania
+            // W rzeczywistej implementacji należy pokazać odpowiedni CreateChannelDialog
+            var channelName = "Nowy kanał"; // To powinno pochodzić z dialogu
             var description = "Opis nowego kanału";
             var isPrivate = false;
 
@@ -339,13 +339,13 @@ namespace TeamsManager.UI.ViewModels.Teams
 
                 if (newChannel != null)
                 {
-                    // Add to collection
+                    // Dodaj do kolekcji
                     var channelVm = new ChannelCardViewModel(newChannel, _channelService, _notificationService, _currentUserService, _msalAuthService, _loggerFactory.CreateLogger<ChannelCardViewModel>());
                     channelVm.ChannelUpdated += OnChannelUpdated;
                     channelVm.ChannelDeleted += OnChannelDeleted;
                     Channels.Add(channelVm);
 
-                    // Update counts
+                    // Aktualizuj liczniki
                     OnPropertyChanged(nameof(HasNoChannels));
                     OnPropertyChanged(nameof(ActiveChannelsCount));
                     OnPropertyChanged(nameof(PrivateChannelsCount));
@@ -413,7 +413,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     return;
                 }
 
-                // Skip header row if present
+                // Pomiń wiersz nagłówka jeśli jest obecny
                 var startIndex = lines.Length > 0 && lines[0].Contains("nazwa") ? 1 : 0;
 
                 for (var i = startIndex; i < lines.Length; i++)
@@ -450,7 +450,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     }
                     catch (Exception ex)
                     {
-                        // Log error but continue with other channels
+                        // Zaloguj błąd ale kontynuuj z innymi kanałami
                         await _notificationService.SendNotificationToUserAsync(
                             _currentUserService.GetCurrentUserUpn() ?? "system",
                             $"Nie udało się utworzyć kanału '{channelName}': {ex.Message}",
@@ -458,7 +458,7 @@ namespace TeamsManager.UI.ViewModels.Teams
                     }
                 }
 
-                // Update counts
+                // Aktualizuj liczniki
                 OnPropertyChanged(nameof(HasNoChannels));
                 OnPropertyChanged(nameof(ActiveChannelsCount));
                 OnPropertyChanged(nameof(PrivateChannelsCount));
@@ -481,18 +481,18 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        // ===== EVENT HANDLERS =====
+
 
         private void OnChannelUpdated(object? sender, ChannelUpdatedEventArgs e)
         {
-            // Update counts when channel is updated
+            // Aktualizuj liczniki gdy kanał zostanie zaktualizowany
             OnPropertyChanged(nameof(ActiveChannelsCount));
             OnPropertyChanged(nameof(PrivateChannelsCount));
         }
 
         private void OnChannelDeleted(object? sender, ChannelDeletedEventArgs e)
         {
-            // Remove from collection
+            // Usuń z kolekcji
             var channelVm = Channels.FirstOrDefault(c => c.Channel.Id == e.DeletedChannel.Id);
             if (channelVm != null)
             {
@@ -507,10 +507,10 @@ namespace TeamsManager.UI.ViewModels.Teams
             OnPropertyChanged(nameof(PrivateChannelsCount));
         }
 
-        // ===== PUBLIC METHODS =====
+
 
         /// <summary>
-        /// Initialize the view model with team data
+        /// Inicjalizuj ViewModel danymi zespołu
         /// </summary>
         public async Task InitializeAsync(string teamId, Team? team = null)
         {
@@ -520,7 +520,7 @@ namespace TeamsManager.UI.ViewModels.Teams
         }
 
         /// <summary>
-        /// Cleanup resources
+        /// Wyczyść zasoby
         /// </summary>
         public void Cleanup()
         {
@@ -532,7 +532,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             Channels.Clear();
         }
 
-        // ===== HELPER METHODS =====
+
 
         /// <summary>
         /// Pobiera token dostępu z MSAL Auth Service

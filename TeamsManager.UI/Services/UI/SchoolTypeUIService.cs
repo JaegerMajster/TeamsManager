@@ -192,7 +192,7 @@ namespace TeamsManager.UI.Services.UI
             if (string.IsNullOrWhiteSpace(color))
                 return false;
 
-            // Obsługa formatu z # i bez
+
             var hex = color.StartsWith("#") ? color : $"#{color}";
             
             return System.Text.RegularExpressions.Regex.IsMatch(

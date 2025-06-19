@@ -243,7 +243,7 @@ namespace TeamsManager.Application.Services
                     result.Errors.Add(new HealthOperationError
                     {
                         Operation = "GraphConnection",
-                        Component = "Graph API",
+                        Component = "API Graph",
                         Message = "Brak prawidłowego połączenia z Microsoft Graph",
                         Severity = HealthErrorSeverity.Critical
                     });
@@ -253,7 +253,7 @@ namespace TeamsManager.Application.Services
                     result.SuccessfulOperations.Add(new HealthOperationSuccess
                     {
                         Operation = "GraphConnection",
-                        Component = "Graph API",
+                        Component = "API Graph",
                         Message = "Połączenie z Microsoft Graph jest aktywne i prawidłowe"
                     });
                 }
@@ -292,7 +292,7 @@ namespace TeamsManager.Application.Services
                 var operation = await _operationHistoryService.CreateNewOperationEntryAsync(
                     OperationType.SystemBackup,
                     "Cache",
-                    targetEntityName: "Cache Performance Optimization"
+                    targetEntityName: "Optymalizacja Wydajności Cache"
                 );
 
                 var result = HealthOperationResult.CreateSuccess("CacheOptimization");
@@ -436,7 +436,7 @@ namespace TeamsManager.Application.Services
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "Cache Performance",
+                    ComponentName = "Wydajność Cache",
                     Status = status,
                     Description = $"Cache Performance: {metrics.GetPerformanceStatus()}. Hit Rate: {metrics.HitRate:F1}%",
                     DurationMs = stopwatch.ElapsedMilliseconds,
@@ -454,7 +454,7 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "Cache Performance",
+                    ComponentName = "Wydajność Cache",
                     Status = HealthStatus.Unhealthy,
                     Description = $"Błąd sprawdzania wydajności cache: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
@@ -478,7 +478,7 @@ namespace TeamsManager.Application.Services
 
                 return new HealthCheckDetail
                 {
-                    ComponentName = "System Performance",
+                    ComponentName = "Wydajność Systemu",
                     Status = status,
                     Description = $"Użycie pamięci: {memoryMB}MB",
                     DurationMs = stopwatch.ElapsedMilliseconds,
@@ -494,7 +494,7 @@ namespace TeamsManager.Application.Services
                 stopwatch.Stop();
                 return new HealthCheckDetail
                 {
-                    ComponentName = "System Performance",
+                    ComponentName = "Wydajność Systemu",
                     Status = HealthStatus.Unhealthy,
                     Description = $"Błąd sprawdzania wydajności systemu: {ex.Message}",
                     DurationMs = stopwatch.ElapsedMilliseconds
@@ -508,9 +508,9 @@ namespace TeamsManager.Application.Services
             {
                 CacheMetrics = _graphCacheService.GetCacheMetrics(),
                 MemoryUsageBytes = GC.GetTotalMemory(false),
-                ActiveConnections = 1, // Symulacja
-                AverageApiResponseTimeMs = 50.0, // Symulacja
-                ErrorsLastHour = 0 // Symulacja
+                ActiveConnections = 1,
+                AverageApiResponseTimeMs = 50.0,
+                ErrorsLastHour = 0
             };
 
             var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();

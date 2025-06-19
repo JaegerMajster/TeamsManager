@@ -69,7 +69,7 @@ namespace TeamsManager.UI.Services
                                        GetClaimValue(jwtToken, "location_claim")?.ToLower() == "trusted",
                     RiskLevel = GetClaimValue(jwtToken, "risk_level") ?? GetClaimValue(jwtToken, "signin_risk"),
                     
-                    // Additional Apps
+                    // Dodatkowe aplikacje
                     RequiredApplications = GetRequiredApplications(jwtToken)
                 };
 

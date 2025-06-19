@@ -106,7 +106,7 @@ namespace TeamsManager.UI.Services
             return null;
         }
 
-        // Metoda testowa do sprawdzenia czy token ma odpowiednie uprawnienia
+        // Sprawdza czy token ma odpowiednie uprawnienia
         public async Task<GraphTestResult> TestGraphAccessAsync(string accessToken)
         {
             var httpClient = _httpClient;
@@ -132,7 +132,7 @@ namespace TeamsManager.UI.Services
                     _logger.LogDebug(ex, "[GraphProfile] Nie można zdekodować tokenu");
                 }
 
-                // Test endpoint /me
+                // Endpoint /me
                 try
                 {
                     startTime = DateTime.UtcNow;
@@ -159,7 +159,7 @@ namespace TeamsManager.UI.Services
                     result.ErrorMessage = $"Me endpoint exception: {ex.Message}";
                 }
 
-                // Test endpoint /me/photo/$value
+                // Endpoint /me/photo/$value
                 try
                 {
                     startTime = DateTime.UtcNow;

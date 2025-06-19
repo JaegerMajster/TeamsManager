@@ -86,7 +86,7 @@ namespace TeamsManager.UI.ViewModels
             else
             {
                 System.Diagnostics.Debug.WriteLine($"[CONFIRM] {title}: {message}");
-                return true; // Fallback dla testów
+                return true;
             }
         }
 

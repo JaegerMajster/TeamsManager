@@ -62,7 +62,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogInformation("=== ROZPOCZYNANIE SYNCHRONIZACJI UŻYTKOWNIKA {UserUpn} ===", userUpn);
                 Console.WriteLine($"=== ROZPOCZYNANIE SYNCHRONIZACJI UŻYTKOWNIKA {userUpn} ===");
 
-                // Sprawdź czy użytkownik już istnieje w lokalnej bazie
+    
                 Console.WriteLine($"=== SPRAWDZANIE CZY UŻYTKOWNIK ISTNIEJE: {userUpn} ===");
                 var existingUser = await _userService.GetUserByUpnAsync(userUpn, forceRefresh: false);
                 
@@ -87,7 +87,7 @@ namespace TeamsManager.UI.Services
                 
                 Console.WriteLine($"=== PROFIL POBRANY: {userProfile.DisplayName} ({userProfile.UserPrincipalName}) ===");
 
-                // Sprawdź czy UPN z profilu pasuje do zalogowanego użytkownika
+    
                 var profileUpn = userProfile.UserPrincipalName ?? userProfile.Mail;
                 if (string.IsNullOrEmpty(profileUpn) || !profileUpn.Equals(userUpn, StringComparison.OrdinalIgnoreCase))
                 {

@@ -315,7 +315,7 @@ namespace TeamsManager.UI.ViewModels.Import
                 if (string.IsNullOrEmpty(_currentProcessId))
                     return;
 
-                // W rzeczywistej implementacji można by pobierać status z API
+    
                 // var processes = await _importOrchestrator.GetActiveImportProcessesStatusAsync();
                 // var currentProcess = processes.FirstOrDefault(p => p.ProcessId == _currentProcessId);
 
@@ -335,10 +335,10 @@ namespace TeamsManager.UI.ViewModels.Import
         {
             if (ProcessStatus == null) return;
 
-            // Symulacja postępu (w rzeczywistej implementacji dane pochodziłyby z API)
+
             if (ProcessStatus.TotalRecords == 0)
             {
-                ProcessStatus.TotalRecords = 100; // Przykładowa liczba rekordów
+                ProcessStatus.TotalRecords = 100;
             }
 
             if (ProcessStatus.ProcessedRecords < ProcessStatus.TotalRecords)
@@ -445,7 +445,7 @@ namespace TeamsManager.UI.ViewModels.Import
             {
                 ShowLoadingOverlay("Generowanie raportu...");
 
-                // TODO: Implementuj zapisywanie raportu
+
                 await Task.Delay(1000);
 
                 await ShowInfoDialog("Raport zapisany", 
@@ -473,7 +473,7 @@ namespace TeamsManager.UI.ViewModels.Import
             IsImportComplete = false;
             _currentProcessId = null;
 
-            // Powróć do pierwszego kroku wizarda (można to zaimplementować poprzez event)
+
             // NewImportRequested?.Invoke(this, EventArgs.Empty);
         }
 

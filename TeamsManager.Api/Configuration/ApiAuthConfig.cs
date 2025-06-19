@@ -47,7 +47,7 @@ namespace TeamsManager.Api.Configuration
                 $"TenantId='{apiOAuthConfig.AzureAd.TenantId}', " +
                 $"ClientId (API's own for OBO)='{apiOAuthConfig.AzureAd.ClientId}', " +
                 $"Audience (for incoming tokens)='{apiOAuthConfig.AzureAd.Audience}', " +
-                $"ClientSecret is {(string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) ? "NOT" : "potentially")} set.");
+                $"ClientSecret jest {(string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.ClientSecret) ? "NIEUSTAWIONY" : "potencjalnie")} ustawiony.");
 
             // Walidacja wczytanej konfiguracji
             if (!skipValidation &&

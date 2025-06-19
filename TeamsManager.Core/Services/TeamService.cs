@@ -13,6 +13,7 @@ using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Graph;
 using TeamsManager.Core.Enums;
 using TeamsManager.Core.Exceptions.Graph;
 
@@ -48,7 +49,7 @@ namespace TeamsManager.Core.Services
         private readonly IUnitOfWork? _unitOfWork;
         
         // NOWA zależność - Team Synchronizer (Etap 4/8)
-        private readonly IGraphSynchronizer<Team, Team> _teamSynchronizer;
+        private readonly IGraphSynchronizer<Team, GraphTeam> _teamSynchronizer;
 
         // Klucze cache (delegowane do GraphCacheService)
         private const string AllActiveTeamsCacheKey = "Teams_AllActive";
@@ -81,7 +82,7 @@ namespace TeamsManager.Core.Services
             IGraphCacheService graphCacheService,
             ICacheInvalidationService cacheInvalidationService, // NOWE: Cache Invalidation Service (Etap 7/8)
             IUnitOfWork? unitOfWork = null, // NOWY parametr - opcjonalny dla kompatybilności
-            IGraphSynchronizer<Team, Team>? teamSynchronizer = null) // NOWY parametr - Team Synchronizer (Etap 4/8)
+            IGraphSynchronizer<Team, GraphTeam>? teamSynchronizer = null) // NOWY parametr - Team Synchronizer (Etap 4/8)
         {
             _teamRepository = teamRepository ?? throw new ArgumentNullException(nameof(teamRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -99,7 +100,7 @@ namespace TeamsManager.Core.Services
             _schoolTypeRepository = schoolTypeRepository ?? throw new ArgumentNullException(nameof(schoolTypeRepository));
             _schoolYearRepository = schoolYearRepository ?? throw new ArgumentNullException(nameof(schoolYearRepository));
 
-            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService)); // Zainicjalizuj to
+            _operationHistoryService = operationHistoryService ?? throw new ArgumentNullException(nameof(operationHistoryService));
             _graphCacheService = graphCacheService ?? throw new ArgumentNullException(nameof(graphCacheService));
             _cacheInvalidationService = cacheInvalidationService ?? throw new ArgumentNullException(nameof(cacheInvalidationService)); // NOWE: Cache Invalidation Service (Etap 7/8)
             _unitOfWork = unitOfWork; // NOWE: opcjonalne przypisanie Unit of Work
@@ -1655,7 +1656,7 @@ namespace TeamsManager.Core.Services
                     catch (Exception ex)
                     {
                         syncFailures++;
-                        _logger.LogError(ex, "Error syncing user {Upn} to team", kvp.Key);
+                        _logger.LogError(ex, "Błąd synchronizacji użytkownika {Upn} do zespołu", kvp.Key);
                     }
                 }
 
@@ -1772,7 +1773,7 @@ namespace TeamsManager.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding users to team {TeamId}", teamId);
+                _logger.LogError(ex, "Błąd dodawania użytkowników do zespołu {TeamId}", teamId);
                 
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id, 
@@ -1855,7 +1856,7 @@ namespace TeamsManager.Core.Services
                             else
                             {
                                 // Użytkownik został usunięty z Teams ale nie był w lokalnej bazie
-                                _logger.LogWarning("Membership for {Upn} not found in local database", kvp.Key);
+                                _logger.LogWarning("Członkostwo dla {Upn} nie znalezione w lokalnej bazie danych", kvp.Key);
                                 syncSuccesses++; // Liczymy jako sukces bo cel został osiągnięty
                             }
                         }
@@ -1982,7 +1983,7 @@ namespace TeamsManager.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing users from team {TeamId}", teamId);
+                _logger.LogError(ex, "Błąd usuwania użytkowników z zespołu {TeamId}", teamId);
                 
                 await _operationHistoryService.UpdateOperationStatusAsync(
                     operation.Id, 

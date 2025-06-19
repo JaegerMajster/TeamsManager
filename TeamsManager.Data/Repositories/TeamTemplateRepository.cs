@@ -17,7 +17,7 @@ namespace TeamsManager.Data.Repositories
         public async Task<TeamTemplate?> GetDefaultTemplateForSchoolTypeAsync(string schoolTypeId)
         {
             return await _dbSet
-                .Include(tt => tt.SchoolType) // Opcjonalnie dołączamy SchoolType
+                .Include(tt => tt.SchoolType)
                 .FirstOrDefaultAsync(tt => tt.SchoolTypeId == schoolTypeId && tt.IsDefault && tt.IsActive);
         }
 

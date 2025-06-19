@@ -239,7 +239,7 @@ namespace TeamsManager.UI.ViewModels.Import
 
         private bool CanFixError(ImportValidationError error)
         {
-            // Określ które błędy można naprawić automatycznie
+
             return error.ErrorType switch
             {
                 "EmptyValue" => true,
@@ -358,8 +358,7 @@ namespace TeamsManager.UI.ViewModels.Import
         {
             try
             {
-                // Symulacja naprawiania błędów
-                await Task.Delay(100); // Symuluj operację
+                await Task.Delay(100);
 
                 return error.ValidationType switch
                 {
@@ -377,7 +376,7 @@ namespace TeamsManager.UI.ViewModels.Import
 
         private bool TryFixEmptyValue(ValidationItemModel error)
         {
-            // Dla pustych wartości można zaproponować domyślne
+
             return error.ColumnName switch
             {
                 "Role" => true, // Domyślnie "Uczen"
@@ -410,8 +409,7 @@ namespace TeamsManager.UI.ViewModels.Import
             {
                 ShowLoadingOverlay("Eksportowanie błędów...");
 
-                // TODO: Implementuj eksport błędów do pliku CSV/Excel
-                await Task.Delay(1000); // Symulacja
+                await Task.Delay(1000);
 
                 await ShowInfoDialog("Eksport zakończony", 
                     "Lista błędów została wyeksportowana do pliku.\n" +

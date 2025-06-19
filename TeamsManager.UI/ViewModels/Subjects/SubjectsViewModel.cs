@@ -416,7 +416,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
         {
             try
             {
-                // TODO: Implement CSV export functionality
+    
                 await ShowInfoSnackbar("Funkcja eksportu CSV będzie dostępna wkrótce");
             }
             catch (Exception ex)
@@ -467,7 +467,6 @@ namespace TeamsManager.UI.ViewModels.Subjects
         {
             await Task.Run(() => System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // TODO: Implement proper snackbar using Material Design
                 _logger.LogInformation("Success: {Message}", message);
             }));
         }
@@ -476,7 +475,6 @@ namespace TeamsManager.UI.ViewModels.Subjects
         {
             await Task.Run(() => System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // TODO: Implement proper snackbar using Material Design
                 _logger.LogError("Error: {Message}", message);
             }));
         }
@@ -485,7 +483,6 @@ namespace TeamsManager.UI.ViewModels.Subjects
         {
             await Task.Run(() => System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // TODO: Implement proper snackbar using Material Design
                 _logger.LogInformation("Info: {Message}", message);
             }));
         }

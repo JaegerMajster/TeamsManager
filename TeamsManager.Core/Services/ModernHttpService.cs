@@ -192,7 +192,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("Endpoint nie może być null lub pusty", nameof(endpoint));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -251,7 +251,7 @@ namespace TeamsManager.Core.Services
             where TRequest : class 
             where TResponse : class
         {
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -319,7 +319,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("URL musi być prawidłowym bezwzględnym URI", nameof(url));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             try
             {
@@ -383,7 +383,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(emailData));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -396,35 +396,35 @@ namespace TeamsManager.Core.Services
                 var jsonContent = JsonSerializer.Serialize(emailData);
                 var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 
-                _logger.LogDebug("Sending email via Graph API Mail endpoint");
+                _logger.LogDebug("Wysyłanie emaila przez endpoint Graph API Mail");
                 
                 var response = await client.PostAsync("v1.0/me/sendMail", httpContent);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogDebug("Email sent successfully via Graph API");
+                    _logger.LogDebug("Email wysłany pomyślnie przez Graph API");
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to send email via Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Nie udało się wysłać emaila przez Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
                         response.StatusCode, response.ReasonPhrase);
                     return false;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when sending email via Graph API");
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas wysyłania emaila przez Graph API");
                 return false;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when sending email via Graph API");
+                _logger.LogError(ex, "Przekroczenie czasu podczas wysyłania emaila przez Graph API");
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when sending email via Graph API");
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas wysyłania emaila przez Graph API");
                 return false;
             }
         }
@@ -441,7 +441,7 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(userId))
             {
-                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+                throw new ArgumentException("ID użytkownika nie może być null lub pusty", nameof(userId));
             }
             
             if (emailData == null)
@@ -449,7 +449,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(emailData));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -463,35 +463,35 @@ namespace TeamsManager.Core.Services
                 var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 var endpoint = $"v1.0/users/{userId}/sendMail";
                 
-                _logger.LogDebug("Sending email on behalf of user {UserId} via Graph API", userId);
+                _logger.LogDebug("Wysyłanie emaila w imieniu użytkownika {UserId} przez Graph API", userId);
                 
                 var response = await client.PostAsync(endpoint, httpContent);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogDebug("Email sent successfully on behalf of user {UserId} via Graph API", userId);
+                    _logger.LogDebug("Email wysłany pomyślnie w imieniu użytkownika {UserId} przez Graph API", userId);
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to send email on behalf of user {UserId} via Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Nie udało się wysłać emaila w imieniu użytkownika {UserId} przez Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
                         userId, response.StatusCode, response.ReasonPhrase);
                     return false;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when sending email on behalf of user {UserId} via Graph API", userId);
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas wysyłania emaila w imieniu użytkownika {UserId} przez Graph API", userId);
                 return false;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when sending email on behalf of user {UserId} via Graph API", userId);
+                _logger.LogError(ex, "Przekroczenie czasu podczas wysyłania emaila w imieniu użytkownika {UserId} przez Graph API", userId);
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when sending email on behalf of user {UserId} via Graph API", userId);
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas wysyłania emaila w imieniu użytkownika {UserId} przez Graph API", userId);
                 return false;
             }
         }
@@ -511,7 +511,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentNullException(nameof(emailData));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -524,7 +524,7 @@ namespace TeamsManager.Core.Services
                 var jsonContent = JsonSerializer.Serialize(emailData);
                 var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
                 
-                _logger.LogDebug("Creating draft email via Graph API");
+                _logger.LogDebug("Tworzenie szkicu emaila przez Graph API");
                 
                 var response = await client.PostAsync("v1.0/me/messages", httpContent);
                 
@@ -536,29 +536,29 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Draft email created successfully via Graph API");
+                    _logger.LogDebug("Szkic emaila utworzony pomyślnie przez Graph API");
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to create draft email via Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Nie udało się utworzyć szkicu emaila przez Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
                         response.StatusCode, response.ReasonPhrase);
                     return null;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when creating draft email via Graph API");
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas tworzenia szkicu emaila przez Graph API");
                 return null;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when creating draft email via Graph API");
+                _logger.LogError(ex, "Przekroczenie czasu podczas tworzenia szkicu emaila przez Graph API");
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when creating draft email via Graph API");
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas tworzenia szkicu emaila przez Graph API");
                 return null;
             }
         }
@@ -574,7 +574,7 @@ namespace TeamsManager.Core.Services
             int? top = null) 
             where TResponse : class
         {
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -599,7 +599,7 @@ namespace TeamsManager.Core.Services
                 if (queryParams.Any())
                     endpoint += "?" + string.Join("&", queryParams);
                 
-                _logger.LogDebug("Getting mail messages via Graph API: {Endpoint}", endpoint);
+                _logger.LogDebug("Pobieranie wiadomości email przez Graph API: {Endpoint}", endpoint);
                 
                 var response = await client.GetAsync(endpoint);
                 
@@ -611,29 +611,29 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Mail messages retrieved successfully via Graph API");
+                    _logger.LogDebug("Wiadomości email pobrane pomyślnie przez Graph API");
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to get mail messages via Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Nie udało się pobrać wiadomości email przez Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
                         response.StatusCode, response.ReasonPhrase);
                     return null;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when getting mail messages via Graph API");
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas pobierania wiadomości email przez Graph API");
                 return null;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when getting mail messages via Graph API");
+                _logger.LogError(ex, "Przekroczenie czasu podczas pobierania wiadomości email przez Graph API");
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when getting mail messages via Graph API");
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas pobierania wiadomości email przez Graph API");
                 return null;
             }
         }
@@ -649,10 +649,10 @@ namespace TeamsManager.Core.Services
         {
             if (string.IsNullOrEmpty(messageId))
             {
-                throw new ArgumentException("Message ID cannot be null or empty", nameof(messageId));
+                throw new ArgumentException("ID wiadomości nie może być null lub pusty", nameof(messageId));
             }
 
-            using var client = _httpClient;
+            var client = _httpClient;
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -664,7 +664,7 @@ namespace TeamsManager.Core.Services
             {
                 var endpoint = $"v1.0/me/messages/{messageId}";
                 
-                _logger.LogDebug("Getting mail message {MessageId} via Graph API", messageId);
+                _logger.LogDebug("Pobieranie wiadomości email {MessageId} przez Graph API", messageId);
                 
                 var response = await client.GetAsync(endpoint);
                 
@@ -676,29 +676,29 @@ namespace TeamsManager.Core.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    _logger.LogDebug("Mail message {MessageId} retrieved successfully via Graph API", messageId);
+                    _logger.LogDebug("Wiadomość email {MessageId} pobrana pomyślnie przez Graph API", messageId);
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("Failed to get mail message {MessageId} via Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
+                    _logger.LogWarning("Nie udało się pobrać wiadomości email {MessageId} przez Graph API. StatusCode: {StatusCode}, Reason: {Reason}",
                         messageId, response.StatusCode, response.ReasonPhrase);
                     return null;
                 }
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP request exception when getting mail message {MessageId} via Graph API", messageId);
+                _logger.LogError(ex, "Wyjątek żądania HTTP podczas pobierania wiadomości email {MessageId} przez Graph API", messageId);
                 return null;
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout when getting mail message {MessageId} via Graph API", messageId);
+                _logger.LogError(ex, "Przekroczenie czasu podczas pobierania wiadomości email {MessageId} przez Graph API", messageId);
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when getting mail message {MessageId} via Graph API", messageId);
+                _logger.LogError(ex, "Nieoczekiwany błąd podczas pobierania wiadomości email {MessageId} przez Graph API", messageId);
                 return null;
             }
         }

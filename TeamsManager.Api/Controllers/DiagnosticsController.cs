@@ -270,7 +270,7 @@ namespace TeamsManager.Api.Controllers
                         {
                             OperationName = operationName,
                             CanExecute = false,
-                            Reason = "Insufficient permissions",
+                            Reason = "Niewystarczające uprawnienia",
                             MissingPermissions = missingPermissions,
                             PermissionInfo = permissionInfo
                         });
@@ -285,7 +285,7 @@ namespace TeamsManager.Api.Controllers
                     {
                         OperationName = operationName,
                         CanExecute = false,
-                        Reason = "Not connected to Microsoft Graph",
+                        Reason = "Brak połączenia z Microsoft Graph",
                         HealthInfo = healthInfo
                     });
                 }
@@ -298,7 +298,7 @@ namespace TeamsManager.Api.Controllers
                 {
                     OperationName = operationName,
                     CanExecute = canExecute,
-                    Reason = canExecute ? "Operation can be executed" : "Operation test failed",
+                    Reason = canExecute ? "Operacja może być wykonana" : "Test operacji nie powiódł się",
                     PermissionInfo = permissionInfo,
                     HealthInfo = healthInfo,
                     TestResult = testResult,
@@ -599,7 +599,7 @@ namespace TeamsManager.Api.Controllers
                 // Test 1: Podstawowe połączenie
                 var connectionTest = new
                 {
-                    TestName = "Connection Test",
+                    TestName = "Test połączenia",
                     Description = "Sprawdzenie podstawowego połączenia z Graph API"
                 };
 
@@ -635,7 +635,7 @@ namespace TeamsManager.Api.Controllers
                 // Test 2: Uwierzytelnienie i kontekst użytkownika
                 var authTest = new
                 {
-                    TestName = "Authentication Test",
+                    TestName = "Test uwierzytelnienia",
                     Description = "Sprawdzenie uwierzytelnienia i kontekstu użytkownika"
                 };
 
@@ -673,7 +673,7 @@ namespace TeamsManager.Api.Controllers
                 {
                     var permissionTest = new
                     {
-                        TestName = "Permissions Test",
+                        TestName = "Test uprawnień",
                         Description = "Sprawdzenie uprawnień aplikacji"
                     };
 
@@ -712,7 +712,7 @@ namespace TeamsManager.Api.Controllers
                     {
                         var endpointTest = new
                         {
-                            TestName = $"Endpoint Test: {endpoint}",
+                            TestName = $"Test endpointu: {endpoint}",
                             Description = $"Sprawdzenie dostępności endpointu {endpoint}"
                         };
 
@@ -751,7 +751,7 @@ namespace TeamsManager.Api.Controllers
                 {
                     var rateLimitTest = new
                     {
-                        TestName = "Rate Limit Test",
+                        TestName = "Test limitów żądań",
                         Description = "Sprawdzenie statusu rate limiting"
                     };
 
@@ -887,7 +887,7 @@ namespace TeamsManager.Api.Controllers
                 var permissionsReport = new
                 {
                     Timestamp = DateTime.UtcNow,
-                    OverallStatus = permissionInfo.IsValid ? "Valid" : "Invalid",
+                    OverallStatus = permissionInfo.IsValid ? "Ważne" : "Nieprawidłowe",
                     UserContext = new
                     {
                         IsAuthenticated = userContext.IsAuthenticated,
@@ -907,7 +907,7 @@ namespace TeamsManager.Api.Controllers
                     {
                         UserManagement = new
                         {
-                            CategoryName = "User Management",
+                            CategoryName = "Zarządzanie użytkownikami",
                             RequiredPermissions = userManagementPermissions,
                             AvailablePermissions = userManagementPermissions.Where(p => permissionInfo.HasPermission(p)).ToArray(),
                             MissingPermissions = userManagementPermissions.Where(p => !permissionInfo.HasPermission(p)).ToArray(),
@@ -917,7 +917,7 @@ namespace TeamsManager.Api.Controllers
                         },
                         TeamManagement = new
                         {
-                            CategoryName = "Team Management",
+                            CategoryName = "Zarządzanie zespołami",
                             RequiredPermissions = teamManagementPermissions,
                             AvailablePermissions = teamManagementPermissions.Where(p => permissionInfo.HasPermission(p)).ToArray(),
                             MissingPermissions = teamManagementPermissions.Where(p => !permissionInfo.HasPermission(p)).ToArray(),
@@ -927,7 +927,7 @@ namespace TeamsManager.Api.Controllers
                         },
                         MailAccess = new
                         {
-                            CategoryName = "Mail Access",
+                            CategoryName = "Dostęp do poczty",
                             RequiredPermissions = mailPermissions,
                             AvailablePermissions = mailPermissions.Where(p => permissionInfo.HasPermission(p)).ToArray(),
                             MissingPermissions = mailPermissions.Where(p => !permissionInfo.HasPermission(p)).ToArray(),
@@ -937,7 +937,7 @@ namespace TeamsManager.Api.Controllers
                         },
                         CalendarAccess = new
                         {
-                            CategoryName = "Calendar Access",
+                            CategoryName = "Dostęp do kalendarza",
                             RequiredPermissions = calendarPermissions,
                             AvailablePermissions = calendarPermissions.Where(p => permissionInfo.HasPermission(p)).ToArray(),
                             MissingPermissions = calendarPermissions.Where(p => !permissionInfo.HasPermission(p)).ToArray(),

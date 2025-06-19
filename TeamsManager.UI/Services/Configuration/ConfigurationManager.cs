@@ -27,7 +27,7 @@ namespace TeamsManager.UI.Services.Configuration
             // Inicjalizuj serwis szyfrowania
             _encryptionService = new EncryptionService();
 
-            // Konfiguracja serializacji JSON
+
             _jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true  // Ładne formatowanie JSON

@@ -188,7 +188,7 @@ namespace TeamsManager.UI.ViewModels.Users
                     OnPropertyChanged();
                     UpdatePagination();
                     
-                    // Update command states
+                    // Aktualizuj stany komend
                     (FirstPageCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     (PreviousPageCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     (NextPageCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -421,12 +421,12 @@ namespace TeamsManager.UI.ViewModels.Users
 
         private void UpdatePagination()
         {
-            // Get filtered items count
+            // Pobierz liczbę przefiltrowanych elementów
             var filteredItems = UsersView.Cast<UserListItemViewModel>().ToList();
             TotalItems = filteredItems.Count;
             TotalPages = (int)Math.Ceiling((double)TotalItems / PageSize);
             
-            // Ensure current page is valid
+            // Upewnij się, że bieżąca strona jest prawidłowa
             if (CurrentPage > TotalPages && TotalPages > 0)
                 CurrentPage = TotalPages;
             else if (CurrentPage < 1 && TotalPages > 0)
@@ -598,7 +598,7 @@ namespace TeamsManager.UI.ViewModels.Users
                     return;
                 }
 
-                // Sprawdź czy użytkownik jest dezaktywowany
+    
                 if (user.IsActive)
                 {
                     ErrorMessage = "Można usuwać tylko dezaktywowanych użytkowników. Najpierw dezaktywuj użytkownika.";
@@ -652,16 +652,16 @@ namespace TeamsManager.UI.ViewModels.Users
             
             try
             {
-                _logger.LogInformation("Opening user details for: {UserId}", user.Id);
+                _logger.LogInformation("Otwieranie szczegółów użytkownika: {UserId}", user.Id);
                 
                 // Pokaż overlay
                 _mainShellViewModel.IsDialogOpen = true;
                 
-                // Get UserDetailWindow from DI
+                // Pobierz UserDetailWindow z DI
                 var serviceProvider = App.ServiceProvider;
                 if (serviceProvider == null)
                 {
-                    _logger.LogError("ServiceProvider not available");
+                    _logger.LogError("ServiceProvider nie jest dostępny");
                     return;
                 }
 
@@ -672,19 +672,19 @@ namespace TeamsManager.UI.ViewModels.Users
                 if (mainWindow != null)
                     userDetailWindow.Owner = mainWindow;
                 
-                // Initialize for editing existing user
+                // Inicjalizuj dla edycji istniejącego użytkownika
                 await userDetailWindow.InitializeAsync(user.Id);
                 
                 var result = userDetailWindow.ShowDialog();
                 if (result == true)
                 {
-                    // Refresh the user list after successful edit
+                    // Odśwież listę użytkowników po pomyślnej edycji
                     await LoadUsersAsync(forceRefresh: true);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error opening user details for user {UserId}", user.Id);
+                _logger.LogError(ex, "Błąd podczas otwierania szczegółów użytkownika {UserId}", user.Id);
                 ErrorMessage = "Nie udało się otworzyć szczegółów użytkownika.";
             }
             finally
@@ -696,47 +696,75 @@ namespace TeamsManager.UI.ViewModels.Users
 
         private async void CreateNewUser()
         {
+            System.Diagnostics.Debug.WriteLine("=== DEBUG: CreateNewUser wywołane ===");
+            Console.WriteLine("=== CONSOLE: CreateNewUser wywołane ===");
+            
             try
             {
-                _logger.LogInformation("Opening create new user dialog");
+                _logger.LogInformation("=== ROZPOCZĘCIE: Otwieranie dialogu tworzenia nowego użytkownika ===");
+                System.Diagnostics.Debug.WriteLine("=== DEBUG: Logger wywołany ===");
                 
                 // Pokaż overlay
                 _mainShellViewModel.IsDialogOpen = true;
+                _logger.LogInformation("Overlay ustawiony na true");
                 
-                // Get UserDetailWindow from DI
+                // Pobierz UserDetailWindow z DI
                 var serviceProvider = App.ServiceProvider;
                 if (serviceProvider == null)
                 {
-                    _logger.LogError("ServiceProvider not available");
+                    _logger.LogError("ServiceProvider nie jest dostępny");
+                    ErrorMessage = "ServiceProvider nie jest dostępny";
                     return;
                 }
+                _logger.LogInformation("ServiceProvider pobrany pomyślnie");
 
+                _logger.LogInformation("Próba pobrania UserDetailWindow z DI...");
                 var userDetailWindow = serviceProvider.GetRequiredService<Views.Users.UserDetailWindow>();
+                _logger.LogInformation("UserDetailWindow utworzony z DI: {WindowType}", userDetailWindow.GetType().Name);
+                
                 var mainWindow = System.Windows.Application.Current.Windows
                     .OfType<Views.Shell.MainShellWindow>()
                     .FirstOrDefault();
                 if (mainWindow != null)
+                {
                     userDetailWindow.Owner = mainWindow;
+                    _logger.LogInformation("Owner okna ustawiony");
+                }
+                else
+                {
+                    _logger.LogWarning("Nie znaleziono MainShellWindow");
+                }
                 
-                // Initialize for creating new user (no userId parameter)
+                // Inicjalizuj dla tworzenia nowego użytkownika (bez parametru userId)
+                _logger.LogInformation("Rozpoczynanie inicjalizacji UserDetailWindow...");
                 await userDetailWindow.InitializeAsync();
+                _logger.LogInformation("Inicjalizacja UserDetailWindow zakończona");
                 
+                _logger.LogInformation("Pokazywanie okna dialogowego...");
                 var result = userDetailWindow.ShowDialog();
+                _logger.LogInformation("ShowDialog zwrócił: {Result}", result);
+                
                 if (result == true)
                 {
-                    // Refresh the user list after successful creation
+                    // Odśwież listę użytkowników po pomyślnym utworzeniu
+                    _logger.LogInformation("Dialog zamknięty z sukcesem, odświeżanie listy użytkowników");
                     await LoadUsersAsync(forceRefresh: true);
+                }
+                else
+                {
+                    _logger.LogInformation("Dialog anulowany lub zamknięty bez zapisania");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error opening create user dialog");
-                ErrorMessage = "Nie udało się otworzyć formularza tworzenia użytkownika.";
+                _logger.LogError(ex, "=== BŁĄD: Podczas otwierania dialogu tworzenia użytkownika ===");
+                ErrorMessage = $"Nie udało się otworzyć formularza: {ex.Message}";
             }
             finally
             {
                 // Ukryj overlay
                 _mainShellViewModel.IsDialogOpen = false;
+                _logger.LogInformation("=== KONIEC: Overlay ukryty, operacja zakończona ===");
             }
         }
 
@@ -747,7 +775,7 @@ namespace TeamsManager.UI.ViewModels.Users
                 OnPropertyChanged(nameof(SelectedCount));
                 OnPropertyChanged(nameof(SelectionText));
                 
-                // Update IsAllSelected state
+                // Aktualizuj stan IsAllSelected
                 var allSelected = Users.All(u => u.IsSelected);
                 if (_isAllSelected != allSelected)
                 {
@@ -755,7 +783,7 @@ namespace TeamsManager.UI.ViewModels.Users
                     OnPropertyChanged(nameof(IsAllSelected));
                 }
                 
-                // Update command states
+                // Aktualizuj stany komend
                 (ActivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeactivateSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (DeleteSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();

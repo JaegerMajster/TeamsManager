@@ -72,18 +72,18 @@ namespace TeamsManager.UI.Services.UI
         }
 
         /// <summary>
-        /// Sprawdza czy można przenieść dział (czy nie utworzy cyklu)
+        /// Sprawdza czy można przenieść dział
         /// </summary>
         public bool CanMoveDepartment(DepartmentTreeItemViewModel source, DepartmentTreeItemViewModel target)
         {
             if (source == null || target == null)
                 return false;
 
-            // Nie można przenieść działu do samego siebie
+
             if (source.Id == target.Id)
                 return false;
 
-            // Nie można przenieść działu do swojego potomka
+
             return !IsDescendant(source, target);
         }
 

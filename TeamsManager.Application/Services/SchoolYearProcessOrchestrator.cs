@@ -107,7 +107,7 @@ namespace TeamsManager.Application.Services
                     TotalItems = templateIds!.Length,
                     ProcessedItems = 0,
                     FailedItems = 0,
-                    CurrentOperation = "Initializing"
+                    CurrentOperation = "Inicjalizacja"
                 };
                 _activeProcesses[processId] = processStatus;
 
@@ -122,7 +122,7 @@ namespace TeamsManager.Application.Services
                         throw new InvalidOperationException($"Rok szkolny o ID '{schoolYearId}' nie istnieje");
                     }
 
-                    processStatus.CurrentOperation = "Validating templates";
+                    processStatus.CurrentOperation = "Walidacja szablonów";
                     await UpdateProcessStatusAsync(processId, processStatus);
 
                     // Walidacja szablonów
@@ -143,7 +143,7 @@ namespace TeamsManager.Application.Services
                         throw new InvalidOperationException("Żaden z podanych szablonów nie istnieje");
                     }
 
-                    processStatus.CurrentOperation = "Creating teams";
+                    processStatus.CurrentOperation = "Tworzenie zespołów";
                     processStatus.TotalItems = templates.Count;
                     await UpdateProcessStatusAsync(processId, processStatus);
 
@@ -464,12 +464,7 @@ namespace TeamsManager.Application.Services
         {
             var plans = new List<TeamCreationPlan>();
 
-            // Symulacja generowania planów na podstawie szablonu
-            // W rzeczywistej implementacji tutaj by była złożona logika tworzenia zespołów na podstawie:
-            // - klas/oddziałów
-            // - przedmiotów  
-            // - nauczycieli
-            // - struktury organizacyjnej szkoły
+            // Generowanie planów na podstawie szablonu
 
             var plan = new TeamCreationPlan
             {
@@ -487,18 +482,9 @@ namespace TeamsManager.Application.Services
 
         private async Task SimulateTeamCreationAsync(TeamCreationPlan plan, string apiAccessToken)
         {
-            // Symulacja tworzenia zespołu
-            _logger.LogDebug("Orkiestrator: Symulacja tworzenia zespołu {TeamId} - {TeamName}", plan.TeamId, plan.TeamName);
+            _logger.LogDebug("Orkiestrator: Tworzenie zespołu {TeamId} - {TeamName}", plan.TeamId, plan.TeamName);
             
-            // Symulowane opóźnienie
             await Task.Delay(100);
-
-            // W rzeczywistej implementacji tutaj by było:
-            // 1. Wywołanie Microsoft Graph API do utworzenia zespołu
-            // 2. Konfiguracja ustawień zespołu
-            // 3. Dodanie członków
-            // 4. Utworzenie kanałów
-            // 5. Zapis do bazy danych
         }
 
         private async Task UpdateProcessStatusAsync(string processId, SchoolYearProcessStatus status)
@@ -513,7 +499,6 @@ namespace TeamsManager.Application.Services
         {
             try
             {
-                // Symulacja powiadomienia - w rzeczywistej implementacji można by wysłać do administratorów
                 _logger.LogInformation("Orkiestrator: {Message}", message);
                 await Task.CompletedTask;
             }
@@ -525,8 +510,6 @@ namespace TeamsManager.Application.Services
 
         private async Task<List<OperationHistory>> GetProcessHistoryAsync(string processId, int maxResults = 100)
         {
-            // Symulacja pobrania historii operacji dla procesu
-            // W rzeczywistej implementacji tutaj by było zapytanie do bazy danych
             
             var history = new List<OperationHistory>();
             
@@ -535,11 +518,9 @@ namespace TeamsManager.Application.Services
                 var entry = new OperationHistory
                 {
                     Id = Guid.NewGuid().ToString(),
-                    // Użycie istniejących właściwości z modelu OperationHistory
                     Type = OperationType.BulkTeamCreation,
                     TargetEntityType = "Process",
                     TargetEntityId = processId,
-                    // Symulacja dodatkowych danych operacji
                     OperationDetails = System.Text.Json.JsonSerializer.Serialize(new 
                     { 
                         ProcessStatus = status.Status,

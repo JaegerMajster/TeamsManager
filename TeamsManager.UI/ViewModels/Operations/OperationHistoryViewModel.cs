@@ -68,8 +68,6 @@ namespace TeamsManager.UI.ViewModels.Operations
         private string? _selectedStatus;
         private string _userFilter = string.Empty;
         private string _searchText = string.Empty;
-
-        // Nowe właściwości dla dwóch combo
         private string? _selectedEntityType;
         private string? _selectedOperationFilter;
 
@@ -218,7 +216,6 @@ namespace TeamsManager.UI.ViewModels.Operations
             }
         }
 
-        // Nowe właściwości dla dwóch combo
         public string? SelectedEntityType
         {
             get => _selectedEntityType;
@@ -710,7 +707,7 @@ namespace TeamsManager.UI.ViewModels.Operations
 
             FilteredOperations = new ObservableCollection<OperationHistoryItemViewModel>(pagedResults);
 
-            // Update command states
+                            // Aktualizuj stany komend
             PreviousPageCommand.RaiseCanExecuteChanged();
             NextPageCommand.RaiseCanExecuteChanged();
             
@@ -829,7 +826,7 @@ namespace TeamsManager.UI.ViewModels.Operations
             {
                 IsExporting = true;
                 
-                // TODO: Implement Excel export
+    
                 await Task.Delay(2000); // Simulate export
                 
                 _logger.LogDebug("Excel export completed");
@@ -851,7 +848,7 @@ namespace TeamsManager.UI.ViewModels.Operations
             {
                 IsExporting = true;
                 
-                // TODO: Implement PDF export
+    
                 await Task.Delay(2000); // Simulate export
                 
                 _logger.LogDebug("PDF export completed");

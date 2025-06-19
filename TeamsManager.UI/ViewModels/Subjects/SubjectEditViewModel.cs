@@ -178,7 +178,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
                 ModifiedBy = subject.ModifiedBy
             };
             
-            // Set selected school type
+                            // Ustaw wybrany typ szkoły
             if (!string.IsNullOrEmpty(subject.DefaultSchoolTypeId))
             {
                 SelectedSchoolType = SchoolTypes.FirstOrDefault(st => st.Id == subject.DefaultSchoolTypeId);
@@ -253,7 +253,7 @@ namespace TeamsManager.UI.ViewModels.Subjects
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas ładowania typów szkół");
-                // Add a fallback or empty collection
+                // Dodaj fallback lub pustą kolekcję
                 SchoolTypes.Clear();
             }
             finally

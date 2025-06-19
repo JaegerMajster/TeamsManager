@@ -30,7 +30,7 @@ namespace TeamsManager.UI.Services.Configuration
 
             try
             {
-                // Sprawdź czy pliki konfiguracyjne istnieją
+    
                 if (!_configManager.ConfigurationExists())
                 {
                     result.IsValid = false;
@@ -296,7 +296,7 @@ namespace TeamsManager.UI.Services.Configuration
             if (parts.Length < 3)
                 return false;
 
-            // Sprawdź czy druga część (po api://) to GUID
+
             var guidPart = parts[2]; // api://[guid]/scope
             return IsValidGuid(guidPart) || !string.IsNullOrWhiteSpace(guidPart);
         }
