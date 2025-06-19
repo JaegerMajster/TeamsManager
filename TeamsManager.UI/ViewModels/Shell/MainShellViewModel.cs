@@ -24,7 +24,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         private readonly IServiceProvider _serviceProvider;
         private readonly ICurrentUserService _currentUserService;
         private readonly IMsalAuthService _msalAuthService;
-        private readonly ConfigurationManager _configManager;
+        private readonly IConfigurationManagerV2 _configManager;
         private readonly IGraphUserProfileService _graphUserProfileService;
         private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
         private readonly IUserSynchronizationService _userSynchronizationService;
@@ -52,7 +52,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             IServiceProvider serviceProvider,
             ICurrentUserService currentUserService,
             IMsalAuthService msalAuthService,
-            ConfigurationManager configManager,
+            IConfigurationManagerV2 configManager,
             IGraphUserProfileService graphUserProfileService,
             ConditionalAccessAnalyzer conditionalAccessAnalyzer,
             IUserSynchronizationService userSynchronizationService,

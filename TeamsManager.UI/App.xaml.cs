@@ -53,6 +53,27 @@ namespace TeamsManager.UI
             var serviceCollection = new ServiceCollection();
             ConfigureServices(serviceCollection);
             ServiceProvider = serviceCollection.BuildServiceProvider();
+            
+            // Inicjalizuj konfigurację
+            InitializeConfigurationAsync().ConfigureAwait(false);
+        }
+
+        private async Task InitializeConfigurationAsync()
+        {
+            try
+            {
+                var configInitializer = ServiceProvider.GetRequiredService<ConfigurationInitializer>();
+                
+                if (await configInitializer.RequiresInitializationAsync())
+                {
+                    await configInitializer.InitializeDefaultConfigurationAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log błąd inicjalizacji konfiguracji
+                System.Diagnostics.Debug.WriteLine($"Błąd inicjalizacji konfiguracji: {ex.Message}");
+            }
         }
 
         private void ConfigureServices(IServiceCollection services)
@@ -79,9 +100,10 @@ namespace TeamsManager.UI
             services.AddSingleton<ICurrentUserService, CurrentUserService>();
 
 
-            services.AddSingleton<TeamsManager.UI.Services.Configuration.ConfigurationManager>();
-            services.AddSingleton<ConfigurationValidator>();
-            services.AddSingleton<EncryptionService>();
+            // Nowy system konfiguracji V2.0
+            services.AddSingleton<AdvancedEncryptionService>();
+            services.AddSingleton<IConfigurationManagerV2, ConfigurationManagerV2>();
+            services.AddSingleton<ConfigurationInitializer>();
 
             services.AddSingleton<IMsalConfigurationProvider, MsalConfigurationProvider>();
             

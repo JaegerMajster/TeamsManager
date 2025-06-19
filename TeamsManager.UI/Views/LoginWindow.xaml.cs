@@ -17,7 +17,7 @@ namespace TeamsManager.UI.Views
         
         public LoginWindow(
             IMsalAuthService msalAuthService,
-            ConfigurationManager configManager,
+            IConfigurationManagerV2 configManager,
             ILogger<LoginViewModel> logger,
             Services.ConditionalAccessAnalyzer conditionalAccessAnalyzer,
             ICurrentUserService currentUserService,

@@ -17,7 +17,7 @@ namespace TeamsManager.UI.ViewModels
     public class LoginViewModel : INotifyPropertyChanged
     {
         private readonly IMsalAuthService _msalAuthService;
-        private readonly ConfigurationManager _configManager;
+        private readonly IConfigurationManagerV2 _configManager;
         private readonly ILogger<LoginViewModel> _logger;
         private readonly ConditionalAccessAnalyzer _conditionalAccessAnalyzer;
         private readonly ICurrentUserService _currentUserService;
@@ -33,7 +33,7 @@ namespace TeamsManager.UI.ViewModels
 
         public LoginViewModel(
             IMsalAuthService msalAuthService,
-            ConfigurationManager configManager,
+            IConfigurationManagerV2 configManager,
             ILogger<LoginViewModel> logger,
             ConditionalAccessAnalyzer conditionalAccessAnalyzer,
             ICurrentUserService currentUserService,
@@ -182,7 +182,7 @@ namespace TeamsManager.UI.ViewModels
                     _logger.LogInformation("Conditional Access Analysis: {SecuritySummary}", SecuritySummary);
                     
                     // Zapisz informację o ostatnim logowaniu (WAM zarządza tokenami automatycznie)
-                    var settings = new LoginSettings
+                    var settings = new LoginSettingsConfiguration
                     {
                         RememberMe = true, // WAM automatycznie "pamięta"
                         AutoLogin = true,  // WAM automatycznie obsługuje SSO
