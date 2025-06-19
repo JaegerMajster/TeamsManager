@@ -84,7 +84,24 @@ namespace TeamsManager.UI.Services.Configuration
 
         public async Task SaveAzureAdConfigurationAsync(AzureAdConfiguration config)
         {
+            _logger.LogInformation("💾 SaveAzureAdConfigurationAsync - WEJŚCIE");
+            
+            if (config == null)
+            {
+                _logger.LogWarning("💾 Azure AD Config jest null - pomijam zapis");
+                return;
+            }
+            
+            _logger.LogInformation("💾 Azure AD Config - Tenant ID: '{TenantId}' ({Length} znaków)", config.TenantId ?? "NULL", config.TenantId?.Length ?? 0);
+            _logger.LogInformation("💾 Azure AD Config - UI Client ID: '{UiClientId}' ({Length} znaków)", config.Ui?.ClientId ?? "NULL", config.Ui?.ClientId?.Length ?? 0);
+            _logger.LogInformation("💾 Azure AD Config - API Client ID: '{ApiClientId}' ({Length} znaków)", config.Api?.ClientId ?? "NULL", config.Api?.ClientId?.Length ?? 0);
+            _logger.LogInformation("💾 Azure AD Config - Client Secret: {SecretLength} znaków", config.Api?.ClientSecret?.Length ?? 0);
+            _logger.LogInformation("💾 Azure AD Config - Audience: '{Audience}' ({Length} znaków)", config.Api?.Audience ?? "NULL", config.Api?.Audience?.Length ?? 0);
+            _logger.LogInformation("💾 Azure AD Config - Redirect URI: '{RedirectUri}' ({Length} znaków)", config.Ui?.RedirectUri ?? "NULL", config.Ui?.RedirectUri?.Length ?? 0);
+            
             await SaveConfigurationAsync("azure-ad", config);
+            
+            _logger.LogInformation("💾 SaveAzureAdConfigurationAsync - ZAKOŃCZENIE");
         }
 
         public async Task<T?> GetConfigurationAsync<T>(string configName) where T : class
@@ -104,11 +121,32 @@ namespace TeamsManager.UI.Services.Configuration
                 // Sprawdź czy plik jest zaszyfrowany
                 if (IsEncrypted(configName))
                 {
+                    _logger.LogInformation("🔍 Deserializacja zaszyfrowanego pliku {ConfigName}", configName);
+                    _logger.LogInformation("🔍 JSON content length: {Length}", jsonContent.Length);
+                    _logger.LogInformation("🔍 JSON preview: {Preview}", jsonContent.Length > 200 ? jsonContent.Substring(0, 200) + "..." : jsonContent);
+                    
                     var encryptedData = JsonSerializer.Deserialize<EncryptedData>(jsonContent);
+                    
                     if (encryptedData != null)
                     {
-                        var decryptedJson = _encryption.DecryptWithFallback(encryptedData);
-                        return JsonSerializer.Deserialize<T>(decryptedJson);
+                        _logger.LogInformation("🔍 EncryptedData deserialized successfully");
+                        _logger.LogInformation("🔍 Data field length: {DataLength}", encryptedData.Data?.Length ?? 0);
+                        _logger.LogInformation("🔍 Salt field length: {SaltLength}", encryptedData.Salt?.Length ?? 0);
+                        _logger.LogInformation("🔍 IV field length: {IVLength}", encryptedData.IV?.Length ?? 0);
+                        
+                        var decryptedJson = _encryption.Decrypt(encryptedData);
+                        
+                        // NAPRAWKA: Użyj tej samej polityki nazewnictwa co przy zapisie
+                        var jsonOptions = new JsonSerializerOptions 
+                        { 
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                        };
+                        
+                        return JsonSerializer.Deserialize<T>(decryptedJson, jsonOptions);
+                    }
+                    else
+                    {
+                        _logger.LogError("🔍 EncryptedData deserialization returned null");
                     }
                 }
                 else
@@ -155,11 +193,54 @@ namespace TeamsManager.UI.Services.Configuration
                     var plainJson = JsonSerializer.Serialize(configuration, jsonOptions);
                     _logger.LogInformation("💾 JSON do zaszyfrowania ma {Length} znaków", plainJson.Length);
                     
+                    // TYMCZASOWE ZAPISYWANIE NIEZASZYFROWANEJ ZAWARTOŚCI DO DEBUGOWANIA
+                    var debugFilePath = filePath.Replace(".json", "-DEBUG-PLAIN.json");
+                    await File.WriteAllTextAsync(debugFilePath, plainJson);
+                    _logger.LogInformation("💾 🐛 DEBUG: Zapisano niezaszyfrowaną zawartość do {DebugPath}", debugFilePath);
+                    _logger.LogInformation("💾 🐛 DEBUG: Zawartość niezaszyfrowana: {PlainContent}", plainJson.Length > 500 ? plainJson.Substring(0, 500) + "..." : plainJson);
+                    
                     var encryptedData = _encryption.Encrypt(plainJson);
                     _logger.LogInformation("💾 Dane zaszyfrowane pomyślnie");
                     
                     jsonContent = JsonSerializer.Serialize(encryptedData, jsonOptions);
                     _logger.LogInformation("💾 JSON zaszyfrowany ma {Length} znaków", jsonContent.Length);
+                    
+                    // ZAPISZ GŁÓWNY PLIK ZASZYFROWANY
+                    await File.WriteAllTextAsync(filePath, jsonContent);
+                    _logger.LogInformation("💾 Zapisano zaszyfrowaną konfigurację do {FilePath}", filePath);
+                    
+                    // TYMCZASOWE TESTOWANIE - ODCZYTAJ I ODSZYFRUJ RZECZYWISTY ZAPISANY PLIK
+                    try
+                    {
+                        _logger.LogInformation("💾 🐛 DEBUG: Testuję odczyt rzeczywistego zapisanego pliku {FilePath}...", filePath);
+                        var savedEncryptedContent = await File.ReadAllTextAsync(filePath);
+                        var savedEncryptedData = JsonSerializer.Deserialize<EncryptedData>(savedEncryptedContent, jsonOptions);
+                        
+                        if (savedEncryptedData != null)
+                        {
+                            var decryptedRealData = _encryption.Decrypt(savedEncryptedData);
+                            _logger.LogInformation("💾 🐛 DEBUG: Rzeczywisty plik odszyfrowany pomyślnie, długość: {Length}", decryptedRealData.Length);
+                            
+                            var decryptedFilePath = filePath.Replace(".json", "-DEBUG-DECRYPTED.json");
+                            await File.WriteAllTextAsync(decryptedFilePath, decryptedRealData);
+                            _logger.LogInformation("💾 🐛 DEBUG: Zapisano odszyfrowaną zawartość rzeczywistego pliku do {DecryptedPath}", decryptedFilePath);
+                            
+                            // Porównaj oryginalną z odszyfrowaną
+                            bool isIdentical = plainJson.Equals(decryptedRealData, StringComparison.Ordinal);
+                            _logger.LogInformation("💾 🐛 DEBUG: Czy oryginalny JSON == odszyfrowany z pliku JSON? {IsIdentical}", isIdentical ? "✅ TAK" : "❌ NIE");
+                        }
+                        else
+                        {
+                            _logger.LogError("💾 🐛 DEBUG: ❌ Nie udało się zdeserializować zapisanego pliku");
+                        }
+                    }
+                    catch (Exception testEx)
+                    {
+                        _logger.LogError(testEx, "💾 🐛 DEBUG: ❌ BŁĄD podczas testowania odczytu rzeczywistego pliku");
+                    }
+                    
+                    // Nie zapisuj ponownie - już zapisano wyżej
+                    return;
                 }
                 else
                 {
@@ -426,7 +507,7 @@ namespace TeamsManager.UI.Services.Configuration
                     return;
                 }
 
-                var decryptedJson = _encryption.DecryptWithFallback(encryptedData);
+                var decryptedJson = _encryption.Decrypt(encryptedData);
                 
                 if (string.IsNullOrEmpty(decryptedJson) || decryptedJson == "{}")
                 {
@@ -435,7 +516,7 @@ namespace TeamsManager.UI.Services.Configuration
                 }
 
                 // Ponownie zaszyfruj dla bieżącego użytkownika
-                var newEncryptedData = _encryption.EncryptForCurrentUser(decryptedJson);
+                var newEncryptedData = _encryption.Encrypt(decryptedJson);
                 
                 // Backup przed zapisem
                 await CreateBackupAsync(configName);

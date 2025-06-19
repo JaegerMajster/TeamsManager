@@ -45,16 +45,16 @@ namespace TeamsManager.UI.ViewModels
             _configInitializer = configInitializer ?? throw new ArgumentNullException(nameof(configInitializer));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            SaveCommand = new RelayCommand(async () => await SaveConfigurationAsync(), () => CanSave);
+            SaveCommand = new AsyncRelayCommand(SaveConfigurationAsync, _ => CanSave);
             CancelCommand = new RelayCommand(() => 
             {
                 _logger.LogInformation("🔘 PRZYCISK ANULUJ - użytkownik wcisnął przycisk ANULUJ");
                 RequestClose?.Invoke();
             });
-            ValidateCommand = new RelayCommand(async () => await ValidateConfigurationAsync());
-            TestConnectionCommand = new RelayCommand(async () => await TestConnectionAsync());
-            ShowConfigCommand = new RelayCommand(async () => await ShowConfigurationAsync());
-            FixEncryptionCommand = new RelayCommand(async () => await FixEncryptionAsync());
+            ValidateCommand = new AsyncRelayCommand(ValidateConfigurationAsync);
+            TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
+            ShowConfigCommand = new AsyncRelayCommand(ShowConfigurationAsync);
+            FixEncryptionCommand = new AsyncRelayCommand(FixEncryptionAsync);
 
             _ = Task.Run(LoadConfigurationAsync);
         }
@@ -303,76 +303,251 @@ namespace TeamsManager.UI.ViewModels
                 StatusMessage = "Zapisywanie konfiguracji...";
                 
                 _logger.LogInformation("🔘 ZAPISZ - rozpoczęcie zapisywania konfiguracji");
+                _logger.LogInformation("💾 DANE Z FORMULARZA:");
+                _logger.LogInformation($"💾   UI Client ID: '{UiClientId}' ({(string.IsNullOrWhiteSpace(UiClientId) ? "PUSTY" : "WYPEŁNIONY")})");
+                _logger.LogInformation($"💾   API Client ID: '{ApiClientId}' ({(string.IsNullOrWhiteSpace(ApiClientId) ? "PUSTY" : "WYPEŁNIONY")})");
+                _logger.LogInformation($"💾   Tenant ID: '{TenantId}' ({(string.IsNullOrWhiteSpace(TenantId) ? "PUSTY" : "WYPEŁNIONY")})");
+                _logger.LogInformation($"💾   Client Secret: {(string.IsNullOrWhiteSpace(ClientSecret) ? "PUSTY" : $"WYPEŁNIONY ({ClientSecret.Length} znaków)")}");
+                _logger.LogInformation($"💾   Audience: '{Audience}' ({(string.IsNullOrWhiteSpace(Audience) ? "PUSTY" : "WYPEŁNIONY")})");
+                _logger.LogInformation($"💾   Application Name: '{ApplicationName}'");
+                _logger.LogInformation($"💾   Environment: '{Environment}'");
+                _logger.LogInformation($"💾   API Base URL: '{ApiBaseUrl}'");
                 
-                // ZAWSZE ZAPISUJEMY - niezależnie od walidacji
-                // Załaduj istniejące konfiguracje i zaktualizuj tylko zmienione pola
-                var existingAzureConfig = await _configManager.LoadAzureAdConfigurationAsync();
-                var existingAppConfig = await _configManager.LoadApplicationConfigurationAsync();
+                // ZAPISUJEMY TYLKO NIEPUSTE POLA Z FORMULARZA
+                _logger.LogInformation("💾 Tworzenie konfiguracji z niepustych pól formularza...");
 
-                // Przygotuj Azure AD Configuration - zachowaj istniejące wartości jeśli nowe są puste
-                var azureConfig = new AzureAdConfiguration
+                // Sprawdź które pola Azure AD są wypełnione
+                bool hasAzureAdData = !string.IsNullOrWhiteSpace(UiClientId) || 
+                                     !string.IsNullOrWhiteSpace(ApiClientId) || 
+                                     !string.IsNullOrWhiteSpace(TenantId) || 
+                                     !string.IsNullOrWhiteSpace(ClientSecret) || 
+                                     !string.IsNullOrWhiteSpace(Audience);
+
+                AzureAdConfiguration? azureConfig = null;
+                if (hasAzureAdData)
                 {
-                    TenantId = !string.IsNullOrWhiteSpace(TenantId) ? TenantId : existingAzureConfig?.TenantId ?? string.Empty,
-                    Ui = new UiClientSettings
+                    _logger.LogInformation("💾 Znaleziono wypełnione pola Azure AD - tworzę konfigurację...");
+                    
+                    azureConfig = new AzureAdConfiguration();
+                    
+                    // Zapisz tylko niepuste pola
+                    if (!string.IsNullOrWhiteSpace(TenantId))
                     {
-                        ClientId = !string.IsNullOrWhiteSpace(UiClientId) ? UiClientId : existingAzureConfig?.Ui?.ClientId ?? string.Empty,
-                        RedirectUri = existingAzureConfig?.Ui?.RedirectUri ?? "http://localhost"
-                    },
-                    Api = new ApiClientSettings
-                    {
-                        ClientId = !string.IsNullOrWhiteSpace(ApiClientId) ? ApiClientId : existingAzureConfig?.Api?.ClientId ?? string.Empty,
-                        ClientSecret = !string.IsNullOrWhiteSpace(ClientSecret) ? ClientSecret : existingAzureConfig?.Api?.ClientSecret ?? string.Empty,
-                        Audience = !string.IsNullOrWhiteSpace(Audience) ? Audience : existingAzureConfig?.Api?.Audience ?? string.Empty
+                        azureConfig.TenantId = TenantId;
+                        _logger.LogInformation($"💾   ✅ TenantId: '{TenantId}'");
                     }
-                };
-
-                // Przygotuj Application Configuration - zachowaj istniejące wartości jeśli nowe są puste
-                var appConfig = new ApplicationConfiguration
-                {
-                    Environment = !string.IsNullOrWhiteSpace(Environment) ? Environment : existingAppConfig?.Environment ?? "Production",
-                    Application = new ApplicationSettings
+                    
+                    // UI Client Settings - tylko jeśli UiClientId jest wypełnione
+                    if (!string.IsNullOrWhiteSpace(UiClientId))
                     {
-                        Name = !string.IsNullOrWhiteSpace(ApplicationName) ? ApplicationName : existingAppConfig?.Application?.Name ?? "TeamsManager",
-                        Version = !string.IsNullOrWhiteSpace(Version) ? Version : existingAppConfig?.Application?.Version ?? "1.0.0"
-                    },
-                    Api = new ApiSettings
-                    {
-                        BaseUrl = !string.IsNullOrWhiteSpace(ApiBaseUrl) ? ApiBaseUrl : existingAppConfig?.Api?.BaseUrl ?? "https://api.teamsmanager.edu.pl",
-                        Timeout = ApiTimeout > 0 ? ApiTimeout : existingAppConfig?.Api?.Timeout ?? 30
+                        azureConfig.Ui = new UiClientSettings
+                        {
+                            ClientId = UiClientId,
+                            RedirectUri = "http://localhost" // domyślna wartość
+                        };
+                        _logger.LogInformation($"💾   ✅ UI ClientId: '{UiClientId}'");
                     }
-                };
-
-                _logger.LogInformation("💾 Przygotowano konfiguracje do zapisu:");
-                _logger.LogInformation($"💾 Azure AD - TenantId: {azureConfig.TenantId}, UiClientId: {azureConfig.Ui.ClientId}, ApiClientId: {azureConfig.Api.ClientId}");
-                _logger.LogInformation($"💾 Application - Name: {appConfig.Application.Name}, Environment: {appConfig.Environment}");
-
-                // Zapisz konfiguracje
-                await _configManager.SaveAzureAdConfigurationAsync(azureConfig);
-                await _configManager.SaveApplicationConfigurationAsync(appConfig);
-
-                HasChanges = false;
-                StatusMessage = "Konfiguracja zapisana pomyślnie";
-                _logger.LogInformation("💾 Konfiguracja została zapisana pomyślnie");
-                
-                // Walidacja po zapisie - sprawdź czy konfiguracja jest kompletna
-                await ValidateConfigurationAsync();
-                
-                // Jeśli konfiguracja jest kompletna, zamknij okno (uruchomi się logowanie)
-                // Jeśli nie, pozostaw okno otwarte z informacją o brakujących polach
-                if (ValidationResult.IsValid)
-                {
-                    _logger.LogInformation("💾 Konfiguracja kompletna - zamykam okno konfiguracji");
-                    RequestClose?.Invoke();
+                    
+                    // API Client Settings - tylko jeśli któreś z pól API jest wypełnione
+                    if (!string.IsNullOrWhiteSpace(ApiClientId) || !string.IsNullOrWhiteSpace(ClientSecret) || !string.IsNullOrWhiteSpace(Audience))
+                    {
+                        azureConfig.Api = new ApiClientSettings();
+                        
+                        if (!string.IsNullOrWhiteSpace(ApiClientId))
+                        {
+                            azureConfig.Api.ClientId = ApiClientId;
+                            _logger.LogInformation($"💾   ✅ API ClientId: '{ApiClientId}'");
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(ClientSecret))
+                        {
+                            azureConfig.Api.ClientSecret = ClientSecret;
+                            _logger.LogInformation($"💾   ✅ ClientSecret: USTAWIONY ({ClientSecret.Length} znaków)");
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(Audience))
+                        {
+                            azureConfig.Api.Audience = Audience;
+                            _logger.LogInformation($"💾   ✅ Audience: '{Audience}'");
+                        }
+                    }
                 }
                 else
                 {
-                    _logger.LogInformation("💾 Konfiguracja niekompletna - pozostawiam okno otwarte");
+                    _logger.LogInformation("💾 ⚠️ Wszystkie pola Azure AD są puste - pomijam zapis Azure AD Configuration");
+                }
+
+                // Sprawdź które pola Application są wypełnione (nie domyślne)
+                bool hasAppData = (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager") ||
+                                  (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0") ||
+                                  (!string.IsNullOrWhiteSpace(Environment) && Environment != "Production") ||
+                                  (!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl") ||
+                                  (ApiTimeout != 30);
+
+                ApplicationConfiguration? appConfig = null;
+                if (hasAppData)
+                {
+                    _logger.LogInformation("💾 Znaleziono wypełnione pola Application - tworzę konfigurację...");
+                    
+                    appConfig = new ApplicationConfiguration();
+                    
+                    // Zapisz tylko pola różne od domyślnych
+                    if (!string.IsNullOrWhiteSpace(Environment) && Environment != "Production")
+                    {
+                        appConfig.Environment = Environment;
+                        _logger.LogInformation($"💾   ✅ Environment: '{Environment}' (różne od domyślnego 'Production')");
+                    }
+                    
+                    // Application Settings - tylko jeśli któreś pole jest różne od domyślnego
+                    if ((!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager") ||
+                        (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0"))
+                    {
+                        appConfig.Application = new ApplicationSettings();
+                        
+                        if (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager")
+                        {
+                            appConfig.Application.Name = ApplicationName;
+                            _logger.LogInformation($"💾   ✅ Application Name: '{ApplicationName}' (różne od domyślnego 'TeamsManager')");
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0")
+                        {
+                            appConfig.Application.Version = Version;
+                            _logger.LogInformation($"💾   ✅ Version: '{Version}' (różne od domyślnego '1.0.0')");
+                        }
+                    }
+                    
+                    // API Settings - tylko jeśli któreś pole jest różne od domyślnego
+                    if ((!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl") ||
+                        (ApiTimeout != 30))
+                    {
+                        appConfig.Api = new ApiSettings();
+                        
+                        if (!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl")
+                        {
+                            appConfig.Api.BaseUrl = ApiBaseUrl;
+                            _logger.LogInformation($"💾   ✅ API BaseUrl: '{ApiBaseUrl}' (różne od domyślnego)");
+                        }
+                        
+                        if (ApiTimeout != 30)
+                        {
+                            appConfig.Api.Timeout = ApiTimeout;
+                            _logger.LogInformation($"💾   ✅ API Timeout: {ApiTimeout}s (różne od domyślnego 30s)");
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("💾 ⚠️ Wszystkie pola Application mają wartości domyślne - pomijam zapis Application Configuration");
+                }
+
+                _logger.LogInformation("💾 FINALNE KONFIGURACJE DO ZAPISU (TYLKO NIEPUSTE POLA):");
+                
+                if (azureConfig != null)
+                {
+                    _logger.LogInformation($"💾 Azure AD - TenantId: '{azureConfig.TenantId ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Azure AD - UiClientId: '{azureConfig.Ui?.ClientId ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Azure AD - ApiClientId: '{azureConfig.Api?.ClientId ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Azure AD - ClientSecret: {(string.IsNullOrWhiteSpace(azureConfig.Api?.ClientSecret) ? "[BRAK]" : $"USTAWIONY ({azureConfig.Api.ClientSecret.Length} znaków)")}");
+                    _logger.LogInformation($"💾 Azure AD - Audience: '{azureConfig.Api?.Audience ?? "[BRAK]"}'");
+                }
+                else
+                {
+                    _logger.LogInformation("💾 Azure AD - BRAK DANYCH DO ZAPISU");
+                }
+                
+                if (appConfig != null)
+                {
+                    _logger.LogInformation($"💾 Application - Name: '{appConfig.Application?.Name ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Application - Environment: '{appConfig.Environment ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Application - API BaseUrl: '{appConfig.Api?.BaseUrl ?? "[BRAK]"}'");
+                    _logger.LogInformation($"💾 Application - API Timeout: {appConfig.Api?.Timeout ?? 0}s");
+                }
+                else
+                {
+                    _logger.LogInformation("💾 Application - BRAK DANYCH DO ZAPISU");
+                }
+
+                // Zapisz konfiguracje tylko jeśli mają dane
+                if (azureConfig != null)
+                {
+                    _logger.LogInformation("💾 Zapisywanie Azure AD Configuration...");
+                    await _configManager.SaveAzureAdConfigurationAsync(azureConfig);
+                    _logger.LogInformation("💾 ✅ Azure AD Configuration zapisana");
+                }
+                else
+                {
+                    _logger.LogInformation("💾 ⚠️ Pomijam zapis Azure AD Configuration - brak danych");
+                }
+                
+                if (appConfig != null)
+                {
+                    _logger.LogInformation("💾 Zapisywanie Application Configuration...");
+                    await _configManager.SaveApplicationConfigurationAsync(appConfig);
+                    _logger.LogInformation("💾 ✅ Application Configuration zapisana");
+                }
+                else
+                {
+                    _logger.LogInformation("💾 ⚠️ Pomijam zapis Application Configuration - brak danych");
+                }
+
+                HasChanges = false;
+                
+                // Ustal komunikat o statusie na podstawie tego co zostało zapisane
+                if (azureConfig != null && appConfig != null)
+                {
+                    StatusMessage = "Konfiguracja zapisana pomyślnie";
+                    _logger.LogInformation("💾 ✅ WSZYSTKIE KONFIGURACJE ZOSTAŁY ZAPISANE POMYŚLNIE");
+                }
+                else if (azureConfig != null)
+                {
+                    StatusMessage = "Konfiguracja Azure AD zapisana pomyślnie";
+                    _logger.LogInformation("💾 ✅ KONFIGURACJA AZURE AD ZOSTAŁA ZAPISANA POMYŚLNIE");
+                }
+                else if (appConfig != null)
+                {
+                    StatusMessage = "Konfiguracja aplikacji zapisana pomyślnie";
+                    _logger.LogInformation("💾 ✅ KONFIGURACJA APLIKACJI ZOSTAŁA ZAPISANA POMYŚLNIE");
+                }
+                else
+                {
+                    StatusMessage = "Brak danych do zapisu - wszystkie pola są puste";
+                    _logger.LogInformation("💾 ⚠️ BRAK DANYCH DO ZAPISU - WSZYSTKIE POLA SĄ PUSTE");
+                }
+                
+                // Walidacja po zapisie - sprawdź czy konfiguracja jest kompletna
+                _logger.LogInformation("💾 Uruchamiam walidację po zapisie...");
+                await ValidateConfigurationAsync();
+                
+                // ZAWSZE ZAMYKAMY OKNO PO ZAPISIE - niezależnie od kompletności
+                // Użytkownik może zapisać częściową konfigurację i dokończyć później
+                _logger.LogInformation("💾 Konfiguracja zapisana - zamykam okno konfiguracji");
+                _logger.LogInformation($"💾 Status kompletności: {(ValidationResult.IsValid ? "KOMPLETNA" : "NIEKOMPLETNA")}");
+                
+                if (ValidationResult.IsValid)
+                {
+                    _logger.LogInformation("💾 ✅ Konfiguracja jest kompletna - aplikacja może działać normalnie");
+                    StatusMessage = "Konfiguracja kompletna i zapisana. Uruchamiam aplikację...";
+                }
+                else
+                {
+                    _logger.LogInformation($"💾 ⚠️ Konfiguracja niekompletna - brakuje {ValidationResult.MissingConfigurations.Count} ustawień");
                     StatusMessage = $"Konfiguracja zapisana. {ValidationResult.Summary}";
                 }
+                
+                // Krótkie opóźnienie aby użytkownik mógł zobaczyć status
+                await Task.Delay(1500);
+                
+                _logger.LogInformation("💾 Zamykam okno konfiguracji...");
+                RequestClose?.Invoke();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔘 ZAPISZ - błąd podczas zapisywania konfiguracji");
+                _logger.LogError(ex, "🔘 ZAPISZ - KRYTYCZNY BŁĄD podczas zapisywania konfiguracji");
+                _logger.LogError($"💾 ❌ Szczegóły błędu: {ex.Message}");
+                _logger.LogError($"💾 ❌ Stack trace: {ex.StackTrace}");
+                
+                StatusMessage = $"Błąd zapisu: {ex.Message}";
                 throw;
             }
             finally
@@ -395,56 +570,33 @@ namespace TeamsManager.UI.ViewModels
                 
                 var result = new ValidationResult();
                 
-                // Załaduj istniejące konfiguracje aby sprawdzić kompletność
-                var existingAzureConfig = await _configManager.LoadAzureAdConfigurationAsync();
-                var existingAppConfig = await _configManager.LoadApplicationConfigurationAsync();
+                // WALIDACJA TYLKO DANYCH Z FORMULARZA - bez ładowania plików
+                _logger.LogInformation("📋 WALIDACJA DANYCH Z FORMULARZA:");
+                _logger.LogInformation($"📋 UI Client ID: '{UiClientId}' ({(string.IsNullOrWhiteSpace(UiClientId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
+                _logger.LogInformation($"📋 API Client ID: '{ApiClientId}' ({(string.IsNullOrWhiteSpace(ApiClientId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
+                _logger.LogInformation($"📋 Tenant ID: '{TenantId}' ({(string.IsNullOrWhiteSpace(TenantId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
+                _logger.LogInformation($"📋 Client Secret: {(string.IsNullOrWhiteSpace(ClientSecret) ? "❌ PUSTY" : $"✅ WYPEŁNIONY ({ClientSecret.Length} znaków)")}");
+                _logger.LogInformation($"📋 Audience: '{Audience}' ({(string.IsNullOrWhiteSpace(Audience) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
 
-                // Sprawdź Azure AD - wartości z formularza LUB istniejące
-                var finalUiClientId = !string.IsNullOrWhiteSpace(UiClientId) ? UiClientId : existingAzureConfig?.Ui?.ClientId;
-                var finalApiClientId = !string.IsNullOrWhiteSpace(ApiClientId) ? ApiClientId : existingAzureConfig?.Api?.ClientId;
-                var finalTenantId = !string.IsNullOrWhiteSpace(TenantId) ? TenantId : existingAzureConfig?.TenantId;
-                var finalAudience = !string.IsNullOrWhiteSpace(Audience) ? Audience : existingAzureConfig?.Api?.Audience;
-                var finalClientSecret = !string.IsNullOrWhiteSpace(ClientSecret) ? ClientSecret : existingAzureConfig?.Api?.ClientSecret;
-
-                // SZCZEGÓŁOWE LOGOWANIE STANU PÓL AZURE AD:
-                _logger.LogInformation("📋 WYNIKI WALIDACJI - STAN PÓL AZURE AD:");
-                _logger.LogInformation($"📋 UI Client ID: {(string.IsNullOrWhiteSpace(finalUiClientId) ? "❌ BRAK" : "✅ USTAWIONY")} (formularz: '{UiClientId}', plik: '{existingAzureConfig?.Ui?.ClientId ?? "[BRAK]'}')");
-                _logger.LogInformation($"📋 API Client ID: {(string.IsNullOrWhiteSpace(finalApiClientId) ? "❌ BRAK" : "✅ USTAWIONY")} (formularz: '{ApiClientId}', plik: '{existingAzureConfig?.Api?.ClientId ?? "[BRAK]'}')");
-                _logger.LogInformation($"📋 Tenant ID: {(string.IsNullOrWhiteSpace(finalTenantId) ? "❌ BRAK" : "✅ USTAWIONY")} (formularz: '{TenantId}', plik: '{existingAzureConfig?.TenantId ?? "[BRAK]'}')");
-                _logger.LogInformation($"📋 Client Secret: {(string.IsNullOrWhiteSpace(finalClientSecret) ? "❌ BRAK" : "✅ USTAWIONY")} (formularz: {(string.IsNullOrWhiteSpace(ClientSecret) ? "pusty" : $"{ClientSecret.Length} znaków")}, plik: {(string.IsNullOrWhiteSpace(existingAzureConfig?.Api?.ClientSecret) ? "pusty" : $"{existingAzureConfig.Api.ClientSecret.Length} znaków")})");
-                _logger.LogInformation($"📋 Audience: {(string.IsNullOrWhiteSpace(finalAudience) ? "❌ BRAK" : "✅ USTAWIONY")} (formularz: '{Audience}', plik: '{existingAzureConfig?.Api?.Audience ?? "[BRAK]'}')");
-
-                // Walidacja Azure AD - sprawdź finalne wartości
-                if (string.IsNullOrWhiteSpace(finalUiClientId))
+                // Walidacja Azure AD - sprawdź tylko dane z formularza
+                if (string.IsNullOrWhiteSpace(UiClientId))
                     result.MissingConfigurations.Add("Azure AD: UI Client ID nie jest ustawiony");
-                if (string.IsNullOrWhiteSpace(finalApiClientId))
+                if (string.IsNullOrWhiteSpace(ApiClientId))
                     result.MissingConfigurations.Add("Azure AD: API Client ID nie jest ustawiony");
-                if (string.IsNullOrWhiteSpace(finalTenantId))
+                if (string.IsNullOrWhiteSpace(TenantId))
                     result.MissingConfigurations.Add("Azure AD: Tenant ID nie jest ustawiony");
-                if (string.IsNullOrWhiteSpace(finalAudience))
+                if (string.IsNullOrWhiteSpace(Audience))
                     result.MissingConfigurations.Add("Azure AD: Audience nie jest ustawione");
-                if (string.IsNullOrWhiteSpace(finalClientSecret))
+                if (string.IsNullOrWhiteSpace(ClientSecret))
                     result.MissingConfigurations.Add("Azure AD: Client Secret nie jest ustawiony");
 
-                // Informacje o istniejących wartościach
-                if (string.IsNullOrWhiteSpace(ClientSecret) && !string.IsNullOrWhiteSpace(finalClientSecret))
-                    result.Warnings.Add("Azure AD: Używany jest istniejący Client Secret");
-                if (string.IsNullOrWhiteSpace(UiClientId) && !string.IsNullOrWhiteSpace(finalUiClientId))
-                    result.Warnings.Add("Azure AD: Używany jest istniejący UI Client ID");
-                if (string.IsNullOrWhiteSpace(ApiClientId) && !string.IsNullOrWhiteSpace(finalApiClientId))
-                    result.Warnings.Add("Azure AD: Używany jest istniejący API Client ID");
-                if (string.IsNullOrWhiteSpace(TenantId) && !string.IsNullOrWhiteSpace(finalTenantId))
-                    result.Warnings.Add("Azure AD: Używany jest istniejący Tenant ID");
-                if (string.IsNullOrWhiteSpace(Audience) && !string.IsNullOrWhiteSpace(finalAudience))
-                    result.Warnings.Add("Azure AD: Używany jest istniejący Audience");
-
                 // LOGOWANIE STANU APLIKACJI
-                _logger.LogInformation("📋 WYNIKI WALIDACJI - STAN PÓL APLIKACJI:");
-                _logger.LogInformation($"📋 Nazwa aplikacji: '{ApplicationName}' (plik: '{existingAppConfig?.Application?.Name ?? "[BRAK]"}')");
-                _logger.LogInformation($"📋 Wersja: '{Version}' (plik: '{existingAppConfig?.Application?.Version ?? "[BRAK]"}')");
-                _logger.LogInformation($"📋 Środowisko: '{Environment}' (plik: '{existingAppConfig?.Environment ?? "[BRAK]"}')");
-                _logger.LogInformation($"📋 API Base URL: '{ApiBaseUrl}' (plik: '{existingAppConfig?.Api?.BaseUrl ?? "[BRAK]"}')");
-                _logger.LogInformation($"📋 API Timeout: {ApiTimeout}s (plik: {existingAppConfig?.Api?.Timeout ?? 0}s)");
+                _logger.LogInformation("📋 WALIDACJA POLA APLIKACJI:");
+                _logger.LogInformation($"📋 Nazwa aplikacji: '{ApplicationName}'");
+                _logger.LogInformation($"📋 Wersja: '{Version}'");
+                _logger.LogInformation($"📋 Środowisko: '{Environment}'");
+                _logger.LogInformation($"📋 API Base URL: '{ApiBaseUrl}'");
+                _logger.LogInformation($"📋 API Timeout: {ApiTimeout}s");
 
                 // Ostrzeżenia aplikacji
                 if (Environment == "Production" && string.IsNullOrWhiteSpace(ApiBaseUrl))
@@ -664,10 +816,12 @@ namespace TeamsManager.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.LogError(ex, "🔘 POKAŻ - błąd podczas wyświetlania konfiguracji");
+                StatusMessage = $"Błąd wyświetlania: {ex.Message}";
                 throw;
             }
             finally
             {
+                IsLoading = false; // NAPRAWKA: Resetuj stan ładowania
                 _logger.LogInformation("🔘 POKAŻ - zakończenie operacji wyświetlania");
             }
         }

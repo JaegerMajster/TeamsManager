@@ -325,59 +325,5 @@ namespace TeamsManager.UI.Services.Configuration
             var hash = sha256.ComputeHash(combined);
             return Convert.ToBase64String(hash);
         }
-
-        public string DecryptWithFallback(EncryptedData encryptedData)
-        {
-            try
-            {
-                // Najpierw próbuj normalnego odszyfrowywania
-                return Decrypt(encryptedData);
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("DPAPI"))
-            {
-                _logger.LogWarning("⚠️ DPAPI nie może odszyfrować danych - próba fallback do surowych danych");
-                
-                try
-                {
-                    // Fallback: spróbuj potraktować dane jako niezaszyfrowane JSON
-                    var rawData = Convert.FromBase64String(encryptedData.Data);
-                    var possibleJson = Encoding.UTF8.GetString(rawData);
-                    
-                    // Sprawdź czy to wygląda jak JSON
-                    if (possibleJson.TrimStart().StartsWith("{") && possibleJson.TrimEnd().EndsWith("}"))
-                    {
-                        _logger.LogInformation("✅ Znaleziono dane w formacie JSON - używam jako fallback");
-                        return possibleJson;
-                    }
-                }
-                catch (Exception fallbackEx)
-                {
-                    _logger.LogWarning(fallbackEx, "Fallback do surowych danych nie powiódł się");
-                }
-                
-                // Jeśli nic nie działa, zwróć komunikat o błędzie jako JSON
-                _logger.LogError("❌ Nie można odzyskać danych - zwracam pusty JSON");
-                return "{}";
-            }
-        }
-
-        public EncryptedData EncryptForCurrentUser(string plaintext)
-        {
-            try
-            {
-                _logger.LogInformation("🔄 Szyfrowanie danych dla bieżącego użytkownika");
-                
-                // Usuń stare dane jeśli istnieją
-                var result = Encrypt(plaintext);
-                
-                _logger.LogInformation($"✅ Dane zaszyfrowane dla użytkownika: {Environment.UserName}");
-                return result;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Błąd podczas szyfrowania dla bieżącego użytkownika");
-                throw;
-            }
-        }
     }
 } 
