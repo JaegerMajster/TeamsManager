@@ -32,7 +32,7 @@
     </Window.Resources>
 
     <materialDesign:DialogHost DialogTheme="Dark">
-        <Grid>
+        <Grid x:Name="MainGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -110,10 +110,10 @@
                                             <Style TargetType="Ellipse">
                                                 <Setter Property="Fill" Value="{DynamicResource BackgroundMedium}"/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Model.HasAvatar}" Value="True">
+                                                    <DataTrigger Binding="{Binding DataContext.Model.HasAvatar, ElementName=MainGrid}" Value="True">
                                                         <Setter Property="Fill">
                                                             <Setter.Value>
-                                                                <ImageBrush ImageSource="{Binding Model.AvatarImageSource, FallbackValue={x:Null}, TargetNullValue={x:Null}}" Stretch="UniformToFill"/>
+                                                                <ImageBrush ImageSource="{Binding DataContext.Model.AvatarImageSource, ElementName=MainGrid, FallbackValue={x:Null}, TargetNullValue={x:Null}}" Stretch="UniformToFill"/>
                                                             </Setter.Value>
                                                         </Setter>
                                                     </DataTrigger>

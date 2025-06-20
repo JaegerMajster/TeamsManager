@@ -283,6 +283,7 @@ namespace TeamsManager.UI.ViewModels.Shell
         public ICommand NavigateToMonitoringCommand { get; private set; } = null!;
         public ICommand NavigateToSettingsCommand { get; private set; } = null!;
         public ICommand NavigateToManualTestingCommand { get; private set; } = null!;
+        public ICommand OpenGraphDiagnosticsCommand { get; private set; } = null!;
         public ICommand LogoutCommand { get; private set; } = null!;
         public ICommand ViewProfileCommand { get; private set; } = null!;
         public ICommand RefreshProfileCommand { get; private set; } = null!;
@@ -302,6 +303,7 @@ namespace TeamsManager.UI.ViewModels.Shell
             NavigateToMonitoringCommand = new RelayCommand(ExecuteNavigateToMonitoring);
             NavigateToSettingsCommand = new RelayCommand(ExecuteNavigateToSettings);
             NavigateToManualTestingCommand = new RelayCommand(ExecuteNavigateToManualTesting);
+            OpenGraphDiagnosticsCommand = new RelayCommand(ExecuteOpenGraphDiagnostics);
             LogoutCommand = new RelayCommand(ExecuteLogout);
             ViewProfileCommand = new RelayCommand(ExecuteViewProfile);
             RefreshProfileCommand = new RelayCommand(ExecuteRefreshProfile);
@@ -834,6 +836,21 @@ namespace TeamsManager.UI.ViewModels.Shell
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Błąd podczas otwierania okna testów");
+            }
+        }
+
+        private void ExecuteOpenGraphDiagnostics()
+        {
+            try
+            {
+                _logger.LogDebug("Otwieranie okna diagnostyki Graph API");
+                TeamsManager.UI.Views.Diagnostics.GraphApiDiagnosticWindow.ShowDiagnostic(_serviceProvider);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas otwierania okna diagnostyki Graph API");
+                System.Windows.MessageBox.Show($"Błąd podczas otwierania diagnostyki Graph API:\n\n{ex.Message}", 
+                    "Błąd", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
         }
 

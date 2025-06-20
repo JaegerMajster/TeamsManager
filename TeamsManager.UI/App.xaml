@@ -75,6 +75,9 @@
             
             <!-- Monitoring konwertery -->
             <converters:HealthCheckToPolishConverter x:Key="HealthCheckToPolishConverter"/>
+            
+            <!-- Diagnostics konwertery -->
+            <converters:StringContainsConverter x:Key="StringContainsConverter"/>
 
             <!-- Globalne ustawienia czcionek -->
             <FontFamily x:Key="DefaultFontFamily">Segoe UI</FontFamily>

@@ -445,6 +445,18 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Diagnostyka Graph API -->
+                        <Button Command="{Binding OpenGraphDiagnosticsCommand}"
+                                Style="{StaticResource NavigationMenuButton}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Stethoscope" 
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,16,0"/>
+                                <TextBlock Text="Diagnostyka Graph API" 
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Separator -->
                         <Separator Style="{StaticResource MaterialDesignDarkSeparator}" 
                                  Margin="16,8"/>
