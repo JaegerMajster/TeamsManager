@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -6,12 +7,14 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Identity.Client;
 using TeamsManager.Core.Abstractions;
-using TeamsManager.UI.Models.Configuration;
+using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.Models;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.UI.Services.Configuration;
+using TeamsManager.UI.Models.Configuration;
 
 namespace TeamsManager.UI.ViewModels
 {

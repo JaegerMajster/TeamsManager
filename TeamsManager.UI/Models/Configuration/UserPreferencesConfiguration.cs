@@ -1,4 +1,5 @@
 using System;
+using TeamsManager.Core.Models.Configuration;
 
 namespace TeamsManager.UI.Models.Configuration
 {

@@ -13,6 +13,12 @@ using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Models.Configuration;
 using Microsoft.Identity.Client.Broker;
 using TeamsManager.Core.Models.Graph;
+using System.Collections.Generic;
+using System.Threading;
+using TeamsManager.Core.Models;
+using TeamsManager.Core.Models.Configuration;
+using TeamsManager.Core.Exceptions.Graph;
+using TeamsManager.Core.Abstractions.Services;
 
 namespace TeamsManager.UI.Services
 {
@@ -40,18 +46,51 @@ namespace TeamsManager.UI.Services
     /// </summary>
     public class MsalAuthService : IMsalAuthService
     {
-        private readonly IPublicClientApplication _publicClientApp;
         private readonly ILogger<MsalAuthService> _logger;
         private readonly GraphApiConfiguration _graphConfig;
+        private readonly IConfigurationManagerV2 _configurationManager;
 
         public MsalAuthService(
-            IPublicClientApplication publicClientApp, 
             ILogger<MsalAuthService> logger,
-            GraphApiConfiguration? graphConfig = null)
+            GraphApiConfiguration? graphConfig = null,
+            IConfigurationManagerV2? configurationManager = null)
         {
-            _publicClientApp = publicClientApp ?? throw new ArgumentNullException(nameof(publicClientApp));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _graphConfig = graphConfig ?? new GraphApiConfiguration();
+            _configurationManager = configurationManager ?? throw new ArgumentNullException(nameof(configurationManager));
+        }
+
+        private async Task<IPublicClientApplication?> CreateMsalClientAsync()
+        {
+            try
+            {
+                var azureConfig = await _configurationManager.LoadAzureAdConfigurationAsync();
+                
+                if (azureConfig == null || 
+                    string.IsNullOrWhiteSpace(azureConfig.Ui?.ClientId) || 
+                    azureConfig.Ui.ClientId == "placeholder-client-id" ||
+                    string.IsNullOrWhiteSpace(azureConfig.TenantId))
+                {
+                    _logger.LogWarning("Brak lub niepoprawna konfiguracja Azure AD - logowanie niemożliwe");
+                    return null;
+                }
+                
+                _logger.LogInformation("Tworzenie MSAL PublicClientApplication z rzeczywistą konfiguracją: ClientId={ClientId}, TenantId={TenantId}",
+                    azureConfig.Ui.ClientId, azureConfig.TenantId);
+                
+                var authority = $"https://login.microsoftonline.com/{azureConfig.TenantId}";
+                
+                return PublicClientApplicationBuilder
+                    .Create(azureConfig.Ui.ClientId)
+                    .WithAuthority(new Uri(authority))
+                    .WithRedirectUri("http://localhost")
+                    .Build();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas tworzenia MSAL client");
+                return null;
+            }
         }
 
         /// <summary>
@@ -106,16 +145,30 @@ namespace TeamsManager.UI.Services
 
         public async Task<AuthenticationResult?> AcquireTokenInteractiveAsync(Window window)
         {
+            var publicClientApp = await CreateMsalClientAsync();
+            
+            if (publicClientApp == null)
+            {
+                _logger.LogWarning("Nie można utworzyć MSAL client - logowanie niemożliwe");
+                
+                MessageBox.Show(
+                    "Aplikacja nie jest skonfigurowana do logowania.\n\n" +
+                    "Przejdź do 'Zmień konfigurację' i ustaw poprawne dane Azure AD:\n" +
+                    "• Client ID (UI)\n" +
+                    "• Tenant ID\n" +
+                    "• Client Secret (API)\n" +
+                    "• Audience", 
+                    "Wymagana konfiguracja", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Information);
+                
+                return null;
+            }
+            
             // Obsłuż null window w sposób łagodny - zwróć null zamiast rzucać wyjątek
             if (window == null)
             {
                 _logger.LogWarning("MSAL: Cannot acquire token interactively with null window");
-                return null;
-            }
-            
-            if (_publicClientApp == null)
-            {
-                HandleMissingConfiguration("MSAL nie został poprawnie zainicjowany z powodu braku konfiguracji (ClientId/TenantId). Logowanie niemożliwe.");
                 return null;
             }
 
@@ -124,7 +177,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 // Najpierw próbuj SSO z istniejącymi kontami
-                var accounts = await _publicClientApp.GetAccountsAsync();
+                var accounts = await publicClientApp.GetAccountsAsync();
                 IAccount? accountToUse = accounts.FirstOrDefault();
                 
                 // Jeśli nie ma cached accounts, spróbuj z Windows OS account
@@ -139,7 +192,7 @@ namespace TeamsManager.UI.Services
                 }
 
                 // Próba silent authentication (SSO)
-                authResult = await _publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, accountToUse).ExecuteAsync();
+                authResult = await publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, accountToUse).ExecuteAsync();
                 _logger.LogInformation("MSAL: Token acquired silently via SSO for user: {Username}", authResult.Account?.Username);
             }
             catch (MsalUiRequiredException ex)
@@ -149,7 +202,7 @@ namespace TeamsManager.UI.Services
                 try
                 {
                     // Fallback do interactive authentication z WAM - WYMUŚ wybór konta
-                    authResult = await _publicClientApp.AcquireTokenInteractive(_graphConfig.Scopes.ReadOnlyScopes)
+                    authResult = await publicClientApp.AcquireTokenInteractive(_graphConfig.Scopes.ReadOnlyScopes)
                                                    .WithPrompt(Prompt.ForceLogin) // WYMUŚ pełne logowanie (zmiana z SelectAccount)
                                                    .WithParentActivityOrWindow(new WindowInteropHelper(window).Handle)
                                                    .ExecuteAsync();
@@ -183,17 +236,19 @@ namespace TeamsManager.UI.Services
 
         public async Task SignOutAsync()
         {
-            if (_publicClientApp == null)
+            var publicClientApp = await CreateMsalClientAsync();
+            
+            if (publicClientApp == null)
             {
                 System.Diagnostics.Debug.WriteLine("MSAL SignOut: PCA not properly initialized.");
                 return;
             }
             
             // Wyczyść wszystkie cached accounts
-            var accounts = await _publicClientApp.GetAccountsAsync();
+            var accounts = await publicClientApp.GetAccountsAsync();
             foreach (var account in accounts)
             {
-                await _publicClientApp.RemoveAsync(account);
+                await publicClientApp.RemoveAsync(account);
                 _logger.LogDebug("MSAL: Removed cached account: {Username}", account.Username);
             }
             
@@ -203,7 +258,9 @@ namespace TeamsManager.UI.Services
 
         public async Task<string?> AcquireGraphTokenAsync()
         {
-            if (_publicClientApp == null)
+            var publicClientApp = await CreateMsalClientAsync();
+            
+            if (publicClientApp == null)
             {
                 System.Diagnostics.Debug.WriteLine("MSAL AcquireGraphToken: PCA not properly initialized.");
                 return null;
@@ -211,11 +268,11 @@ namespace TeamsManager.UI.Services
 
             try
             {
-                var accounts = await _publicClientApp.GetAccountsAsync();
+                var accounts = await publicClientApp.GetAccountsAsync();
                 IAccount? firstAccount = accounts.FirstOrDefault();
 
                 // Spróbuj pobrać token z cache
-                var result = await _publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, firstAccount).ExecuteAsync();
+                var result = await publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, firstAccount).ExecuteAsync();
                 
                 System.Diagnostics.Debug.WriteLine($"MSAL: Graph token acquired silently. Scopes: {string.Join(", ", result.Scopes)}");
                 return result.AccessToken;
@@ -241,7 +298,9 @@ namespace TeamsManager.UI.Services
                 return null;
             }
             
-            if (_publicClientApp == null)
+            var publicClientApp = await CreateMsalClientAsync();
+            
+            if (publicClientApp == null)
             {
                 System.Diagnostics.Debug.WriteLine("MSAL AcquireGraphTokenInteractive: PCA not properly initialized.");
                 return null;
@@ -249,10 +308,10 @@ namespace TeamsManager.UI.Services
 
             try
             {
-                var accounts = await _publicClientApp.GetAccountsAsync();
+                var accounts = await publicClientApp.GetAccountsAsync();
                 IAccount? firstAccount = accounts.FirstOrDefault();
 
-                var result = await _publicClientApp.AcquireTokenInteractive(_graphConfig.Scopes.ReadOnlyScopes)
+                var result = await publicClientApp.AcquireTokenInteractive(_graphConfig.Scopes.ReadOnlyScopes)
                                                .WithAccount(firstAccount)
                                                .WithParentActivityOrWindow(new WindowInteropHelper(window).Handle)
                                                .ExecuteAsync();
@@ -269,7 +328,9 @@ namespace TeamsManager.UI.Services
 
         public async Task<AuthenticationResult?> AcquireTokenSilentAsync()
         {
-            if (_publicClientApp == null)
+            var publicClientApp = await CreateMsalClientAsync();
+            
+            if (publicClientApp == null)
             {
                 _logger.LogWarning("MSAL AcquireTokenSilent: PCA not properly initialized.");
                 return null;
@@ -277,7 +338,7 @@ namespace TeamsManager.UI.Services
 
             try
             {
-                var accounts = await _publicClientApp.GetAccountsAsync();
+                var accounts = await publicClientApp.GetAccountsAsync();
                 IAccount? accountToUse = accounts.FirstOrDefault();
 
                 // Jeśli nie ma cached accounts, spróbuj z Windows OS account (SSO)
@@ -288,7 +349,7 @@ namespace TeamsManager.UI.Services
                 }
 
                 // Spróbuj pobrać token z cache lub SSO
-                var result = await _publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, accountToUse).ExecuteAsync();
+                var result = await publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, accountToUse).ExecuteAsync();
                 
                 _logger.LogDebug("MSAL: Token acquired silently for user: {Username}", result.Account?.Username);
                 return result;

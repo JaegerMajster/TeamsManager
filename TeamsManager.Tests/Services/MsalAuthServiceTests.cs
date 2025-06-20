@@ -8,11 +8,12 @@ using Microsoft.Identity.Client;
 using Moq;
 using Xunit;
 using TeamsManager.UI.Services;
-using TeamsManager.UI.Models.Configuration;
+using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.Services.Configuration;
 using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Services.Abstractions;
 using TeamsManager.Core.Models.Graph;
+using Microsoft.Identity.Client.Broker;
 
 namespace TeamsManager.Tests.Services
 {

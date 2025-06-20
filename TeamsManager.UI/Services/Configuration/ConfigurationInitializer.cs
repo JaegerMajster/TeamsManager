@@ -1,7 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.Models.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 
 namespace TeamsManager.UI.Services.Configuration
@@ -95,27 +96,9 @@ namespace TeamsManager.UI.Services.Configuration
                 
                 config = new ApplicationConfiguration
                 {
-                    Environment = "Production",
-                    Application = new ApplicationSettings
-                    {
-                        Name = "TeamsManager",
-                        Version = "1.0.0",
-                        AutoUpdate = true,
-                        TelemetryEnabled = false
-                    },
-                    Api = new ApiSettings
-                    {
-                        BaseUrl = "https://localhost:7037",
-                        Timeout = 30,
-                        RetryAttempts = 3,
-                        HealthCheckInterval = 300
-                    },
-                    Security = new SecuritySettings
-                    {
-                        EncryptionKeyRotationDays = 90,
-                        TokenCacheExpiryHours = 24,
-                        RequireSecureConnection = true
-                    }
+                    ApplicationName = "TeamsManager",
+                    ApplicationVersion = "2.0",
+                    Environment = "Production"
                 };
 
                 await _configManager.SaveApplicationConfigurationAsync(config);
@@ -134,28 +117,13 @@ namespace TeamsManager.UI.Services.Configuration
                     TenantId = string.Empty,
                     Ui = new UiClientSettings
                     {
-                        ClientId = string.Empty,
-                        RedirectUri = "http://localhost",
-                        Scopes = new List<string>
-                        {
-                            "https://graph.microsoft.com/User.Read",
-                            "https://graph.microsoft.com/Team.ReadBasic.All"
-                        }
+                        ClientId = string.Empty
                     },
                     Api = new ApiClientSettings
                     {
                         ClientId = string.Empty,
                         ClientSecret = string.Empty,
                         Audience = string.Empty
-                    },
-                    Graph = new GraphSettings
-                    {
-                        BaseUrl = "https://graph.microsoft.com/v1.0",
-                        Scopes = new List<string>
-                        {
-                            "https://graph.microsoft.com/User.Read",
-                            "https://graph.microsoft.com/Team.ReadBasic.All"
-                        }
                     }
                 };
 

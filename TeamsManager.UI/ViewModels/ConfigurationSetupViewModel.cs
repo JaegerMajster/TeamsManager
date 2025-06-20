@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Services.Configuration;
-using TeamsManager.UI.Models.Configuration;
+using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.ViewModels;
 using System.Collections.Generic;
 
@@ -261,11 +261,12 @@ namespace TeamsManager.UI.ViewModels
 
                 if (appConfig != null)
                 {
-                    _applicationName = appConfig.Application.Name ?? "TeamsManager";
-                    _version = appConfig.Application.Version ?? "1.0.0";
+                    _applicationName = appConfig.ApplicationName ?? "TeamsManager";
+                    _version = appConfig.ApplicationVersion ?? "2.0";
                     _environment = appConfig.Environment ?? "Production";
-                    _apiBaseUrl = appConfig.Api.BaseUrl ?? "https://api.teamsmanager.edu.pl";
-                    _apiTimeout = appConfig.Api.Timeout;
+                    // Core nie ma zagnieżdżonych Api settings - używamy wartości domyślnych
+                    _apiBaseUrl = "https://api.teamsmanager.edu.pl";
+                    _apiTimeout = 30;
                     
                     // Powiadom UI o zmianie wartości
                     OnPropertyChanged(nameof(ApplicationName));
@@ -332,8 +333,7 @@ namespace TeamsManager.UI.ViewModels
                     {
                         azureConfig.Ui = new UiClientSettings
                         {
-                            ClientId = UiClientId,
-                            RedirectUri = "http://localhost" // domyślna wartość
+                            ClientId = UiClientId
                         };
                         _logger.LogInformation("Ustawiono UI ClientId");
                     }
@@ -369,10 +369,8 @@ namespace TeamsManager.UI.ViewModels
 
                 // Sprawdź które pola Application są wypełnione (nie domyślne)
                 bool hasAppData = (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager") ||
-                                  (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0") ||
-                                  (!string.IsNullOrWhiteSpace(Environment) && Environment != "Production") ||
-                                  (!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl") ||
-                                  (ApiTimeout != 30);
+                                  (!string.IsNullOrWhiteSpace(Version) && Version != "2.0") ||
+                                  (!string.IsNullOrWhiteSpace(Environment) && Environment != "Production");
 
                 ApplicationConfiguration? appConfig = null;
                 if (hasAppData)
@@ -388,43 +386,21 @@ namespace TeamsManager.UI.ViewModels
                         _logger.LogInformation("Ustawiono Environment (różne od domyślnego)");
                     }
                     
-                    // Application Settings - tylko jeśli któreś pole jest różne od domyślnego
-                    if ((!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager") ||
-                        (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0"))
+                    // Application Settings - ustaw bezpośrednio na właściwościach
+                    if (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager")
                     {
-                        appConfig.Application = new ApplicationSettings();
-                        
-                        if (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager")
-                        {
-                            appConfig.Application.Name = ApplicationName;
-                            _logger.LogInformation("Ustawiono Application Name (różne od domyślnego)");
-                        }
-                        
-                        if (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0")
-                        {
-                            appConfig.Application.Version = Version;
-                            _logger.LogInformation("Ustawiono Version (różne od domyślnego)");
-                        }
+                        appConfig.ApplicationName = ApplicationName;
+                        _logger.LogInformation("Ustawiono Application Name (różne od domyślnego)");
                     }
                     
-                    // API Settings - tylko jeśli któreś pole jest różne od domyślnego
-                    if ((!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl") ||
-                        (ApiTimeout != 30))
+                    if (!string.IsNullOrWhiteSpace(Version) && Version != "2.0")
                     {
-                        appConfig.Api = new ApiSettings();
-                        
-                        if (!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl")
-                        {
-                            appConfig.Api.BaseUrl = ApiBaseUrl;
-                            _logger.LogInformation("Ustawiono API BaseUrl (różne od domyślnego)");
-                        }
-                        
-                        if (ApiTimeout != 30)
-                        {
-                            appConfig.Api.Timeout = ApiTimeout;
-                            _logger.LogInformation("Ustawiono API Timeout (różne od domyślnego)");
-                        }
+                        appConfig.ApplicationVersion = Version;
+                        _logger.LogInformation("Ustawiono Version (różne od domyślnego)");
                     }
+                    
+                    // Note: Core nie ma zagnieżdżonych Api settings - używa ConnectionStrings
+                    _logger.LogInformation("API settings będą zarządzane przez ConnectionStrings w Core");
                 }
                 else
                 {
@@ -782,10 +758,9 @@ namespace TeamsManager.UI.ViewModels
                     {
                         configText += $"⚙️ Application Configuration:\n";
                         configText += $"   • Environment: {(!string.IsNullOrEmpty(appConfig.Environment) ? appConfig.Environment : "DOMYŚLNE (Production)")}\n";
-                        configText += $"   • Application Name: {(appConfig.Application?.Name ?? "DOMYŚLNE (TeamsManager)")}\n";
-                        configText += $"   • Version: {(appConfig.Application?.Version ?? "DOMYŚLNE (1.0.0)")}\n";
-                        configText += $"   • API Base URL: {(appConfig.Api?.BaseUrl ?? "DOMYŚLNE")}\n";
-                        configText += $"   • API Timeout: {(appConfig.Api?.Timeout ?? 30)} sekund\n";
+                        configText += $"   • Application Name: {(appConfig.ApplicationName ?? "DOMYŚLNE (TeamsManager)")}\n";
+                        configText += $"   • Version: {(appConfig.ApplicationVersion ?? "DOMYŚLNE (2.0)")}\n";
+                        configText += $"   • Connection String: {(!string.IsNullOrEmpty(appConfig.ConnectionStrings?.DefaultConnection) ? "USTAWIONE" : "DOMYŚLNE")}\n";
                     }
                 }
                 catch (Exception loadEx)

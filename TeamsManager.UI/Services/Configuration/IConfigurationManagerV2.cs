@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.Models.Configuration;
 
 namespace TeamsManager.UI.Services.Configuration
@@ -24,7 +25,7 @@ namespace TeamsManager.UI.Services.Configuration
         Task ReencryptForCurrentUserAsync(string configName);
         
         // Zdarzenia
-        event EventHandler<ConfigurationChangedEventArgs> ConfigurationChanged;
+        event EventHandler<ConfigurationChangedEventArgs>? ConfigurationChanged;
     }
     
     public class ConfigurationChangedEventArgs : EventArgs
