@@ -43,6 +43,8 @@ using Microsoft.Identity.Client;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Tools;
+using TeamsManager.UI.Views.Common;
+using TeamsManager.UI.ViewModels.Dialogs;
 
 namespace TeamsManager.UI
 {
@@ -108,6 +110,10 @@ namespace TeamsManager.UI
             services.AddSingleton<AdvancedEncryptionService>();
             services.AddSingleton<IConfigurationManagerV2, ConfigurationManagerV2>();
             services.AddSingleton<ConfigurationInitializer>();
+            
+            // NOWY UNIWERSALNY SYSTEM KONFIGURACJI (Clean Architecture)
+            services.AddSingleton<TeamsManager.Core.Abstractions.Services.IConfigurationService, 
+                TeamsManager.UI.Services.Configuration.ConfigurationService>();
             
             // Okno i ViewModel konfiguracji
             services.AddTransient<ConfigurationSetupWindow>();

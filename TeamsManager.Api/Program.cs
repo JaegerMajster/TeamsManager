@@ -58,20 +58,27 @@ using TeamsManager.Core.Abstractions.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Konfiguracja OAuth - ZINTEGROWANA z systemem V2.0
-var skipValidation = builder.Environment.EnvironmentName == "Test";
-var oauthApiConfig = ApiAuthConfig.LoadApiOAuthConfig(builder.Configuration, skipValidation);
+// ===== NOWY UNIWERSALNY SYSTEM KONFIGURACJI (Clean Architecture) =====
+// Rejestracja systemu konfiguracji zgodnego z zasadami DRY
+builder.Services.AddSingleton<TeamsManager.Api.Services.Configuration.AdvancedEncryptionService>();
+builder.Services.AddSingleton<TeamsManager.Core.Abstractions.Services.IConfigurationService, 
+    TeamsManager.Api.Services.Configuration.ConfigurationService>();
 
-if (string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.TenantId) ||
-    string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientId) ||
-    string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientSecret) ||
-    string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.Audience))
+// Ładowanie konfiguracji Azure AD z nowego systemu
+var configService = builder.Services.BuildServiceProvider()
+    .GetRequiredService<TeamsManager.Core.Abstractions.Services.IConfigurationService>();
+
+var azureAdConfig = await configService.GetConfigurationAsync<TeamsManager.Core.Models.Configuration.AzureAdConfiguration>("azure-ad");
+
+if (azureAdConfig?.Api?.IsValid() != true)
 {
-    var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
-                       "nie zostały w pełni skonfigurowane w systemie V2.0 ani w appsettings.json. Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie. " +
-                       "Skonfiguruj aplikację przez UI TeamsManager.";
-    Console.Error.WriteLine(errorMessage);
+    Console.WriteLine("[BŁĄD] Brak konfiguracji Azure AD w systemie V2.0!");
+    Console.WriteLine("Uruchom najpierw aplikację UI, aby skonfigurować Azure AD.");
+    throw new InvalidOperationException("Brak konfiguracji Azure AD. Uruchom UI aby skonfigurować system.");
 }
+
+builder.Services.AddSingleton(azureAdConfig);
+Console.WriteLine("[SUKCES] Załadowano konfigurację Azure AD z systemu V2.0");
 
 builder.Services.AddControllers();
 
@@ -209,8 +216,22 @@ API dla aplikacji TeamsManager - kompleksowe zarządzanie zespołami Microsoft T
         Enum = System.Enum.GetNames<TeamsManager.Core.Enums.OperationType>().Select(name => new Microsoft.OpenApi.Any.OpenApiString(name)).ToArray<Microsoft.OpenApi.Any.IOpenApiAny>()
     });
 });
+// Ładowanie konfiguracji aplikacji z nowego systemu
+var applicationConfig = await configService.GetConfigurationAsync<TeamsManager.Core.Models.Configuration.ApplicationConfiguration>("application");
+if (applicationConfig?.IsValid() != true)
+{
+    Console.WriteLine("[OSTRZEŻENIE] Brak konfiguracji aplikacji - tworzę domyślną");
+    applicationConfig = builder.Environment.IsDevelopment() ? 
+        TeamsManager.Api.Services.Configuration.DefaultApplicationConfig.CreateDevelopment() :
+        TeamsManager.Api.Services.Configuration.DefaultApplicationConfig.CreateDefault();
+    await configService.SaveConfigurationAsync("application", applicationConfig);
+    Console.WriteLine("[SUKCES] Utworzono domyślną konfigurację aplikacji");
+}
+
+builder.Services.AddSingleton(applicationConfig);
+
 builder.Services.AddDbContext<TeamsManagerDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(applicationConfig.ConnectionStrings.DefaultConnection));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddMemoryCache();
@@ -242,8 +263,8 @@ else
     builder.Services.AddScoped<INotificationService, StubNotificationService>();
 }
 
-// Konfiguracja Admin Notification Service
-if (builder.Environment.IsDevelopment() || !builder.Configuration.GetValue<bool>("AdminNotifications:Enabled", false))
+// Konfiguracja Admin Notification Service z nowego systemu
+if (builder.Environment.IsDevelopment() || !applicationConfig.AdminNotifications.Enabled)
 {
     builder.Services.AddScoped<IAdminNotificationService, StubAdminNotificationService>();
 }
@@ -282,16 +303,17 @@ builder.Services.AddScoped<IBulkUserManagementOrchestrator, BulkUserManagementOr
 builder.Services.AddScoped<IHealthMonitoringOrchestrator, HealthMonitoringOrchestrator>();
 builder.Services.AddScoped<IReportingOrchestrator, ReportingOrchestrator>();
 
-// Konfiguracja HTTP Resilience dla Microsoft Graph
+// Konfiguracja HTTP Resilience dla Microsoft Graph z nowego systemu
+var graphSettings = applicationConfig.ModernHttpResilience.MicrosoftGraph;
 builder.Services.AddHttpClient("MicrosoftGraph", client =>
 {
     client.BaseAddress = new Uri("https://graph.microsoft.com/");
     client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager/1.0");
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(graphSettings.Timeout.TotalRequestTimeoutSeconds);
 })
 .AddStandardResilienceHandler(options =>
 {
-    // Polityka ponawiania
+    // Polityka ponawiania z konfiguracji
     options.Retry.ShouldHandle = args => args.Outcome switch
     {
         { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
@@ -299,12 +321,13 @@ builder.Services.AddHttpClient("MicrosoftGraph", client =>
         { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.RequestTimeout => PredicateResult.True(),
         _ => PredicateResult.False()
     };
-    options.Retry.MaxRetryAttempts = 3;
-    options.Retry.UseJitter = true;
-    options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-    options.Retry.Delay = TimeSpan.FromSeconds(1);
+    options.Retry.MaxRetryAttempts = graphSettings.Retry.MaxAttempts;
+    options.Retry.UseJitter = graphSettings.Retry.UseJitter;
+    options.Retry.BackoffType = graphSettings.Retry.BackoffType == "Exponential" ? 
+        Polly.DelayBackoffType.Exponential : Polly.DelayBackoffType.Linear;
+    options.Retry.Delay = TimeSpan.FromSeconds(graphSettings.Retry.BaseDelaySeconds);
     
-    // Circuit Breaker  
+    // Circuit Breaker z konfiguracji
     options.CircuitBreaker.ShouldHandle = args => args.Outcome switch
     {
         { } outcome when HttpClientResiliencePredicates.IsTransient(outcome) => PredicateResult.True(),
@@ -314,25 +337,25 @@ builder.Services.AddHttpClient("MicrosoftGraph", client =>
         { } outcome when outcome.Result?.StatusCode == System.Net.HttpStatusCode.GatewayTimeout => PredicateResult.True(),
         _ => PredicateResult.False()
     };
-    options.CircuitBreaker.FailureRatio = 0.5;
-    options.CircuitBreaker.MinimumThroughput = 10;
-    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
-    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(60);
+    options.CircuitBreaker.FailureRatio = graphSettings.CircuitBreaker.FailureRatio;
+    options.CircuitBreaker.MinimumThroughput = graphSettings.CircuitBreaker.MinimumThroughput;
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(graphSettings.CircuitBreaker.SamplingDurationSeconds);
+    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(graphSettings.CircuitBreaker.BreakDurationSeconds);
 
-    // Timeout
-    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
-    
+    // Timeout z konfiguracji
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(graphSettings.Timeout.TotalRequestTimeoutSeconds);
 });
 
-// HttpClient dla zewnętrznych API
+// HttpClient dla zewnętrznych API z konfiguracji
+var externalSettings = applicationConfig.ModernHttpResilience.ExternalApis;
 builder.Services.AddHttpClient("ExternalApis")
 .AddStandardResilienceHandler(options =>
 {
-    options.Retry.MaxRetryAttempts = 2;
-    options.Retry.Delay = TimeSpan.FromSeconds(2);
-    options.CircuitBreaker.FailureRatio = 0.7;
-    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
-    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
+    options.Retry.MaxRetryAttempts = externalSettings.Retry.MaxAttempts;
+    options.Retry.Delay = TimeSpan.FromSeconds(externalSettings.Retry.BaseDelaySeconds);
+    options.CircuitBreaker.FailureRatio = externalSettings.CircuitBreaker.FailureRatio;
+    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(externalSettings.CircuitBreaker.BreakDurationSeconds);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(externalSettings.Timeout.TotalRequestTimeoutSeconds);
 });
 
 // Rejestracja nowoczesnych serwisów HTTP
@@ -352,15 +375,15 @@ builder.Services.AddSingleton<ModernCircuitBreaker>(provider =>
 // IConfidentialClientApplication dla TokenManager
 builder.Services.AddScoped<IConfidentialClientApplication>(provider =>
 {
-    var authority = $"{oauthApiConfig.AzureAd.Instance?.TrimEnd('/')}/{oauthApiConfig.AzureAd.TenantId}";
+    var authority = $"{azureAdConfig.Instance?.TrimEnd('/')}/{azureAdConfig.TenantId}";
     var logger = provider.GetRequiredService<ILogger<Program>>();
     logger.LogInformation("Konfiguracja IConfidentialClientApplication: ClientId='{ApiAppClientId}', Authority='{Authority}', ClientSecret is set: {IsSecretSet}",
-        oauthApiConfig.AzureAd.ClientId,
+        azureAdConfig.Api.ClientId,
         authority,
-        !string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.ClientSecret));
+        !string.IsNullOrWhiteSpace(azureAdConfig.Api.ClientSecret));
      
-    return ConfidentialClientApplicationBuilder.Create(oauthApiConfig.AzureAd.ClientId)
-        .WithClientSecret(oauthApiConfig.AzureAd.ClientSecret)
+    return ConfidentialClientApplicationBuilder.Create(azureAdConfig.Api.ClientId)
+        .WithClientSecret(azureAdConfig.Api.ClientSecret)
         .WithAuthority(new Uri(authority))
         .Build();
 });
@@ -398,16 +421,16 @@ builder.Services.AddCors(options => {
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = $"{oauthApiConfig.AzureAd.Instance?.TrimEnd('/')}/{oauthApiConfig.AzureAd.TenantId}/v2.0";
-        options.Audience = oauthApiConfig.AzureAd.Audience;
+        options.Authority = $"{azureAdConfig.Instance?.TrimEnd('/')}/{azureAdConfig.TenantId}/v2.0";
+        options.Audience = azureAdConfig.Api.Audience;
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidIssuers = new[]
             {
-                $"{oauthApiConfig.AzureAd.Instance?.TrimEnd('/')}/{oauthApiConfig.AzureAd.TenantId}/v2.0",
-                $"https://sts.windows.net/{oauthApiConfig.AzureAd.TenantId}/"
+                $"{azureAdConfig.Instance?.TrimEnd('/')}/{azureAdConfig.TenantId}/v2.0",
+                $"https://sts.windows.net/{azureAdConfig.TenantId}/"
             },
             ValidateAudience = true,
             ValidateLifetime = true,
