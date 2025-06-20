@@ -75,16 +75,56 @@ namespace TeamsManager.UI.Services
                     return null;
                 }
                 
-                _logger.LogInformation("Tworzenie MSAL PublicClientApplication z rzeczywistą konfiguracją: ClientId={ClientId}, TenantId={TenantId}",
-                    azureConfig.Ui.ClientId, azureConfig.TenantId);
+                // Załaduj ustawienia logowania
+                var loginSettings = await _configurationManager.LoadLoginSettingsAsync();
+                bool useWindowsHello = loginSettings?.UseWindowsHello ?? true;
+                bool useBroker = loginSettings?.UseBroker ?? true;
+                
+                _logger.LogInformation("Tworzenie MSAL PublicClientApplication z rzeczywistą konfiguracją: ClientId={ClientId}, TenantId={TenantId}, WindowsHello={WindowsHello}",
+                    azureConfig.Ui.ClientId, azureConfig.TenantId, useWindowsHello);
                 
                 var authority = $"https://login.microsoftonline.com/{azureConfig.TenantId}";
                 
-                return PublicClientApplicationBuilder
+                var builder = PublicClientApplicationBuilder
                     .Create(azureConfig.Ui.ClientId)
-                    .WithAuthority(new Uri(authority))
-                    .WithRedirectUri("http://localhost")
-                    .Build();
+                    .WithAuthority(new Uri(authority));
+                
+                // Konfiguracja Windows Hello/WAM
+                if (useWindowsHello && useBroker)
+                {
+                    _logger.LogInformation("✅ Włączam Windows Hello/WAM Broker");
+                    
+                    builder = builder
+                        .WithBroker(brokerOptions: new BrokerOptions(BrokerOptions.OperatingSystems.Windows)
+                        {
+                            Title = "TeamsManager - Bezpieczne logowanie",
+                            ListOperatingSystemAccounts = true
+                        })
+                        .WithRedirectUri("ms-appx-web://microsoft.aad.brokerplugin/" + azureConfig.Ui.ClientId);
+                }
+                else
+                {
+                    _logger.LogInformation("⚠️ Windows Hello wyłączone - używam podstawowego redirect URI");
+                    builder = builder.WithRedirectUri("http://localhost");
+                }
+                
+                var pca = builder.Build();
+                
+                // Włącz cache tokenów (bezpieczne przechowywanie)
+                if (useBroker)
+                {
+                    try
+                    {
+                        await MsalCacheHelper.EnableTokenCacheSerializationAsync(pca, _logger);
+                        _logger.LogInformation("✅ MSAL Token Cache włączony");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "⚠️ Nie można włączyć MSAL Token Cache - tokeny nie będą cache'owane");
+                    }
+                }
+                
+                return pca;
             }
             catch (Exception ex)
             {

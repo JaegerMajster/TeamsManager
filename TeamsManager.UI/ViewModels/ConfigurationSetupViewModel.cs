@@ -247,8 +247,7 @@ namespace TeamsManager.UI.ViewModels
                     _uiClientId = azureConfig.Ui.ClientId ?? string.Empty;
                     _apiClientId = azureConfig.Api.ClientId ?? string.Empty;
                     _tenantId = azureConfig.TenantId ?? string.Empty;
-                    // ClientSecret celowo nie wczytujemy ze względów bezpieczeństwa
-                    _clientSecret = string.Empty;
+                    _clientSecret = azureConfig.Api.ClientSecret ?? string.Empty;
                     _audience = azureConfig.Api.Audience ?? string.Empty;
                     
                     // Powiadom UI o zmianie wartości
