@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.ViewModels;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.ViewModels
 {
@@ -54,7 +55,6 @@ namespace TeamsManager.UI.ViewModels
             ValidateCommand = new AsyncRelayCommand(ValidateConfigurationAsync);
             TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
             ShowConfigCommand = new AsyncRelayCommand(ShowConfigurationAsync);
-            FixEncryptionCommand = new AsyncRelayCommand(FixEncryptionAsync);
 
             _ = Task.Run(LoadConfigurationAsync);
         }
@@ -211,7 +211,6 @@ namespace TeamsManager.UI.ViewModels
         public ICommand ValidateCommand { get; }
         public ICommand TestConnectionCommand { get; }
         public ICommand ShowConfigCommand { get; }
-        public ICommand FixEncryptionCommand { get; }
 
         #endregion
 
@@ -295,26 +294,17 @@ namespace TeamsManager.UI.ViewModels
 
         private async Task SaveConfigurationAsync()
         {
-            _logger.LogInformation("🔘 PRZYCISK ZAPISZ - użytkownik wcisnął przycisk ZAPISZ");
+            _logger.LogInformation("Użytkownik wcisnął przycisk ZAPISZ");
             
             try
             {
                 IsLoading = true;
                 StatusMessage = "Zapisywanie konfiguracji...";
                 
-                _logger.LogInformation("🔘 ZAPISZ - rozpoczęcie zapisywania konfiguracji");
-                _logger.LogInformation("💾 DANE Z FORMULARZA:");
-                _logger.LogInformation($"💾   UI Client ID: '{UiClientId}' ({(string.IsNullOrWhiteSpace(UiClientId) ? "PUSTY" : "WYPEŁNIONY")})");
-                _logger.LogInformation($"💾   API Client ID: '{ApiClientId}' ({(string.IsNullOrWhiteSpace(ApiClientId) ? "PUSTY" : "WYPEŁNIONY")})");
-                _logger.LogInformation($"💾   Tenant ID: '{TenantId}' ({(string.IsNullOrWhiteSpace(TenantId) ? "PUSTY" : "WYPEŁNIONY")})");
-                _logger.LogInformation($"💾   Client Secret: {(string.IsNullOrWhiteSpace(ClientSecret) ? "PUSTY" : $"WYPEŁNIONY ({ClientSecret.Length} znaków)")}");
-                _logger.LogInformation($"💾   Audience: '{Audience}' ({(string.IsNullOrWhiteSpace(Audience) ? "PUSTY" : "WYPEŁNIONY")})");
-                _logger.LogInformation($"💾   Application Name: '{ApplicationName}'");
-                _logger.LogInformation($"💾   Environment: '{Environment}'");
-                _logger.LogInformation($"💾   API Base URL: '{ApiBaseUrl}'");
+                _logger.LogInformation("Rozpoczęcie zapisywania konfiguracji");
                 
                 // ZAPISUJEMY TYLKO NIEPUSTE POLA Z FORMULARZA
-                _logger.LogInformation("💾 Tworzenie konfiguracji z niepustych pól formularza...");
+                _logger.LogInformation("Analiza pól formularza...");
 
                 // Sprawdź które pola Azure AD są wypełnione
                 bool hasAzureAdData = !string.IsNullOrWhiteSpace(UiClientId) || 
@@ -326,7 +316,7 @@ namespace TeamsManager.UI.ViewModels
                 AzureAdConfiguration? azureConfig = null;
                 if (hasAzureAdData)
                 {
-                    _logger.LogInformation("💾 Znaleziono wypełnione pola Azure AD - tworzę konfigurację...");
+                    _logger.LogInformation("Znaleziono wypełnione pola Azure AD - tworzę konfigurację");
                     
                     azureConfig = new AzureAdConfiguration();
                     
@@ -334,7 +324,7 @@ namespace TeamsManager.UI.ViewModels
                     if (!string.IsNullOrWhiteSpace(TenantId))
                     {
                         azureConfig.TenantId = TenantId;
-                        _logger.LogInformation($"💾   ✅ TenantId: '{TenantId}'");
+                        _logger.LogInformation("Ustawiono TenantId");
                     }
                     
                     // UI Client Settings - tylko jeśli UiClientId jest wypełnione
@@ -345,7 +335,7 @@ namespace TeamsManager.UI.ViewModels
                             ClientId = UiClientId,
                             RedirectUri = "http://localhost" // domyślna wartość
                         };
-                        _logger.LogInformation($"💾   ✅ UI ClientId: '{UiClientId}'");
+                        _logger.LogInformation("Ustawiono UI ClientId");
                     }
                     
                     // API Client Settings - tylko jeśli któreś z pól API jest wypełnione
@@ -356,25 +346,25 @@ namespace TeamsManager.UI.ViewModels
                         if (!string.IsNullOrWhiteSpace(ApiClientId))
                         {
                             azureConfig.Api.ClientId = ApiClientId;
-                            _logger.LogInformation($"💾   ✅ API ClientId: '{ApiClientId}'");
+                            _logger.LogInformation("Ustawiono API ClientId");
                         }
                         
                         if (!string.IsNullOrWhiteSpace(ClientSecret))
                         {
                             azureConfig.Api.ClientSecret = ClientSecret;
-                            _logger.LogInformation($"💾   ✅ ClientSecret: USTAWIONY ({ClientSecret.Length} znaków)");
+                            _logger.LogInformation("Ustawiono ClientSecret");
                         }
                         
                         if (!string.IsNullOrWhiteSpace(Audience))
                         {
                             azureConfig.Api.Audience = Audience;
-                            _logger.LogInformation($"💾   ✅ Audience: '{Audience}'");
+                            _logger.LogInformation("Ustawiono Audience");
                         }
                     }
                 }
                 else
                 {
-                    _logger.LogInformation("💾 ⚠️ Wszystkie pola Azure AD są puste - pomijam zapis Azure AD Configuration");
+                    _logger.LogInformation("Wszystkie pola Azure AD są puste - pomijam zapis Azure AD Configuration");
                 }
 
                 // Sprawdź które pola Application są wypełnione (nie domyślne)
@@ -387,7 +377,7 @@ namespace TeamsManager.UI.ViewModels
                 ApplicationConfiguration? appConfig = null;
                 if (hasAppData)
                 {
-                    _logger.LogInformation("💾 Znaleziono wypełnione pola Application - tworzę konfigurację...");
+                    _logger.LogInformation("Znaleziono wypełnione pola Application - tworzę konfigurację");
                     
                     appConfig = new ApplicationConfiguration();
                     
@@ -395,7 +385,7 @@ namespace TeamsManager.UI.ViewModels
                     if (!string.IsNullOrWhiteSpace(Environment) && Environment != "Production")
                     {
                         appConfig.Environment = Environment;
-                        _logger.LogInformation($"💾   ✅ Environment: '{Environment}' (różne od domyślnego 'Production')");
+                        _logger.LogInformation("Ustawiono Environment (różne od domyślnego)");
                     }
                     
                     // Application Settings - tylko jeśli któreś pole jest różne od domyślnego
@@ -407,13 +397,13 @@ namespace TeamsManager.UI.ViewModels
                         if (!string.IsNullOrWhiteSpace(ApplicationName) && ApplicationName != "TeamsManager")
                         {
                             appConfig.Application.Name = ApplicationName;
-                            _logger.LogInformation($"💾   ✅ Application Name: '{ApplicationName}' (różne od domyślnego 'TeamsManager')");
+                            _logger.LogInformation("Ustawiono Application Name (różne od domyślnego)");
                         }
                         
                         if (!string.IsNullOrWhiteSpace(Version) && Version != "1.0.0")
                         {
                             appConfig.Application.Version = Version;
-                            _logger.LogInformation($"💾   ✅ Version: '{Version}' (różne od domyślnego '1.0.0')");
+                            _logger.LogInformation("Ustawiono Version (różne od domyślnego)");
                         }
                     }
                     
@@ -426,69 +416,42 @@ namespace TeamsManager.UI.ViewModels
                         if (!string.IsNullOrWhiteSpace(ApiBaseUrl) && ApiBaseUrl != "https://api.teamsmanager.edu.pl")
                         {
                             appConfig.Api.BaseUrl = ApiBaseUrl;
-                            _logger.LogInformation($"💾   ✅ API BaseUrl: '{ApiBaseUrl}' (różne od domyślnego)");
+                            _logger.LogInformation("Ustawiono API BaseUrl (różne od domyślnego)");
                         }
                         
                         if (ApiTimeout != 30)
                         {
                             appConfig.Api.Timeout = ApiTimeout;
-                            _logger.LogInformation($"💾   ✅ API Timeout: {ApiTimeout}s (różne od domyślnego 30s)");
+                            _logger.LogInformation("Ustawiono API Timeout (różne od domyślnego)");
                         }
                     }
                 }
                 else
                 {
-                    _logger.LogInformation("💾 ⚠️ Wszystkie pola Application mają wartości domyślne - pomijam zapis Application Configuration");
-                }
-
-                _logger.LogInformation("💾 FINALNE KONFIGURACJE DO ZAPISU (TYLKO NIEPUSTE POLA):");
-                
-                if (azureConfig != null)
-                {
-                    _logger.LogInformation($"💾 Azure AD - TenantId: '{azureConfig.TenantId ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Azure AD - UiClientId: '{azureConfig.Ui?.ClientId ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Azure AD - ApiClientId: '{azureConfig.Api?.ClientId ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Azure AD - ClientSecret: {(string.IsNullOrWhiteSpace(azureConfig.Api?.ClientSecret) ? "[BRAK]" : $"USTAWIONY ({azureConfig.Api.ClientSecret.Length} znaków)")}");
-                    _logger.LogInformation($"💾 Azure AD - Audience: '{azureConfig.Api?.Audience ?? "[BRAK]"}'");
-                }
-                else
-                {
-                    _logger.LogInformation("💾 Azure AD - BRAK DANYCH DO ZAPISU");
-                }
-                
-                if (appConfig != null)
-                {
-                    _logger.LogInformation($"💾 Application - Name: '{appConfig.Application?.Name ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Application - Environment: '{appConfig.Environment ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Application - API BaseUrl: '{appConfig.Api?.BaseUrl ?? "[BRAK]"}'");
-                    _logger.LogInformation($"💾 Application - API Timeout: {appConfig.Api?.Timeout ?? 0}s");
-                }
-                else
-                {
-                    _logger.LogInformation("💾 Application - BRAK DANYCH DO ZAPISU");
+                    _logger.LogInformation("Wszystkie pola Application mają wartości domyślne - pomijam zapis Application Configuration");
                 }
 
                 // Zapisz konfiguracje tylko jeśli mają dane
                 if (azureConfig != null)
                 {
-                    _logger.LogInformation("💾 Zapisywanie Azure AD Configuration...");
+                    _logger.LogInformation("Zapisywanie Azure AD Configuration");
                     await _configManager.SaveAzureAdConfigurationAsync(azureConfig);
-                    _logger.LogInformation("💾 ✅ Azure AD Configuration zapisana");
+                    _logger.LogInformation("Azure AD Configuration zapisana pomyślnie");
                 }
                 else
                 {
-                    _logger.LogInformation("💾 ⚠️ Pomijam zapis Azure AD Configuration - brak danych");
+                    _logger.LogInformation("Pomijam zapis Azure AD Configuration - brak danych do zapisu");
                 }
                 
                 if (appConfig != null)
                 {
-                    _logger.LogInformation("💾 Zapisywanie Application Configuration...");
+                    _logger.LogInformation("Zapisywanie Application Configuration");
                     await _configManager.SaveApplicationConfigurationAsync(appConfig);
-                    _logger.LogInformation("💾 ✅ Application Configuration zapisana");
+                    _logger.LogInformation("Application Configuration zapisana pomyślnie");
                 }
                 else
                 {
-                    _logger.LogInformation("💾 ⚠️ Pomijam zapis Application Configuration - brak danych");
+                    _logger.LogInformation("Pomijam zapis Application Configuration - brak danych do zapisu");
                 }
 
                 HasChanges = false;
@@ -497,86 +460,70 @@ namespace TeamsManager.UI.ViewModels
                 if (azureConfig != null && appConfig != null)
                 {
                     StatusMessage = "Konfiguracja zapisana pomyślnie";
-                    _logger.LogInformation("💾 ✅ WSZYSTKIE KONFIGURACJE ZOSTAŁY ZAPISANE POMYŚLNIE");
+                    _logger.LogInformation("Wszystkie konfiguracje zostały zapisane pomyślnie");
                 }
                 else if (azureConfig != null)
                 {
                     StatusMessage = "Konfiguracja Azure AD zapisana pomyślnie";
-                    _logger.LogInformation("💾 ✅ KONFIGURACJA AZURE AD ZOSTAŁA ZAPISANA POMYŚLNIE");
+                    _logger.LogInformation("Konfiguracja Azure AD zapisana pomyślnie");
                 }
                 else if (appConfig != null)
                 {
                     StatusMessage = "Konfiguracja aplikacji zapisana pomyślnie";
-                    _logger.LogInformation("💾 ✅ KONFIGURACJA APLIKACJI ZOSTAŁA ZAPISANA POMYŚLNIE");
+                    _logger.LogInformation("Konfiguracja aplikacji zapisana pomyślnie");
                 }
                 else
                 {
                     StatusMessage = "Brak danych do zapisu - wszystkie pola są puste";
-                    _logger.LogInformation("💾 ⚠️ BRAK DANYCH DO ZAPISU - WSZYSTKIE POLA SĄ PUSTE");
+                    _logger.LogInformation("Brak danych do zapisu - wszystkie pola są puste lub mają wartości domyślne");
                 }
                 
-                // Walidacja po zapisie - sprawdź czy konfiguracja jest kompletna
-                _logger.LogInformation("💾 Uruchamiam walidację po zapisie...");
+                // Walidacja po zapisie
                 await ValidateConfigurationAsync();
                 
-                // ZAWSZE ZAMYKAMY OKNO PO ZAPISIE - niezależnie od kompletności
-                // Użytkownik może zapisać częściową konfigurację i dokończyć później
-                _logger.LogInformation("💾 Konfiguracja zapisana - zamykam okno konfiguracji");
-                _logger.LogInformation($"💾 Status kompletności: {(ValidationResult.IsValid ? "KOMPLETNA" : "NIEKOMPLETNA")}");
-                
+                // Sprawdź czy konfiguracja jest teraz kompletna
                 if (ValidationResult.IsValid)
                 {
-                    _logger.LogInformation("💾 ✅ Konfiguracja jest kompletna - aplikacja może działać normalnie");
-                    StatusMessage = "Konfiguracja kompletna i zapisana. Uruchamiam aplikację...";
+                    _logger.LogInformation("✅ Konfiguracja jest kompletna - zamykam okno i kontynuuję do głównej aplikacji");
+                    
+                    // Opóźnienie żeby użytkownik zobaczył komunikat o sukcesie
+                    await Task.Delay(1000);
+                    
+                    // Zamknij okno konfiguracji
+                    RequestClose?.Invoke();
                 }
                 else
                 {
-                    _logger.LogInformation($"💾 ⚠️ Konfiguracja niekompletna - brakuje {ValidationResult.MissingConfigurations.Count} ustawień");
-                    StatusMessage = $"Konfiguracja zapisana. {ValidationResult.Summary}";
+                    _logger.LogInformation("⚠️ Konfiguracja nadal niekompletna - pozostawiam okno otwarte");
+                    StatusMessage = "Konfiguracja zapisana, ale nadal niekompletna - uzupełnij brakujące pola";
                 }
-                
-                // Krótkie opóźnienie aby użytkownik mógł zobaczyć status
-                await Task.Delay(1500);
-                
-                _logger.LogInformation("💾 Zamykam okno konfiguracji...");
-                RequestClose?.Invoke();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔘 ZAPISZ - KRYTYCZNY BŁĄD podczas zapisywania konfiguracji");
-                _logger.LogError($"💾 ❌ Szczegóły błędu: {ex.Message}");
-                _logger.LogError($"💾 ❌ Stack trace: {ex.StackTrace}");
-                
-                StatusMessage = $"Błąd zapisu: {ex.Message}";
-                throw;
+                _logger.LogError(ex, "Błąd podczas zapisywania konfiguracji");
+                StatusMessage = $"Błąd podczas zapisywania: {ex.Message}";
             }
             finally
             {
                 IsLoading = false;
-                _logger.LogInformation("🔘 ZAPISZ - zakończenie operacji zapisywania");
             }
         }
 
         private async Task ValidateConfigurationAsync()
         {
-            _logger.LogInformation("🔘 PRZYCISK WALIDUJ - użytkownik wcisnął przycisk WALIDUJ");
+            _logger.LogInformation("Użytkownik wcisnął przycisk WALIDUJ");
             
             try
             {
                 IsLoading = true;
                 StatusMessage = "Walidacja konfiguracji...";
                 
-                _logger.LogInformation("🔘 WALIDUJ - rozpoczęcie walidacji konfiguracji");
+                _logger.LogInformation("Rozpoczęcie walidacji konfiguracji");
                 
                 var result = new ValidationResult();
                 
-                // WALIDACJA TYLKO DANYCH Z FORMULARZA - bez ładowania plików
-                _logger.LogInformation("📋 WALIDACJA DANYCH Z FORMULARZA:");
-                _logger.LogInformation($"📋 UI Client ID: '{UiClientId}' ({(string.IsNullOrWhiteSpace(UiClientId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
-                _logger.LogInformation($"📋 API Client ID: '{ApiClientId}' ({(string.IsNullOrWhiteSpace(ApiClientId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
-                _logger.LogInformation($"📋 Tenant ID: '{TenantId}' ({(string.IsNullOrWhiteSpace(TenantId) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
-                _logger.LogInformation($"📋 Client Secret: {(string.IsNullOrWhiteSpace(ClientSecret) ? "❌ PUSTY" : $"✅ WYPEŁNIONY ({ClientSecret.Length} znaków)")}");
-                _logger.LogInformation($"📋 Audience: '{Audience}' ({(string.IsNullOrWhiteSpace(Audience) ? "❌ PUSTY" : "✅ WYPEŁNIONY")})");
+                // Walidacja danych z formularza
+                _logger.LogInformation("Sprawdzanie wypełnienia pól formularza");
 
                 // Walidacja Azure AD - sprawdź tylko dane z formularza
                 if (string.IsNullOrWhiteSpace(UiClientId))
@@ -590,13 +537,7 @@ namespace TeamsManager.UI.ViewModels
                 if (string.IsNullOrWhiteSpace(ClientSecret))
                     result.MissingConfigurations.Add("Azure AD: Client Secret nie jest ustawiony");
 
-                // LOGOWANIE STANU APLIKACJI
-                _logger.LogInformation("📋 WALIDACJA POLA APLIKACJI:");
-                _logger.LogInformation($"📋 Nazwa aplikacji: '{ApplicationName}'");
-                _logger.LogInformation($"📋 Wersja: '{Version}'");
-                _logger.LogInformation($"📋 Środowisko: '{Environment}'");
-                _logger.LogInformation($"📋 API Base URL: '{ApiBaseUrl}'");
-                _logger.LogInformation($"📋 API Timeout: {ApiTimeout}s");
+                _logger.LogInformation("Sprawdzanie pól aplikacji");
 
                 // Ostrzeżenia aplikacji
                 if (Environment == "Production" && string.IsNullOrWhiteSpace(ApiBaseUrl))
@@ -608,108 +549,181 @@ namespace TeamsManager.UI.ViewModels
                 // Podsumowanie
                 if (!result.MissingConfigurations.Any() && !result.Warnings.Any())
                 {
-                    result.Summary = "✅ Konfiguracja jest kompletna i poprawna";
+                    result.Summary = "Konfiguracja jest kompletna i poprawna";
                     result.IsValid = true;
                 }
                 else if (!result.MissingConfigurations.Any())
                 {
-                    result.Summary = $"⚠️ Konfiguracja jest kompletna, ale zawiera {result.Warnings.Count} ostrzeżeń";
+                    result.Summary = $"Konfiguracja jest kompletna, ale zawiera {result.Warnings.Count} ostrzeżeń";
                     result.IsValid = true;
                 }
                 else
                 {
-                    result.Summary = $"❌ Konfiguracja niekompletna - brakuje {result.MissingConfigurations.Count} ustawień";
+                    result.Summary = $"Konfiguracja niekompletna - brakuje {result.MissingConfigurations.Count} ustawień";
                     result.IsValid = false;
                 }
 
-                // SZCZEGÓŁOWE LOGOWANIE WYNIKÓW WALIDACJI
-                _logger.LogInformation("📋 PODSUMOWANIE WALIDACJI:");
-                _logger.LogInformation($"📋 Status: {result.Summary}");
-                _logger.LogInformation($"📋 Czy konfiguracja jest ważna: {(result.IsValid ? "TAK" : "NIE")}");
-                
-                if (result.MissingConfigurations.Any())
-                {
-                    _logger.LogWarning($"📋 BRAKUJĄCE POLA ({result.MissingConfigurations.Count}):");
-                    foreach (var missing in result.MissingConfigurations)
-                    {
-                        _logger.LogWarning($"📋   ❌ {missing}");
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("📋 ✅ Wszystkie wymagane pola są wypełnione");
-                }
-                
-                if (result.Warnings.Any())
-                {
-                    _logger.LogInformation($"📋 OSTRZEŻENIA ({result.Warnings.Count}):");
-                    foreach (var warning in result.Warnings)
-                    {
-                        _logger.LogInformation($"📋   ⚠️ {warning}");
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("📋 ℹ️ Brak ostrzeżeń");
-                }
+                _logger.LogInformation("Walidacja zakończona - Status: {IsValid}", result.IsValid ? "Poprawna" : "Niepoprawna");
+                _logger.LogInformation("Brakujące pola: {MissingCount}, Ostrzeżenia: {WarningsCount}", 
+                    result.MissingConfigurations.Count, result.Warnings.Count);
 
                 ValidationResult = result;
                 await Task.CompletedTask;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔘 WALIDUJ - błąd podczas walidacji konfiguracji");
+                _logger.LogError(ex, "Błąd podczas walidacji konfiguracji");
                 throw;
             }
             finally
             {
                 IsLoading = false;
-                _logger.LogInformation("🔘 WALIDUJ - zakończenie operacji walidacji");
+                _logger.LogInformation("Zakończenie operacji walidacji");
             }
         }
 
         private async Task TestConnectionAsync()
         {
-            _logger.LogInformation("🔘 PRZYCISK TESTUJ - użytkownik wcisnął przycisk TESTUJ");
+            _logger.LogInformation("Użytkownik wcisnął przycisk TESTUJ");
             
             try
             {
                 IsLoading = true;
                 StatusMessage = "Testowanie połączenia...";
                 
-                _logger.LogInformation("🔘 TESTUJ - rozpoczęcie testowania połączenia");
+                _logger.LogInformation("Rozpoczęcie testowania połączenia");
                 
-                // Tutaj można dodać testy połączenia z Azure AD i API
-                await Task.Delay(2000); // Symulacja testu
-
-                StatusMessage = "Test połączenia zakończony pomyślnie";
+                var testResults = new List<string>();
+                
+                // Test 1: Sprawdź czy wszystkie pola są wypełnione
+                if (string.IsNullOrWhiteSpace(UiClientId) || 
+                    string.IsNullOrWhiteSpace(ApiClientId) || 
+                    string.IsNullOrWhiteSpace(TenantId) || 
+                    string.IsNullOrWhiteSpace(ClientSecret) || 
+                    string.IsNullOrWhiteSpace(Audience))
+                {
+                    testResults.Add("❌ Nie wszystkie pola są wypełnione - uzupełnij konfigurację przed testem");
+                }
+                else
+                {
+                    testResults.Add("✅ Wszystkie wymagane pola są wypełnione");
+                    
+                    // Test 2: Sprawdź format Tenant ID (GUID)
+                    if (Guid.TryParse(TenantId, out _))
+                    {
+                        testResults.Add("✅ Tenant ID ma poprawny format GUID");
+                    }
+                    else
+                    {
+                        testResults.Add("❌ Tenant ID nie ma poprawnego formatu GUID");
+                    }
+                    
+                    // Test 3: Sprawdź format Client ID (GUID)
+                    if (Guid.TryParse(UiClientId, out _) && Guid.TryParse(ApiClientId, out _))
+                    {
+                        testResults.Add("✅ Client ID mają poprawny format GUID");
+                    }
+                    else
+                    {
+                        testResults.Add("❌ Client ID nie mają poprawnego formatu GUID");
+                    }
+                    
+                    // Test 4: Sprawdź format Audience
+                    if (Audience.StartsWith("api://") && Audience.Contains(ApiClientId))
+                    {
+                        testResults.Add("✅ Audience ma poprawny format api://[API Client ID]");
+                    }
+                    else
+                    {
+                        testResults.Add("❌ Audience powinno mieć format api://[API Client ID]");
+                    }
+                    
+                    // Test 5: Sprawdź długość Client Secret
+                    if (ClientSecret.Length >= 32)
+                    {
+                        testResults.Add("✅ Client Secret ma odpowiednią długość");
+                    }
+                    else
+                    {
+                        testResults.Add("❌ Client Secret wydaje się za krótki (powinien mieć co najmniej 32 znaki)");
+                    }
+                    
+                    // Test 6: Symulacja próby połączenia z Microsoft Entra ID
+                    testResults.Add("🔄 Testowanie dostępności Microsoft Entra ID...");
+                    await Task.Delay(1000); // Symulacja testu
+                    
+                    try
+                    {
+                        // Sprawdź czy można dotrzeć do endpointu Microsoft
+                        var httpClient = new System.Net.Http.HttpClient();
+                        httpClient.Timeout = TimeSpan.FromSeconds(10);
+                        
+                        var response = await httpClient.GetAsync($"https://login.microsoftonline.com/{TenantId}/.well-known/openid-configuration");
+                        if (response.IsSuccessStatusCode)
+                        {
+                            testResults.Add("✅ Microsoft Entra ID endpoint jest dostępny");
+                        }
+                        else
+                        {
+                            testResults.Add($"❌ Microsoft Entra ID endpoint niedostępny (HTTP {response.StatusCode})");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        testResults.Add($"❌ Błąd połączenia z Microsoft Entra ID: {ex.Message}");
+                    }
+                }
+                
+                // Pokaż wyniki testów
+                var resultText = "=== WYNIKI TESTÓW POŁĄCZENIA ===\n\n" + string.Join("\n", testResults);
+                
+                if (testResults.Any(r => r.StartsWith("❌")))
+                {
+                    resultText += "\n\n⚠️ Znaleziono problemy z konfiguracją. Sprawdź powyższe błędy i popraw konfigurację.";
+                    StatusMessage = "Test połączenia - znaleziono problemy";
+                }
+                else
+                {
+                    resultText += "\n\n✅ Wszystkie testy przeszły pomyślnie! Konfiguracja wygląda poprawnie.";
+                    StatusMessage = "Test połączenia zakończony pomyślnie";
+                }
+                
+                System.Windows.MessageBox.Show(resultText, "Wyniki testów połączenia", 
+                    System.Windows.MessageBoxButton.OK, 
+                    testResults.Any(r => r.StartsWith("❌")) ? System.Windows.MessageBoxImage.Warning : System.Windows.MessageBoxImage.Information);
+                
+                _logger.LogInformation("Test połączenia zakończony");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔘 TESTUJ - błąd podczas testowania połączenia");
-                throw;
+                _logger.LogError(ex, "Błąd podczas testowania połączenia");
+                StatusMessage = $"Błąd testu: {ex.Message}";
+                
+                System.Windows.MessageBox.Show($"Błąd podczas testowania połączenia:\n\n{ex.Message}", 
+                    "Błąd testu połączenia", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Error);
             }
             finally
             {
                 IsLoading = false;
-                _logger.LogInformation("🔘 TESTUJ - zakończenie operacji testowania");
+                _logger.LogInformation("Zakończenie operacji testowania");
             }
         }
 
         private async Task ShowConfigurationAsync()
         {
-            _logger.LogInformation("🔘 PRZYCISK POKAŻ - użytkownik wcisnął przycisk POKAŻ");
+            _logger.LogInformation("Użytkownik wcisnął przycisk POKAŻ");
             
             try
             {
-                _logger.LogInformation("🔘 POKAŻ - rozpoczęcie wyświetlania konfiguracji");
+                _logger.LogInformation("Rozpoczęcie wyświetlania informacji o konfiguracji");
                 
                 IsLoading = true;
-                StatusMessage = "Odczytywanie konfiguracji...";
-                _logger.LogInformation("🔍 Rozpoczęcie odczytu konfiguracji");
+                StatusMessage = "Odczytywanie informacji o konfiguracji...";
 
                 // Przygotuj tekst do wyświetlenia
-                var configText = "=== KONFIGURACJA TEAMSMANAGER ===\n\n";
+                var configText = "=== INFORMACJE O KONFIGURACJI TEAMSMANAGER ===\n\n";
                 
                 // Informacje o plikach (zawsze sprawdzamy)
                 var configPath = System.IO.Path.Combine(
@@ -737,131 +751,79 @@ namespace TeamsManager.UI.ViewModels
                 }
                 configText += "\n\n";
 
-                // Próbuj załadować i odszyfrować konfiguracje
+                // Sprawdź czy pliki można odczytać
                 try
                 {
                     var azureConfig = await _configManager.LoadAzureAdConfigurationAsync();
                     var appConfig = await _configManager.LoadApplicationConfigurationAsync();
 
-                    // Azure AD Configuration
-                    configText += "🔐 AZURE AD CONFIGURATION:\n";
+                    configText += "📊 STATUS KONFIGURACJI:\n";
+                    configText += $"Azure AD Configuration: {(azureConfig != null ? "ZAŁADOWANA POMYŚLNIE" : "BŁĄD ODCZYTU")}\n";
+                    configText += $"Application Configuration: {(appConfig != null ? "ZAŁADOWANA POMYŚLNIE" : "BŁĄD ODCZYTU")}\n\n";
+                    
                     if (azureConfig != null)
                     {
-                        configText += $"Tenant ID: {azureConfig.TenantId ?? "[BRAK]"}\n";
-                        configText += $"UI Client ID: {azureConfig.Ui?.ClientId ?? "[BRAK]"}\n";
-                        configText += $"API Client ID: {azureConfig.Api?.ClientId ?? "[BRAK]"}\n";
-                        configText += $"Client Secret: {(string.IsNullOrEmpty(azureConfig.Api?.ClientSecret) ? "[BRAK]" : "[USTAWIONY - " + azureConfig.Api.ClientSecret.Length + " znaków]")}\n";
-                        configText += $"Audience: {azureConfig.Api?.Audience ?? "[BRAK]"}\n";
-                        configText += $"Redirect URI: {azureConfig.Ui?.RedirectUri ?? "[BRAK]"}\n";
-                    }
-                    else
-                    {
-                        configText += "[PLIK AZURE AD NIE ISTNIEJE LUB NIE MOŻNA GO ODSZYFROWAĆ]\n";
+                        var fieldsCount = 0;
+                        if (!string.IsNullOrEmpty(azureConfig.TenantId)) fieldsCount++;
+                        if (!string.IsNullOrEmpty(azureConfig.Ui?.ClientId)) fieldsCount++;
+                        if (!string.IsNullOrEmpty(azureConfig.Api?.ClientId)) fieldsCount++;
+                        if (!string.IsNullOrEmpty(azureConfig.Api?.ClientSecret)) fieldsCount++;
+                        if (!string.IsNullOrEmpty(azureConfig.Api?.Audience)) fieldsCount++;
+                        
+                        configText += $"🔐 Azure AD - wypełnione pola: {fieldsCount}/5\n";
+                        configText += $"   • Tenant ID: {(!string.IsNullOrEmpty(azureConfig.TenantId) ? "USTAWIONE" : "BRAK")}\n";
+                        configText += $"   • UI Client ID: {(!string.IsNullOrEmpty(azureConfig.Ui?.ClientId) ? "USTAWIONE" : "BRAK")}\n";
+                        configText += $"   • API Client ID: {(!string.IsNullOrEmpty(azureConfig.Api?.ClientId) ? "USTAWIONE" : "BRAK")}\n";
+                        configText += $"   • Client Secret: {(!string.IsNullOrEmpty(azureConfig.Api?.ClientSecret) ? "USTAWIONE" : "BRAK")}\n";
+                        configText += $"   • Audience: {(!string.IsNullOrEmpty(azureConfig.Api?.Audience) ? "USTAWIONE" : "BRAK")}\n\n";
                     }
                     
-                    configText += "\n⚙️ APPLICATION CONFIGURATION:\n";
                     if (appConfig != null)
                     {
-                        configText += $"Nazwa aplikacji: {appConfig.Application?.Name ?? "[BRAK]"}\n";
-                        configText += $"Wersja: {appConfig.Application?.Version ?? "[BRAK]"}\n";
-                        configText += $"Środowisko: {appConfig.Environment ?? "[BRAK]"}\n";
-                        configText += $"API Base URL: {appConfig.Api?.BaseUrl ?? "[BRAK]"}\n";
-                        configText += $"API Timeout: {appConfig.Api?.Timeout ?? 0} sekund\n";
-                    }
-                    else
-                    {
-                        configText += "[PLIK APPLICATION NIE ISTNIEJE]\n";
+                        configText += $"⚙️ Application Configuration:\n";
+                        configText += $"   • Environment: {(!string.IsNullOrEmpty(appConfig.Environment) ? appConfig.Environment : "DOMYŚLNE (Production)")}\n";
+                        configText += $"   • Application Name: {(appConfig.Application?.Name ?? "DOMYŚLNE (TeamsManager)")}\n";
+                        configText += $"   • Version: {(appConfig.Application?.Version ?? "DOMYŚLNE (1.0.0)")}\n";
+                        configText += $"   • API Base URL: {(appConfig.Api?.BaseUrl ?? "DOMYŚLNE")}\n";
+                        configText += $"   • API Timeout: {(appConfig.Api?.Timeout ?? 30)} sekund\n";
                     }
                 }
                 catch (Exception loadEx)
                 {
-                    _logger.LogError(loadEx, "🔍 Błąd podczas ładowania konfiguracji");
+                    _logger.LogError(loadEx, "Błąd podczas ładowania konfiguracji do wyświetlenia");
                     
                     configText += "❌ BŁĄD ODCZYTU KONFIGURACJI:\n";
                     configText += $"Szczegóły: {loadEx.Message}\n\n";
-                    
-                    // Spróbuj odczytać surowe pliki
-                    try
-                    {
-                        configText += "📄 SUROWA ZAWARTOŚĆ PLIKÓW:\n\n";
-                        
-                        if (System.IO.File.Exists(appFile))
-                        {
-                            configText += "application.json (niezaszyfrowany):\n";
-                            var appContent = await System.IO.File.ReadAllTextAsync(appFile);
-                            configText += appContent + "\n\n";
-                        }
-                        
-                        if (System.IO.File.Exists(azureAdFile))
-                        {
-                            configText += "azure-ad.json (zaszyfrowany - pierwsze 200 znaków):\n";
-                            var azureContent = await System.IO.File.ReadAllTextAsync(azureAdFile);
-                            configText += azureContent.Length > 200 ? azureContent.Substring(0, 200) + "..." : azureContent;
-                            configText += "\n\n";
-                        }
-                    }
-                    catch (Exception fileEx)
-                    {
-                        configText += $"Nie można odczytać plików: {fileEx.Message}\n";
-                    }
+                    configText += "💡 MOŻLIWE PRZYCZYNY:\n";
+                    configText += "• Konfiguracja może być zaszyfrowana dla innego użytkownika\n";
+                    configText += "• Plik konfiguracji może być uszkodzony\n";
+                    configText += "• Brak uprawnień do odczytu pliku\n\n";
+                    configText += "🔧 ROZWIĄZANIA:\n";
+                    configText += "• Spróbuj ponownie skonfigurować aplikację\n";
+                    configText += "• Skontaktuj się z administratorem systemu\n";
                 }
 
                 // Pokaż w MessageBox
-                System.Windows.MessageBox.Show(configText, "Zawartość konfiguracji TeamsManager", 
+                System.Windows.MessageBox.Show(configText, "Informacje o konfiguracji TeamsManager", 
                     System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                 
-                StatusMessage = "Konfiguracja wyświetlona";
-                _logger.LogInformation("🔍 Konfiguracja została wyświetlona użytkownikowi");
+                StatusMessage = "Informacje o konfiguracji wyświetlone";
+                _logger.LogInformation("Informacje o konfiguracji zostały wyświetlone użytkownikowi");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔘 POKAŻ - błąd podczas wyświetlania konfiguracji");
+                _logger.LogError(ex, "Błąd podczas wyświetlania informacji o konfiguracji");
                 StatusMessage = $"Błąd wyświetlania: {ex.Message}";
-                throw;
-            }
-            finally
-            {
-                IsLoading = false; // NAPRAWKA: Resetuj stan ładowania
-                _logger.LogInformation("🔘 POKAŻ - zakończenie operacji wyświetlania");
-            }
-        }
-
-        private async Task FixEncryptionAsync()
-        {
-            _logger.LogInformation("🔘 PRZYCISK NAPRAW - użytkownik wcisnął przycisk NAPRAW");
-            
-            try
-            {
-                IsLoading = true;
-                StatusMessage = "Naprawianie szyfrowania...";
                 
-                _logger.LogInformation("🔘 NAPRAW - rozpoczęcie naprawy szyfrowania");
-                
-                // Spróbuj naprawić szyfrowanie dla azure-ad.json
-                await _configManager.ReencryptForCurrentUserAsync("azure-ad");
-                
-                StatusMessage = "✅ Szyfrowanie naprawione pomyślnie!";
-                _logger.LogInformation("🔧 Szyfrowanie naprawione pomyślnie");
-                
-                // Przeładuj konfigurację po naprawie
-                await LoadConfigurationAsync();
-                
-                System.Windows.MessageBox.Show(
-                    "Szyfrowanie zostało naprawione dla bieżącego użytkownika.\n\n" +
-                    "Dane konfiguracyjne zostały ponownie zaszyfrowane i powinny być teraz dostępne.",
-                    "Naprawa szyfrowania",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "🔘 NAPRAW - błąd podczas naprawy szyfrowania");
-                throw;
+                System.Windows.MessageBox.Show($"Błąd podczas wyświetlania informacji o konfiguracji:\n\n{ex.Message}", 
+                    "Błąd", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Error);
             }
             finally
             {
                 IsLoading = false;
-                _logger.LogInformation("🔘 NAPRAW - zakończenie operacji naprawy");
+                _logger.LogInformation("Zakończenie operacji wyświetlania");
             }
         }
 

@@ -40,7 +40,6 @@ using TeamsManager.Core.Services.Synchronization;
 using TeamsManager.Core.Abstractions.Services.Synchronization;
 using TeamsManager.Core.Common;
 using Microsoft.Identity.Client;
-using Microsoft.Identity.Client.Broker;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Tools;
@@ -117,16 +116,38 @@ namespace TeamsManager.UI
             // DEBUG TOOL dla konfiguracji
             // services.AddTransient<TeamsManager.UI.Tools.ConfigurationDebugTool>();
             
-            // Rejestracja IPublicClientApplication dla MsalAuthService z Windows Hello/WAM - NOWY SYSTEM V2.0
-            // LAZY LOADING - konfiguracja ładowana dopiero gdy jest potrzebna
+            // Rejestracja IPublicClientApplication dla MsalAuthService - MINIMALNA STATYCZNA KONFIGURACJA
+            // BEZ DYNAMICZNEGO ŁADOWANIA - tylko placeholder dla testów
             services.AddSingleton<Microsoft.Identity.Client.IPublicClientApplication>(provider =>
             {
-                // Zwracamy placeholder - prawdziwa konfiguracja będzie ładowana w MsalAuthService
-                return Microsoft.Identity.Client.PublicClientApplicationBuilder
-                    .Create("placeholder-client-id")
-                    .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
-                    .WithRedirectUri("http://localhost")
-                    .Build();
+                try
+                {
+                    var logger = provider.GetRequiredService<ILogger<App>>();
+                    logger.LogInformation("Tworzenie prostego MSAL PublicClientApplication...");
+                    
+                    // MINIMALNA STATYCZNA KONFIGURACJA - bez żadnego dynamicznego ładowania
+                    var app = Microsoft.Identity.Client.PublicClientApplicationBuilder
+                        .Create("00000000-0000-0000-0000-000000000000") // Placeholder Client ID
+                        .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                        .WithRedirectUri("http://localhost")
+                        .Build();
+                    
+                    logger.LogInformation("MSAL PublicClientApplication utworzone pomyślnie");
+                    return app;
+                }
+                catch (Exception ex)
+                {
+                    // Ostatni fallback - logujemy do konsoli
+                    Console.WriteLine($"[MSAL] Błąd podczas tworzenia MSAL: {ex.Message}");
+                    Console.WriteLine($"[MSAL] Stack trace: {ex.StackTrace}");
+                    
+                    // Bardzo prosta konfiguracja bez żadnych dodatkowych funkcji
+                    return Microsoft.Identity.Client.PublicClientApplicationBuilder
+                        .Create("placeholder-client-id")
+                        .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                        .WithRedirectUri("http://localhost")
+                        .Build();
+                }
             });
             
             services.AddSingleton<IMsalAuthService, MsalAuthService>();
@@ -485,15 +506,74 @@ namespace TeamsManager.UI
             
             // Authentication Services
             
-            // IConfidentialClientApplication dla TokenManager - LAZY LOADING
+            // IConfidentialClientApplication dla TokenManager - RZECZYWISTA KONFIGURACJA z Azure AD V2.0
             services.AddScoped<Microsoft.Identity.Client.IConfidentialClientApplication>(provider =>
             {
-                // Zwracamy placeholder - prawdziwa konfiguracja będzie ładowana w TokenManager
-                return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
-                    .Create("placeholder-api-client-id")
-                    .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
-                    .WithClientSecret("placeholder-secret")
-                    .Build();
+                try
+                {
+                    var logger = provider.GetRequiredService<ILogger<App>>();
+                    logger.LogInformation("Tworzenie IConfidentialClientApplication z rzeczywistą konfiguracją Azure AD...");
+                    
+                    // Ładowanie konfiguracji Azure AD z systemu V2.0
+                    var configManager = provider.GetService<IConfigurationManagerV2>();
+                    if (configManager != null)
+                    {
+                        try
+                        {
+                            var azureAdConfig = configManager.GetConfigurationAsync<AzureAdConfiguration>("azure-ad").GetAwaiter().GetResult();
+                            
+                            if (azureAdConfig != null && 
+                                !string.IsNullOrWhiteSpace(azureAdConfig.Api.ClientId) && 
+                                !string.IsNullOrWhiteSpace(azureAdConfig.Api.ClientSecret) &&
+                                !string.IsNullOrWhiteSpace(azureAdConfig.TenantId))
+                            {
+                                var authority = $"https://login.microsoftonline.com/{azureAdConfig.TenantId}";
+                                
+                                logger.LogInformation("Konfiguracja IConfidentialClientApplication: ClientId='{ApiClientId}', Authority='{Authority}', ClientSecret is set: {IsSecretSet}",
+                                    azureAdConfig.Api.ClientId,
+                                    authority,
+                                    !string.IsNullOrWhiteSpace(azureAdConfig.Api.ClientSecret));
+                                
+                                return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                                    .Create(azureAdConfig.Api.ClientId)
+                                    .WithClientSecret(azureAdConfig.Api.ClientSecret)
+                                    .WithAuthority(new Uri(authority))
+                                    .Build();
+                            }
+                            else
+                            {
+                                logger.LogWarning("Konfiguracja Azure AD API niekompletna - brak ClientId, ClientSecret lub TenantId");
+                            }
+                        }
+                        catch (Exception configEx)
+                        {
+                            logger.LogWarning(configEx, "Błąd podczas ładowania konfiguracji Azure AD dla IConfidentialClientApplication");
+                        }
+                    }
+                    else
+                    {
+                        logger.LogWarning("ConfigurationManagerV2 niedostępny");
+                    }
+                    
+                    // Fallback do placeholder (dla przypadków gdy konfiguracja nie jest dostępna)
+                    logger.LogWarning("Używam placeholder IConfidentialClientApplication - OBO może nie działać");
+                    return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                        .Create("placeholder-api-client-id")
+                        .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                        .WithClientSecret("placeholder-secret")
+                        .Build();
+                }
+                catch (Exception ex)
+                {
+                    // Ostatni fallback
+                    Console.WriteLine($"[IConfidentialClientApplication] Krytyczny błąd: {ex.Message}");
+                    
+                    return Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                        .Create("placeholder-api-client-id")
+                        .WithAuthority(new Uri("https://login.microsoftonline.com/common"))
+                        .WithClientSecret("placeholder-secret")
+                        .Build();
+                }
             });
             
             // TokenManager - używa GraphApiConfiguration dla scope'ów
@@ -890,7 +970,7 @@ namespace TeamsManager.UI
                 logger.LogInformation("🏠 Tworzenie głównego okna aplikacji...");
                 
                 // Tworzenie MainShellWindow przez DI
-                var mainShellWindow = ServiceProvider.GetRequiredService<MainShellWindow>();
+                var mainShellWindow = ServiceProvider.GetRequiredService<Views.Shell.MainShellWindow>();
                 
                 System.Diagnostics.Debug.WriteLine($"=== APP: MainShellWindow utworzone: {mainShellWindow != null} ===");
                 Console.WriteLine($"=== APP: MainShellWindow utworzone: {mainShellWindow != null} ===");

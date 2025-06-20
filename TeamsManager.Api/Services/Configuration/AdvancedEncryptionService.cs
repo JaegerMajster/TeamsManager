@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using System.Linq;
 
-namespace TeamsManager.UI.Services.Configuration
+namespace TeamsManager.Api.Services.Configuration
 {
     public class AdvancedEncryptionService
     {

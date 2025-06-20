@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using TeamsManager.Core.Abstractions;
 using TeamsManager.UI.Models.Configuration;
 using TeamsManager.UI.Models;
@@ -52,6 +53,7 @@ namespace TeamsManager.UI.ViewModels
             LoginCommand = new RelayCommand(async _ => await LoginAsync(), _ => CanLogin);
             CancelCommand = new RelayCommand(_ => OnCancelRequested());
             ClearSettingsCommand = new RelayCommand(async _ => await ClearSettingsAsync());
+            OpenConfigurationCommand = new RelayCommand(async _ => await OpenConfigurationAsync());
             
             // Wczytaj zapisane ustawienia
             _ = LoadSavedSettingsAsync();
@@ -121,6 +123,7 @@ namespace TeamsManager.UI.ViewModels
         public ICommand LoginCommand { get; }
         public ICommand CancelCommand { get; }
         public ICommand ClearSettingsCommand { get; }
+        public ICommand OpenConfigurationCommand { get; }
 
         #endregion
 
@@ -275,6 +278,49 @@ namespace TeamsManager.UI.ViewModels
         private void OnCancelRequested()
         {
             CancelRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private async Task OpenConfigurationAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Użytkownik wcisnął przycisk 'Zmień konfigurację'");
+                
+                // Pobierz ConfigurationSetupWindow z DI
+                var configWindow = App.ServiceProvider.GetRequiredService<Views.ConfigurationSetupWindow>();
+                
+                // Wyśrodkuj okno względem okna logowania
+                var loginWindow = System.Windows.Application.Current.Windows.OfType<Views.LoginWindow>().FirstOrDefault();
+                if (loginWindow != null)
+                {
+                    configWindow.Owner = loginWindow;
+                    configWindow.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+                }
+                else
+                {
+                    configWindow.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen;
+                }
+                
+                // Pokaż okno konfiguracji jako dialog
+                var result = configWindow.ShowDialog();
+                
+                if (result == true)
+                {
+                    // Konfiguracja została zapisana - przeładuj dane logowania
+                    await LoadSavedSettingsAsync();
+                    StatusMessage = "Konfiguracja została zaktualizowana";
+                    _logger.LogInformation("Konfiguracja została zaktualizowana przez użytkownika");
+                }
+                else
+                {
+                    _logger.LogInformation("Użytkownik anulował zmianę konfiguracji");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas otwierania okna konfiguracji");
+                StatusMessage = "Błąd podczas otwierania konfiguracji";
+            }
         }
 
         #endregion

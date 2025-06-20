@@ -3,10 +3,10 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using TeamsManager.UI.Models.Configuration;
+using TeamsManager.Api.Models.Configuration;
 using System.IO.Compression;
 
-namespace TeamsManager.UI.Services.Configuration
+namespace TeamsManager.Api.Services.Configuration
 {
     public class ConfigurationManagerV2 : IConfigurationManagerV2, IDisposable
     {

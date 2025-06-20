@@ -15,17 +15,13 @@ namespace TeamsManager.UI.Views
         private readonly ILogger<ConfigurationSetupWindow> _logger;
 
         public ConfigurationSetupWindow(
-            IConfigurationManagerV2 configManager,
-            ConfigurationInitializer configInitializer,
+            ConfigurationSetupViewModel viewModel,
             ILogger<ConfigurationSetupWindow> logger)
         {
             InitializeComponent();
             
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            
-            // Utwórz ViewModel z zależnościami
-            var viewModelLogger = App.ServiceProvider.GetRequiredService<ILogger<ConfigurationSetupViewModel>>();
-            _viewModel = new ConfigurationSetupViewModel(configManager, configInitializer, viewModelLogger);
+            _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             
             DataContext = _viewModel;
             
@@ -174,14 +170,8 @@ namespace TeamsManager.UI.Views
         {
             try
             {
-                var configManager = serviceProvider.GetRequiredService<IConfigurationManagerV2>();
-                var configInitializer = serviceProvider.GetRequiredService<ConfigurationInitializer>();
-                var logger = serviceProvider.GetRequiredService<ILogger<ConfigurationSetupWindow>>();
-
-                var window = new ConfigurationSetupWindow(configManager, configInitializer, logger)
-                {
-                    Owner = owner
-                };
+                var window = serviceProvider.GetRequiredService<ConfigurationSetupWindow>();
+                window.Owner = owner;
 
                 return window.ShowDialog();
             }

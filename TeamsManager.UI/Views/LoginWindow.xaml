@@ -218,11 +218,30 @@
 
             <!-- Footer -->
             <Border Grid.Row="2" Background="#FF252526" CornerRadius="0,0,10,10">
-                <TextBlock Text="© 2025 Teams Manager" 
-                         HorizontalAlignment="Center"
-                         Foreground="#FF808080"
-                         FontSize="12"
-                         Margin="0,10"/>
+                <Grid Margin="20,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Grid.Column="0"
+                             Text="© 2025 Teams Manager" 
+                             HorizontalAlignment="Left"
+                             VerticalAlignment="Center"
+                             Foreground="#FF808080"
+                             FontSize="12"/>
+                    
+                    <!-- Przycisk konfiguracji -->
+                    <Button Grid.Column="1"
+                            Content="Zmień konfigurację"
+                            Command="{Binding OpenConfigurationCommand}"
+                            Style="{StaticResource MaterialDesignFlatButton}"
+                            Foreground="#FF4B50BE"
+                            FontSize="11"
+                            Height="28"
+                            Padding="8,0"
+                            ToolTip="Otwórz okno konfiguracji Azure AD"/>
+                </Grid>
             </Border>
         </Grid>
     </Border>

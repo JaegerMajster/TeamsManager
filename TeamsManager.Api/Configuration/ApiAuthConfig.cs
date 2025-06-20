@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using System;
+using System.IO;
+using System.Text.Json;
 
 namespace TeamsManager.Api.Configuration
 {
@@ -22,23 +24,71 @@ namespace TeamsManager.Api.Configuration
         }
 
         /// <summary>
-        /// Wczytuje konfigurację OAuth dla API z IConfiguration
-        /// (appsettings.json, User Secrets, zmienne środowiskowe).
+        /// Wczytuje konfigurację OAuth dla API z systemu konfiguracji V2.0 (zastępuje stary appsettings.json)
         /// </summary>
-        /// <param name="configuration">Dostawca konfiguracji ASP.NET Core.</param>
+        /// <param name="configuration">Dostawca konfiguracji ASP.NET Core (używany jako fallback).</param>
         /// <param name="skipValidation">Jeśli true, pomija walidację kompletności konfiguracji.</param>
         /// <returns>Skonfigurowany obiekt ApiOAuthConfig.</returns>
         public static ApiOAuthConfig LoadApiOAuthConfig(IConfiguration? configuration, bool skipValidation = false)
         {
-            System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wczytywanie konfiguracji z IConfiguration.");
+            System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wczytywanie konfiguracji z systemu V2.0.");
 
             var apiOAuthConfig = new ApiOAuthConfig();
 
-            // Jeśli configuration jest null, zwracamy domyślną konfigurację
-            if (configuration != null)
+            try
             {
-                // Bindowanie sekcji "AzureAd" do obiektu konfiguracji
-                configuration.GetSection("AzureAd").Bind(apiOAuthConfig.AzureAd);
+                // NOWE: Próba wczytania z systemu konfiguracji V2.0
+                var azureAdConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "TeamsManager", "config", "azure-ad.json");
+
+                if (File.Exists(azureAdConfigPath))
+                {
+                    System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Znaleziono plik konfiguracji V2.0: {azureAdConfigPath}");
+                    
+                    var jsonContent = File.ReadAllText(azureAdConfigPath);
+                    
+                    // Sprawdź czy plik jest zaszyfrowany (zawiera encryptedData, salt, iv)
+                    if (jsonContent.Contains("\"encryptedData\"") && jsonContent.Contains("\"salt\""))
+                    {
+                        System.Diagnostics.Debug.WriteLine("OAuth Config (API): Wykryto zaszyfrowaną konfigurację - używam fallback do appsettings.json");
+                        // Zaszyfrowane dane wymagają systemu V2.0 - użyj fallback
+                        LoadFromAppSettings(configuration, apiOAuthConfig);
+                    }
+                    else
+                    {
+                        // Niezaszyfrowane dane - możemy bezpośrednio odczytać
+                        var v2Config = JsonSerializer.Deserialize<V2AzureAdConfiguration>(jsonContent, new JsonSerializerOptions 
+                        { 
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase 
+                        });
+                        
+                        if (v2Config != null)
+                        {
+                            apiOAuthConfig.AzureAd.TenantId = v2Config.TenantId;
+                            apiOAuthConfig.AzureAd.ClientId = v2Config.Api?.ClientId;
+                            apiOAuthConfig.AzureAd.ClientSecret = v2Config.Api?.ClientSecret;
+                            apiOAuthConfig.AzureAd.Audience = v2Config.Api?.Audience;
+                            
+                            System.Diagnostics.Debug.WriteLine("OAuth Config (API): Pomyślnie załadowano z systemu V2.0");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine("OAuth Config (API): Błąd deserializacji V2.0 - używam fallback");
+                            LoadFromAppSettings(configuration, apiOAuthConfig);
+                        }
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("OAuth Config (API): Brak pliku V2.0 - używam fallback do appsettings.json");
+                    LoadFromAppSettings(configuration, apiOAuthConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"OAuth Config (API): Błąd podczas ładowania V2.0: {ex.Message} - używam fallback");
+                LoadFromAppSettings(configuration, apiOAuthConfig);
             }
 
             // Logowanie wczytanych wartości dla celów diagnostycznych
@@ -57,14 +107,38 @@ namespace TeamsManager.Api.Configuration
                  string.IsNullOrWhiteSpace(apiOAuthConfig.AzureAd.Audience)))
             {
                 var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
-                                   "nie zostały w pełni skonfigurowane dla API w appsettings.json lub User Secrets. " +
-                                   "Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie.";
+                                   "nie zostały w pełni skonfigurowane dla API w systemie V2.0 ani w appsettings.json. " +
+                                   "Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie. " +
+                                   "Skonfiguruj aplikację przez UI TeamsManager.";
                 Console.Error.WriteLine(errorMessage);
                 System.Diagnostics.Debug.WriteLine(errorMessage);
                 throw new InvalidOperationException(errorMessage);
             }
 
             return apiOAuthConfig;
+        }
+
+        private static void LoadFromAppSettings(IConfiguration? configuration, ApiOAuthConfig apiOAuthConfig)
+        {
+            // Fallback do starego sposobu ładowania z appsettings.json
+            if (configuration != null)
+            {
+                configuration.GetSection("AzureAd").Bind(apiOAuthConfig.AzureAd);
+            }
+        }
+
+        // Klasy pomocnicze do deserializacji konfiguracji V2.0
+        private class V2AzureAdConfiguration
+        {
+            public string TenantId { get; set; } = string.Empty;
+            public V2ApiClientSettings? Api { get; set; }
+        }
+
+        private class V2ApiClientSettings
+        {
+            public string ClientId { get; set; } = string.Empty;
+            public string ClientSecret { get; set; } = string.Empty;
+            public string Audience { get; set; } = string.Empty;
         }
     }
 }

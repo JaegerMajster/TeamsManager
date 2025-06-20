@@ -40,9 +40,25 @@ using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using TeamsManager.Core.Common;
 using TeamsManager.Application.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using TeamsManager.Api.Services.Configuration;
+using TeamsManager.Api.Models.Configuration;
+using TeamsManager.Api.HealthChecks;
+using TeamsManager.Api.Hubs;
+using TeamsManager.Api.Services;
+using TeamsManager.Api.Swagger;
+using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Abstractions.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Konfiguracja OAuth - ZINTEGROWANA z systemem V2.0
 var skipValidation = builder.Environment.EnvironmentName == "Test";
 var oauthApiConfig = ApiAuthConfig.LoadApiOAuthConfig(builder.Configuration, skipValidation);
 
@@ -52,8 +68,8 @@ if (string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.TenantId) ||
     string.IsNullOrWhiteSpace(oauthApiConfig.AzureAd.Audience))
 {
     var errorMessage = "[KRYTYCZNY BŁĄD KONFIGURACJI API] Kluczowe wartości AzureAd (TenantId, ClientId, ClientSecret, Audience) " +
-                       "nie zostały w pełni skonfigurowane. Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie. " +
-                       "Sprawdź appsettings.json, User Secrets lub inne źródła konfiguracji.";
+                       "nie zostały w pełni skonfigurowane w systemie V2.0 ani w appsettings.json. Uwierzytelnianie JWT i/lub przepływ On-Behalf-Of mogą nie działać poprawnie. " +
+                       "Skonfiguruj aplikację przez UI TeamsManager.";
     Console.Error.WriteLine(errorMessage);
 }
 
