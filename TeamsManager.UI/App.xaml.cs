@@ -44,6 +44,7 @@ using TeamsManager.UI.Services.Configuration;
 using TeamsManager.UI.Views.Common;
 using TeamsManager.UI.ViewModels.Dialogs;
 using TeamsManager.Core.Models.Configuration;
+using TeamsManager.UI.Models.Configuration;
 
 namespace TeamsManager.UI
 {
@@ -89,17 +90,15 @@ namespace TeamsManager.UI
 
             services.AddMemoryCache();
 
+            // ===== SCENTRALIZOWANE LOGOWANIE TEAMSMANAGER =====
+            // UI będzie zapisywać logi do plików z prefiksem "ui-"
             services.AddLogging(configure =>
             {
                 configure.AddDebug();
                 configure.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
                 
-                // Upewnij się, że katalog logs istnieje
-                var logsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TeamsManager", "logs");
-                Directory.CreateDirectory(logsPath);
-                
-                // Dodaj FileLoggerProvider do zapisywania logów do plików UTF-8
-                configure.AddProvider(new Services.Configuration.FileLoggerProvider(logsPath));
+                // Użyj scentralizowanego systemu logowania z Core
+                configure.AddTeamsManagerDiagnosticLogging("UI", enableDiagnostics: true);
             });
 
             // Konfiguracja ICurrentUserService
@@ -109,6 +108,12 @@ namespace TeamsManager.UI
             services.AddSingleton<AdvancedEncryptionService>();
             services.AddSingleton<IConfigurationManagerV2, ConfigurationManagerV2>();
             services.AddSingleton<ConfigurationInitializer>();
+            
+            // Nowy serwis konfiguracji API z automatycznym wykrywaniem
+            services.AddScoped<IApiConfigurationService, ApiConfigurationService>();
+            
+            // Embedded API Server
+            services.AddSingleton<EmbeddedApiServer>();
             
             // NOWY UNIWERSALNY SYSTEM KONFIGURACJI (Clean Architecture)
             services.AddSingleton<TeamsManager.Core.Abstractions.Services.IConfigurationService, 
@@ -195,10 +200,11 @@ namespace TeamsManager.UI
                 options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
             });
 
-            // HttpClient dla TeamsManager API (diagnostyka i monitoring)
-            services.AddHttpClient<ITeamsManagerApiService, TeamsManagerApiService>(client =>
+            // HttpClient dla TeamsManager API (diagnostyka i monitoring) - konfiguracja dynamiczna
+            services.AddHttpClient<ITeamsManagerApiService, TeamsManagerApiService>((serviceProvider, client) =>
             {
-                client.BaseAddress = new Uri("https://localhost:7037/");
+                // BaseAddress będzie ustawiony dynamicznie przez TeamsManagerApiService
+                // na podstawie rzeczywistego portu EmbeddedApiServer
                 client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager-UI/1.0");
                 client.Timeout = TimeSpan.FromSeconds(30);
             })
@@ -227,10 +233,11 @@ namespace TeamsManager.UI
                 options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(45);
             });
 
-            // HttpClient dla TeamsManager API (główne operacje CRUD)
-            services.AddHttpClient<TeamsManagerApiClient>(client =>
+            // HttpClient dla TeamsManager API (główne operacje CRUD) - konfiguracja dynamiczna
+            services.AddHttpClient<TeamsManagerApiClient>((serviceProvider, client) =>
             {
-                client.BaseAddress = new Uri("https://localhost:7037/api/");
+                // BaseAddress będzie ustawiony dynamicznie przez TeamsManagerApiClient
+                // na podstawie rzeczywistego portu EmbeddedApiServer
                 client.DefaultRequestHeaders.Add("User-Agent", "TeamsManager-UI/1.0");
                 client.Timeout = TimeSpan.FromSeconds(30);
             })
@@ -797,17 +804,12 @@ namespace TeamsManager.UI
             
             try
             {
-                // Najpierw skonfiguruj logger
+                // Najpierw skonfiguruj logger SCENTRALIZOWANY
                 var logsDirectory = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "TeamsManager", "logs");
                 
-                using var loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
-                {
-                    builder
-                        .SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug)
-                        .AddProvider(new Services.Configuration.FileLoggerProvider(logsDirectory));
-                });
+                using var loggerFactory = TeamsManager.Core.Extensions.LoggingExtensions.CreateTeamsManagerLoggerFactory("UI", true, logsDirectory);
                 
                 logger = loggerFactory.CreateLogger<App>();
                 
@@ -919,7 +921,7 @@ namespace TeamsManager.UI
                 
                 logger.LogInformation("✅ Konfiguracja jest kompletna - kontynuuję uruchomienie");
                 
-                // Przywróć normalny ShutdownMode i uruchom główne okno
+                // Przywróć normalny ShutdownMode przed uruchomieniem serwera
                 try
                 {
                     this.ShutdownMode = ShutdownMode.OnLastWindowClose;

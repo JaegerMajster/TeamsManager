@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models.Graph;
-using TeamsManager.Api.Extensions;
+// using TeamsManager.Api.Extensions; // Usunięte - nie potrzebne w embedded
 
-namespace TeamsManager.Api.Controllers
+namespace TeamsManager.UI.Controllers
 {
     /// <summary>
     /// Kontroler do diagnostyki systemu Graph API

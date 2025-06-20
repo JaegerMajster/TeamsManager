@@ -276,68 +276,41 @@ namespace TeamsManager.UI.Tools
             Console.WriteLine("🧪 TEST PEŁNEGO SYSTEMU SZYFROWANIA");
             Console.WriteLine("===================================");
             
-            ILogger<AdvancedEncryptionService>? logger = null;
-            
             try
             {
-                // Konfiguracja logowania do plików UTF-8
-                var logsDirectory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "TeamsManager", "logs");
-                
-                using var loggerFactory = LoggerFactory.Create(builder =>
-                {
-                    builder
-                        .SetMinimumLevel(LogLevel.Debug)
-                        .AddConsole()
-                        .AddProvider(new FileLoggerProvider(logsDirectory));
-                });
-                
-                logger = loggerFactory.CreateLogger<AdvancedEncryptionService>();
-                Console.WriteLine($"📁 Logi zapisywane do: {logsDirectory}");
-                Console.WriteLine();
-                
-                logger.LogInformation("🧪 TEST SZYFROWANIA TEAMSMANAGER - rozpoczęcie");
+                // Uproszczony test bez zaawansowanego logowania
+                Console.WriteLine("📁 Test szyfrowania bez zaawansowanego logowania");
                 
                 // Utworzenie prostego loggera konsoli
+                using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+                var logger = loggerFactory.CreateLogger<AdvancedEncryptionService>();
+                
                 var encryptionService = new AdvancedEncryptionService(logger);
                 
                 // Testowe dane
                 var testData = "{\"TenantId\":\"test-tenant\",\"ClientId\":\"test-client\"}";
                 Console.WriteLine($"🧪 Dane testowe: {testData}");
-                logger.LogInformation($"🧪 Dane testowe: {testData}");
                 
                 // Krok 1: Szyfrowanie
                 Console.WriteLine("🧪 Krok 1: Szyfrowanie...");
-                logger.LogInformation("🧪 Krok 1: Rozpoczynam szyfrowanie testowych danych");
-                
                 var encrypted = encryptionService.Encrypt(testData);
                 Console.WriteLine($"🧪 Zaszyfrowano: Data={encrypted.Data?.Length ?? 0} znaków, Salt={encrypted.Salt?.Length ?? 0}, IV={encrypted.IV?.Length ?? 0}");
-                logger.LogInformation($"🧪 Zaszyfrowano: Data={encrypted.Data?.Length ?? 0} znaków, Salt={encrypted.Salt?.Length ?? 0}, IV={encrypted.IV?.Length ?? 0}");
                 
                 // Krok 2: Natychmiastowe odszyfrowywanie
                 Console.WriteLine("🧪 Krok 2: Natychmiastowe odszyfrowywanie...");
-                logger.LogInformation("🧪 Krok 2: Rozpoczynam odszyfrowywanie testowych danych");
-                
                 var decrypted = encryptionService.Decrypt(encrypted);
                 Console.WriteLine($"🧪 Odszyfrowano: {decrypted}");
-                logger.LogInformation($"🧪 Odszyfrowano: {decrypted}");
                 
                 // Krok 3: Porównanie
                 if (testData == decrypted)
                 {
                     Console.WriteLine("🧪 ✅ TEST UDANY - dane są identyczne!");
-                    logger.LogInformation("🧪 ✅ TEST SZYFROWANIA UDANY - dane są identyczne!");
                 }
                 else
                 {
                     Console.WriteLine("🧪 ❌ TEST NIEUDANY - dane różnią się!");
                     Console.WriteLine($"🧪 Oryginał: {testData}");
                     Console.WriteLine($"🧪 Odszyfrowane: {decrypted}");
-                    
-                    logger.LogError("🧪 ❌ TEST SZYFROWANIA NIEUDANY - dane różnią się!");
-                    logger.LogError($"🧪 Oryginał: {testData}");
-                    logger.LogError($"🧪 Odszyfrowane: {decrypted}");
                 }
             }
             catch (Exception ex)
@@ -348,16 +321,9 @@ namespace TeamsManager.UI.Tools
                 {
                     Console.WriteLine($"🧪 Inner exception: {ex.InnerException.Message}");
                 }
-                
-                logger?.LogError(ex, "🧪 ❌ BŁĄD TESTU SZYFROWANIA");
-                if (ex.InnerException != null)
-                {
-                    logger?.LogError(ex.InnerException, "🧪 ❌ Inner exception testu szyfrowania");
-                }
             }
             
             Console.WriteLine("🧪 === KONIEC TESTU ===");
-            logger?.LogInformation("🧪 === KONIEC TESTU SZYFROWANIA ===");
         }
     }
 } 

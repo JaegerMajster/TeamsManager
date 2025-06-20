@@ -51,41 +51,59 @@ namespace TeamsManager.UI.Services
         private readonly HttpClient _httpClient;
         private readonly IMsalAuthService _authService;
         private readonly ILogger<TeamsManagerApiService> _logger;
+        private readonly EmbeddedApiServer _embeddedApiServer;
 
         public TeamsManagerApiService(
             HttpClient httpClient,
             IMsalAuthService authService,
-            ILogger<TeamsManagerApiService> logger)
+            ILogger<TeamsManagerApiService> logger,
+            EmbeddedApiServer embeddedApiServer)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _embeddedApiServer = embeddedApiServer ?? throw new ArgumentNullException(nameof(embeddedApiServer));
         }
 
         public async Task<GraphDiagnosticInfo?> GetGraphConnectionDiagnosticsAsync()
         {
             try
             {
-                _logger.LogDebug("[API-SERVICE] Pobieranie diagnostyki połączenia Graph API");
+                _logger.LogInformation("[DIAGNOSTIC] Rozpoczynam pobieranie diagnostyki połączenia Graph API");
+                _logger.LogInformation("[DIAGNOSTIC] HttpClient BaseAddress: {BaseAddress}", _httpClient.BaseAddress);
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/status");
+                
+                var url = BuildApiUrl("api/diagnostics/graph/status");
+                _logger.LogInformation("[DIAGNOSTIC] Wysyłam żądanie GET do: {Url}", url);
+                var response = await _httpClient.GetAsync(url);
+                
+                _logger.LogInformation("[DIAGNOSTIC] Otrzymano odpowiedź: StatusCode={StatusCode}, ReasonPhrase={ReasonPhrase}", 
+                    response.StatusCode, response.ReasonPhrase);
                 
                 if (response.IsSuccessStatusCode)
                 {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation("[DIAGNOSTIC] Zawartość odpowiedzi (pierwsze 500 znaków): {Content}", 
+                        responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
+                    
                     var result = await response.Content.ReadFromJsonAsync<GraphDiagnosticInfo>();
-                    _logger.LogDebug("[API-SERVICE] Diagnostyka połączenia Graph API pobrana pomyślnie");
+                    _logger.LogInformation("[DIAGNOSTIC] Diagnostyka Graph API pobrana pomyślnie. IsConnected={IsConnected}, Status={Status}", 
+                        result?.IsConnected, result?.Status);
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Błąd pobierania diagnostyki Graph API: {StatusCode}", response.StatusCode);
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning("[DIAGNOSTIC] Błąd pobierania diagnostyki Graph API: {StatusCode}, Content: {ErrorContent}", 
+                        response.StatusCode, errorContent);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania diagnostyki połączenia Graph API");
+                _logger.LogError(ex, "[DIAGNOSTIC] Wyjątek podczas pobierania diagnostyki połączenia Graph API. Message: {Message}, StackTrace: {StackTrace}", 
+                    ex.Message, ex.StackTrace);
                 return null;
             }
         }
@@ -108,7 +126,8 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = true
                 };
                 
-                var response = await _httpClient.PostAsJsonAsync("api/diagnostics/graph/test", requestBody);
+                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -136,7 +155,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Sprawdzanie uprawnień Graph API: {Permissions}", string.Join(", ", requiredPermissions));
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.PostAsJsonAsync("api/diagnostics/graph/permissions", requiredPermissions);
+                var url = BuildApiUrl("api/diagnostics/graph/permissions");
+                var response = await _httpClient.PostAsJsonAsync(url, requiredPermissions);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -164,7 +184,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie stanu połączenia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/status");
+                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -203,7 +224,8 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = false
                 };
                 
-                var response = await _httpClient.PostAsJsonAsync("api/diagnostics/graph/test", requestBody);
+                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -231,7 +253,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie pełnego raportu diagnostycznego Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/status");
+                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -259,7 +282,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu połączenia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/status");
+                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -298,7 +322,8 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = true
                 };
                 
-                var response = await _httpClient.PostAsJsonAsync("api/diagnostics/graph/test", requestBody);
+                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -308,13 +333,13 @@ namespace TeamsManager.UI.Services
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Błąd testu połączenia Graph API: {StatusCode}", response.StatusCode);
+                    _logger.LogWarning("[API-SERVICE] Błąd testowania połączenia Graph API: {StatusCode}", response.StatusCode);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas testu połączenia Graph API");
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas testowania połączenia Graph API");
                 return null;
             }
         }
@@ -323,10 +348,11 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[API-SERVICE] Pobieranie uprawnień Microsoft Graph API");
+                _logger.LogDebug("[API-SERVICE] Pobieranie uprawnień Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/permissions");
+                var url = BuildApiUrl("api/diagnostics/graph/permissions");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -347,24 +373,102 @@ namespace TeamsManager.UI.Services
             }
         }
 
-        private async Task EnsureAuthenticatedAsync()
+        /// <summary>
+        /// Buduje pełny URL dla endpointu API na podstawie EmbeddedApiServer
+        /// </summary>
+        private string BuildApiUrl(string endpoint)
         {
             try
             {
-                var token = await _authService.GetAccessTokenAsync();
-                if (!string.IsNullOrEmpty(token))
+                var baseUrl = _embeddedApiServer.BaseUrl;
+                if (string.IsNullOrEmpty(baseUrl))
                 {
-                    _httpClient.DefaultRequestHeaders.Authorization = 
-                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                    _logger.LogWarning("[DIAGNOSTIC] EmbeddedApiServer nie zwrócił URL - używam fallback");
+                    baseUrl = "https://localhost:7037";
+                }
+                
+                var fullUrl = $"{baseUrl.TrimEnd('/')}/{endpoint.TrimStart('/')}";
+                _logger.LogDebug("[DIAGNOSTIC] Zbudowano URL: {FullUrl}", fullUrl);
+                return fullUrl;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[DIAGNOSTIC] Błąd podczas budowania URL API");
+                // Fallback URL
+                return $"https://localhost:7037/{endpoint.TrimStart('/')}";
+            }
+        }
+
+        private async Task EnsureAuthenticatedAsync()
+        {
+            _logger.LogDebug("[UI-DIAGNOSTIC] ==================== ROZPOCZĘCIE EnsureAuthenticatedAsync ====================");
+            
+            try
+            {
+                _logger.LogDebug("[UI-DIAGNOSTIC] Sprawdzanie czy HttpClient ma już Authorization header...");
+                
+                // Sprawdź czy już mamy header
+                var existingAuth = _httpClient.DefaultRequestHeaders.Authorization;
+                if (existingAuth != null)
+                {
+                    _logger.LogDebug("[UI-DIAGNOSTIC] HttpClient ma już Authorization header: {Scheme} {Parameter}", 
+                        existingAuth.Scheme, 
+                        existingAuth.Parameter?.Length > 20 ? existingAuth.Parameter.Substring(0, 20) + "..." : existingAuth.Parameter);
+                    return;
+                }
+                
+                _logger.LogDebug("[UI-DIAGNOSTIC] Brak Authorization header w HttpClient. Pobieranie tokenu...");
+                
+                _logger.LogDebug("[UI-DIAGNOSTIC] Wywołanie _authService.AcquireApiTokenSilentAsync()...");
+                var authResult = await _authService.AcquireApiTokenSilentAsync();
+                
+                if (authResult == null || string.IsNullOrEmpty(authResult.AccessToken))
+                {
+                    _logger.LogWarning("[UI-DIAGNOSTIC] ⚠️ AcquireApiTokenSilentAsync() zwróciło NULL lub pusty token!");
+                    _logger.LogWarning("[UI-DIAGNOSTIC] AuthResult is null: {IsNull}", authResult == null);
+                    if (authResult != null)
+                    {
+                        _logger.LogWarning("[UI-DIAGNOSTIC] AccessToken is null or empty: {IsEmpty}", string.IsNullOrEmpty(authResult.AccessToken));
+                    }
+                    
+                    _logger.LogError("[UI-DIAGNOSTIC] ❌ Nie można pobrać tokenu API!");
+                    return;
+                }
+                
+                var token = authResult.AccessToken;
+                _logger.LogInformation("[UI-DIAGNOSTIC] ✅ Token API otrzymany pomyślnie! Długość: {TokenLength}", token.Length);
+                _logger.LogInformation("[UI-DIAGNOSTIC] Token Account: {Account}", authResult.Account?.Username ?? "N/A");
+                _logger.LogInformation("[UI-DIAGNOSTIC] Token Scopes: {Scopes}", string.Join(", ", authResult.Scopes ?? new string[0]));
+                _logger.LogInformation("[UI-DIAGNOSTIC] Token ExpiresOn: {ExpiresOn}", authResult.ExpiresOn);
+                _logger.LogDebug("[UI-DIAGNOSTIC] Token (pierwsze 30 znaków): {TokenStart}...", 
+                    token.Length > 30 ? token.Substring(0, 30) : token);
+                
+                _logger.LogDebug("[UI-DIAGNOSTIC] Ustawianie Authorization header w HttpClient...");
+                _httpClient.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                
+                _logger.LogInformation("[UI-DIAGNOSTIC] ✅ Authorization header ustawiony w HttpClient!");
+                
+                // Weryfikacja czy header został ustawiony
+                var verifyAuth = _httpClient.DefaultRequestHeaders.Authorization;
+                if (verifyAuth != null && verifyAuth.Scheme == "Bearer" && !string.IsNullOrEmpty(verifyAuth.Parameter))
+                {
+                    _logger.LogInformation("[UI-DIAGNOSTIC] ✅ WERYFIKACJA: Authorization header poprawnie ustawiony");
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Nie udało się uzyskać tokenu dostępu");
+                    _logger.LogError("[UI-DIAGNOSTIC] ❌ WERYFIKACJA NIEUDANA: Authorization header nie został ustawiony!");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Błąd podczas uwierzytelniania");
+                _logger.LogError(ex, "[UI-DIAGNOSTIC] ❌ BŁĄD w EnsureAuthenticatedAsync: {Message}", ex.Message);
+                _logger.LogError("[UI-DIAGNOSTIC] StackTrace: {StackTrace}", ex.StackTrace);
+                throw;
+            }
+            finally
+            {
+                _logger.LogDebug("[UI-DIAGNOSTIC] ==================== KONIEC EnsureAuthenticatedAsync ====================");
             }
         }
 
@@ -372,26 +476,27 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[API-SERVICE] Pobieranie statusu rate limiting Graph API");
+                _logger.LogDebug("[API-SERVICE] Pobieranie statusu rate limit Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/rate-limit");
+                var url = BuildApiUrl("api/diagnostics/graph/rate-limit");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<GraphRateLimitStatus>();
-                    _logger.LogDebug("[API-SERVICE] Status rate limiting Graph API pobrany pomyślnie");
+                    _logger.LogDebug("[API-SERVICE] Status rate limit Graph API pobrany pomyślnie");
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Błąd pobierania statusu rate limiting Graph API: {StatusCode}", response.StatusCode);
+                    _logger.LogWarning("[API-SERVICE] Błąd pobierania statusu rate limit Graph API: {StatusCode}", response.StatusCode);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania statusu rate limiting Graph API");
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania statusu rate limit Graph API");
                 return null;
             }
         }
@@ -403,7 +508,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu zdrowia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/health");
+                var url = BuildApiUrl("api/diagnostics/graph/health");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -428,26 +534,27 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[API-SERVICE] Wykonywanie batch operacji Graph API z {RequestCount} requestami", batchRequest.Requests?.Count ?? 0);
+                _logger.LogDebug("[API-SERVICE] Wykonywanie operacji batch Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.PostAsJsonAsync("api/graph/batch", batchRequest);
+                var url = BuildApiUrl("api/graph/batch");
+                var response = await _httpClient.PostAsJsonAsync(url, batchRequest);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<GraphBatchOperationResult>();
-                    _logger.LogDebug("[API-SERVICE] Batch operacja Graph API wykonana pomyślnie");
+                    _logger.LogDebug("[API-SERVICE] Operacja batch Graph API wykonana pomyślnie");
                     return result;
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Błąd wykonywania batch operacji Graph API: {StatusCode}", response.StatusCode);
+                    _logger.LogWarning("[API-SERVICE] Błąd wykonywania operacji batch Graph API: {StatusCode}", response.StatusCode);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas wykonywania batch operacji Graph API");
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas wykonywania operacji batch Graph API");
                 return null;
             }
         }
@@ -459,7 +566,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie metryk Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/metrics");
+                var url = BuildApiUrl("api/diagnostics/graph/metrics");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -487,7 +595,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu cache Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/cache");
+                var url = BuildApiUrl("api/diagnostics/graph/cache");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -542,7 +651,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie informacji o tokenie Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/token");
+                var url = BuildApiUrl("api/diagnostics/graph/token");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -570,7 +680,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Odświeżanie tokenu Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.PostAsync("api/diagnostics/graph/token/refresh", null);
+                var url = BuildApiUrl("api/diagnostics/graph/token/refresh");
+                var response = await _httpClient.PostAsync(url, null);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -597,12 +708,13 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie dostępnych endpointów Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/endpoints");
+                var url = BuildApiUrl("api/diagnostics/graph/endpoints");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<GraphApiAvailability[]>();
-                    _logger.LogDebug("[API-SERVICE] Dostępne endpointy Graph API pobrane pomyślnie ({Count} endpointów)", result?.Length ?? 0);
+                    _logger.LogDebug("[API-SERVICE] Dostępne endpointy Graph API pobrane pomyślnie");
                     return result;
                 }
                 else
@@ -625,7 +737,8 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie informacji o quota Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var response = await _httpClient.GetAsync("api/diagnostics/graph/quota");
+                var url = BuildApiUrl("api/diagnostics/graph/quota");
+                var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
                 {

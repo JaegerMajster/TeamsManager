@@ -382,8 +382,10 @@
                                                 &#160;&#160;• Skopiuj <Run FontWeight="Bold">"Identyfikator dzierżawy" (Tenant ID)</Run> i wklej do pola <Run FontWeight="Bold">"Tenant ID"</Run> poniżej<LineBreak/>
                                                 <Run FontWeight="Bold">Krok 4.2:</Run> Ustaw <Run FontWeight="Bold">Audience</Run> na: <Run FontWeight="Bold">api://[API Client ID]</Run><LineBreak/>
                                                 &#160;&#160;• Gdzie [API Client ID] to ID aplikacji TeamsManager API<LineBreak/>
-                                                <Run FontWeight="Bold">Krok 4.3:</Run> Kliknij <Run FontWeight="Bold">"WALIDUJ"</Run> aby sprawdzić konfigurację<LineBreak/>
-                                                <Run FontWeight="Bold">Krok 4.4:</Run> Jeśli wszystko jest poprawne, kliknij <Run FontWeight="Bold">"ZAPISZ"</Run>
+                                                <Run FontWeight="Bold">Krok 4.3:</Run> Ustaw <Run FontWeight="Bold">API Scope</Run> na: <Run FontWeight="Bold">api://[API Client ID]/TeamsManagerAPI</Run><LineBreak/>
+                                                &#160;&#160;• To jest scope który UI będzie używać do uzyskiwania tokenów dla API<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.4:</Run> Kliknij <Run FontWeight="Bold">"WALIDUJ"</Run> aby sprawdzić konfigurację<LineBreak/>
+                                                <Run FontWeight="Bold">Krok 4.5:</Run> Jeśli wszystko jest poprawne, kliknij <Run FontWeight="Bold">"ZAPISZ"</Run>
                                             </TextBlock>
                                         </StackPanel>
                                     </Border>
@@ -445,6 +447,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 
                                 <!-- Client ID UI -->
@@ -495,6 +498,16 @@
                                         materialDesign:HintAssist.Hint="Audience *"
                                         materialDesign:HintAssist.IsFloating="True"
                                         materialDesign:HintAssist.HelperText="Docelowa grupa odbiorców tokenów"
+                                        materialDesign:TextFieldAssist.HasClearButton="True"/>
+                                
+                                <!-- API Scope -->
+                                <TextBox Grid.Row="5"
+                                        Margin="0,0,0,16"
+                                        Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                        Text="{Binding ApiScope, UpdateSourceTrigger=PropertyChanged}"
+                                        materialDesign:HintAssist.Hint="API Scope *"
+                                        materialDesign:HintAssist.IsFloating="True"
+                                        materialDesign:HintAssist.HelperText="Scope dla tokenów TeamsManager API (np. api://[API-Client-ID]/TeamsManagerAPI)"
                                         materialDesign:TextFieldAssist.HasClearButton="True"/>
                             </Grid>
                         </Expander>

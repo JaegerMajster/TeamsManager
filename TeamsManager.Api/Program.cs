@@ -58,6 +58,30 @@ using TeamsManager.Core.Abstractions.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ===== SCENTRALIZOWANE LOGOWANIE TEAMSMANAGER =====
+Console.WriteLine("[API-DIAGNOSTIC] Konfiguracja scentralizowanego logowania API rozpoczęta");
+
+// Najpierw dodaj podstawowe providery
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+// Następnie dodaj nasz scentralizowany system - API będzie zapisywać do plików z prefiksem "api-"
+builder.Logging.AddTeamsManagerDiagnosticLogging("API", enableDiagnostics: true);
+
+Console.WriteLine("[API-DIAGNOSTIC] Scentralizowane logowanie API skonfigurowane - logi zapisywane do plików z prefiksem 'api-'");
+
+// Utwórz logger dla dalszej diagnostyki
+using var tempLoggerFactory = TeamsManager.Core.Extensions.LoggingExtensions.CreateTeamsManagerLoggerFactory("API", true);
+var tempLogger = tempLoggerFactory.CreateLogger<Program>();
+
+tempLogger.LogInformation("[API-DIAGNOSTIC] ==================== URUCHOMIENIE API ===================");
+tempLogger.LogInformation("[API-DIAGNOSTIC] Wersja .NET: {Version}", Environment.Version);
+tempLogger.LogInformation("[API-DIAGNOSTIC] Użytkownik: {User}", Environment.UserName);
+tempLogger.LogInformation("[API-DIAGNOSTIC] Maszyna: {Machine}", Environment.MachineName);
+tempLogger.LogInformation("[API-DIAGNOSTIC] Katalog roboczy: {WorkingDirectory}", Environment.CurrentDirectory);
+
+// ===== KONFIGURACJA SERWISÓW =====
+
 // ===== NOWY UNIWERSALNY SYSTEM KONFIGURACJI (Clean Architecture) =====
 // Rejestracja systemu konfiguracji zgodnego z zasadami DRY
 builder.Services.AddSingleton<TeamsManager.Api.Services.Configuration.AdvancedEncryptionService>();
@@ -564,6 +588,69 @@ else
     app.UseHsts();
 }
 app.UseHttpsRedirection();
+
+// ===== MIDDLEWARE DIAGNOSTYCZNY =====
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    var startTime = DateTime.UtcNow;
+    
+    // Loguj szczegóły requestu
+    logger.LogInformation("[API-DIAGNOSTIC] ==================== NOWY REQUEST ====================");
+    logger.LogInformation("[API-DIAGNOSTIC] Method: {Method}", context.Request.Method);
+    logger.LogInformation("[API-DIAGNOSTIC] Path: {Path}", context.Request.Path);
+    logger.LogInformation("[API-DIAGNOSTIC] QueryString: {QueryString}", context.Request.QueryString);
+    logger.LogInformation("[API-DIAGNOSTIC] ContentType: {ContentType}", context.Request.ContentType ?? "BRAK");
+    logger.LogInformation("[API-DIAGNOSTIC] ContentLength: {ContentLength}", context.Request.ContentLength?.ToString() ?? "BRAK");
+    logger.LogInformation("[API-DIAGNOSTIC] Host: {Host}", context.Request.Host);
+    logger.LogInformation("[API-DIAGNOSTIC] RemoteIP: {RemoteIP}", context.Connection.RemoteIpAddress?.ToString() ?? "BRAK");
+    
+    // Loguj WSZYSTKIE headery
+    logger.LogInformation("[API-DIAGNOSTIC] === WSZYSTKIE HEADERY ===");
+    foreach (var header in context.Request.Headers)
+    {
+        if (header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+        {
+            var authValue = header.Value.FirstOrDefault();
+            if (!string.IsNullOrEmpty(authValue))
+            {
+                if (authValue.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var token = authValue.Substring(7);
+                    logger.LogInformation("[API-DIAGNOSTIC] Header: {Key} = Bearer {TokenStart}... (długość: {TokenLength})", 
+                        header.Key, 
+                        token.Length > 20 ? token.Substring(0, 20) : token,
+                        token.Length);
+                }
+                else
+                {
+                    logger.LogInformation("[API-DIAGNOSTIC] Header: {Key} = {Value} (NIE BEARER!)", header.Key, authValue);
+                }
+            }
+            else
+            {
+                logger.LogInformation("[API-DIAGNOSTIC] Header: {Key} = PUSTY!", header.Key);
+            }
+        }
+        else
+        {
+            logger.LogInformation("[API-DIAGNOSTIC] Header: {Key} = {Value}", header.Key, string.Join(", ", header.Value));
+        }
+    }
+    
+    // Sprawdź czy brak Authorization header
+    if (!context.Request.Headers.ContainsKey("Authorization"))
+    {
+        logger.LogWarning("[API-DIAGNOSTIC] ⚠️ BRAK AUTHORIZATION HEADER!");
+    }
+    
+    await next.Invoke();
+    
+    var duration = DateTime.UtcNow - startTime;
+    logger.LogInformation("[API-DIAGNOSTIC] Response: {StatusCode} w {Duration}ms", 
+        context.Response.StatusCode, duration.TotalMilliseconds);
+    logger.LogInformation("[API-DIAGNOSTIC] ==================== KONIEC REQUEST ====================");
+});
 
 app.UseRouting();
 

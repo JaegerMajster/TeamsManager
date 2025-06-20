@@ -47,5 +47,17 @@ namespace TeamsManager.UI.Services.Abstractions
         /// </summary>
         /// <returns>Token dostępu lub null w przypadku błędu</returns>
         Task<string?> GetAccessTokenAsync();
+
+        /// <summary>
+        /// Pobiera token dla TeamsManager API w trybie cichym
+        /// </summary>
+        /// <returns>Rezultat autentykacji dla API lub null jeśli wymagana interakcja użytkownika</returns>
+        Task<AuthenticationResult?> AcquireApiTokenSilentAsync();
+        
+        /// <summary>
+        /// Pobiera token dostępu dla TeamsManager API w trybie cichym
+        /// </summary>
+        /// <returns>Token dostępu dla API lub null w przypadku błędu</returns>
+        Task<string?> GetApiAccessTokenAsync();
     }
 } 

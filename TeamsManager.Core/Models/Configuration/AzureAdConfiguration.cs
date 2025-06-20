@@ -86,6 +86,11 @@ namespace TeamsManager.Core.Models.Configuration
         public string Audience { get; set; } = string.Empty;
 
         /// <summary>
+        /// Scope dla tokenów API (domyślnie taki sam jak Audience)
+        /// </summary>
+        public string ApiScope { get; set; } = string.Empty;
+
+        /// <summary>
         /// Sprawdza czy ustawienia API są prawidłowe
         /// </summary>
         /// <returns>True jeśli wszystkie wymagane pola są wypełnione</returns>
@@ -93,7 +98,8 @@ namespace TeamsManager.Core.Models.Configuration
         {
             return !string.IsNullOrEmpty(ClientId) &&
                    !string.IsNullOrEmpty(ClientSecret) &&
-                   !string.IsNullOrEmpty(Audience);
+                   !string.IsNullOrEmpty(Audience) &&
+                   !string.IsNullOrEmpty(ApiScope);
         }
     }
 } 

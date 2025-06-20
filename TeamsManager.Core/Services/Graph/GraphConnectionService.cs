@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
+using System.IdentityModel.Tokens.Jwt;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models.Graph;
@@ -221,152 +222,198 @@ namespace TeamsManager.Core.Services.Graph
         /// </summary>
         public async Task<GraphDiagnosticInfo> GetDiagnosticInfoAsync()
         {
-            var stopwatch = Stopwatch.StartNew();
-            var diagnosticInfo = new GraphDiagnosticInfo();
+            var diagnostic = new GraphDiagnosticInfo
+            {
+                LastChecked = DateTime.UtcNow
+            };
 
             try
             {
-                _logger.LogDebug("Rozpoczęcie diagnostyki Graph API");
+                _logger.LogInformation("[DIAGNOSTIC] Rozpoczynam GetDiagnosticInfoAsync");
+                
+                // Test podstawowego połączenia
+                _logger.LogInformation("[DIAGNOSTIC] Sprawdzanie podstawowego połączenia Graph API...");
+                var connectionTest = await TestBasicConnectionAsync();
+                diagnostic.IsConnected = connectionTest.IsSuccessful;
+                diagnostic.ResponseTimeMs = connectionTest.ResponseTimeMs;
+                
+                _logger.LogInformation("[DIAGNOSTIC] Podstawowe połączenie: IsConnected={IsConnected}, ResponseTime={ResponseTime}ms", 
+                    diagnostic.IsConnected, diagnostic.ResponseTimeMs);
 
-                // Test połączenia
-                var healthInfo = await GetConnectionHealthAsync();
-                diagnosticInfo.IsConnected = healthInfo.IsConnected;
-                diagnosticInfo.ResponseTimeMs = healthInfo.ResponseTimeMs;
-                diagnosticInfo.Status = healthInfo.Status;
-
-                if (!string.IsNullOrEmpty(healthInfo.LastError))
+                if (!diagnostic.IsConnected)
                 {
-                    diagnosticInfo.Errors.Add($"Błąd połączenia: {healthInfo.LastError}");
+                    diagnostic.Status = GraphHealthStatus.Critical;
+                    diagnostic.Errors.Add($"Brak połączenia z Graph API: {connectionTest.ErrorMessage}");
+                    _logger.LogError("[DIAGNOSTIC] Brak połączenia z Graph API: {Error}", connectionTest.ErrorMessage);
+                    return diagnostic;
                 }
 
                 // Test uwierzytelnienia
+                _logger.LogInformation("[DIAGNOSTIC] Sprawdzanie uwierzytelnienia...");
+                var authTest = await TestAuthenticationAsync();
+                diagnostic.IsAuthenticated = authTest.IsSuccessful;
+                
+                _logger.LogInformation("[DIAGNOSTIC] Uwierzytelnienie: IsAuthenticated={IsAuthenticated}", diagnostic.IsAuthenticated);
+                
+                if (!diagnostic.IsAuthenticated)
+                {
+                    diagnostic.Status = GraphHealthStatus.Critical;
+                    diagnostic.Errors.Add($"Błąd uwierzytelnienia: {authTest.ErrorMessage}");
+                    _logger.LogError("[DIAGNOSTIC] Błąd uwierzytelnienia: {Error}", authTest.ErrorMessage);
+                    return diagnostic;
+                }
+
+                // Pobierz informacje o aplikacji i dzierżawie
+                _logger.LogInformation("[DIAGNOSTIC] Pobieranie informacji o aplikacji...");
                 try
                 {
-                    var userContext = await GetUserContextAsync();
-                    diagnosticInfo.IsAuthenticated = userContext.IsAuthenticated;
-                    diagnosticInfo.TenantId = userContext.TenantId;
-                    
-                    if (userContext.IsAuthenticated)
+                    var accessToken = await GetAccessTokenAsync();
+                    if (!string.IsNullOrEmpty(accessToken))
                     {
-                        diagnosticInfo.AdditionalInfo["UserPrincipalName"] = userContext.UserPrincipalName ?? "Nieznane";
-                        diagnosticInfo.AdditionalInfo["DisplayName"] = userContext.DisplayName ?? "Nieznane";
-                        diagnosticInfo.AdditionalInfo["RolesCount"] = userContext.Roles.Count;
+                        _logger.LogInformation("[DIAGNOSTIC] Token dostępu otrzymany, długość: {TokenLength}", accessToken.Length);
+                        
+                        // Próba dekodowania tokenu JWT
+                        try
+                        {
+                            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                            var token = handler.ReadJwtToken(accessToken);
+                            
+                            diagnostic.TenantId = token.Claims.FirstOrDefault(c => c.Type == "tid")?.Value;
+                            diagnostic.ApplicationId = token.Claims.FirstOrDefault(c => c.Type == "aud")?.Value ?? 
+                                                    token.Claims.FirstOrDefault(c => c.Type == "appid")?.Value;
+                            
+                            _logger.LogInformation("[DIAGNOSTIC] Token zdekodowany:");
+                            _logger.LogInformation("[DIAGNOSTIC] - TenantId: {TenantId}", diagnostic.TenantId ?? "NULL");
+                            _logger.LogInformation("[DIAGNOSTIC] - ApplicationId: {ApplicationId}", diagnostic.ApplicationId ?? "NULL");
+                            _logger.LogInformation("[DIAGNOSTIC] - Issuer: {Issuer}", token.Issuer ?? "NULL");
+                            _logger.LogInformation("[DIAGNOSTIC] - Audience: {Audience}", string.Join(", ", token.Audiences) ?? "NULL");
+                            _logger.LogInformation("[DIAGNOSTIC] - ExpiresOn: {ExpiresOn}", token.ValidTo);
+                            
+                            var scopes = token.Claims.FirstOrDefault(c => c.Type == "scp")?.Value;
+                            _logger.LogInformation("[DIAGNOSTIC] - Scopes: {Scopes}", scopes ?? "NULL");
+                        }
+                        catch (Exception tokenEx)
+                        {
+                            _logger.LogWarning("[DIAGNOSTIC] Nie można zdekodować tokenu JWT: {Error}", tokenEx.Message);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[DIAGNOSTIC] Token dostępu jest pusty");
                     }
                 }
                 catch (Exception ex)
                 {
-                    diagnosticInfo.IsAuthenticated = false;
-                    diagnosticInfo.Errors.Add($"Błąd uwierzytelnienia: {ex.Message}");
+                    _logger.LogWarning(ex, "[DIAGNOSTIC] Błąd podczas pobierania informacji o aplikacji: {Message}", ex.Message);
                 }
 
-                // Test uprawnień - sprawdź podstawowe endpointy
-                var permissionTests = new[]
-                {
-                    ("/v1.0/me", "User.Read"),
-                    ("/v1.0/users", "User.Read.All"),
-                    ("/v1.0/groups", "Group.Read.All"),
-                    ("/v1.0/teams", "Team.ReadBasic.All")
-                };
+                // Test uprawnień
+                _logger.LogInformation("[DIAGNOSTIC] Sprawdzanie uprawnień...");
+                var permissionTest = await TestPermissionsAsync();
+                diagnostic.HasRequiredPermissions = permissionTest.IsSuccessful;
+                
+                _logger.LogInformation("[DIAGNOSTIC] Uprawnienia: HasRequiredPermissions={HasRequiredPermissions}", 
+                    diagnostic.HasRequiredPermissions);
 
-                int successfulPermissionTests = 0;
-                foreach (var (endpoint, permission) in permissionTests)
+                if (!diagnostic.HasRequiredPermissions)
                 {
-                    try
-                    {
-                        await _httpService.GetAsync<object>(endpoint);
-                        successfulPermissionTests++;
-                        _logger.LogDebug("Test uprawnienia {Permission} dla {Endpoint}: OK", permission, endpoint);
-                    }
-                    catch (Exception ex)
-                    {
-                        diagnosticInfo.Warnings.Add($"Brak uprawnienia {permission} dla {endpoint}: {ex.Message}");
-                        _logger.LogWarning("Test uprawnienia {Permission} dla {Endpoint}: BŁĄD - {Error}", 
-                            permission, endpoint, ex.Message);
-                    }
+                    diagnostic.Warnings.Add($"Brak wymaganych uprawnień: {permissionTest.ErrorMessage}");
+                    _logger.LogWarning("[DIAGNOSTIC] Brak wymaganych uprawnień: {Error}", permissionTest.ErrorMessage);
                 }
 
-                diagnosticInfo.HasRequiredPermissions = successfulPermissionTests >= 2; // Minimum User.Read i User.Read.All
-
-                // Pobierz informacje o Graph API
-                try
-                {
-                    diagnosticInfo.GraphApiVersion = "v1.0"; // Stała wartość dla Microsoft Graph
-                    
-                    // Spróbuj pobrać informacje o aplikacji
-                    var appResponse = await _httpService.GetAsync<dynamic>("/v1.0/applications");
-                    if (appResponse != null)
-                    {
-                        diagnosticInfo.AdditionalInfo["ApplicationsEndpointAvailable"] = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    diagnosticInfo.Warnings.Add($"Nie można pobrać informacji o aplikacji: {ex.Message}");
-                }
-
-                // Pobierz informacje o rate limiting
+                // Sprawdź rate limiting
+                _logger.LogInformation("[DIAGNOSTIC] Sprawdzanie rate limiting...");
                 try
                 {
                     var rateLimitStatus = await GetRateLimitStatusAsync();
-                    if (rateLimitStatus != null)
-                    {
-                        diagnosticInfo.RateLimitInfo = new GraphRateLimitStatus
-                        {
-                            RemainingRequests = rateLimitStatus.RemainingRequests,
-                            MaxRequests = rateLimitStatus.MaxRequests,
-                            ResetTime = rateLimitStatus.ResetTime,
-                            UsagePercentage = rateLimitStatus.UsagePercentage
-                        };
-
-                        if (rateLimitStatus.IsLimitReached)
-                        {
-                            diagnosticInfo.Warnings.Add("Osiągnięto limit żądań Graph API");
-                        }
-                    }
+                    diagnostic.RateLimitInfo = rateLimitStatus;
+                    _logger.LogInformation("[DIAGNOSTIC] Rate limiting: RemainingRequests={RemainingRequests}, IsLimitReached={IsLimitReached}", 
+                        rateLimitStatus?.RemainingRequests, rateLimitStatus?.IsLimitReached);
                 }
                 catch (Exception ex)
                 {
-                    diagnosticInfo.Warnings.Add($"Nie można pobrać informacji o rate limiting: {ex.Message}");
+                    _logger.LogWarning(ex, "[DIAGNOSTIC] Błąd podczas sprawdzania rate limiting: {Message}", ex.Message);
                 }
 
-                // Ustaw końcowy status
-                diagnosticInfo.AllTestsPassed = diagnosticInfo.IsConnected && 
-                                               diagnosticInfo.IsAuthenticated && 
-                                               diagnosticInfo.HasRequiredPermissions &&
-                                               diagnosticInfo.Errors.Count == 0;
-
-                if (!diagnosticInfo.AllTestsPassed && diagnosticInfo.Status == GraphHealthStatus.Healthy)
+                // Określ końcowy status
+                if (diagnostic.IsConnected && diagnostic.IsAuthenticated && diagnostic.HasRequiredPermissions)
                 {
-                    diagnosticInfo.Status = diagnosticInfo.Errors.Count > 0 ? 
-                        GraphHealthStatus.Critical : GraphHealthStatus.Warning;
+                    diagnostic.Status = GraphHealthStatus.Healthy;
+                    diagnostic.AllTestsPassed = true;
+                    _logger.LogInformation("[DIAGNOSTIC] Status końcowy: Healthy - wszystkie testy przeszły pomyślnie");
+                }
+                else if (diagnostic.IsConnected && diagnostic.IsAuthenticated)
+                {
+                    diagnostic.Status = GraphHealthStatus.Warning;
+                    _logger.LogInformation("[DIAGNOSTIC] Status końcowy: Warning - połączenie i uwierzytelnienie OK, ale problemy z uprawnieniami");
+                }
+                else
+                {
+                    diagnostic.Status = GraphHealthStatus.Critical;
+                    _logger.LogError("[DIAGNOSTIC] Status końcowy: Critical - podstawowe problemy z połączeniem lub uwierzytelnieniem");
                 }
 
-                stopwatch.Stop();
-                diagnosticInfo.ResponseTimeMs = Math.Max(diagnosticInfo.ResponseTimeMs, stopwatch.ElapsedMilliseconds);
-                diagnosticInfo.LastChecked = DateTime.UtcNow;
-
-                _logger.LogDebug("Diagnostyka Graph API zakończona: Status={Status}, Testy={AllTestsPassed}, Czas={Time}ms", 
-                    diagnosticInfo.Status, diagnosticInfo.AllTestsPassed, diagnosticInfo.ResponseTimeMs);
-
-                return diagnosticInfo;
+                _logger.LogInformation("[DIAGNOSTIC] GetDiagnosticInfoAsync zakończone. Status: {Status}", diagnostic.Status);
+                return diagnostic;
             }
-            catch (GraphConnectionException ex)
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[DIAGNOSTIC] Nieoczekiwany błąd w GetDiagnosticInfoAsync: {Message}", ex.Message);
+                diagnostic.Status = GraphHealthStatus.Critical;
+                diagnostic.Errors.Add($"Nieoczekiwany błąd diagnostyczny: {ex.Message}");
+                return diagnostic;
+            }
+        }
+
+        /// <summary>
+        /// Testuje podstawowe połączenie z Graph API
+        /// </summary>
+        private async Task<(bool IsSuccessful, long ResponseTimeMs, string? ErrorMessage)> TestBasicConnectionAsync()
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                await _httpService.GetAsync<object>("/v1.0/me");
+                stopwatch.Stop();
+                return (true, stopwatch.ElapsedMilliseconds, null);
+            }
+            catch (Exception ex)
             {
                 stopwatch.Stop();
-                return await GraphExceptionHandler.HandleGraphConnectionExceptionAsync(ex,
-                    () => GetDiagnosticInfoAsync(),
-                    _logger,
-                    "GetDiagnosticInfo",
-                    defaultValue: new GraphDiagnosticInfo
-                    {
-                        ResponseTimeMs = stopwatch.ElapsedMilliseconds,
-                        IsConnected = false,
-                        IsAuthenticated = false,
-                        HasRequiredPermissions = false,
-                        Status = GraphHealthStatus.Critical,
-                        AllTestsPassed = false,
-                        Errors = new List<string> { ex.Message }
-                    });
+                return (false, stopwatch.ElapsedMilliseconds, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Testuje uwierzytelnienie Graph API
+        /// </summary>
+        private async Task<(bool IsSuccessful, string? ErrorMessage)> TestAuthenticationAsync()
+        {
+            try
+            {
+                var token = await GetAccessTokenAsync();
+                return (!string.IsNullOrEmpty(token), string.IsNullOrEmpty(token) ? "Brak tokenu dostępu" : null);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Testuje uprawnienia Graph API
+        /// </summary>
+        private async Task<(bool IsSuccessful, string? ErrorMessage)> TestPermissionsAsync()
+        {
+            try
+            {
+                // Test podstawowych uprawnień
+                await _httpService.GetAsync<object>("/v1.0/me");
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
             }
         }
 

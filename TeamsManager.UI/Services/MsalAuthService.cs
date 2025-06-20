@@ -368,40 +368,77 @@ namespace TeamsManager.UI.Services
 
         public async Task<AuthenticationResult?> AcquireTokenSilentAsync()
         {
-            var publicClientApp = await CreateMsalClientAsync();
-            
-            if (publicClientApp == null)
-            {
-                _logger.LogWarning("MSAL AcquireTokenSilent: PCA not properly initialized.");
-                return null;
-            }
-
             try
             {
-                var accounts = await publicClientApp.GetAccountsAsync();
-                IAccount? accountToUse = accounts.FirstOrDefault();
-
-                // Jeśli nie ma cached accounts, spróbuj z Windows OS account (SSO)
-                if (accountToUse == null)
-                {
-                    accountToUse = PublicClientApplication.OperatingSystemAccount;
-                    _logger.LogDebug("MSAL: No cached accounts, trying Windows OS account for SSO");
-                }
-
-                // Spróbuj pobrać token z cache lub SSO
-                var result = await publicClientApp.AcquireTokenSilent(_graphConfig.Scopes.ReadOnlyScopes, accountToUse).ExecuteAsync();
+                _logger.LogInformation("[DIAGNOSTIC] Rozpoczynam AcquireTokenSilentAsync");
                 
-                _logger.LogDebug("MSAL: Token acquired silently for user: {Username}", result.Account?.Username);
-                return result;
+                var azureAdConfig = await _configurationManager.GetConfigurationAsync<AzureAdConfiguration>("azure-ad");
+                if (azureAdConfig == null)
+                {
+                    _logger.LogError("[DIAGNOSTIC] Konfiguracja Azure AD jest null - nie można uzyskać tokenu");
+                    return null;
+                }
+                
+                _logger.LogInformation("[DIAGNOSTIC] Konfiguracja Azure AD załadowana:");
+                _logger.LogInformation("[DIAGNOSTIC] - TenantId: {TenantId}", azureAdConfig.TenantId ?? "NULL");
+                _logger.LogInformation("[DIAGNOSTIC] - UI ClientId: {ClientId}", azureAdConfig.Ui?.ClientId ?? "NULL");
+                _logger.LogInformation("[DIAGNOSTIC] - API ClientId: {ApiClientId}", azureAdConfig.Api?.ClientId ?? "NULL");
+                _logger.LogInformation("[DIAGNOSTIC] - API Audience: {Audience}", azureAdConfig.Api?.Audience ?? "NULL");
+                _logger.LogInformation("[DIAGNOSTIC] - GraphConfig Scopes count: {ScopesCount}", _graphConfig?.Scopes?.ReadOnlyScopes?.Length ?? 0);
+                
+                var app = await CreateMsalClientAsync();
+                if (app == null)
+                {
+                    _logger.LogError("[DIAGNOSTIC] PublicClientApplication jest null");
+                    return null;
+                }
+                
+                _logger.LogInformation("[DIAGNOSTIC] PublicClientApplication utworzona pomyślnie");
+                
+                var accounts = await app.GetAccountsAsync();
+                _logger.LogInformation("[DIAGNOSTIC] Znaleziono {AccountsCount} kont w cache", accounts?.Count() ?? 0);
+                
+                if (accounts?.Any() == true)
+                {
+                    var account = accounts.First();
+                    _logger.LogInformation("[DIAGNOSTIC] Używam konta: {Username} (Environment: {Environment})", 
+                        account.Username, account.Environment);
+                    
+                    var scopes = _graphConfig?.Scopes?.ReadOnlyScopes ?? new[] { "https://graph.microsoft.com/.default" };
+                    _logger.LogInformation("[DIAGNOSTIC] Żądam tokenów dla scopes: {Scopes}", string.Join(", ", scopes));
+                    
+                    var result = await app.AcquireTokenSilent(scopes, account).ExecuteAsync();
+                    
+                    _logger.LogInformation("[DIAGNOSTIC] Token uzyskany pomyślnie:");
+                    _logger.LogInformation("[DIAGNOSTIC] - Account: {Account}", result.Account?.Username);
+                    _logger.LogInformation("[DIAGNOSTIC] - Scopes: {Scopes}", string.Join(", ", result.Scopes));
+                    _logger.LogInformation("[DIAGNOSTIC] - ExpiresOn: {ExpiresOn}", result.ExpiresOn);
+                    _logger.LogInformation("[DIAGNOSTIC] - TokenType: {TokenType}", result.TokenType);
+                    _logger.LogInformation("[DIAGNOSTIC] - AuthenticationResultMetadata: {Metadata}", result.AuthenticationResultMetadata?.ToString() ?? "NULL");
+                    
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[DIAGNOSTIC] Brak kont w cache - wymagane logowanie interaktywne");
+                    return null;
+                }
             }
-            catch (MsalUiRequiredException)
+            catch (MsalUiRequiredException ex)
             {
-                _logger.LogDebug("MSAL AcquireTokenSilent: UI interaction required");
-                return null; // Wymagana interakcja użytkownika
+                _logger.LogWarning("[DIAGNOSTIC] MsalUiRequiredException - wymagane logowanie interaktywne: {ErrorCode} - {Message}", 
+                    ex.ErrorCode, ex.Message);
+                return null;
+            }
+            catch (MsalServiceException ex)
+            {
+                _logger.LogError(ex, "[DIAGNOSTIC] MsalServiceException: ErrorCode={ErrorCode}, Message={Message}", 
+                    ex.ErrorCode, ex.Message);
+                return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "MSAL Error acquiring token silently");
+                _logger.LogError(ex, "[DIAGNOSTIC] Nieoczekiwany błąd w AcquireTokenSilentAsync: {Message}", ex.Message);
                 return null;
             }
         }
@@ -409,6 +446,93 @@ namespace TeamsManager.UI.Services
         public async Task<string?> GetAccessTokenAsync()
         {
             var result = await AcquireTokenSilentAsync();
+            return result?.AccessToken;
+        }
+
+        public async Task<AuthenticationResult?> AcquireApiTokenSilentAsync()
+        {
+            try
+            {
+                _logger.LogInformation("[DIAGNOSTIC] Rozpoczynam AcquireApiTokenSilentAsync dla TeamsManager API");
+                
+                var azureAdConfig = await _configurationManager.GetConfigurationAsync<AzureAdConfiguration>("azure-ad");
+                if (azureAdConfig == null)
+                {
+                    _logger.LogError("[DIAGNOSTIC] Konfiguracja Azure AD jest null - nie można uzyskać tokenu API");
+                    return null;
+                }
+                
+                if (string.IsNullOrEmpty(azureAdConfig.Api?.ApiScope))
+                {
+                    _logger.LogError("[DIAGNOSTIC] API Scope nie jest skonfigurowane");
+                    return null;
+                }
+                
+                _logger.LogInformation("[DIAGNOSTIC] Konfiguracja API:");
+                _logger.LogInformation("[DIAGNOSTIC] - API Scope: {ApiScope}", azureAdConfig.Api.ApiScope);
+                _logger.LogInformation("[DIAGNOSTIC] - API Audience: {Audience}", azureAdConfig.Api.Audience ?? "NULL");
+                _logger.LogInformation("[DIAGNOSTIC] - API ClientId: {ApiClientId}", azureAdConfig.Api.ClientId ?? "NULL");
+                
+                var app = await CreateMsalClientAsync();
+                if (app == null)
+                {
+                    _logger.LogError("[DIAGNOSTIC] PublicClientApplication jest null");
+                    return null;
+                }
+                
+                _logger.LogInformation("[DIAGNOSTIC] PublicClientApplication utworzona pomyślnie");
+                
+                var accounts = await app.GetAccountsAsync();
+                _logger.LogInformation("[DIAGNOSTIC] Znaleziono {AccountsCount} kont w cache", accounts?.Count() ?? 0);
+                
+                if (accounts?.Any() == true)
+                {
+                    var account = accounts.First();
+                    _logger.LogInformation("[DIAGNOSTIC] Używam konta: {Username} (Environment: {Environment})", 
+                        account.Username, account.Environment);
+                    
+                    // Używamy API Scope dla TeamsManager API
+                    var apiScopes = new[] { azureAdConfig.Api.ApiScope };
+                    _logger.LogInformation("[DIAGNOSTIC] Żądam tokenów API dla scopes: {Scopes}", string.Join(", ", apiScopes));
+                    
+                    var result = await app.AcquireTokenSilent(apiScopes, account).ExecuteAsync();
+                    
+                    _logger.LogInformation("[DIAGNOSTIC] Token API uzyskany pomyślnie:");
+                    _logger.LogInformation("[DIAGNOSTIC] - Account: {Account}", result.Account?.Username);
+                    _logger.LogInformation("[DIAGNOSTIC] - Scopes: {Scopes}", string.Join(", ", result.Scopes));
+                    _logger.LogInformation("[DIAGNOSTIC] - ExpiresOn: {ExpiresOn}", result.ExpiresOn);
+                    _logger.LogInformation("[DIAGNOSTIC] - TokenType: {TokenType}", result.TokenType);
+                    
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[DIAGNOSTIC] Brak kont w cache - wymagane logowanie interaktywne");
+                    return null;
+                }
+            }
+            catch (MsalUiRequiredException ex)
+            {
+                _logger.LogWarning("[DIAGNOSTIC] MsalUiRequiredException dla API token - wymagane logowanie interaktywne: {ErrorCode} - {Message}", 
+                    ex.ErrorCode, ex.Message);
+                return null;
+            }
+            catch (MsalServiceException ex)
+            {
+                _logger.LogError(ex, "[DIAGNOSTIC] MsalServiceException dla API token: ErrorCode={ErrorCode}, Message={Message}", 
+                    ex.ErrorCode, ex.Message);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[DIAGNOSTIC] Nieoczekiwany błąd w AcquireApiTokenSilentAsync: {Message}", ex.Message);
+                return null;
+            }
+        }
+
+        public async Task<string?> GetApiAccessTokenAsync()
+        {
+            var result = await AcquireApiTokenSilentAsync();
             return result?.AccessToken;
         }
     }

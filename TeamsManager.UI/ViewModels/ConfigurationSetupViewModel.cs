@@ -29,6 +29,7 @@ namespace TeamsManager.UI.ViewModels
         private string _tenantId = string.Empty;
         private string _clientSecret = string.Empty;
         private string _audience = string.Empty;
+        private string _apiScope = string.Empty;
 
         // Application Configuration
         private string _applicationName = "TeamsManager";
@@ -151,6 +152,16 @@ namespace TeamsManager.UI.ViewModels
             }
         }
 
+        public string ApiScope
+        {
+            get => _apiScope;
+            set
+            {
+                SetProperty(ref _apiScope, value);
+                HasChanges = true;
+            }
+        }
+
         // Application Properties
         public string ApplicationName
         {
@@ -249,6 +260,7 @@ namespace TeamsManager.UI.ViewModels
                     _tenantId = azureConfig.TenantId ?? string.Empty;
                     _clientSecret = azureConfig.Api.ClientSecret ?? string.Empty;
                     _audience = azureConfig.Api.Audience ?? string.Empty;
+                    _apiScope = azureConfig.Api.ApiScope ?? string.Empty;
                     
                     // Powiadom UI o zmianie wartości
                     OnPropertyChanged(nameof(UiClientId));
@@ -256,6 +268,7 @@ namespace TeamsManager.UI.ViewModels
                     OnPropertyChanged(nameof(TenantId));
                     OnPropertyChanged(nameof(ClientSecret));
                     OnPropertyChanged(nameof(Audience));
+                    OnPropertyChanged(nameof(ApiScope));
                 }
 
                 if (appConfig != null)
@@ -311,7 +324,8 @@ namespace TeamsManager.UI.ViewModels
                                      !string.IsNullOrWhiteSpace(ApiClientId) || 
                                      !string.IsNullOrWhiteSpace(TenantId) || 
                                      !string.IsNullOrWhiteSpace(ClientSecret) || 
-                                     !string.IsNullOrWhiteSpace(Audience);
+                                     !string.IsNullOrWhiteSpace(Audience) ||
+                                     !string.IsNullOrWhiteSpace(ApiScope);
 
                 AzureAdConfiguration? azureConfig = null;
                 if (hasAzureAdData)
@@ -338,7 +352,7 @@ namespace TeamsManager.UI.ViewModels
                     }
                     
                     // API Client Settings - tylko jeśli któreś z pól API jest wypełnione
-                    if (!string.IsNullOrWhiteSpace(ApiClientId) || !string.IsNullOrWhiteSpace(ClientSecret) || !string.IsNullOrWhiteSpace(Audience))
+                    if (!string.IsNullOrWhiteSpace(ApiClientId) || !string.IsNullOrWhiteSpace(ClientSecret) || !string.IsNullOrWhiteSpace(Audience) || !string.IsNullOrWhiteSpace(ApiScope))
                     {
                         azureConfig.Api = new ApiClientSettings();
                         
@@ -358,6 +372,12 @@ namespace TeamsManager.UI.ViewModels
                         {
                             azureConfig.Api.Audience = Audience;
                             _logger.LogInformation("Ustawiono Audience");
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(ApiScope))
+                        {
+                            azureConfig.Api.ApiScope = ApiScope;
+                            _logger.LogInformation("Ustawiono API Scope");
                         }
                     }
                 }
