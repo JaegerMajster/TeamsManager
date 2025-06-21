@@ -12,6 +12,7 @@ using TeamsManager.UI.Models.Teams;
 using TeamsManager.UI.ViewModels;
 using TeamsManager.UI.ViewModels.Shell;
 using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.UI.Services;
 using TeamsManager.UI.Views.Teams;
 using System.Windows;
 using Microsoft.Extensions.Logging;
@@ -20,13 +21,12 @@ namespace TeamsManager.UI.ViewModels.Teams
 {
     public class TeamListViewModel : BaseViewModel
     {
-        private readonly ITeamService _teamService;
+        private readonly ITeamsManagerApiService _apiService;
         private readonly ISchoolTypeService _schoolTypeService;
         private readonly ISchoolYearService _schoolYearService;
         private readonly ICurrentUserService _currentUserService;
         private readonly INotificationService _notificationService;
         private readonly MainShellViewModel _mainShellViewModel;
-        private readonly IMsalAuthService _msalAuthService;
         private readonly ILogger<TeamListViewModel> _logger;
 
         // Kolekcje
@@ -141,22 +141,20 @@ namespace TeamsManager.UI.ViewModels.Teams
         public ICommand ShowLifecycleOperationsCommand { get; }
         
         public TeamListViewModel(
-            ITeamService teamService,
+            ITeamsManagerApiService apiService,
             ISchoolTypeService schoolTypeService,
             ISchoolYearService schoolYearService,
             ICurrentUserService currentUserService,
             INotificationService notificationService,
             MainShellViewModel mainShellViewModel,
-            IMsalAuthService msalAuthService,
             ILogger<TeamListViewModel> logger)
         {
-            _teamService = teamService;
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
             _schoolTypeService = schoolTypeService;
             _schoolYearService = schoolYearService;
             _currentUserService = currentUserService;
             _notificationService = notificationService;
             _mainShellViewModel = mainShellViewModel ?? throw new ArgumentNullException(nameof(mainShellViewModel));
-            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             // Inicjalizacja komend
@@ -203,21 +201,22 @@ namespace TeamsManager.UI.ViewModels.Teams
                 IsLoading = true;
                 TeamGroups.Clear();
                 
-                var accessToken = await GetAccessTokenAsync();
-                if (string.IsNullOrEmpty(accessToken))
+                // Pobierz wszystkie zespoły przez API z przepływem OBO
+                var allTeams = await _apiService.GetAllTeamsAsync();
+                if (allTeams == null)
                 {
                     await _notificationService.SendNotificationToUserAsync(
                         _currentUserService.GetCurrentUserUpn() ?? "system",
-                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
+                        "Nie można pobrać zespołów. Sprawdź połączenie.",
                         "error"
                     );
                     return;
                 }
                 
-                // Pobierz zespoły według statusu
+                // Filtruj według statusu
                 var teams = _selectedStatus == TeamStatus.Archived
-                    ? await _teamService.GetArchivedTeamsAsync(forceRefresh, accessToken)
-                    : await _teamService.GetActiveTeamsAsync(forceRefresh, accessToken);
+                    ? allTeams.Where(t => t.Status == TeamStatus.Archived)
+                    : allTeams.Where(t => t.Status == TeamStatus.Active);
                 
                 // Zastosuj filtry
                 var filteredTeams = teams.AsEnumerable();
@@ -285,18 +284,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             try
             {
                 IsLoading = true;
-                var accessToken = await GetAccessTokenAsync();
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    await _notificationService.SendNotificationToUserAsync(
-                        _currentUserService.GetCurrentUserUpn() ?? "system",
-                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
-                        "error"
-                    );
-                    return;
-                }
-                
-                var success = await _teamService.ArchiveTeamAsync(team.Id, "Archiwizacja z interfejsu użytkownika", accessToken);
+                var success = await _apiService.ArchiveTeamAsync(team.Id, "Archiwizacja z interfejsu użytkownika");
                 
                 if (success)
                 {
@@ -345,36 +333,12 @@ namespace TeamsManager.UI.ViewModels.Teams
             try
             {
                 IsLoading = true;
-                var accessToken = await GetAccessTokenAsync();
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    await _notificationService.SendNotificationToUserAsync(
-                        _currentUserService.GetCurrentUserUpn() ?? "system",
-                        "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.",
-                        "error"
-                    );
-                    return;
-                }
-                
-                var success = await _teamService.RestoreTeamAsync(team.Id, accessToken);
-                
-                if (success)
-                {
-                    await _notificationService.SendNotificationToUserAsync(
-                        _currentUserService.GetCurrentUserUpn() ?? "system",
-                        $"Zespół '{team.DisplayName}' został przywrócony.",
-                        "success"
-                    );
-                    await LoadTeamsAsync();
-                }
-                else
-                {
-                    await _notificationService.SendNotificationToUserAsync(
-                        _currentUserService.GetCurrentUserUpn() ?? "system",
-                        "Nie udało się przywrócić zespołu.",
-                        "error"
-                    );
-                }
+                // TODO: Implementacja RestoreTeamAsync w ITeamsManagerApiService
+                await _notificationService.SendNotificationToUserAsync(
+                    _currentUserService.GetCurrentUserUpn() ?? "system",
+                    "Funkcjonalność przywracania zespołów jest w przygotowaniu.",
+                    "info"
+                );
             }
             catch (Exception ex)
             {
@@ -413,8 +377,7 @@ namespace TeamsManager.UI.ViewModels.Teams
             try
             {
                 IsLoading = true;
-                var accessToken = await GetAccessTokenAsync();
-                var success = await _teamService.DeleteTeamAsync(team.Id, accessToken);
+                var success = await _apiService.DeleteTeamAsync(team.Id);
                 
                 if (success)
                 {
@@ -541,27 +504,6 @@ namespace TeamsManager.UI.ViewModels.Teams
             }
         }
 
-        /// <summary>
-        /// Pobiera token dostępu z MSAL Auth Service
-        /// </summary>
-        private async Task<string?> GetAccessTokenAsync()
-        {
-            try
-            {
-                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
-                if (authResult?.AccessToken != null)
-                {
-                    return authResult.AccessToken;
-                }
-
-                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
-                return null;
-            }
-        }
+        // Metoda GetAccessTokenAsync usunięta - używamy teraz ITeamsManagerApiService z przepływem OBO
     }
 } 

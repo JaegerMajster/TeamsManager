@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Abstractions.Services.Graph;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Models.Graph;
+using TeamsManager.Core.Enums;
 using TeamsManager.UI.Models.Monitoring;
 using TeamsManager.UI.Services.Abstractions;
 
@@ -16,24 +17,20 @@ namespace TeamsManager.UI.Services
 {
     /// <summary>
     /// Serwis do komunikacji z API TeamsManager
-    /// Obsługuje endpointy diagnostyczne i monitorowania Graph API
-    /// Implementuje operacje Graph API
+    /// Obsługuje wszystkie operacje biznesowe przez EmbeddedApiServer z przepływem OBO
     /// </summary>
     public interface ITeamsManagerApiService
     {
-
+        // ===== METODY DIAGNOSTYCZNE (ISTNIEJĄCE) =====
         Task<GraphDiagnosticInfo?> GetGraphConnectionDiagnosticsAsync();
         Task<GraphDiagnosticInfo?> GetExtendedGraphConnectionDiagnosticsAsync(string[]? testEndpoints = null, bool includePermissions = true);
         Task<GraphPermissionInfo?> ValidateGraphPermissionsAsync(string[] requiredPermissions);
         Task<GraphConnectionHealthInfo?> GetGraphConnectionHealthAsync();
         Task<GraphDiagnosticInfo?> TestGraphOperationAsync(string operationType, Dictionary<string, object>? parameters = null);
         Task<object?> GetFullGraphDiagnosticReportAsync();
-        
-
         Task<GraphConnectionHealthInfo?> GetGraphStatusAsync();
         Task<GraphConnectionTestResult?> TestGraphConnectionAsync();
         Task<GraphPermissionInfo?> GetGraphPermissionsAsync();
-        
         Task<GraphRateLimitStatus?> GetGraphRateLimitStatusAsync();
         Task<GraphHealthStatus?> GetGraphHealthStatusAsync();
         Task<GraphBatchOperationResult?> ExecuteGraphBatchOperationAsync(GraphBatchRequest batchRequest);
@@ -44,6 +41,121 @@ namespace TeamsManager.UI.Services
         Task<bool> RefreshGraphTokenAsync();
         Task<GraphApiAvailability[]?> GetAvailableGraphEndpointsAsync();
         Task<GraphRateLimitStatus?> GetGraphQuotaInfoAsync();
+
+        // ===== METODY BIZNESOWE ZESPOŁÓW =====
+        /// <summary>
+        /// Tworzy nowy zespół przez API z przepływem OBO
+        /// </summary>
+        Task<Team?> CreateTeamAsync(string displayName, string description, string ownerUpn, 
+            TeamVisibility visibility, string? teamTemplateId = null, string? schoolTypeId = null, 
+            string? schoolYearId = null, Dictionary<string, string>? additionalTemplateValues = null);
+
+        /// <summary>
+        /// Pobiera zespół po ID przez API z przepływem OBO
+        /// </summary>
+        Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false);
+
+        /// <summary>
+        /// Pobiera wszystkie zespoły przez API z przepływem OBO
+        /// </summary>
+        Task<IEnumerable<Team>?> GetAllTeamsAsync();
+
+        /// <summary>
+        /// Aktualizuje zespół przez API z przepływem OBO
+        /// </summary>
+        Task<bool> UpdateTeamAsync(string teamId, string displayName, string description, string ownerUpn, 
+            TeamVisibility visibility, string? schoolTypeId = null, string? schoolYearId = null);
+
+        /// <summary>
+        /// Usuwa zespół przez API z przepływem OBO
+        /// </summary>
+        Task<bool> DeleteTeamAsync(string teamId);
+
+        /// <summary>
+        /// Archiwizuje zespół przez API z przepływem OBO
+        /// </summary>
+        Task<bool> ArchiveTeamAsync(string teamId, string reason);
+
+        /// <summary>
+        /// Dodaje członka do zespołu przez API z przepływem OBO
+        /// </summary>
+        Task<TeamMember?> AddMemberToTeamAsync(string teamId, string userUpn, TeamMemberRole role);
+
+        /// <summary>
+        /// Usuwa członka z zespołu przez API z przepływem OBO
+        /// </summary>
+        Task<bool> RemoveMemberFromTeamAsync(string teamId, string membershipId);
+
+        // ===== METODY BIZNESOWE UŻYTKOWNIKÓW =====
+        /// <summary>
+        /// Tworzy nowego użytkownika przez API z przepływem OBO
+        /// </summary>
+        Task<User?> CreateUserAsync(string firstName, string lastName, string upn, UserRole role, 
+            string departmentId, string password, bool sendWelcomeEmail = false, string? phone = null, 
+            string? alternateEmail = null, string? externalId = null);
+
+        /// <summary>
+        /// Pobiera użytkownika po ID przez API z przepływem OBO
+        /// </summary>
+        Task<User?> GetUserByIdAsync(string userId);
+
+        /// <summary>
+        /// Pobiera wszystkich aktywnych użytkowników przez API z przepływem OBO
+        /// </summary>
+        Task<IEnumerable<User>?> GetAllActiveUsersAsync();
+
+        /// <summary>
+        /// Aktualizuje użytkownika przez API z przepływem OBO
+        /// </summary>
+        Task<bool> UpdateUserAsync(string userId, string firstName, string lastName, string upn, 
+            UserRole role, string departmentId, string? phone = null, string? alternateEmail = null);
+
+        /// <summary>
+        /// Usuwa użytkownika przez API z przepływem OBO
+        /// </summary>
+        Task<bool> DeleteUserAsync(string userId);
+
+        // ===== METODY BIZNESOWE KANAŁÓW =====
+        /// <summary>
+        /// Tworzy nowy kanał w zespole przez API z przepływem OBO
+        /// </summary>
+        Task<Channel?> CreateChannelAsync(string teamId, string displayName, string? description = null, bool isPrivate = false);
+
+        /// <summary>
+        /// Pobiera kanały zespołu przez API z przepływem OBO
+        /// </summary>
+        Task<IEnumerable<Channel>?> GetTeamChannelsAsync(string teamId);
+
+        /// <summary>
+        /// Aktualizuje kanał przez API z przepływem OBO
+        /// </summary>
+        Task<bool> UpdateChannelAsync(string teamId, string channelId, string? newDisplayName = null, string? newDescription = null);
+
+        /// <summary>
+        /// Usuwa kanał przez API z przepływem OBO
+        /// </summary>
+        Task<bool> DeleteChannelAsync(string teamId, string channelId);
+
+        // ===== METODY BIZNESOWE DZIAŁÓW =====
+        /// <summary>
+        /// Pobiera wszystkie działy przez API z przepływem OBO
+        /// </summary>
+        Task<IEnumerable<Department>?> GetAllDepartmentsAsync();
+
+        /// <summary>
+        /// Tworzy nowy dział przez API z przepływem OBO
+        /// </summary>
+        Task<Department?> CreateDepartmentAsync(string name, string? description = null);
+
+        /// <summary>
+        /// Aktualizuje dział przez API z przepływem OBO
+        /// </summary>
+        Task<bool> UpdateDepartmentAsync(string departmentId, string name, string? description = null);
+
+        /// <summary>
+        /// Usuwa dział przez API z przepływem OBO
+        /// </summary>
+        Task<bool> DeleteDepartmentAsync(string departmentId);
     }
 
     public class TeamsManagerApiService : ITeamsManagerApiService
@@ -765,6 +877,473 @@ namespace TeamsManager.UI.Services
             {
                 _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania informacji o quota Graph API");
                 return null;
+            }
+        }
+
+        public async Task<Team?> CreateTeamAsync(string displayName, string description, string ownerUpn, 
+            TeamVisibility visibility, string? teamTemplateId = null, string? schoolTypeId = null, 
+            string? schoolYearId = null, Dictionary<string, string>? additionalTemplateValues = null)
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Tworzenie zespołu: {DisplayName}", displayName);
+                
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/teams");
+                
+                var request = new
+                {
+                    DisplayName = displayName,
+                    Description = description,
+                    OwnerUpn = ownerUpn,
+                    Visibility = visibility,
+                    TeamTemplateId = teamTemplateId,
+                    SchoolTypeId = schoolTypeId,
+                    SchoolYearId = schoolYearId,
+                    AdditionalTemplateValues = additionalTemplateValues
+                };
+                
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<Team>();
+                    _logger.LogDebug("[API-SERVICE] Zespół utworzony pomyślnie: {TeamId}", result?.Id);
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd tworzenia zespołu: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas tworzenia zespołu: {DisplayName}", displayName);
+                return null;
+            }
+        }
+
+        public async Task<Team?> GetTeamByIdAsync(string teamId, bool includeMembers = false, bool includeChannels = false)
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Pobieranie zespołu: {TeamId}", teamId);
+                
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}?includeMembers={includeMembers}&includeChannels={includeChannels}");
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<Team>();
+                    _logger.LogDebug("[API-SERVICE] Zespół pobrany pomyślnie: {TeamId}", teamId);
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd pobierania zespołu: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania zespołu: {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        public async Task<IEnumerable<Team>?> GetAllTeamsAsync()
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Pobieranie wszystkich zespołów");
+                
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/teams");
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<IEnumerable<Team>>();
+                    _logger.LogDebug("[API-SERVICE] Wszystkie zespoły pobrane pomyślnie");
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd pobierania wszystkich zespołów: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania wszystkich zespołów");
+                return null;
+            }
+        }
+
+        public async Task<bool> UpdateTeamAsync(string teamId, string displayName, string description, string ownerUpn, 
+            TeamVisibility visibility, string? schoolTypeId = null, string? schoolYearId = null)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}");
+                var request = new { DisplayName = displayName, Description = description, OwnerUpn = ownerUpn, Visibility = visibility, SchoolTypeId = schoolTypeId, SchoolYearId = schoolYearId };
+                var response = await _httpClient.PatchAsJsonAsync(url, request);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd aktualizacji zespołu: {TeamId}", teamId);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteTeamAsync(string teamId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}");
+                var response = await _httpClient.DeleteAsync(url);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd usuwania zespołu: {TeamId}", teamId);
+                return false;
+            }
+        }
+
+        public async Task<bool> ArchiveTeamAsync(string teamId, string reason)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/archive");
+                var request = new { Reason = reason };
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd archiwizacji zespołu: {TeamId}", teamId);
+                return false;
+            }
+        }
+
+        public async Task<TeamMember?> AddMemberToTeamAsync(string teamId, string userUpn, TeamMemberRole role)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/members");
+                var request = new { UserUpn = userUpn, Role = role };
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<TeamMember>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd dodawania członka do zespołu: {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        public async Task<bool> RemoveMemberFromTeamAsync(string teamId, string membershipId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/members/{membershipId}");
+                var response = await _httpClient.DeleteAsync(url);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd usuwania członka z zespołu: {TeamId}", teamId);
+                return false;
+            }
+        }
+
+        public async Task<User?> CreateUserAsync(string firstName, string lastName, string upn, UserRole role, 
+            string departmentId, string password, bool sendWelcomeEmail = false, string? phone = null, 
+            string? alternateEmail = null, string? externalId = null)
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Tworzenie użytkownika: {Upn}", upn);
+                
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/users");
+                
+                var request = new
+                {
+                    FirstName = firstName,
+                    LastName = lastName,
+                    Upn = upn,
+                    Role = role,
+                    DepartmentId = departmentId,
+                    Password = password,
+                    SendWelcomeEmail = sendWelcomeEmail,
+                    Phone = phone,
+                    AlternateEmail = alternateEmail,
+                    ExternalId = externalId
+                };
+                
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<User>();
+                    _logger.LogDebug("[API-SERVICE] Użytkownik utworzony pomyślnie: {UserId}", result?.Id);
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd tworzenia użytkownika: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas tworzenia użytkownika: {Upn}", upn);
+                return null;
+            }
+        }
+
+        public async Task<User?> GetUserByIdAsync(string userId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/users/{userId}");
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<User>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd pobierania użytkownika: {UserId}", userId);
+                return null;
+            }
+        }
+
+        public async Task<IEnumerable<User>?> GetAllActiveUsersAsync()
+        {
+            try
+            {
+                _logger.LogDebug("[API-SERVICE] Pobieranie wszystkich aktywnych użytkowników");
+                
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/users");
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<IEnumerable<User>>();
+                    _logger.LogDebug("[API-SERVICE] Wszyscy aktywni użytkownicy pobrani pomyślnie");
+                    return result;
+                }
+                else
+                {
+                    _logger.LogWarning("[API-SERVICE] Błąd pobierania wszystkich aktywnych użytkowników: {StatusCode}", response.StatusCode);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas pobierania wszystkich aktywnych użytkowników");
+                return null;
+            }
+        }
+
+        public async Task<bool> UpdateUserAsync(string userId, string firstName, string lastName, string upn, 
+            UserRole role, string departmentId, string? phone = null, string? alternateEmail = null)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/users/{userId}");
+                var request = new { FirstName = firstName, LastName = lastName, Upn = upn, Role = role, DepartmentId = departmentId, Phone = phone, AlternateEmail = alternateEmail };
+                var response = await _httpClient.PatchAsJsonAsync(url, request);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd aktualizacji użytkownika: {UserId}", userId);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteUserAsync(string userId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/users/{userId}");
+                var response = await _httpClient.DeleteAsync(url);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd usuwania użytkownika: {UserId}", userId);
+                return false;
+            }
+        }
+
+        public async Task<Channel?> CreateChannelAsync(string teamId, string displayName, string? description = null, bool isPrivate = false)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels");
+                var request = new { DisplayName = displayName, Description = description, IsPrivate = isPrivate };
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<Channel>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd tworzenia kanału: {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        public async Task<IEnumerable<Channel>?> GetTeamChannelsAsync(string teamId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels");
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<IEnumerable<Channel>>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd pobierania kanałów zespołu: {TeamId}", teamId);
+                return null;
+            }
+        }
+
+        public async Task<bool> UpdateChannelAsync(string teamId, string channelId, string? newDisplayName = null, string? newDescription = null)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels/{channelId}");
+                var request = new { DisplayName = newDisplayName, Description = newDescription };
+                var response = await _httpClient.PatchAsJsonAsync(url, request);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd aktualizacji kanału: {ChannelId}", channelId);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteChannelAsync(string teamId, string channelId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels/{channelId}");
+                var response = await _httpClient.DeleteAsync(url);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd usuwania kanału: {ChannelId}", channelId);
+                return false;
+            }
+        }
+
+        public async Task<IEnumerable<Department>?> GetAllDepartmentsAsync()
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/departments");
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<IEnumerable<Department>>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd pobierania działów");
+                return null;
+            }
+        }
+
+        public async Task<Department?> CreateDepartmentAsync(string name, string? description = null)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync("api/departments");
+                var request = new { Name = name, Description = description };
+                var response = await _httpClient.PostAsJsonAsync(url, request);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadFromJsonAsync<Department>();
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd tworzenia działu: {Name}", name);
+                return null;
+            }
+        }
+
+        public async Task<bool> UpdateDepartmentAsync(string departmentId, string name, string? description = null)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/departments/{departmentId}");
+                var request = new { Name = name, Description = description };
+                var response = await _httpClient.PatchAsJsonAsync(url, request);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd aktualizacji działu: {DepartmentId}", departmentId);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteDepartmentAsync(string departmentId)
+        {
+            try
+            {
+                await EnsureAuthenticatedAsync();
+                var url = await BuildApiUrlAsync($"api/departments/{departmentId}");
+                var response = await _httpClient.DeleteAsync(url);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[API-SERVICE] Błąd usuwania działu: {DepartmentId}", departmentId);
+                return false;
             }
         }
     }
