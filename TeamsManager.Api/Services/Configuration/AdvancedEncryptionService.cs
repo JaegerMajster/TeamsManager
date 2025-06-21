@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Runtime.Versioning;
 
 namespace TeamsManager.Api.Services.Configuration
 {
@@ -19,6 +20,7 @@ namespace TeamsManager.Api.Services.Configuration
             _keyId = GenerateKeyId();
         }
 
+        [SupportedOSPlatform("windows")]
         public EncryptedData Encrypt(string plaintext)
         {
             try
@@ -79,6 +81,7 @@ namespace TeamsManager.Api.Services.Configuration
             }
         }
 
+        [SupportedOSPlatform("windows")]
         public string Decrypt(EncryptedData encryptedData)
         {
             try

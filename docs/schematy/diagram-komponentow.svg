@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="1400" height="1000" xmlns="http://www.w3.org/2000/svg">
+<svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <!-- Gradienty -->
     <linearGradient id="orchestratorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -25,37 +25,41 @@
     
     <!-- Shadow filter -->
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#00000020"/>
+      <feDropShadow dx="3" dy="3" stdDeviation="4" flood-color="#00000025"/>
     </filter>
     
     <!-- Arrow markers -->
-    <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-            refX="10" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" 
+            refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#333" />
     </marker>
     
-    <marker id="dependencyArrow" markerWidth="10" markerHeight="7" 
-            refX="10" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    <marker id="dependencyArrow" markerWidth="12" markerHeight="8" 
+            refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#666" />
     </marker>
   </defs>
 
   <!-- Tło -->
-  <rect width="1400" height="1000" fill="#FAFAFA"/>
+  <rect width="1600" height="1200" fill="#F8F9FA"/>
   
   <!-- Tytuł -->
-  <text x="700" y="30" text-anchor="middle" font-family="Arial, sans-serif" 
-        font-size="24" font-weight="bold" fill="#212121">
+  <text x="800" y="25" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="22" font-weight="bold" fill="#212121">
     TeamsManager - Diagram Komponentów (Szczegółowa Architektura)
+  </text>
+  <text x="800" y="45" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="12" fill="#666">
+    7 Orkiestratorów Enterprise | 18 Kontrolerów API | 20+ Serwisów Core | Aktualizacja: 21.06.2025
   </text>
 
   <!-- Orkiestratory (Application Layer) -->
-  <g transform="translate(50, 80)">
-    <rect width="650" height="200" rx="10" fill="none" stroke="#FF9800" 
+  <g transform="translate(50, 70)">
+    <rect width="750" height="240" rx="12" fill="none" stroke="#FF9800" 
           stroke-width="3" stroke-dasharray="8,4" opacity="0.8"/>
-    <text x="325" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+    <text x="375" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
           font-size="16" font-weight="bold" fill="#F57C00">
-      🎯 APPLICATION LAYER - ORKIESTRATORY ENTERPRISE (6 komponentów)
+      🎯 APPLICATION LAYER - ORKIESTRATORY ENTERPRISE (7 komponentów - 6,272 linii kodu)
     </text>
     
     <!-- SchoolYearProcessOrchestrator -->
@@ -135,21 +139,35 @@
       <text x="90" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
             font-size="12" font-weight="bold" fill="white">Reporting</text>
       <text x="90" y="35" text-anchor="middle" font-family="Arial, sans-serif" 
-            font-size="12" font-weight="bold" fill="white">Orchestrator</text>
+            font-size="12" font-weight="bold" fill="white">Orchestrator (852)</text>
       <text x="90" y="50" text-anchor="middle" font-family="Arial, sans-serif" 
             font-size="9" fill="white">Generowanie raportów</text>
       <text x="90" y="62" text-anchor="middle" font-family="Arial, sans-serif" 
             font-size="9" fill="white">Analityka i export</text>
     </g>
+    
+    <!-- TeamManagementHealthOrchestrator (7th) -->
+    <g transform="translate(620, 130)">
+      <rect width="180" height="70" rx="8" fill="url(#orchestratorGradient)" 
+            stroke="#FF9800" stroke-width="2" filter="url(#shadow)"/>
+      <text x="90" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+            font-size="12" font-weight="bold" fill="white">TMHealth</text>
+      <text x="90" y="35" text-anchor="middle" font-family="Arial, sans-serif" 
+            font-size="12" font-weight="bold" fill="white">Orchestrator (980)</text>
+      <text x="90" y="50" text-anchor="middle" font-family="Arial, sans-serif" 
+            font-size="9" fill="white">Health Teams</text>
+      <text x="90" y="62" text-anchor="middle" font-family="Arial, sans-serif" 
+            font-size="9" fill="white">Advanced monitoring</text>
+    </g>
   </g>
 
   <!-- API Controllers -->
-  <g transform="translate(750, 80)">
-    <rect width="600" height="280" rx="10" fill="none" stroke="#9C27B0" 
+  <g transform="translate(850, 70)">
+    <rect width="700" height="320" rx="12" fill="none" stroke="#9C27B0" 
           stroke-width="3" stroke-dasharray="8,4" opacity="0.8"/>
-    <text x="300" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
+    <text x="350" y="20" text-anchor="middle" font-family="Arial, sans-serif" 
           font-size="16" font-weight="bold" fill="#7B1FA2">
-      ⚡ API LAYER - KONTROLERY (19 komponentów)
+      ⚡ API LAYER - KONTROLERY REST (18 komponentów)
     </text>
     
     <!-- Kontrolery w kolumnach -->

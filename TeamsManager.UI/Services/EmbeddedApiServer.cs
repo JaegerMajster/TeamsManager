@@ -404,6 +404,10 @@ namespace TeamsManager.UI.Services
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddScoped<IUnitOfWork, EfUnitOfWork>();
             
+            // ===== TIME PROVIDER - .NET 9 modernization =====
+            services.AddSingleton<TimeProvider>(TimeProvider.System);
+            _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano TimeProvider (modernizacja .NET 9)");
+            
             // ===== REPOZYTORIA =====
             services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
             services.AddScoped<IUserRepository, UserRepository>();
@@ -814,10 +818,16 @@ namespace TeamsManager.UI.Services
     /// </summary>
     public class EmbeddedAuthenticationHandler : Microsoft.AspNetCore.Authentication.AuthenticationHandler<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions>
     {
-        public EmbeddedAuthenticationHandler(Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions> options,
-            Microsoft.Extensions.Logging.ILoggerFactory logger, System.Text.Encodings.Web.UrlEncoder encoder, Microsoft.AspNetCore.Authentication.ISystemClock clock)
-            : base(options, logger, encoder, clock)
+        private readonly TimeProvider _timeProvider;
+
+        public EmbeddedAuthenticationHandler(
+            Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions> options,
+            Microsoft.Extensions.Logging.ILoggerFactory logger, 
+            System.Text.Encodings.Web.UrlEncoder encoder,
+            TimeProvider timeProvider)
+            : base(options, logger, encoder)
         {
+            _timeProvider = timeProvider;
         }
 
         protected override Task<Microsoft.AspNetCore.Authentication.AuthenticateResult> HandleAuthenticateAsync()
@@ -837,7 +847,8 @@ namespace TeamsManager.UI.Services
                     {
                         new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "embedded-user"),
                         new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "EmbeddedApiUser"),
-                        new System.Security.Claims.Claim("access_token", userAccessToken)
+                        new System.Security.Claims.Claim("access_token", userAccessToken),
+                        new System.Security.Claims.Claim("auth_time", _timeProvider.GetUtcNow().ToUnixTimeSeconds().ToString())
                     };
                     
                     var identity = new System.Security.Claims.ClaimsIdentity(claims, "Bearer");

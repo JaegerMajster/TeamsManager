@@ -3,6 +3,7 @@
   <!-- Title -->
   <text x="900" y="30" font-family="Segoe UI, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#1e293b">🏗️ Diagram Klas - Modele Domenowe TeamsManager</text>
   <text x="900" y="55" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle" fill="#64748b">13 encji głównych • 5 tabel łączących • Dziedziczenie BaseEntity • Rich Domain Models</text>
+  <text x="900" y="75" font-family="Segoe UI, sans-serif" font-size="12" text-anchor="middle" fill="#94a3b8">Entity Framework Core 9.0 | SQLite | Clean Architecture | Aktualizacja: 21.06.2025</text>
   
   <!-- Base Entity (Center Top) -->
   <rect x="700" y="80" width="400" height="140" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="8"/>

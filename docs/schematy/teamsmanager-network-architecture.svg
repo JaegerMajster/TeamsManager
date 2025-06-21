@@ -17,8 +17,11 @@
   </defs>
   
   <!-- Title -->
-  <text x="400" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">
+  <text x="400" y="20" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">
     TeamsManager - Architektura Sieciowa
+  </text>
+  <text x="400" y="45" text-anchor="middle" font-size="12" fill="#666">
+    Embedded API Server | HTTPS | SignalR | OAuth2 | Aktualizacja: 21.06.2025
   </text>
   
   <!-- Desktop Client Layer -->

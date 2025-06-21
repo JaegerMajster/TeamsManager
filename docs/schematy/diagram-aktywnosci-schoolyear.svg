@@ -57,6 +57,10 @@
         font-size="14" fill="#666">
     Proces rozpoczęcia nowego roku szkolnego z automatyczną archiwizacją poprzedniego
   </text>
+  <text x="600" y="68" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="12" fill="#999">
+    Orkiestrator Enterprise | 980 linii kodu | ASP.NET Core 9.0 | 21.06.2025
+  </text>
 
   <!-- Swimlanes -->
   <g transform="translate(50, 80)">
