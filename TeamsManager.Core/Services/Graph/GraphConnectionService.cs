@@ -48,11 +48,34 @@ namespace TeamsManager.Core.Services.Graph
             {
                 _logger.LogDebug("Sprawdzanie ważności tokenu Graph API");
 
-                // Próba pobrania tokenu z cache
+                // ✅ NAPRAWKA OBO: Sprawdź token OBO z ModernHttpService
+                var oboToken = await _httpService.GetAccessTokenAsync();
+                if (!string.IsNullOrEmpty(oboToken))
+                {
+                    try
+                    {
+                        // Sprawdź czy token OBO nie wygasł
+                        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                        var token = handler.ReadJwtToken(oboToken);
+                        var isValid = token.ValidTo > DateTime.UtcNow.AddMinutes(5);
+                        
+                        _logger.LogDebug("Token OBO Graph API jest {Status}, wygasa: {ExpiresAt}", 
+                            isValid ? "ważny" : "nieważny", token.ValidTo);
+                        return isValid;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Błąd podczas dekodowania tokenu OBO");
+                    }
+                }
+
+                // Fallback do Client Credentials jeśli OBO nie jest dostępny
+                _logger.LogDebug("Brak tokenu OBO, sprawdzam Client Credentials jako fallback");
+                
                 var accounts = await _confidentialClientApp.GetAccountsAsync();
                 if (!accounts.Any())
                 {
-                    _logger.LogWarning("Brak kont w cache tokenu");
+                    _logger.LogWarning("Brak kont w cache tokenu Client Credentials");
                     return false;
                 }
 
@@ -68,12 +91,12 @@ namespace TeamsManager.Core.Services.Graph
                     var isValid = result?.AccessToken != null && 
                                   result.ExpiresOn > DateTimeOffset.UtcNow.AddMinutes(5);
 
-                    _logger.LogDebug("Token Graph API jest {Status}", isValid ? "ważny" : "nieważny");
+                    _logger.LogDebug("Token Client Credentials Graph API jest {Status}", isValid ? "ważny" : "nieważny");
                     return isValid;
                 }
                 catch (MsalUiRequiredException)
                 {
-                    _logger.LogWarning("Token wymaga interakcji użytkownika");
+                    _logger.LogWarning("Token Client Credentials wymaga interakcji użytkownika");
                     return false;
                 }
             }
@@ -540,6 +563,32 @@ namespace TeamsManager.Core.Services.Graph
                 var hasBasicPermissions = basicPermissions.All(p => permissionInfo.AssignedPermissions.Contains(p));
                 
                 permissionInfo.HasRequiredPermissions = hasBasicPermissions; // Używamy bardziej realistycznego kryterium
+
+                // ✅ NAPRAWKA: Ustaw Status na podstawie rzeczywistych wyników
+                if (permissionInfo.AssignedPermissions.Count > 0 && permissionInfo.MissingPermissions.Count == 0)
+                {
+                    permissionInfo.Status = GraphHealthStatus.Healthy;
+                    _logger.LogDebug("Status uprawnień: Healthy - wszystkie uprawnienia dostępne");
+                }
+                else if (permissionInfo.AssignedPermissions.Count >= 3) // Przynajmniej 3 podstawowe uprawnienia
+                {
+                    permissionInfo.Status = GraphHealthStatus.Warning;
+                    _logger.LogDebug("Status uprawnień: Warning - niektóre uprawnienia dostępne");
+                }
+                else
+                {
+                    permissionInfo.Status = GraphHealthStatus.Critical;
+                    _logger.LogDebug("Status uprawnień: Critical - brak wystarczających uprawnień");
+                }
+
+                // Ustaw flagi uprawnień na podstawie rzeczywistych wyników
+                permissionInfo.HasUserReadPermission = permissionInfo.AssignedPermissions.Contains("User.Read");
+                permissionInfo.HasTeamReadPermission = permissionInfo.AssignedPermissions.Contains("Team.ReadBasic.All");
+                permissionInfo.HasUserManagePermission = permissionInfo.AssignedPermissions.Contains("User.ReadWrite.All");
+                permissionInfo.HasTeamManagePermission = permissionInfo.AssignedPermissions.Contains("Team.Create");
+                permissionInfo.HasDirectoryReadPermission = permissionInfo.AssignedPermissions.Contains("Directory.Read.All");
+                permissionInfo.HasGroupReadPermission = permissionInfo.AssignedPermissions.Contains("Group.Read.All");
+                permissionInfo.HasGroupWritePermission = permissionInfo.AssignedPermissions.Contains("Group.ReadWrite.All");
 
                 // Dodaj brakujące wymagane uprawnienia
                 foreach (var required in requiredPermissions)

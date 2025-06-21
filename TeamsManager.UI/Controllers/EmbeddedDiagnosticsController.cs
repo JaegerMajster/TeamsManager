@@ -54,37 +54,41 @@ namespace TeamsManager.UI.Controllers
 
                 _logger.LogDebug("[EMBEDDED-DIAGNOSTICS] Używanie tokenu OBO do sprawdzenia stanu Graph API");
                 
-                // TODO: Przekaż token OBO do GraphConnectionService
-                // Na razie używamy standardowej metody, ale token będzie przekazany przez ModernHttpService
+                // Pobierz dane z GraphConnectionService
                 var healthInfo = await _graphConnectionService.GetConnectionHealthAsync();
+                var permissionInfo = await _graphConnectionService.GetPermissionInfoAsync();
                 
-                // Rozszerz informacje o dane z konfiguracji Azure AD
-                var extendedHealthInfo = new
+                // ✅ NAPRAWKA: Konwertuj na GraphDiagnosticInfo dla okna diagnostyki
+                var diagnosticInfo = new GraphDiagnosticInfo
                 {
-                    healthInfo.IsConnected,
-                    healthInfo.IsTokenValid,
-                    healthInfo.Status,
-                    healthInfo.LastChecked,
-                    healthInfo.ResponseTimeMs,
-                    healthInfo.GraphVersion,
-                    healthInfo.LastError,
-                    healthInfo.TokenExpiresAt,
-                    healthInfo.IsHealthy,
-                    // Dodatkowe informacje z konfiguracji
+                    IsConnected = healthInfo.IsConnected,
+                    IsAuthenticated = healthInfo.IsTokenValid, // ✅ KLUCZOWA NAPRAWKA
+                    Status = healthInfo.Status,
+                    ResponseTimeMs = healthInfo.ResponseTimeMs,
+                    LastChecked = healthInfo.LastChecked,
+                    Errors = string.IsNullOrEmpty(healthInfo.LastError) ? new List<string>() : new List<string> { healthInfo.LastError },
+                    Warnings = new List<string>(),
+                    AllTestsPassed = healthInfo.IsHealthy,
+                    HasRequiredPermissions = permissionInfo.HasRequiredPermissions, // ✅ KLUCZOWA NAPRAWKA
+                    GraphApiVersion = healthInfo.GraphVersion,
                     TenantId = _azureAdConfig?.TenantId ?? "Nieznany",
-                    TenantName = _azureAdConfig?.TenantId ?? "Nieznany", 
                     ApplicationId = _azureAdConfig?.Api?.ClientId ?? "Nieznany",
-                    HasConfiguration = _azureAdConfig != null,
-                    ConfigurationValid = _azureAdConfig?.Api?.IsValid() == true,
-                    // Informacje o tokenach OBO
-                    HasUserToken = !string.IsNullOrEmpty(userAccessToken),
-                    HasOboToken = !string.IsNullOrEmpty(graphAccessToken),
-                    TokenFlow = "On-Behalf-Of (OBO)"
+                    AdditionalInfo = new Dictionary<string, object>
+                    {
+                        ["TokenExpiresAt"] = healthInfo.TokenExpiresAt,
+                        ["HasConfiguration"] = _azureAdConfig != null,
+                        ["ConfigurationValid"] = _azureAdConfig?.Api?.IsValid() == true,
+                        ["HasUserToken"] = !string.IsNullOrEmpty(userAccessToken),
+                        ["HasOboToken"] = !string.IsNullOrEmpty(graphAccessToken),
+                        ["TokenFlow"] = "On-Behalf-Of (OBO)",
+                        ["AssignedPermissionsCount"] = permissionInfo.AssignedPermissions.Count,
+                        ["MissingPermissionsCount"] = permissionInfo.MissingPermissions.Count
+                    }
                 };
                 
-                _logger.LogInformation("[EMBEDDED-DIAGNOSTICS] Status Graph API (OBO): {Status}, TenantId: {TenantId}, ApplicationId: {ApplicationId}", 
-                    healthInfo.Status, extendedHealthInfo.TenantId, extendedHealthInfo.ApplicationId);
-                return Ok(extendedHealthInfo);
+                _logger.LogInformation("[EMBEDDED-DIAGNOSTICS] Status Graph API (OBO): {Status}, IsAuthenticated: {IsAuthenticated}, HasPermissions: {HasPermissions}", 
+                    diagnosticInfo.Status, diagnosticInfo.IsAuthenticated, diagnosticInfo.HasRequiredPermissions);
+                return Ok(diagnosticInfo);
             }
             catch (Exception ex)
             {
@@ -112,85 +116,102 @@ namespace TeamsManager.UI.Controllers
 
                 _logger.LogDebug("[EMBEDDED-DIAGNOSTICS] Używanie tokenu OBO do sprawdzenia uprawnień Graph API");
                 
-                // TODO: Przekaż token OBO do GraphConnectionService
-                // Na razie używamy standardowej metody, ale token będzie przekazany przez ModernHttpService
+                // Pobierz dane z request body (jeśli są)
+                string[] requestedPermissions = null;
+                try
+                {
+                    if (HttpContext.Request.ContentLength > 0)
+                    {
+                        using var reader = new System.IO.StreamReader(HttpContext.Request.Body);
+                        var body = await reader.ReadToEndAsync();
+                        if (!string.IsNullOrEmpty(body))
+                        {
+                            requestedPermissions = System.Text.Json.JsonSerializer.Deserialize<string[]>(body);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[EMBEDDED-DIAGNOSTICS] Błąd parsowania żądanych uprawnień z body");
+                }
+                
+                // ✅ NAPRAWKA: Użyj rzeczywistych wyników z GraphConnectionService
                 var permissionInfo = await _graphConnectionService.GetPermissionInfoAsync();
                 
-                // Sprawdź wymagane uprawnienia dla TeamsManager
-                var requiredPermissions = new[] 
-                { 
-                    "User.ReadWrite.All", 
-                    "Directory.ReadWrite.All", 
-                    "Group.ReadWrite.All",
-                    "Team.ReadBasic.All",
-                    "TeamMember.ReadWrite.All"
-                };
+                // ✅ NAPRAWKA: Jeśli są żądane konkretne uprawnienia, sprawdź je
+                if (requestedPermissions != null && requestedPermissions.Length > 0)
+                {
+                    var missingPermissions = requestedPermissions
+                        .Where(p => !permissionInfo.AssignedPermissions.Contains(p))
+                        .ToList();
+                    
+                    // Aktualizuj informacje o brakujących uprawnieniach
+                    permissionInfo.MissingPermissions = missingPermissions;
+                    permissionInfo.HasRequiredPermissions = missingPermissions.Count == 0;
+                    
+                    // Ustaw status na podstawie wyników
+                    if (missingPermissions.Count == 0)
+                    {
+                        permissionInfo.Status = GraphHealthStatus.Healthy;
+                    }
+                    else if (permissionInfo.AssignedPermissions.Count > 0)
+                    {
+                        permissionInfo.Status = GraphHealthStatus.Warning;
+                    }
+                    else
+                    {
+                        permissionInfo.Status = GraphHealthStatus.Critical;
+                    }
+                    
+                    _logger.LogInformation("[EMBEDDED-DIAGNOSTICS] Sprawdzono konkretne uprawnienia: Żądane={RequestedCount}, Przypisane={AssignedCount}, Brakujące={MissingCount}", 
+                        requestedPermissions.Length, permissionInfo.AssignedPermissions.Count, missingPermissions.Count);
+                }
                 
-                var hasAllPermissions = requiredPermissions.All(p => permissionInfo.HasPermission(p));
-                var missingPermissions = requiredPermissions.Where(p => !permissionInfo.HasPermission(p)).ToList();
-                var availablePermissions = requiredPermissions.Where(p => permissionInfo.HasPermission(p)).ToList();
-                
-                // Pobierz dane z rzeczywistej konfiguracji Azure AD
+                // Rozszerz informacje o dane z konfiguracji Azure AD
                 var tenantId = _azureAdConfig?.TenantId ?? "Nieznany";
                 var applicationId = _azureAdConfig?.Api?.ClientId ?? "Nieznany";
-                // Nazwa tenanta może być uzyskana z domeny (np. ckziumm.edu.pl) lub pozostać jako TenantId
                 var tenantName = tenantId.Contains(".") ? tenantId : $"Tenant-{tenantId}";
                 
-                var result = new GraphPermissionInfo
-                {
-                    HasRequiredPermissions = hasAllPermissions,
-                    Status = hasAllPermissions ? GraphHealthStatus.Healthy : GraphHealthStatus.Critical,
-                    AssignedPermissions = availablePermissions,
-                    MissingPermissions = missingPermissions,
-                    Errors = new List<string>(),
-                    LastChecked = DateTime.UtcNow,
-                    AuthenticationType = "Bearer (OBO)",
-                    TokenExpiresAt = DateTime.UtcNow.AddHours(1), // Będzie zaktualizowane przez rzeczywisty serwis
-                    TenantName = tenantName,
-                    ApplicationId = applicationId
-                };
+                // Aktualizuj informacje o konfiguracji
+                permissionInfo.TenantName = tenantName;
+                permissionInfo.ApplicationId = applicationId;
+                permissionInfo.AuthenticationType = "Bearer (OBO)";
                 
-                if (!hasAllPermissions)
+                // Dodaj informacje o przepływie OBO do listy błędów (jako informacje)
+                var infoMessages = new List<string>();
+                infoMessages.Add($"🔄 Przepływ uwierzytelniania: On-Behalf-Of (OBO)");
+                infoMessages.Add($"👤 Token użytkownika: {(!string.IsNullOrEmpty(userAccessToken) ? "✅ Dostępny" : "❌ Niedostępny")}");
+                infoMessages.Add($"🔑 Token OBO: {(!string.IsNullOrEmpty(graphAccessToken) ? "✅ Dostępny" : "❌ Niedostępny")}");
+                infoMessages.Add($"📊 Potwierdzone uprawnienia ({permissionInfo.AssignedPermissions.Count}): {string.Join(", ", permissionInfo.AssignedPermissions)}");
+                
+                if (permissionInfo.MissingPermissions.Count > 0)
                 {
-                    result.Errors.Add($"Brakujące uprawnienia: {string.Join(", ", missingPermissions)}");
-                    result.Errors.Add($"Sprawdź konfigurację Azure AD (Tenant ID: {tenantId})");
-                    result.Errors.Add($"Application ID: {applicationId}");
-                    result.Errors.Add("Dodaj brakujące uprawnienia Graph API w Azure AD Portal");
-                    result.Errors.Add("⚠️ Uprawnienia muszą być typu 'Delegated' dla przepływu OBO");
+                    infoMessages.Add($"⚠️ Brakujące uprawnienia ({permissionInfo.MissingPermissions.Count}): {string.Join(", ", permissionInfo.MissingPermissions)}");
                 }
                 
                 // Dodaj informacje o konfiguracji
                 if (_azureAdConfig == null)
                 {
-                    result.Errors.Add("⚠️ Brak konfiguracji Azure AD w EmbeddedApiServer");
+                    infoMessages.Add("⚠️ Brak konfiguracji Azure AD w EmbeddedApiServer");
                 }
                 else if (_azureAdConfig.Api?.IsValid() != true)
                 {
-                    result.Errors.Add("⚠️ Nieprawidłowa konfiguracja Azure AD API");
+                    infoMessages.Add("⚠️ Nieprawidłowa konfiguracja Azure AD API");
                     if (string.IsNullOrEmpty(_azureAdConfig.Api?.ClientId))
-                        result.Errors.Add("- Brakuje Client ID");
+                        infoMessages.Add("- Brakuje Client ID");
                     if (string.IsNullOrEmpty(_azureAdConfig.Api?.ClientSecret))
-                        result.Errors.Add("- Brakuje Client Secret");
+                        infoMessages.Add("- Brakuje Client Secret");
                     if (string.IsNullOrEmpty(_azureAdConfig.TenantId))
-                        result.Errors.Add("- Brakuje Tenant ID");
+                        infoMessages.Add("- Brakuje Tenant ID");
                 }
                 
-                if (!permissionInfo.IsValid)
-                {
-                    result.Errors.Add("Nieprawidłowe uprawnienia Graph API");
-                    if (!string.IsNullOrEmpty(permissionInfo.ErrorMessage))
-                    {
-                        result.Errors.Add(permissionInfo.ErrorMessage);
-                    }
-                }
+                // ✅ NAPRAWKA: Nie nadpisuj Errors - dodaj tylko informacje
+                permissionInfo.Errors.AddRange(infoMessages);
                 
-                // Dodaj informacje o przepływie OBO
-                result.Errors.Add($"🔄 Przepływ uwierzytelniania: On-Behalf-Of (OBO)");
-                result.Errors.Add($"👤 Token użytkownika: {(!string.IsNullOrEmpty(userAccessToken) ? "✅ Dostępny" : "❌ Niedostępny")}");
-                result.Errors.Add($"🔑 Token OBO: {(!string.IsNullOrEmpty(graphAccessToken) ? "✅ Dostępny" : "❌ Niedostępny")}");
-                
-                _logger.LogInformation("[EMBEDDED-DIAGNOSTICS] Uprawnienia Graph API (OBO): {HasPermissions}", result.HasRequiredPermissions);
-                return Ok(result);
+                _logger.LogInformation("[EMBEDDED-DIAGNOSTICS] Uprawnienia Graph API (OBO): {HasPermissions}, Status: {Status}, Przypisane: {AssignedCount}", 
+                    permissionInfo.HasRequiredPermissions, permissionInfo.Status, permissionInfo.AssignedPermissions.Count);
+                    
+                return Ok(permissionInfo);
             }
             catch (Exception ex)
             {
