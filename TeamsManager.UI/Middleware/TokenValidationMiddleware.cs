@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Threading.Tasks;
 using TeamsManager.UI.Services.Auth;
+using Microsoft.Extensions.DependencyInjection;
+using TeamsManager.Core.Abstractions.Services;
 
 namespace TeamsManager.UI.Middleware
 {
@@ -30,61 +32,69 @@ namespace TeamsManager.UI.Middleware
         {
             try
             {
+                _logger.LogDebug("[TOKEN-VALIDATION] Sprawdzanie Authorization header...");
+                
                 // Sprawdź czy żądanie ma Authorization header
                 if (context.Request.Headers.TryGetValue("Authorization", out var authHeader))
                 {
                     var authHeaderValue = authHeader.ToString();
-                    
-                    // Sprawdź czy to Bearer token
                     if (authHeaderValue.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        var token = authHeaderValue.Substring("Bearer ".Length).Trim();
+                        var userAccessToken = authHeaderValue.Substring("Bearer ".Length).Trim();
                         
-                        _logger.LogDebug("Znaleziono Bearer token w Authorization header");
-                        
-                        // Waliduj token
-                        if (_oboTokenManager.ValidateUserToken(token))
+                        if (!string.IsNullOrEmpty(userAccessToken))
                         {
-                            _logger.LogDebug("Token użytkownika jest prawidłowy");
+                            _logger.LogDebug("[TOKEN-VALIDATION] Token użytkownika otrzymany, długość: {Length}", userAccessToken.Length);
                             
-                            // Dodaj token do HttpContext.Items dla kontrolerów
-                            context.Items["UserAccessToken"] = token;
+                            // Wykonaj przepływ OBO
+                            var oboAccessToken = await _oboTokenManager.GetOboAccessTokenAsync(userAccessToken);
                             
-                            // Uzyskaj token OBO dla Graph API
-                            var oboToken = await _oboTokenManager.GetOboAccessTokenAsync(token);
-                            if (!string.IsNullOrEmpty(oboToken))
+                            if (!string.IsNullOrEmpty(oboAccessToken))
                             {
-                                context.Items["GraphAccessToken"] = oboToken;
-                                _logger.LogDebug("Token OBO dla Graph API został uzyskany pomyślnie");
+                                _logger.LogDebug("[TOKEN-VALIDATION] Token OBO otrzymany pomyślnie");
+                                
+                                // ✅ NAPRAWKA OBO: Dodaj tokeny do HttpContext.Items
+                                context.Items["UserAccessToken"] = userAccessToken;
+                                context.Items["GraphAccessToken"] = oboAccessToken;
+                                
+                                // ✅ NAPRAWKA OBO: Ustaw token OBO w ModernHttpService
+                                try
+                                {
+                                    var modernHttpService = context.RequestServices.GetService<IModernHttpService>();
+                                    if (modernHttpService != null)
+                                    {
+                                        modernHttpService.SetOboToken(oboAccessToken);
+                                        _logger.LogDebug("[TOKEN-VALIDATION] Token OBO ustawiony w ModernHttpService");
+                                    }
+                                    else
+                                    {
+                                        _logger.LogWarning("[TOKEN-VALIDATION] ModernHttpService nie jest dostępny w DI");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "[TOKEN-VALIDATION] Błąd podczas ustawiania tokenu OBO w ModernHttpService");
+                                }
                             }
                             else
                             {
-                                _logger.LogWarning("Nie udało się uzyskać tokenu OBO dla Graph API");
+                                _logger.LogWarning("[TOKEN-VALIDATION] Nie udało się uzyskać tokenu OBO");
                             }
                         }
-                        else
-                        {
-                            _logger.LogWarning("Token użytkownika nie przeszedł walidacji");
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogDebug("Authorization header nie zawiera Bearer token");
                     }
                 }
                 else
                 {
-                    _logger.LogDebug("Brak Authorization header w żądaniu");
+                    _logger.LogDebug("[TOKEN-VALIDATION] Brak Authorization header");
                 }
-
+                
                 // Kontynuuj pipeline
                 await _next(context);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd w TokenValidationMiddleware");
-                
-                // W przypadku błędu, kontynuuj pipeline bez tokenów
+                _logger.LogError(ex, "[TOKEN-VALIDATION] Błąd w TokenValidationMiddleware");
+                // Kontynuuj pipeline mimo błędu
                 await _next(context);
             }
         }

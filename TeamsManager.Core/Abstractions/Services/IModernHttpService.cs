@@ -831,6 +831,12 @@ namespace TeamsManager.Core.Abstractions.Services
         /// <returns>Token dostępu lub null jeśli niedostępny</returns>
         Task<string?> GetAccessTokenAsync();
 
+        /// <summary>
+        /// ✅ NAPRAWKA OBO: Ustawia token OBO do użycia w żądaniach Graph API
+        /// </summary>
+        /// <param name="oboAccessToken">Token OBO otrzymany z middleware</param>
+        void SetOboToken(string oboAccessToken);
+
         // ===== WERSJE GENERIC METOD HTTP =====
 
         /// <summary>

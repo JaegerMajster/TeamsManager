@@ -1306,14 +1306,25 @@ namespace TeamsManager.Core.Services.Graph
             {
                 _logger.LogDebug("Pobieranie tokenu dostępu Graph API");
 
+                // ✅ NAPRAWKA OBO: Użyj ModernHttpService który ma token OBO
+                var token = await _httpService.GetAccessTokenAsync();
+                
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _logger.LogDebug("Token Graph API pobrany z ModernHttpService (OBO): {HasToken}", !string.IsNullOrEmpty(token));
+                    return token;
+                }
+                
+                // Fallback do Client Credentials jeśli OBO nie jest dostępny
+                _logger.LogDebug("Brak tokenu OBO, używam Client Credentials jako fallback");
                 var scopes = _graphConfig.Scopes.ClientCredentials;
                 var result = await _confidentialClientApp
                     .AcquireTokenForClient(scopes)
                     .ExecuteAsync();
 
-                var token = result?.AccessToken;
-                _logger.LogDebug("Token Graph API pobrany: {HasToken}", !string.IsNullOrEmpty(token));
-                return token;
+                var fallbackToken = result?.AccessToken;
+                _logger.LogDebug("Token Graph API pobrany (Client Credentials fallback): {HasToken}", !string.IsNullOrEmpty(fallbackToken));
+                return fallbackToken;
             }
             catch (Exception ex)
             {

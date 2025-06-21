@@ -22,6 +22,9 @@ namespace TeamsManager.Core.Services
         private readonly IConfidentialClientApplication _confidentialClientApp;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly GraphApiConfiguration _graphConfig;
+        
+        // ✅ NAPRAWKA OBO: Przechowywanie tokenu OBO
+        private string? _oboAccessToken;
 
         public ModernHttpService(
             HttpClient httpClient,
@@ -39,6 +42,15 @@ namespace TeamsManager.Core.Services
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 WriteIndented = false
             };
+        }
+
+        /// <summary>
+        /// ✅ NAPRAWKA OBO: Ustawia token OBO do użycia w żądaniach Graph API
+        /// </summary>
+        public void SetOboToken(string oboAccessToken)
+        {
+            _oboAccessToken = oboAccessToken;
+            _logger.LogDebug("Token OBO ustawiony w ModernHttpService");
         }
 
         // ===== PODSTAWOWE METODY HTTP ZWRACAJĄCE HttpResponseMessage =====
@@ -182,6 +194,14 @@ namespace TeamsManager.Core.Services
 
         private void AddHeaders(HttpClient client, Dictionary<string, string>? headers)
         {
+            // ✅ NAPRAWKA OBO: Automatycznie dodaj token OBO jako Authorization header
+            if (!string.IsNullOrEmpty(_oboAccessToken))
+            {
+                client.DefaultRequestHeaders.Authorization = 
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _oboAccessToken);
+                _logger.LogDebug("Dodano token OBO do Authorization header");
+            }
+            
             if (headers != null)
             {
                 foreach (var header in headers)
@@ -1035,7 +1055,14 @@ namespace TeamsManager.Core.Services
         {
             try
             {
-                _logger.LogDebug("Pobieranie tokenu dostępu z ModernHttpService...");
+                // ✅ NAPRAWKA OBO: Jeśli mamy token OBO, użyj go zamiast Client Credentials
+                if (!string.IsNullOrEmpty(_oboAccessToken))
+                {
+                    _logger.LogDebug("Używanie tokenu OBO z ModernHttpService");
+                    return _oboAccessToken;
+                }
+                
+                _logger.LogDebug("Pobieranie tokenu dostępu z ModernHttpService (Client Credentials)...");
                 
                 var result = await _confidentialClientApp
                     .AcquireTokenForClient(_graphConfig.Scopes.ClientCredentials)
@@ -1043,7 +1070,7 @@ namespace TeamsManager.Core.Services
 
                 if (result?.AccessToken != null)
                 {
-                    _logger.LogDebug("Token dostępu pobrany pomyślnie");
+                    _logger.LogDebug("Token dostępu pobrany pomyślnie (Client Credentials)");
                     return result.AccessToken;
                 }
 
