@@ -3,7 +3,17 @@ namespace TeamsManager.Api.Models.Configuration
     public class DatabaseConfiguration : BaseConfiguration
     {
         public string Provider { get; set; } = "SQLite";
-        public string ConnectionString { get; set; } = "Data Source=%APPDATA%\\TeamsManager\\data\\teamsmanager.db";
+        public string ConnectionString { get; set; } = GetMainAppDatabasePath();
+    
+    /// <summary>
+    /// Pobiera ścieżkę do bazy danych głównej aplikacji (ta sama co UI)
+    /// </summary>
+    private static string GetMainAppDatabasePath()
+    {
+        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var dbPath = System.IO.Path.Combine(appDataPath, "TeamsManager", "data", "teamsmanager.db");
+        return $"Data Source={dbPath}";
+    }
         public MigrationSettings Migrations { get; set; } = new();
         public PerformanceSettings Performance { get; set; } = new();
     }

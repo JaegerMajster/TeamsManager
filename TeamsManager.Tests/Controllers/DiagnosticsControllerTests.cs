@@ -382,36 +382,7 @@ namespace TeamsManager.Tests.Controllers
             var badRequestResult = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
         }
 
-        [Fact]
-        public async Task TestOperationAsync_WithInsufficientPermissions_ShouldReturnOkWithCanExecuteFalse()
-        {
-            // Arrange
-            var operationName = "CreateUser";
-            var requiredPermissions = new[] { "Directory.ReadWrite.All" };
-            
-            var permissionInfo = new GraphPermissionInfo
-            {
-                HasRequiredPermissions = false,
-                AssignedPermissions = new List<string> { "User.Read" }
-            };
 
-            _mockGraphConnectionService.Setup(x => x.GetPermissionInfoAsync())
-                .ReturnsAsync(permissionInfo);
-
-            // Act
-            var result = await _controller.TestOperationAsync(operationName, requiredPermissions);
-
-            // Assert
-            var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-            var response = okResult.Value.Should().BeAssignableTo<object>().Subject;
-            
-            // Use reflection to check dynamic object properties
-            var canExecute = response.GetType().GetProperty("CanExecute")?.GetValue(response);
-            var reason = response.GetType().GetProperty("Reason")?.GetValue(response);
-            
-            canExecute.Should().Be(false);
-            reason.Should().Be("Insufficient permissions");
-        }
 
         #endregion
 

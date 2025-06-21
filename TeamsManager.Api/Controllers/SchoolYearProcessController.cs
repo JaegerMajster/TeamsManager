@@ -6,13 +6,13 @@ using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Models;
 
-namespace TeamsManager.API.Controllers
+namespace TeamsManager.Api.Controllers
 {
     /// <summary>
     /// Kontroler API dla procesów związanych z rokiem szkolnym
     /// </summary>
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     [Authorize]
     public class SchoolYearProcessController : ControllerBase
     {
@@ -230,18 +230,18 @@ namespace TeamsManager.API.Controllers
         /// Anuluje aktywny proces
         /// </summary>
         [HttpPost("cancel-process/{processId}")]
-        [ProducesResponseType(typeof(CancelProcessResponse), 200)]
+        [ProducesResponseType(typeof(SchoolYearCancelProcessResponse), 200)]
         [ProducesResponseType(400)]
         [ProducesResponseType(401)]
         [ProducesResponseType(404)]
         [ProducesResponseType(500)]
-        public async Task<ActionResult<CancelProcessResponse>> CancelProcess(string processId)
+        public async Task<ActionResult<SchoolYearCancelProcessResponse>> CancelProcess(string processId)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(processId))
                 {
-                    return BadRequest(new CancelProcessResponse 
+                    return BadRequest(new SchoolYearCancelProcessResponse 
                     { 
                         Success = false, 
                         Message = "ID procesu jest wymagane" 
@@ -253,7 +253,7 @@ namespace TeamsManager.API.Controllers
 
                 if (success)
                 {
-                    return Ok(new CancelProcessResponse 
+                    return Ok(new SchoolYearCancelProcessResponse 
                     { 
                         Success = true, 
                         Message = "Proces został anulowany pomyślnie" 
@@ -261,7 +261,7 @@ namespace TeamsManager.API.Controllers
                 }
                 else
                 {
-                    return NotFound(new CancelProcessResponse 
+                    return NotFound(new SchoolYearCancelProcessResponse 
                     { 
                         Success = false, 
                         Message = "Proces nie został znaleziony lub już się zakończył" 
@@ -271,7 +271,7 @@ namespace TeamsManager.API.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ API: Błąd podczas anulowania procesu {ProcessId}", processId);
-                return StatusCode(500, new CancelProcessResponse 
+                return StatusCode(500, new SchoolYearCancelProcessResponse 
                 { 
                     Success = false, 
                     Message = "Wystąpił błąd wewnętrzny serwera" 
@@ -313,7 +313,7 @@ namespace TeamsManager.API.Controllers
         public SchoolYearProcessOptions? Options { get; set; }
     }
 
-    public class CancelProcessResponse
+    public class SchoolYearCancelProcessResponse
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;

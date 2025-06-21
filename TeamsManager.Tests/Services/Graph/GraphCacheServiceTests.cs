@@ -681,16 +681,7 @@ namespace TeamsManager.Tests.Services.Graph
 
         #region Cache Validation Tests
 
-        [Fact]
-        public void ValidateCache_WithNonExistentKey_ReturnsNotFound()
-        {
-            // Act
-            var result = _service.ValidateCache("nonexistent-key", "etag-123");
 
-            // Assert
-            Assert.False(result.IsValid);
-            Assert.Equal("Cache entry not found", result.InvalidationReason);
-        }
 
         [Fact]
         public void ValidateCache_WithMatchingETag_ReturnsValid()

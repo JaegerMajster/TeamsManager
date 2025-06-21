@@ -147,7 +147,17 @@ namespace TeamsManager.Core.Models.Configuration
         /// Główne połączenie z bazą danych
         /// </summary>
         [Required]
-        public string DefaultConnection { get; set; } = "Data Source=teamsmanager.db";
+        public string DefaultConnection { get; set; } = GetMainAppDatabasePath();
+        
+        /// <summary>
+        /// Pobiera ścieżkę do bazy danych głównej aplikacji (ta sama co UI)
+        /// </summary>
+        private static string GetMainAppDatabasePath()
+        {
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dbPath = System.IO.Path.Combine(appDataPath, "TeamsManager", "data", "teamsmanager.db");
+            return $"Data Source={dbPath}";
+        }
     }
 
     /// <summary>

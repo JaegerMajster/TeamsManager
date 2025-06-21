@@ -33,7 +33,8 @@ namespace TeamsManager.Api.Services.Configuration
                 
                 ConnectionStrings = new ConnectionStringsSettings
                 {
-                    DefaultConnection = "Data Source=teamsmanager.db"
+                    // ✅ NAPRAWKA: Używaj tej samej bazy danych co UI w AppData
+                    DefaultConnection = GetMainAppDatabasePath()
                 },
                 
                 ModernHttpResilience = new ModernHttpResilienceSettings
@@ -135,6 +136,16 @@ namespace TeamsManager.Api.Services.Configuration
             };
             
             return config;
+        }
+        
+        /// <summary>
+        /// Pobiera ścieżkę do bazy danych głównej aplikacji (ta sama co UI)
+        /// </summary>
+        private static string GetMainAppDatabasePath()
+        {
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dbPath = System.IO.Path.Combine(appDataPath, "TeamsManager", "data", "teamsmanager.db");
+            return $"Data Source={dbPath}";
         }
     }
 } 

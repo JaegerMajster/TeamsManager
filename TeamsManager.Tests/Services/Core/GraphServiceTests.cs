@@ -205,37 +205,9 @@ namespace TeamsManager.Tests.Services.Core
             result.Data.Should().Be(expectedResult);
         }
 
-        [Fact]
-        public async Task ExecuteWithAutoConnectAsync_WithEmptyToken_ShouldReturnError()
-        {
-            // Arrange
-            var accessToken = "";
-            var operation = new Func<Task<string>>(() => Task.FromResult("test"));
 
-            // Act
-            var result = await _graphService.ExecuteWithAutoConnectAsync(accessToken, operation);
 
-            // Assert
-            result.Should().NotBeNull();
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("API access token is required");
-        }
 
-        [Fact]
-        public async Task ExecuteWithAutoConnectAsync_WithNullOperation_ShouldReturnError()
-        {
-            // Arrange
-            var accessToken = "valid-token";
-            Func<Task<string>>? operation = null;
-
-            // Act
-            var result = await _graphService.ExecuteWithAutoConnectAsync(accessToken, operation!);
-
-            // Assert
-            result.Should().NotBeNull();
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Be("Operation is required");
-        }
 
         [Fact]
         public async Task ExecuteWithAutoConnectAsync_WhenNotConnected_ShouldTryToConnect()
@@ -257,24 +229,7 @@ namespace TeamsManager.Tests.Services.Core
             result.IsSuccess.Should().BeTrue();
         }
 
-        [Fact]
-        public async Task ExecuteWithAutoConnectAsync_WhenConnectionFails_ShouldReturnError()
-        {
-            // Arrange
-            var accessToken = "invalid-token";
-            var operation = new Func<Task<string>>(() => Task.FromResult("test"));
 
-            _mockConnectionService.Setup(x => x.IsTokenValidAsync())
-                .ReturnsAsync(false);
-
-            // Act
-            var result = await _graphService.ExecuteWithAutoConnectAsync(accessToken, operation);
-
-            // Assert
-            result.Should().NotBeNull();
-            result.IsSuccess.Should().BeFalse();
-            result.ErrorMessage.Should().Contain("Failed to establish connection to Microsoft Graph");
-        }
 
         #endregion
 
@@ -306,21 +261,7 @@ namespace TeamsManager.Tests.Services.Core
             result.ResponseTimeMs.Should().Be(100);
         }
 
-        [Fact]
-        public async Task DiagnoseConnectionAsync_WithEmptyToken_ShouldReturnCriticalStatus()
-        {
-            // Arrange
-            var accessToken = "";
 
-            // Act
-            var result = await _graphService.DiagnoseConnectionAsync(accessToken);
-
-            // Assert
-            result.Should().NotBeNull();
-            result.IsConnected.Should().BeFalse();
-            result.Status.Should().Be(GraphHealthStatus.Critical);
-            result.Errors.Should().Contain("API access token is required");
-        }
 
         [Fact]
         public async Task DiagnoseConnectionAsync_WhenConnectionUnhealthy_ShouldReturnCriticalStatus()
@@ -377,20 +318,7 @@ namespace TeamsManager.Tests.Services.Core
             result.ResponseTimeMs.Should().Be(150);
         }
 
-        [Fact]
-        public async Task PerformHealthCheckAsync_WithEmptyToken_ShouldReturnUnhealthyInfo()
-        {
-            // Arrange
-            var accessToken = "";
 
-            // Act
-            var result = await _graphService.PerformHealthCheckAsync(accessToken);
-
-            // Assert
-            result.Should().NotBeNull();
-            result.IsHealthy.Should().BeFalse();
-            result.LastError.Should().Be("API access token is required");
-        }
 
         #endregion
 

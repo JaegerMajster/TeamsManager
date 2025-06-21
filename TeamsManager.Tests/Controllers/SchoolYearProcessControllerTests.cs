@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using TeamsManager.API.Controllers;
+using TeamsManager.Api.Controllers;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using TeamsManager.Core.Models;
@@ -381,9 +381,9 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-            var response = okResult.Value.Should().BeOfType<CancelProcessResponse>().Subject;
+            var response = okResult.Value.Should().BeOfType<SchoolYearCancelProcessResponse>().Subject;
             response.Success.Should().BeTrue();
-            response.Message.Should().Be("Proces został anulowany");
+            response.Message.Should().Be("Proces został anulowany pomyślnie");
         }
 
         [Fact]
@@ -400,9 +400,9 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var notFoundResult = result.Result.Should().BeOfType<NotFoundObjectResult>().Subject;
-            var response = notFoundResult.Value.Should().BeOfType<CancelProcessResponse>().Subject;
+            var response = notFoundResult.Value.Should().BeOfType<SchoolYearCancelProcessResponse>().Subject;
             response.Success.Should().BeFalse();
-            response.Message.Should().Be("Proces nie istnieje lub już się zakończył");
+            response.Message.Should().Be("Proces nie został znaleziony lub już się zakończył");
         }
 
         [Fact]
@@ -416,7 +416,9 @@ namespace TeamsManager.Tests.Controllers
 
             // Assert
             var badRequestResult = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
-            badRequestResult.Value.Should().Be("ID procesu nie może być pusty");
+            var response = badRequestResult.Value.Should().BeOfType<SchoolYearCancelProcessResponse>().Subject;
+            response.Success.Should().BeFalse();
+            response.Message.Should().Be("ID procesu jest wymagane");
         }
 
         [Fact]
@@ -435,7 +437,7 @@ namespace TeamsManager.Tests.Controllers
             var statusCodeResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
             statusCodeResult.StatusCode.Should().Be(500);
             
-            var response = statusCodeResult.Value.Should().BeOfType<CancelProcessResponse>().Subject;
+            var response = statusCodeResult.Value.Should().BeOfType<SchoolYearCancelProcessResponse>().Subject;
             response.Success.Should().BeFalse();
             response.Message.Should().Be("Wystąpił błąd wewnętrzny serwera");
         }

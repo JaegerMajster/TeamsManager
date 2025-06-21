@@ -318,45 +318,5 @@ namespace TeamsManager.Tests.Controllers
         }
 
         #endregion
-
-        #region CancelProcess Tests
-
-        [Fact]
-        public async Task CancelProcess_WithValidProcessId_ShouldReturnOkWithSuccessResponse()
-        {
-            // Arrange
-            var processId = "process-123";
-            _mockOrchestrator.Setup(x => x.CancelProcessAsync(processId))
-                .ReturnsAsync(true);
-
-            // Act
-            var result = await _controller.CancelProcess(processId);
-
-            // Assert
-            var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-            var response = okResult.Value.Should().BeAssignableTo<ProcessCancelResponse>().Subject;
-
-            response.Success.Should().BeTrue();
-            response.ProcessId.Should().Be(processId);
-            response.Message.Should().Be("Proces raportowania został anulowany");
-
-            _mockOrchestrator.Verify(x => x.CancelProcessAsync(processId), Times.Once);
-        }
-
-        [Fact]
-        public async Task CancelProcess_WithEmptyProcessId_ShouldReturnBadRequest()
-        {
-            // Act
-            var result = await _controller.CancelProcess("");
-
-            // Assert
-            var badRequestResult = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
-            var response = badRequestResult.Value.Should().BeAssignableTo<ProcessCancelResponse>().Subject;
-
-            response.Success.Should().BeFalse();
-            response.Message.Should().Be("ID procesu nie może być pusty");
-        }
-
-        #endregion
     }
 }

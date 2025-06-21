@@ -338,7 +338,7 @@ namespace TeamsManager.Tests.Services.Core
                 OperationType.DepartmentCreated, "Department", null, name, null, null))
                 .ReturnsAsync(operation);
             _mockDepartmentRepository.Setup(x => x.GetByIdAsync(parentId))
-                .ReturnsAsync((Department)null);
+                .ReturnsAsync((Department?)null);
 
             // Act
             var result = await _service.CreateDepartmentAsync(name, description, parentId);
@@ -398,7 +398,7 @@ namespace TeamsManager.Tests.Services.Core
                 OperationType.DepartmentUpdated, "Department", department.Id, department.Name, null, null))
                 .ReturnsAsync(operation);
             _mockDepartmentRepository.Setup(x => x.GetByIdAsync(department.Id))
-                .ReturnsAsync((Department)null);
+                .ReturnsAsync((Department?)null);
 
             // Act
             var result = await _service.UpdateDepartmentAsync(department);
@@ -473,7 +473,7 @@ namespace TeamsManager.Tests.Services.Core
                 OperationType.DepartmentDeleted, "Department", departmentId, null, null, null))
                 .ReturnsAsync(operation);
             _mockDepartmentRepository.Setup(x => x.GetByIdAsync(departmentId))
-                .ReturnsAsync((Department)null);
+                .ReturnsAsync((Department?)null);
 
             // Act
             var result = await _service.DeleteDepartmentAsync(departmentId);

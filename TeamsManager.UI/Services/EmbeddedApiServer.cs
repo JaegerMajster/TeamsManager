@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
 using System;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -12,6 +13,10 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using System.IO;
 using System.Net.Http;
+using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using TeamsManager.Core.Extensions;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.UI.Services.Configuration;
@@ -140,7 +145,8 @@ namespace TeamsManager.UI.Services
                     Environment = "Development",
                     ConnectionStrings = new TeamsManager.Core.Models.Configuration.ConnectionStringsSettings
                     {
-                        DefaultConnection = "Data Source=teamsmanager_embedded.db"
+                        // ✅ NAPRAWKA: Użyj tej samej bazy danych co główna aplikacja UI
+                        DefaultConnection = GetMainAppDatabasePath()
                     }
                 };
             }
@@ -309,14 +315,41 @@ namespace TeamsManager.UI.Services
                 
                 // ✅ PEŁNA KONFIGURACJA SERWISÓW DLA EMBEDDED MODE
                 
-                // ===== KONTROLERY - TYLKO DIAGNOSTICS =====
-                // BEZPIECZNE: Ładuj tylko DiagnosticsController bez API versioning
+                // ===== KONTROLERY - TYLKO Z TeamsManager.Api =====
                 _logger.LogInformation("[EMBEDDED-API] 🔧 Rejestracja kontrolerów...");
                 services.AddControllers(options =>
                 {
                     // Skonfiguruj podstawowe opcje kontrolerów
                     options.SuppressAsyncSuffixInActionNames = false;
+                })
+                .ConfigureApplicationPartManager(manager =>
+                {
+                    // ✅ NAPRAWKA: Usuń wszystkie domyślne assembly i dodaj tylko TeamsManager.Api
+                    manager.ApplicationParts.Clear();
+                    manager.ApplicationParts.Add(new Microsoft.AspNetCore.Mvc.ApplicationParts.AssemblyPart(typeof(TeamsManager.Api.Controllers.DepartmentsController).Assembly));
+                    _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano TYLKO kontrolery z TeamsManager.Api assembly");
                 });
+                
+                _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano kontrolery z TeamsManager.Api assembly");
+
+                // ===== API VERSIONING =====
+                services.AddApiVersioning(opt =>
+                {
+                    opt.DefaultApiVersion = new Asp.Versioning.ApiVersion(1, 0);
+                    opt.AssumeDefaultVersionWhenUnspecified = true;
+                    opt.ApiVersionReader = Asp.Versioning.ApiVersionReader.Combine(
+                        new Asp.Versioning.QueryStringApiVersionReader("version"),
+                        new Asp.Versioning.HeaderApiVersionReader("X-Version"),
+                        new Asp.Versioning.UrlSegmentApiVersionReader()
+                    );
+                    opt.ApiVersionSelector = new Asp.Versioning.DefaultApiVersionSelector(opt);
+                }).AddApiExplorer(setup =>
+                {
+                    setup.GroupNameFormat = "'v'VVV";
+                    setup.SubstituteApiVersionInUrl = true;
+                });
+                
+                _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano pełne API versioning z ApiExplorer");
             
             services.AddHttpContextAccessor();
             services.AddMemoryCache();
@@ -347,7 +380,22 @@ namespace TeamsManager.UI.Services
             _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano załadowaną konfigurację Azure AD i aplikacji");
             
             // ===== DATABASE CONTEXT =====
-            string connectionString = _applicationConfig?.ConnectionStrings?.DefaultConnection ?? "Data Source=teamsmanager_embedded.db";
+            // ✅ NAPRAWKA: Użyj tej samej bazy danych co główna aplikacja UI
+            string connectionString;
+            if (!string.IsNullOrEmpty(_applicationConfig?.ConnectionStrings?.DefaultConnection))
+            {
+                connectionString = _applicationConfig.ConnectionStrings.DefaultConnection;
+                _logger.LogInformation("[EMBEDDED-API] ✅ Używam connection string z konfiguracji: {ConnectionString}", 
+                    connectionString.Contains("Data Source=") ? connectionString.Substring(connectionString.IndexOf("Data Source=")) : connectionString);
+            }
+            else
+            {
+                // Fallback: użyj tej samej lokalizacji co główna aplikacja UI
+                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var dbPath = System.IO.Path.Combine(appDataPath, "TeamsManager", "teamsmanager.db");
+                connectionString = $"Data Source={dbPath}";
+                _logger.LogInformation("[EMBEDDED-API] ✅ Używam fallback connection string: {ConnectionString}", connectionString);
+            }
             
             services.AddDbContext<TeamsManagerDbContext>(options =>
                 options.UseSqlite(connectionString));
@@ -511,6 +559,21 @@ namespace TeamsManager.UI.Services
             services.AddScoped<IHealthMonitoringOrchestrator, HealthMonitoringOrchestrator>();
             services.AddScoped<IReportingOrchestrator, ReportingOrchestrator>();
             
+            // ===== AUTORYZACJA =====
+            // Dodaj konfigurację autoryzacji dla kontrolerów z [Authorize]
+            // TokenValidationMiddleware już obsługuje uwierzytelnianie, więc używamy dummy handler
+            services.AddAuthentication("Bearer")
+                .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, EmbeddedAuthenticationHandler>("Bearer", options => { });
+            
+            services.AddAuthorization(options =>
+            {
+                options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .Build();
+            });
+            
+            _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano Authentication i Authorization");
+            
             // ===== CORS =====
             services.AddCors(options =>
             {
@@ -522,6 +585,49 @@ namespace TeamsManager.UI.Services
                           .AllowCredentials();
                 });
             });
+            
+            // ===== SWAGGER =====
+            services.AddEndpointsApiExplorer();
+            services.AddSwaggerGen(options => {
+                options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+                {
+                    Title = "TeamsManager Embedded API",
+                    Version = "v1.0",
+                    Description = "Embedded API Server dla TeamsManager - uruchomiony lokalnie wewnątrz aplikacji UI",
+                    Contact = new Microsoft.OpenApi.Models.OpenApiContact
+                    {
+                        Name = "TeamsManager Support",
+                        Email = "support@teamsmanager.local"
+                    }
+                });
+
+                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                    Description = "JWT Bearer Token dla uwierzytelniania"
+                });
+
+                options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+                {
+                    {
+                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        {
+                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                            {
+                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
+            });
+            
+            _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano Swagger UI");
             
             _logger.LogInformation("[EMBEDDED-API] ✅ Skonfigurowano pełną konfigurację serwisów API dla embedded mode");
             }
@@ -560,6 +666,18 @@ namespace TeamsManager.UI.Services
                 logger.LogInformation("[EMBEDDED-API] ==================== KONIEC REQUEST ====================");
             });
             
+            // ✅ SWAGGER UI
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "TeamsManager Embedded API v1.0");
+                c.RoutePrefix = "swagger"; // Swagger będzie dostępny na /swagger
+                c.DisplayRequestDuration();
+                c.EnableDeepLinking();
+                c.EnableFilter();
+                c.ShowExtensions();
+            });
+            
             // ✅ NAPRAWKA OBO: TokenValidationMiddleware musi być przed routing
             app.UseMiddleware<TokenValidationMiddleware>();
             
@@ -567,6 +685,10 @@ namespace TeamsManager.UI.Services
             
             // ✅ CORS (musi być przed Authentication)
             app.UseCors("EmbeddedApiCors");
+            
+            // ✅ NAPRAWKA AUTORYZACJI: Dodaj Authentication i Authorization middleware
+            app.UseAuthentication();
+            app.UseAuthorization();
             
             // ✅ Mapowanie kontrolerów
             app.UseEndpoints(endpoints =>
@@ -668,11 +790,73 @@ namespace TeamsManager.UI.Services
             }
         }
 
+        /// <summary>
+        /// Pobiera ścieżkę do bazy danych głównej aplikacji
+        /// </summary>
+        private static string GetMainAppDatabasePath()
+        {
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dbPath = System.IO.Path.Combine(appDataPath, "TeamsManager", "data", "teamsmanager.db");
+            return $"Data Source={dbPath}";
+        }
+
         public void Dispose()
         {
             _cancellationTokenSource?.Cancel();
             _host?.Dispose();
             _cancellationTokenSource?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Dummy authentication handler dla EmbeddedApiServer.
+    /// TokenValidationMiddleware już obsługuje uwierzytelnianie.
+    /// </summary>
+    public class EmbeddedAuthenticationHandler : Microsoft.AspNetCore.Authentication.AuthenticationHandler<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions>
+    {
+        public EmbeddedAuthenticationHandler(Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions> options,
+            Microsoft.Extensions.Logging.ILoggerFactory logger, System.Text.Encodings.Web.UrlEncoder encoder, Microsoft.AspNetCore.Authentication.ISystemClock clock)
+            : base(options, logger, encoder, clock)
+        {
+        }
+
+        protected override Task<Microsoft.AspNetCore.Authentication.AuthenticateResult> HandleAuthenticateAsync()
+        {
+            try
+            {
+                Logger.LogDebug("[EMBEDDED-AUTH] Sprawdzanie uwierzytelnienia...");
+                
+                // TokenValidationMiddleware ustawił tokeny w HttpContext.Items
+                // Sprawdź czy mamy UserAccessToken (oznacza uwierzytelnienie)
+                if (Context.Items.TryGetValue("UserAccessToken", out var userToken) && userToken is string userAccessToken && !string.IsNullOrEmpty(userAccessToken))
+                {
+                    Logger.LogDebug("[EMBEDDED-AUTH] ✅ Token użytkownika znaleziony, długość: {Length}", userAccessToken.Length);
+                    
+                    // Stwórz ClaimsPrincipal dla uwierzytelnionego użytkownika
+                    var claims = new[]
+                    {
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "embedded-user"),
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "EmbeddedApiUser"),
+                        new System.Security.Claims.Claim("access_token", userAccessToken)
+                    };
+                    
+                    var identity = new System.Security.Claims.ClaimsIdentity(claims, "Bearer");
+                    var principal = new System.Security.Claims.ClaimsPrincipal(identity);
+                    var ticket = new Microsoft.AspNetCore.Authentication.AuthenticationTicket(principal, "Bearer");
+                    
+                    Logger.LogDebug("[EMBEDDED-AUTH] ✅ Uwierzytelnienie pomyślne");
+                    return Task.FromResult(Microsoft.AspNetCore.Authentication.AuthenticateResult.Success(ticket));
+                }
+
+                Logger.LogDebug("[EMBEDDED-AUTH] ❌ Brak tokenu użytkownika");
+                // Jeśli TokenValidationMiddleware nie ustawił tokenów, zwróć failure
+                return Task.FromResult(Microsoft.AspNetCore.Authentication.AuthenticateResult.Fail("Brak tokenu użytkownika - TokenValidationMiddleware nie uwierzytelnił"));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "[EMBEDDED-AUTH] Błąd podczas uwierzytelniania");
+                return Task.FromResult(Microsoft.AspNetCore.Authentication.AuthenticateResult.Fail($"Błąd uwierzytelniania: {ex.Message}"));
+            }
         }
     }
 } 

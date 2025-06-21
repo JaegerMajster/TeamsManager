@@ -25,6 +25,7 @@ namespace TeamsManager.UI.ViewModels.Users
     public class UserDetailViewModel : INotifyPropertyChanged
     {
         private readonly ITeamsManagerApiService _apiService;
+        private readonly IDepartmentService _departmentService;  // ✅ NAPRAWKA: Dodano IDepartmentService
         private readonly ILogger<UserDetailViewModel> _logger;
         private readonly UserSchoolTypeAssignmentViewModel _userSchoolTypeAssignmentViewModel;
         
@@ -39,10 +40,12 @@ namespace TeamsManager.UI.ViewModels.Users
 
         public UserDetailViewModel(
             ITeamsManagerApiService apiService,
+            IDepartmentService departmentService,  // ✅ NAPRAWKA: Dodano IDepartmentService
             ILogger<UserDetailViewModel> logger,
             UserSchoolTypeAssignmentViewModel userSchoolTypeAssignmentViewModel)
         {
             _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
+            _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));  // ✅ NAPRAWKA
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _userSchoolTypeAssignmentViewModel = userSchoolTypeAssignmentViewModel ?? throw new ArgumentNullException(nameof(userSchoolTypeAssignmentViewModel));
 
@@ -221,11 +224,11 @@ namespace TeamsManager.UI.ViewModels.Users
             try
             {
                 _logger.LogInformation("=== ROZPOCZĘCIE ŁADOWANIA DZIAŁÓW ===");
-                _logger.LogDebug("Wywołanie API: GetAllDepartmentsAsync...");
+                _logger.LogDebug("✅ NAPRAWKA: Wywołanie IDepartmentService.GetAllDepartmentsAsync (bezpośrednio z bazy UI)...");
                 
-                var departments = await _apiService.GetAllDepartmentsAsync();
+                var departments = await _departmentService.GetAllDepartmentsAsync();
                 
-                _logger.LogInformation("Wynik API GetAllDepartmentsAsync: {DepartmentsCount} działów", 
+                _logger.LogInformation("✅ NAPRAWKA: Wynik IDepartmentService.GetAllDepartmentsAsync: {DepartmentsCount} działów", 
                     departments?.Count() ?? 0);
                 
                 if (departments != null)

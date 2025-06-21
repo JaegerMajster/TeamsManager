@@ -463,12 +463,12 @@ namespace TeamsManager.Tests.Services
 
         private MsalAuthService CreateMsalAuthService(GraphApiConfiguration? graphConfig = null)
         {
-            var mockPublicClientApp = new Mock<IPublicClientApplication>();
             var mockLogger = new Mock<ILogger<MsalAuthService>>();
+            var mockConfigManager = new Mock<IConfigurationManagerV2>();
             
             var defaultGraphConfig = graphConfig ?? new GraphApiConfiguration();
             
-            return new MsalAuthService(mockPublicClientApp.Object, mockLogger.Object, defaultGraphConfig);
+            return new MsalAuthService(mockLogger.Object, defaultGraphConfig, mockConfigManager.Object);
         }
 
         private void CreateTestConfigFile(string filePath, MsalUiAppConfiguration config)
@@ -514,8 +514,8 @@ namespace TeamsManager.Tests.Services
     /// </summary>
     public class TestableMsalAuthService : MsalAuthService
     {
-        public TestableMsalAuthService(IPublicClientApplication publicClientApp, ILogger<MsalAuthService> logger, GraphApiConfiguration? graphConfig = null) 
-            : base(publicClientApp, logger, graphConfig) { }
+        public TestableMsalAuthService(ILogger<MsalAuthService> logger, GraphApiConfiguration? graphConfig = null, IConfigurationManagerV2? configManager = null) 
+            : base(logger, graphConfig, configManager) { }
 
         // If we need to expose protected methods for testing:
         // public new MsalUiAppConfiguration LoadConfiguration() => base.LoadConfiguration();

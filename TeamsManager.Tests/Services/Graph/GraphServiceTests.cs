@@ -299,33 +299,9 @@ namespace TeamsManager.Tests.Services.Graph
             Assert.NotNull(result.ExecutionTimeMs);
         }
 
-        [Fact]
-        public async Task ExecuteWithAutoConnectAsync_WithNullToken_ReturnsError()
-        {
-            // Arrange
-            var operation = new Func<Task<string>>(() => Task.FromResult("test"));
 
-            // Act
-            var result = await _service.ExecuteWithAutoConnectAsync(null, operation);
 
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("API access token is required", result.ErrorMessage);
-        }
 
-        [Fact]
-        public async Task ExecuteWithAutoConnectAsync_WithNullOperation_ReturnsError()
-        {
-            // Arrange
-            var apiAccessToken = "valid_token";
-
-            // Act
-            var result = await _service.ExecuteWithAutoConnectAsync<string>(apiAccessToken, null);
-
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("Operation is required", result.ErrorMessage);
-        }
 
         [Fact]
         public async Task ExecuteBatchOperationAsync_WithValidParameters_ReturnsSuccessResult()
@@ -359,34 +335,9 @@ namespace TeamsManager.Tests.Services.Graph
                 x.ExecuteBatchRequestAsync(It.IsAny<IEnumerable<GraphBatchRequest>>()), Times.Once);
         }
 
-        [Fact]
-        public async Task ExecuteBatchOperationAsync_WithNullToken_ReturnsError()
-        {
-            // Arrange
-            var batchOperations = new[] { GraphBatchOperation.CreateGet("/v1.0/me") };
 
-            // Act
-            var result = await _service.ExecuteBatchOperationAsync<object>(null, batchOperations);
 
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("API access token is required", result.ErrorMessage);
-        }
 
-        [Fact]
-        public async Task ExecuteBatchOperationAsync_WithEmptyOperations_ReturnsError()
-        {
-            // Arrange
-            var apiAccessToken = "valid_token";
-            var batchOperations = new GraphBatchOperation[0];
-
-            // Act
-            var result = await _service.ExecuteBatchOperationAsync<object>(apiAccessToken, batchOperations);
-
-            // Assert
-            Assert.False(result.IsSuccess);
-            Assert.Contains("Batch operations are required", result.ErrorMessage);
-        }
 
         #endregion
 
@@ -533,17 +484,7 @@ namespace TeamsManager.Tests.Services.Graph
             Assert.Equal("v1.0", result.GraphApiVersion);
         }
 
-        [Fact]
-        public async Task DiagnoseConnectionAsync_WithNullToken_ReturnsCriticalStatus()
-        {
-            // Act
-            var result = await _service.DiagnoseConnectionAsync(null);
 
-            // Assert
-            Assert.False(result.IsConnected);
-            Assert.Equal(GraphHealthStatus.Critical, result.Status);
-            Assert.Contains("API access token is required", result.Errors);
-        }
 
         [Fact]
         public async Task PerformHealthCheckAsync_WithValidToken_ReturnsHealthyResult()

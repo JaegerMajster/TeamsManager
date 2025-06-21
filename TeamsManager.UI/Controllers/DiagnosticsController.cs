@@ -559,13 +559,13 @@ namespace TeamsManager.UI.Controllers
         /// <param name="testRequest">Parametry testu Graph API</param>
         /// <returns>Wyniki testów Graph API</returns>
         [HttpPost("graph/test")]
-        public async Task<ActionResult<object>> TestGraphApiAsync([FromBody] GraphTestRequest? testRequest = null)
+        public async Task<ActionResult<object>> TestGraphApiAsync([FromBody] EmbeddedGraphTestRequest? testRequest = null)
         {
             try
             {
                 _logger.LogInformation("Rozpoczynanie kompleksowego testu Graph API");
 
-                var request = testRequest ?? new GraphTestRequest();
+                var request = testRequest ?? new EmbeddedGraphTestRequest();
                 var testResults = new List<object>();
                 var startTime = DateTime.UtcNow;
 
@@ -987,9 +987,9 @@ namespace TeamsManager.UI.Controllers
     }
 
     /// <summary>
-    /// Model żądania testu Graph API
+    /// Model żądania testu Graph API dla EmbeddedApiServer
     /// </summary>
-    public class GraphTestRequest
+    public class EmbeddedGraphTestRequest
     {
         /// <summary>
         /// Czy testować uprawnienia
