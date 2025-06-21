@@ -889,7 +889,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Tworzenie zespołu: {DisplayName}", displayName);
                 
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/teams");
+                var url = await BuildApiUrlAsync("api/v1.0/teams");
                 
                 var request = new
                 {
@@ -931,7 +931,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie zespołu: {TeamId}", teamId);
                 
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}?includeMembers={includeMembers}&includeChannels={includeChannels}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}?includeMembers={includeMembers}&includeChannels={includeChannels}");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -960,7 +960,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie wszystkich zespołów");
                 
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/teams");
+                var url = await BuildApiUrlAsync("api/v1.0/teams");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -988,7 +988,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}");
                 var request = new { DisplayName = displayName, Description = description, OwnerUpn = ownerUpn, Visibility = visibility, SchoolTypeId = schoolTypeId, SchoolYearId = schoolYearId };
                 var response = await _httpClient.PatchAsJsonAsync(url, request);
                 return response.IsSuccessStatusCode;
@@ -1005,7 +1005,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}");
                 var response = await _httpClient.DeleteAsync(url);
                 return response.IsSuccessStatusCode;
             }
@@ -1021,7 +1021,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/archive");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/archive");
                 var request = new { Reason = reason };
                 var response = await _httpClient.PostAsJsonAsync(url, request);
                 return response.IsSuccessStatusCode;
@@ -1038,7 +1038,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/members");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/members");
                 var request = new { UserUpn = userUpn, Role = role };
                 var response = await _httpClient.PostAsJsonAsync(url, request);
                 if (response.IsSuccessStatusCode)
@@ -1059,7 +1059,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/members/{membershipId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/members/{membershipId}");
                 var response = await _httpClient.DeleteAsync(url);
                 return response.IsSuccessStatusCode;
             }
@@ -1076,43 +1076,88 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                _logger.LogDebug("[API-SERVICE] Tworzenie użytkownika: {Upn}", upn);
-                
+                _logger.LogInformation("=== API-SERVICE: ROZPOCZĘCIE TWORZENIA UŻYTKOWNIKA ===");
+                _logger.LogInformation("Parametry: FirstName={FirstName}, LastName={LastName}, UPN={UPN}, Role={Role}, DepartmentId={DepartmentId}", 
+                    firstName, lastName, upn, role, departmentId);
+                _logger.LogInformation("Dodatkowe: SendWelcomeEmail={SendWelcomeEmail}, Phone={Phone}, AlternateEmail={AlternateEmail}, ExternalId={ExternalId}", 
+                    sendWelcomeEmail, phone, alternateEmail, externalId);
+
+                _logger.LogDebug("Wywołanie EnsureAuthenticatedAsync...");
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/users");
-                
-                var request = new
-                {
-                    FirstName = firstName,
-                    LastName = lastName,
-                    Upn = upn,
-                    Role = role,
-                    DepartmentId = departmentId,
+                _logger.LogDebug("✅ Uwierzytelnienie zakończone pomyślnie");
+
+                _logger.LogDebug("Budowanie URL API...");
+                var url = await BuildApiUrlAsync("api/v1.0/users");
+                _logger.LogInformation("URL API: {ApiUrl}", url);
+
+                var request = new 
+                { 
+                    FirstName = firstName, 
+                    LastName = lastName, 
+                    UPN = upn, 
+                    Role = role, 
+                    DepartmentId = departmentId, 
                     Password = password,
                     SendWelcomeEmail = sendWelcomeEmail,
                     Phone = phone,
                     AlternateEmail = alternateEmail,
                     ExternalId = externalId
                 };
-                
+
+                _logger.LogInformation("Obiekt żądania przygotowany: {RequestData}", 
+                    System.Text.Json.JsonSerializer.Serialize(new { 
+                        FirstName = firstName, 
+                        LastName = lastName, 
+                        UPN = upn, 
+                        Role = role, 
+                        DepartmentId = departmentId, 
+                        HasPassword = !string.IsNullOrEmpty(password),
+                        SendWelcomeEmail = sendWelcomeEmail,
+                        Phone = phone,
+                        AlternateEmail = alternateEmail,
+                        ExternalId = externalId
+                    }));
+
+                _logger.LogInformation("Wysyłanie żądania POST do API...");
                 var response = await _httpClient.PostAsJsonAsync(url, request);
                 
+                _logger.LogInformation("Odpowiedź HTTP: StatusCode={StatusCode}, IsSuccess={IsSuccess}", 
+                    response.StatusCode, response.IsSuccessStatusCode);
+
                 if (response.IsSuccessStatusCode)
                 {
+                    _logger.LogDebug("Odczytywanie odpowiedzi JSON...");
                     var result = await response.Content.ReadFromJsonAsync<User>();
-                    _logger.LogDebug("[API-SERVICE] Użytkownik utworzony pomyślnie: {UserId}", result?.Id);
-                    return result;
+                    
+                    if (result != null)
+                    {
+                        _logger.LogInformation("✅ SUKCES: Użytkownik utworzony pomyślnie - ID: {UserId}, UPN: {UPN}", 
+                            result.Id, result.UPN);
+                        return result;
+                    }
+                    else
+                    {
+                        _logger.LogError("❌ BŁĄD: API zwróciło sukces, ale deserialization zwróciła NULL");
+                        return null;
+                    }
                 }
                 else
                 {
-                    _logger.LogWarning("[API-SERVICE] Błąd tworzenia użytkownika: {StatusCode}", response.StatusCode);
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("❌ BŁĄD API: StatusCode={StatusCode}, Content={ErrorContent}", 
+                        response.StatusCode, errorContent);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Wyjątek podczas tworzenia użytkownika: {Upn}", upn);
+                _logger.LogError(ex, "💥 WYJĄTEK w API-SERVICE podczas tworzenia użytkownika: {Message}", ex.Message);
+                _logger.LogError("Stack trace: {StackTrace}", ex.StackTrace);
                 return null;
+            }
+            finally
+            {
+                _logger.LogInformation("=== API-SERVICE: ZAKOŃCZENIE TWORZENIA UŻYTKOWNIKA ===");
             }
         }
 
@@ -1121,7 +1166,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/users/{userId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/users/{userId}");
                 var response = await _httpClient.GetAsync(url);
                 if (response.IsSuccessStatusCode)
                 {
@@ -1143,7 +1188,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie wszystkich aktywnych użytkowników");
                 
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/users");
+                var url = await BuildApiUrlAsync("api/v1.0/users");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -1171,8 +1216,8 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/users/{userId}");
-                var request = new { FirstName = firstName, LastName = lastName, Upn = upn, Role = role, DepartmentId = departmentId, Phone = phone, AlternateEmail = alternateEmail };
+                var url = await BuildApiUrlAsync($"api/v1.0/users/{userId}");
+                var request = new { FirstName = firstName, LastName = lastName, UPN = upn, Role = role, DepartmentId = departmentId, Phone = phone, AlternateEmail = alternateEmail };
                 var response = await _httpClient.PatchAsJsonAsync(url, request);
                 return response.IsSuccessStatusCode;
             }
@@ -1188,7 +1233,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/users/{userId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/users/{userId}");
                 var response = await _httpClient.DeleteAsync(url);
                 return response.IsSuccessStatusCode;
             }
@@ -1204,7 +1249,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/channels");
                 var request = new { DisplayName = displayName, Description = description, IsPrivate = isPrivate };
                 var response = await _httpClient.PostAsJsonAsync(url, request);
                 if (response.IsSuccessStatusCode)
@@ -1225,7 +1270,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/channels");
                 var response = await _httpClient.GetAsync(url);
                 if (response.IsSuccessStatusCode)
                 {
@@ -1245,7 +1290,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels/{channelId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/channels/{channelId}");
                 var request = new { DisplayName = newDisplayName, Description = newDescription };
                 var response = await _httpClient.PatchAsJsonAsync(url, request);
                 return response.IsSuccessStatusCode;
@@ -1262,7 +1307,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/teams/{teamId}/channels/{channelId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/teams/{teamId}/channels/{channelId}");
                 var response = await _httpClient.DeleteAsync(url);
                 return response.IsSuccessStatusCode;
             }
@@ -1277,19 +1322,63 @@ namespace TeamsManager.UI.Services
         {
             try
             {
+                _logger.LogInformation("=== API-SERVICE: ROZPOCZĘCIE POBIERANIA DZIAŁÓW ===");
+                
+                _logger.LogDebug("Wywołanie EnsureAuthenticatedAsync...");
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/departments");
+                _logger.LogDebug("✅ Uwierzytelnienie zakończone pomyślnie");
+
+                _logger.LogDebug("Budowanie URL API...");
+                var url = await BuildApiUrlAsync("api/v1.0/departments");
+                _logger.LogInformation("URL API: {ApiUrl}", url);
+
+                _logger.LogInformation("Wysyłanie żądania GET do API...");
                 var response = await _httpClient.GetAsync(url);
+                
+                _logger.LogInformation("Odpowiedź HTTP: StatusCode={StatusCode}, IsSuccess={IsSuccess}", 
+                    response.StatusCode, response.IsSuccessStatusCode);
+
                 if (response.IsSuccessStatusCode)
                 {
-                    return await response.Content.ReadFromJsonAsync<IEnumerable<Department>>();
+                    _logger.LogDebug("Odczytywanie odpowiedzi JSON...");
+                    var result = await response.Content.ReadFromJsonAsync<IEnumerable<Department>>();
+                    
+                    if (result != null)
+                    {
+                        var departmentsList = result.ToList();
+                        _logger.LogInformation("✅ SUKCES: Pobrano {Count} działów z API", departmentsList.Count);
+                        
+                        foreach (var dept in departmentsList)
+                        {
+                            _logger.LogDebug("Dział z API: ID={Id}, Name={Name}, IsActive={IsActive}", 
+                                dept.Id, dept.Name, dept.IsActive);
+                        }
+                        
+                        return result;
+                    }
+                    else
+                    {
+                        _logger.LogError("❌ BŁĄD: API zwróciło sukces, ale deserialization zwróciła NULL");
+                        return null;
+                    }
                 }
-                return null;
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("❌ BŁĄD API: StatusCode={StatusCode}, Content={ErrorContent}", 
+                        response.StatusCode, errorContent);
+                    return null;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[API-SERVICE] Błąd pobierania działów");
+                _logger.LogError(ex, "💥 WYJĄTEK w API-SERVICE podczas pobierania działów: {Message}", ex.Message);
+                _logger.LogError("Stack trace: {StackTrace}", ex.StackTrace);
                 return null;
+            }
+            finally
+            {
+                _logger.LogInformation("=== API-SERVICE: ZAKOŃCZENIE POBIERANIA DZIAŁÓW ===");
             }
         }
 
@@ -1298,7 +1387,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync("api/departments");
+                var url = await BuildApiUrlAsync("api/v1.0/departments");
                 var request = new { Name = name, Description = description };
                 var response = await _httpClient.PostAsJsonAsync(url, request);
                 if (response.IsSuccessStatusCode)
@@ -1319,7 +1408,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/departments/{departmentId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/departments/{departmentId}");
                 var request = new { Name = name, Description = description };
                 var response = await _httpClient.PatchAsJsonAsync(url, request);
                 return response.IsSuccessStatusCode;
@@ -1336,7 +1425,7 @@ namespace TeamsManager.UI.Services
             try
             {
                 await EnsureAuthenticatedAsync();
-                var url = await BuildApiUrlAsync($"api/departments/{departmentId}");
+                var url = await BuildApiUrlAsync($"api/v1.0/departments/{departmentId}");
                 var response = await _httpClient.DeleteAsync(url);
                 return response.IsSuccessStatusCode;
             }

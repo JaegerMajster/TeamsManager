@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using TeamsManager.Core.Abstractions.Services;
 using TeamsManager.UI.Services.Abstractions;
+using TeamsManager.UI.Services;
 using TeamsManager.Core.Models;
 using TeamsManager.Core.Enums;
 using TeamsManager.UI.Models.ViewModels;
@@ -23,11 +24,9 @@ namespace TeamsManager.UI.ViewModels.Users
     /// </summary>
     public class UserDetailViewModel : INotifyPropertyChanged
     {
-        private readonly IUserService _userService;
-        private readonly IDepartmentService _departmentService;
+        private readonly ITeamsManagerApiService _apiService;
         private readonly ILogger<UserDetailViewModel> _logger;
         private readonly UserSchoolTypeAssignmentViewModel _userSchoolTypeAssignmentViewModel;
-        private readonly IMsalAuthService _msalAuthService;
         
         private UserDetailModel _model;
         private ObservableCollection<Department> _departments;
@@ -39,17 +38,13 @@ namespace TeamsManager.UI.ViewModels.Users
         private bool? _dialogResult;
 
         public UserDetailViewModel(
-            IUserService userService,
-            IDepartmentService departmentService,
+            ITeamsManagerApiService apiService,
             ILogger<UserDetailViewModel> logger,
-            UserSchoolTypeAssignmentViewModel userSchoolTypeAssignmentViewModel,
-            IMsalAuthService msalAuthService)
+            UserSchoolTypeAssignmentViewModel userSchoolTypeAssignmentViewModel)
         {
-            _userService = userService ?? throw new ArgumentNullException(nameof(userService));
-            _departmentService = departmentService ?? throw new ArgumentNullException(nameof(departmentService));
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _userSchoolTypeAssignmentViewModel = userSchoolTypeAssignmentViewModel ?? throw new ArgumentNullException(nameof(userSchoolTypeAssignmentViewModel));
-            _msalAuthService = msalAuthService ?? throw new ArgumentNullException(nameof(msalAuthService));
 
             _model = new UserDetailModel();
             _departments = new ObservableCollection<Department>();
@@ -225,13 +220,30 @@ namespace TeamsManager.UI.ViewModels.Users
         {
             try
             {
-                var departments = await _departmentService.GetAllDepartmentsAsync();
+                _logger.LogInformation("=== ROZPOCZĘCIE ŁADOWANIA DZIAŁÓW ===");
+                _logger.LogDebug("Wywołanie API: GetAllDepartmentsAsync...");
+                
+                var departments = await _apiService.GetAllDepartmentsAsync();
+                
+                _logger.LogInformation("Wynik API GetAllDepartmentsAsync: {DepartmentsCount} działów", 
+                    departments?.Count() ?? 0);
+                
+                if (departments != null)
+                {
+                    foreach (var dept in departments)
+                    {
+                        _logger.LogDebug("Dział: ID={Id}, Name={Name}, IsActive={IsActive}", 
+                            dept.Id, dept.Name, dept.IsActive);
+                    }
+                }
+                
                 Departments.Clear();
+                _logger.LogDebug("Wyczyszczono kolekcję Departments");
                 
                 // Jeśli nie ma działów, dodaj domyślny dział
-                if (!departments.Any())
+                if (departments == null || !departments.Any())
                 {
-                    _logger.LogWarning("Brak działów w bazie danych. Może być potrzebna inicjalizacja danych.");
+                    _logger.LogWarning("⚠️ Brak działów w bazie danych. Może być potrzebna inicjalizacja danych.");
                     
                     // Dodaj domyślny dział jako fallback
                     var defaultDepartment = new Department
@@ -242,21 +254,31 @@ namespace TeamsManager.UI.ViewModels.Users
                         IsActive = true
                     };
                     Departments.Add(defaultDepartment);
-                    
-                    _logger.LogInformation("Dodano tymczasowy domyślny dział dla formularza użytkownika");
+                    _logger.LogInformation("Dodano tymczasowy domyślny dział: {DepartmentId}", defaultDepartment.Id);
                 }
                 else
                 {
-                    foreach (var dept in departments.OrderBy(d => d.Name))
+                    var sortedDepartments = departments.OrderBy(d => d.Name).ToList();
+                    _logger.LogDebug("Sortowanie działów według nazwy: {Count} działów", sortedDepartments.Count);
+                    
+                    foreach (var dept in sortedDepartments)
                     {
                         Departments.Add(dept);
+                        _logger.LogDebug("Dodano dział do kolekcji: {DepartmentId} - {DepartmentName}", dept.Id, dept.Name);
                     }
-                    _logger.LogDebug("Załadowano {Count} działów", departments.Count());
+                    _logger.LogInformation("✅ Załadowano {Count} działów do ComboBox", Departments.Count);
+                }
+                
+                _logger.LogInformation("Aktualna zawartość kolekcji Departments: {Count} elementów", Departments.Count);
+                foreach (var dept in Departments)
+                {
+                    _logger.LogDebug("  - {Id}: {Name}", dept.Id, dept.Name);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas ładowania działów");
+                _logger.LogError(ex, "💥 WYJĄTEK podczas ładowania działów: {Message}", ex.Message);
+                _logger.LogError("Stack trace: {StackTrace}", ex.StackTrace);
                 
                 // Dodaj domyślny dział jako fallback w przypadku błędu
                 Departments.Clear();
@@ -268,9 +290,14 @@ namespace TeamsManager.UI.ViewModels.Users
                     IsActive = true
                 };
                 Departments.Add(errorDepartment);
+                _logger.LogInformation("Dodano fallback dział po błędzie: {DepartmentId}", errorDepartment.Id);
                 
                 // NIE rzucaj wyjątku ponownie - pozwól formularzowi się otworzyć z fallback działem
-                _logger.LogInformation("Dodano fallback dział po błędzie - formularz może się otworzyć");
+                _logger.LogInformation("Formularz może się otworzyć z fallback działem");
+            }
+            finally
+            {
+                _logger.LogInformation("=== ZAKOŃCZENIE ŁADOWANIA DZIAŁÓW ===");
             }
         }
 
@@ -278,7 +305,7 @@ namespace TeamsManager.UI.ViewModels.Users
         {
             try
             {
-                var user = await _userService.GetUserByIdAsync(userId);
+                var user = await _apiService.GetUserByIdAsync(userId);
                 if (user == null)
                 {
                     throw new InvalidOperationException($"Nie znaleziono użytkownika o ID: {userId}");
@@ -347,84 +374,104 @@ namespace TeamsManager.UI.ViewModels.Users
             {
                 IsLoading = true;
                 ErrorMessage = null;
-                
-                // Pobierz token dostępu z MSAL Auth Service
-                var accessToken = await GetAccessTokenAsync();
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    ErrorMessage = "Nie można uzyskać tokenu dostępu. Spróbuj ponownie zalogować się.";
-                    return;
-                }
+
+                _logger.LogInformation("=== ROZPOCZĘCIE PROCESU ZAPISYWANIA UŻYTKOWNIKA ===");
+                _logger.LogInformation("Tryb edycji: {IsEditMode}, UserId: {UserId}", IsEditMode, _userId);
+                _logger.LogInformation("Model danych: FirstName={FirstName}, LastName={LastName}, UPN={UPN}, Role={Role}, DepartmentId={DepartmentId}", 
+                    Model.FirstName, Model.LastName, Model.Upn, Model.Role, Model.DepartmentId);
 
                 if (IsEditMode)
                 {
                     StatusMessage = "Zapisywanie zmian...";
+                    _logger.LogInformation("TRYB EDYCJI: Aktualizacja użytkownika {UserId}", _userId);
                     
                     // Load current user and apply changes
-                    var currentUser = await _userService.GetUserByIdAsync(_userId!);
+                    _logger.LogDebug("Pobieranie aktualnych danych użytkownika...");
+                    var currentUser = await _apiService.GetUserByIdAsync(_userId!);
                     if (currentUser == null)
                     {
+                        _logger.LogError("BŁĄD: Nie można znaleźć użytkownika o ID: {UserId}", _userId);
                         throw new InvalidOperationException("Nie można znaleźć użytkownika do aktualizacji");
                     }
+                    _logger.LogDebug("Pobrano dane użytkownika: {UserName}", $"{currentUser.FirstName} {currentUser.LastName}");
 
-                    var updatedUser = MapModelToUser(currentUser);
-                    var success = await _userService.UpdateUserAsync(updatedUser, accessToken);
+                    _logger.LogInformation("Wywołanie API: UpdateUserAsync z parametrami: UserId={UserId}, FirstName={FirstName}, LastName={LastName}, UPN={UPN}, Role={Role}, DepartmentId={DepartmentId}", 
+                        _userId, Model.FirstName, Model.LastName, Model.Upn, Model.Role, Model.DepartmentId);
+
+                    var success = await _apiService.UpdateUserAsync(
+                        _userId!,
+                        Model.FirstName,
+                        Model.LastName,
+                        Model.Upn,
+                        Model.Role,
+                        Model.DepartmentId,
+                        Model.Phone,
+                        Model.AlternateEmail
+                    );
+
+                    _logger.LogInformation("Wynik aktualizacji: {Success}", success);
 
                     if (success)
                     {
                         StatusMessage = "Zmiany zostały zapisane";
                         DialogResult = true;
+                        _logger.LogInformation("✅ SUKCES: Użytkownik zaktualizowany pomyślnie");
                     }
                     else
                     {
                         ErrorMessage = "Nie udało się zapisać zmian";
                         StatusMessage = "Błąd zapisu";
+                        _logger.LogError("❌ BŁĄD: Aktualizacja użytkownika nie powiodła się");
                     }
                 }
                 else
                 {
                     StatusMessage = "Tworzenie użytkownika...";
-                    
-                    var newUser = await _userService.CreateUserAsync(
+                    _logger.LogInformation("TRYB TWORZENIA: Nowy użytkownik");
+                    _logger.LogInformation("Parametry tworzenia: FirstName={FirstName}, LastName={LastName}, UPN={UPN}, Role={Role}, DepartmentId={DepartmentId}, Password={HasPassword}", 
+                        Model.FirstName, Model.LastName, Model.Upn, Model.Role, Model.DepartmentId, !string.IsNullOrEmpty(Model.Password));
+
+                    _logger.LogInformation("Wywołanie API: CreateUserAsync...");
+                    var newUser = await _apiService.CreateUserAsync(
                         Model.FirstName,
                         Model.LastName,
                         Model.Upn,
                         Model.Role,
                         Model.DepartmentId,
                         Model.Password,
-                        accessToken,
-                        sendWelcomeEmail: false,
-                        phone: Model.Phone,
-                        alternateEmail: Model.AlternateEmail,
-                        externalId: null,
-                        birthDate: Model.BirthDate,
-                        employmentDate: Model.EmploymentDate,
-                        position: Model.Position,
-                        notes: Model.Notes,
-                        isSystemAdmin: Model.IsSystemAdmin
+                        false, // sendWelcomeEmail
+                        Model.Phone,
+                        Model.AlternateEmail,
+                        null // externalId
                     );
+
+                    _logger.LogInformation("Wynik tworzenia: {NewUser}", newUser != null ? $"Utworzono użytkownika ID: {newUser.Id}" : "NULL - tworzenie nie powiodło się");
 
                     if (newUser != null)
                     {
                         StatusMessage = "Użytkownik został utworzony";
                         DialogResult = true;
+                        _logger.LogInformation("✅ SUKCES: Użytkownik utworzony pomyślnie - ID: {UserId}, UPN: {UPN}", newUser.Id, newUser.UPN);
                     }
                     else
                     {
                         ErrorMessage = "Nie udało się utworzyć użytkownika";
                         StatusMessage = "Błąd tworzenia";
+                        _logger.LogError("❌ BŁĄD: Tworzenie użytkownika nie powiodło się - API zwróciło NULL");
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas zapisu użytkownika");
+                _logger.LogError(ex, "💥 WYJĄTEK podczas zapisu użytkownika: {Message}", ex.Message);
+                _logger.LogError("Stack trace: {StackTrace}", ex.StackTrace);
                 ErrorMessage = $"Błąd zapisu: {ex.Message}";
                 StatusMessage = "Wystąpił błąd";
             }
             finally
             {
                 IsLoading = false;
+                _logger.LogInformation("=== ZAKOŃCZENIE PROCESU ZAPISYWANIA UŻYTKOWNIKA ===");
             }
         }
 
@@ -508,29 +555,6 @@ namespace TeamsManager.UI.ViewModels.Users
         {
             (SaveCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (RemoveAvatarCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        }
-
-        /// <summary>
-        /// Pobiera token dostępu z MSAL Auth Service
-        /// </summary>
-        private async Task<string?> GetAccessTokenAsync()
-        {
-            try
-            {
-                var authResult = await _msalAuthService.AcquireTokenSilentAsync();
-                if (authResult?.AccessToken != null)
-                {
-                    return authResult.AccessToken;
-                }
-
-                _logger.LogWarning("Nie można pobrać tokenu w trybie cichym, może być wymagana ponowna autoryzacja");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd podczas pobierania tokenu dostępu");
-                return null;
-            }
         }
 
         #endregion

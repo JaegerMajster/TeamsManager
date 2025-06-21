@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
@@ -1019,29 +1020,33 @@ namespace TeamsManager.Core.Services.Graph
                 }
 
                 // Pobierz informacje o użytkowniku z Graph API
-                var userResponse = await _httpService.GetAsync<dynamic>("/v1.0/me");
+                var userResponse = await _httpService.GetAsync<JsonElement>("/v1.0/me");
                 
                 var userContext = new GraphUserContext
                 {
-                    UserId = userResponse?.id?.ToString(),
-                    UserPrincipalName = userResponse?.userPrincipalName?.ToString(),
-                    DisplayName = userResponse?.displayName?.ToString(),
-                    Mail = userResponse?.mail?.ToString(),
-                    TenantId = userResponse?.tenantId?.ToString(),
+                    UserId = userResponse.TryGetProperty("id", out var idProp) ? idProp.GetString() : null,
+                    UserPrincipalName = userResponse.TryGetProperty("userPrincipalName", out var upnProp) ? upnProp.GetString() : null,
+                    DisplayName = userResponse.TryGetProperty("displayName", out var displayProp) ? displayProp.GetString() : null,
+                    Mail = userResponse.TryGetProperty("mail", out var mailProp) ? mailProp.GetString() : null,
+                    TenantId = userResponse.TryGetProperty("tenantId", out var tenantProp) ? tenantProp.GetString() : null,
                     IsAuthenticated = true
                 };
 
                 // Pobierz role użytkownika
                 try
                 {
-                    var rolesResponse = await _httpService.GetAsync<dynamic>("/v1.0/me/memberOf");
-                    if (rolesResponse?.value != null)
+                    var rolesResponse = await _httpService.GetAsync<JsonElement>("/v1.0/me/memberOf");
+                    if (rolesResponse.TryGetProperty("value", out var valueArray) && valueArray.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var role in rolesResponse.value)
+                        foreach (var role in valueArray.EnumerateArray())
                         {
-                            if (role?.displayName != null)
+                            if (role.TryGetProperty("displayName", out var displayNameProp))
                             {
-                                userContext.Roles.Add(role.displayName.ToString());
+                                var displayName = displayNameProp.GetString();
+                                if (!string.IsNullOrEmpty(displayName))
+                                {
+                                    userContext.Roles.Add(displayName);
+                                }
                             }
                         }
                     }

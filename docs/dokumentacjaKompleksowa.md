@@ -4,7 +4,7 @@
 
 **Nazwa projektu:** TeamsManager - System zarządzania zespołami Microsoft Teams  
 **Autor:** Mariusz Jaguścik  
-**Uczelnia:** Akademia Ekonomiczno-Humanistyczna w Łodzi  
+**Uczelnia:** Akademia Ekonomiczno-Humanistyczna w Warszawie 
 **Okres realizacji:** 28 maja 2024 - 08 czerwca 2025  
 **Status:** Projekt ukończony  
 **Technologia:** .NET 9.0, ASP.NET Core, WPF, Entity Framework Core  
@@ -979,4 +979,4 @@ Supported Protocols:
 
 *Dokument utworzony: 08 czerwca 2025, 15:07*  
 *Autor: Mariusz Jaguścik*  
-*Uczelnia: Akademia Ekonomiczno-Humanistyczna w Łodzi* 
+*Uczelnia: Akademia Ekonomiczno-Humanistyczna w Warszawie* 
