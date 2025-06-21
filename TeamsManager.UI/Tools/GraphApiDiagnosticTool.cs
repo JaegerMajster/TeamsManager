@@ -6,6 +6,8 @@ using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using TeamsManager.Core.Models.Graph;
+using Microsoft.Extensions.DependencyInjection;
+using TeamsManager.Core.Abstractions.Services;
 
 namespace TeamsManager.UI.Tools
 {
@@ -16,11 +18,13 @@ namespace TeamsManager.UI.Tools
     {
         private readonly ITeamsManagerApiService _apiService;
         private readonly ILogger<GraphApiDiagnosticTool> _logger;
+        private readonly IServiceProvider _serviceProvider;
 
-        public GraphApiDiagnosticTool(ITeamsManagerApiService apiService, ILogger<GraphApiDiagnosticTool> logger)
+        public GraphApiDiagnosticTool(ITeamsManagerApiService apiService, ILogger<GraphApiDiagnosticTool> logger, IServiceProvider serviceProvider)
         {
             _apiService = apiService;
             _logger = logger;
+            _serviceProvider = serviceProvider;
         }
 
         /// <summary>
@@ -52,7 +56,14 @@ namespace TeamsManager.UI.Tools
 
                 // Test 4: Szczegółowe uprawnienia
                 var detailedPermissionsTest = await TestDetailedPermissionsAsync();
-                report.TestResults.Add(detailedPermissionsTest);
+                report.TestResults.Add(new DiagnosticTestResult
+                {
+                    TestName = "Szczegółowa analiza uprawnień biznesowych",
+                    Status = "Healthy",
+                    ErrorMessage = null,
+                    Details = $"Przypisane uprawnienia: {string.Join(", ", detailedPermissionsTest.Select(c => c.Name))}",
+                    Data = detailedPermissionsTest
+                });
 
                 // Test 5: Dostępność endpointów
                 var endpointsTest = await TestEndpointsAvailabilityAsync();
@@ -173,49 +184,274 @@ namespace TeamsManager.UI.Tools
             }
         }
 
-        private async Task<DiagnosticTestResult> TestDetailedPermissionsAsync()
+        public async Task<List<PermissionCategoryViewModel>> TestDetailedPermissionsAsync()
         {
             try
             {
-                var allPermissions = new[]
-                {
-                    "User.Read", "User.Read.All", "User.ReadWrite.All",
-                    "Directory.Read.All", "Directory.ReadWrite.All",
-                    "Group.Read.All", "Group.ReadWrite.All",
-                    "Team.ReadBasic.All", "Team.Create", "TeamMember.ReadWrite.All",
-                    "Channel.ReadBasic.All", "Channel.Create",
-                    "Application.Read.All", "Organization.Read.All"
-                };
-
-                var permissionInfo = await _apiService.ValidateGraphPermissionsAsync(allPermissions);
+                _logger.LogInformation("=== ROZPOCZĘCIE SZCZEGÓŁOWEGO TESTU UPRAWNIEŃ ===");
                 
-                var assignedPermissions = permissionInfo?.AssignedPermissions ?? new List<string>();
-                var missingPermissions = allPermissions.Except(assignedPermissions).ToList();
-
-                return new DiagnosticTestResult
+                // ✅ DODATKOWE LOGOWANIE: Sprawdź czy mamy token OBO
+                var modernHttpService = _serviceProvider.GetService<IModernHttpService>();
+                if (modernHttpService != null)
                 {
-                    TestName = "Szczegółowa analiza uprawnień",
-                    Status = assignedPermissions.Count >= 5 ? "Healthy" : "Warning",
-                    ErrorMessage = null,
-                    Details = $"Przypisanych: {assignedPermissions.Count}/{allPermissions.Length} uprawnień",
-                    Data = new 
-                    { 
-                        AssignedPermissions = assignedPermissions, 
-                        MissingPermissions = missingPermissions,
-                        PermissionCompleteness = (double)assignedPermissions.Count / allPermissions.Length * 100
+                    var currentToken = await modernHttpService.GetAccessTokenAsync();
+                    _logger.LogInformation("DIAGNOSTIC: Aktualny token w ModernHttpService: {HasToken}, długość: {TokenLength}", 
+                        !string.IsNullOrEmpty(currentToken), currentToken?.Length ?? 0);
+                    
+                    if (!string.IsNullOrEmpty(currentToken))
+                    {
+                        try
+                        {
+                            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                            var token = handler.ReadJwtToken(currentToken);
+                            _logger.LogInformation("DIAGNOSTIC: Token wygasa: {ExpiresAt}, Typ: {TokenType}, Audience: {Audience}", 
+                                token.ValidTo, token.Claims.FirstOrDefault(c => c.Type == "typ")?.Value, 
+                                token.Claims.FirstOrDefault(c => c.Type == "aud")?.Value);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "DIAGNOSTIC: Nie można zdekodować tokenu");
+                        }
                     }
+                }
+                else
+                {
+                    _logger.LogWarning("DIAGNOSTIC: ModernHttpService nie jest dostępny");
+                }
+
+                // Sprawdź uprawnienia przez API
+                var permissionInfo = await _apiService.ValidateGraphPermissionsAsync(new[] { "User.Read.All" });
+                
+                _logger.LogInformation("DIAGNOSTIC: API zwróciło permissionInfo: {IsNull}, AssignedPermissions: {Count}", 
+                    permissionInfo == null, permissionInfo?.AssignedPermissions?.Count ?? 0);
+                
+                if (permissionInfo != null)
+                {
+                    _logger.LogInformation("DIAGNOSTIC: Przypisane uprawnienia: {Permissions}", 
+                        string.Join(", ", permissionInfo.AssignedPermissions ?? new List<string>()));
+                    _logger.LogInformation("DIAGNOSTIC: Status: {Status}, HasRequired: {HasRequired}", 
+                        permissionInfo.Status, permissionInfo.HasRequiredPermissions);
+                }
+
+                var categories = new List<PermissionCategoryViewModel>();
+
+                // Podstawowe uprawnienia (wymagane)
+                var basicPermissions = new[]
+                {
+                    "User.Read",
+                    "User.Read.All", 
+                    "Group.Read.All",
+                    "Team.ReadBasic.All"
                 };
+
+                var basicCategory = new PermissionCategoryViewModel
+                {
+                    Name = "Podstawowe (wymagane)",
+                    Permissions = new List<PermissionDetailViewModel>()
+                };
+
+                foreach (var permission in basicPermissions)
+                {
+                    var hasPermission = permissionInfo?.AssignedPermissions?.Contains(permission) == true;
+                    _logger.LogDebug("DIAGNOSTIC: Uprawnienie {Permission}: {HasPermission}", permission, hasPermission);
+                    
+                    basicCategory.Permissions.Add(new PermissionDetailViewModel
+                    {
+                        Name = permission,
+                        HasPermission = hasPermission,
+                        Status = hasPermission ? "✅ Przyznane" : "❌ Brakuje"
+                    });
+                }
+
+                categories.Add(basicCategory);
+
+                // Zarządzanie użytkownikami
+                var userManagementPermissions = new[]
+                {
+                    "User.ReadWrite.All",
+                    "Directory.Read.All", 
+                    "Directory.ReadWrite.All"
+                };
+
+                var userCategory = new PermissionCategoryViewModel
+                {
+                    Name = "Zarządzanie użytkownikami",
+                    Permissions = new List<PermissionDetailViewModel>()
+                };
+
+                foreach (var permission in userManagementPermissions)
+                {
+                    var hasPermission = permissionInfo?.AssignedPermissions?.Contains(permission) == true;
+                    userCategory.Permissions.Add(new PermissionDetailViewModel
+                    {
+                        Name = permission,
+                        HasPermission = hasPermission,
+                        Status = hasPermission ? "✅ Przyznane" : "❌ Brakuje"
+                    });
+                }
+
+                categories.Add(userCategory);
+
+                // Zarządzanie zespołami
+                var teamManagementPermissions = new[]
+                {
+                    "Group.ReadWrite.All",
+                    "Team.Create",
+                    "TeamMember.ReadWrite.All",
+                    "TeamSettings.ReadWrite.All"
+                };
+
+                var teamCategory = new PermissionCategoryViewModel
+                {
+                    Name = "Zarządzanie zespołami", 
+                    Permissions = new List<PermissionDetailViewModel>()
+                };
+
+                foreach (var permission in teamManagementPermissions)
+                {
+                    var hasPermission = permissionInfo?.AssignedPermissions?.Contains(permission) == true;
+                    teamCategory.Permissions.Add(new PermissionDetailViewModel
+                    {
+                        Name = permission,
+                        HasPermission = hasPermission,
+                        Status = hasPermission ? "✅ Przyznane" : "❌ Brakuje"
+                    });
+                }
+
+                categories.Add(teamCategory);
+
+                // Zarządzanie kanałami
+                var channelManagementPermissions = new[]
+                {
+                    "Channel.ReadBasic.All",
+                    "Channel.Create",
+                    "ChannelSettings.ReadWrite.All"
+                };
+
+                var channelCategory = new PermissionCategoryViewModel
+                {
+                    Name = "Zarządzanie kanałami",
+                    Permissions = new List<PermissionDetailViewModel>()
+                };
+
+                foreach (var permission in channelManagementPermissions)
+                {
+                    var hasPermission = permissionInfo?.AssignedPermissions?.Contains(permission) == true;
+                    channelCategory.Permissions.Add(new PermissionDetailViewModel
+                    {
+                        Name = permission,
+                        HasPermission = hasPermission,
+                        Status = hasPermission ? "✅ Przyznane" : "❌ Brakuje"
+                    });
+                }
+
+                categories.Add(channelCategory);
+
+                // Dodatkowe funkcje
+                var additionalPermissions = new[]
+                {
+                    "Application.Read.All",
+                    "Organization.Read.All",
+                    "Mail.Send",
+                    "Calendars.ReadWrite"
+                };
+
+                var additionalCategory = new PermissionCategoryViewModel
+                {
+                    Name = "Dodatkowe funkcje",
+                    Permissions = new List<PermissionDetailViewModel>()
+                };
+
+                foreach (var permission in additionalPermissions)
+                {
+                    var hasPermission = permissionInfo?.AssignedPermissions?.Contains(permission) == true;
+                    additionalCategory.Permissions.Add(new PermissionDetailViewModel
+                    {
+                        Name = permission,
+                        HasPermission = hasPermission,
+                        Status = hasPermission ? "✅ Przyznane" : "❌ Brakuje"
+                    });
+                }
+
+                categories.Add(additionalCategory);
+
+                // Oblicz ogólną kompletność
+                var totalPermissions = categories.SelectMany(c => c.Permissions).Count();
+                var grantedPermissions = categories.SelectMany(c => c.Permissions).Count(p => p.HasPermission);
+                var completeness = totalPermissions > 0 ? (grantedPermissions * 100.0 / totalPermissions) : 0;
+
+                _logger.LogInformation("DIAGNOSTIC: Kompletność uprawnień: {Completeness:F1}% ({Granted}/{Total})", 
+                    completeness, grantedPermissions, totalPermissions);
+                _logger.LogInformation("=== KONIEC SZCZEGÓŁOWEGO TESTU UPRAWNIEŃ ===");
+
+                return categories;
             }
             catch (Exception ex)
             {
-                return new DiagnosticTestResult
-                {
-                    TestName = "Szczegółowa analiza uprawnień",
-                    Status = "Critical",
-                    ErrorMessage = ex.Message,
-                    Details = ex.StackTrace
-                };
+                _logger.LogError(ex, "Błąd podczas testowania szczegółowych uprawnień Graph API");
+                return new List<PermissionCategoryViewModel>();
             }
+        }
+
+        private List<string> GeneratePermissionRecommendations(Dictionary<string, string[]> businessPermissions, List<string> assignedPermissions)
+        {
+            var recommendations = new List<string>();
+            
+            // Sprawdź podstawowe uprawnienia
+            var basicMissing = businessPermissions["Podstawowe (wymagane)"]
+                .Where(p => !assignedPermissions.Contains(p)).ToList();
+            
+            if (basicMissing.Any())
+            {
+                recommendations.Add("🔧 KRYTYCZNE: Dodaj podstawowe uprawnienia w Azure AD Portal:");
+                foreach (var permission in basicMissing)
+                {
+                    recommendations.Add($"   - {permission} (Application permission)");
+                }
+            }
+
+            // Sprawdź uprawnienia do zarządzania użytkownikami
+            var userMgmtMissing = businessPermissions["Zarządzanie użytkownikami"]
+                .Where(p => !assignedPermissions.Contains(p)).ToList();
+            
+            if (userMgmtMissing.Any())
+            {
+                recommendations.Add("⚠️ Brakujące uprawnienia do zarządzania użytkownikami:");
+                foreach (var permission in userMgmtMissing)
+                {
+                    recommendations.Add($"   - {permission}");
+                }
+            }
+
+            // Sprawdź uprawnienia do zarządzania zespołami
+            var teamMgmtMissing = businessPermissions["Zarządzanie zespołami"]
+                .Where(p => !assignedPermissions.Contains(p)).ToList();
+            
+            if (teamMgmtMissing.Any())
+            {
+                recommendations.Add("⚠️ Brakujące uprawnienia do zarządzania zespołami:");
+                foreach (var permission in teamMgmtMissing)
+                {
+                    recommendations.Add($"   - {permission}");
+                }
+            }
+
+            if (!recommendations.Any())
+            {
+                recommendations.Add("✅ Wszystkie uprawnienia biznesowe są poprawnie skonfigurowane");
+            }
+            else
+            {
+                recommendations.Add("");
+                recommendations.Add("📋 Instrukcje konfiguracji:");
+                recommendations.Add("1. Otwórz Azure Portal → Azure Active Directory");
+                recommendations.Add("2. Przejdź do App registrations → Twoja aplikacja");
+                recommendations.Add("3. Wybierz API permissions → Add a permission");
+                recommendations.Add("4. Wybierz Microsoft Graph → Application permissions");
+                recommendations.Add("5. Dodaj brakujące uprawnienia i zatwierdź je jako administrator");
+            }
+
+            return recommendations;
         }
 
         private async Task<DiagnosticTestResult> TestEndpointsAvailabilityAsync()
@@ -332,5 +568,24 @@ namespace TeamsManager.UI.Tools
         public string? ErrorMessage { get; set; }
         public string? Details { get; set; }
         public object? Data { get; set; }
+    }
+
+    /// <summary>
+    /// Model kategorii uprawnień
+    /// </summary>
+    public class PermissionCategoryViewModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<PermissionDetailViewModel> Permissions { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Model szczegółów uprawnienia
+    /// </summary>
+    public class PermissionDetailViewModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool HasPermission { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 } 

@@ -183,6 +183,132 @@
                     </StackPanel>
                 </materialDesign:Card>
 
+                <!-- Detailed Permissions -->
+                <materialDesign:Card x:Name="PermissionsCard" Margin="0,0,0,15" Padding="15" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="Szczegółowe uprawnienia biznesowe" Style="{StaticResource SectionHeader}"/>
+                        
+                        <!-- Permission Summary -->
+                        <Border Background="{DynamicResource MaterialDesignCardBackground}" 
+                               BorderBrush="{DynamicResource MaterialDesignDivider}" 
+                               BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock x:Name="PermissionSummaryText" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="PermissionCompletenessText" FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                                
+                                <materialDesign:PackIcon x:Name="PermissionSummaryIcon" Grid.Column="1" 
+                                                       Width="24" Height="24" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Permission Categories -->
+                        <ItemsControl x:Name="PermissionCategoriesItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <materialDesign:Card Margin="0,5,0,5" Padding="10">
+                                        <StackPanel>
+                                            <!-- Category Header -->
+                                            <Grid Margin="0,0,0,5">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <materialDesign:PackIcon Grid.Column="0" Width="18" Height="18" 
+                                                                       VerticalAlignment="Center" Margin="0,0,8,0">
+                                                    <materialDesign:PackIcon.Style>
+                                                        <Style TargetType="materialDesign:PackIcon">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Healthy">
+                                                                    <Setter Property="Kind" Value="CheckCircle"/>
+                                                                    <Setter Property="Foreground" Value="Green"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Warning">
+                                                                    <Setter Property="Kind" Value="AlertCircle"/>
+                                                                    <Setter Property="Foreground" Value="Orange"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Critical">
+                                                                    <Setter Property="Kind" Value="CloseCircle"/>
+                                                                    <Setter Property="Foreground" Value="Red"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </materialDesign:PackIcon.Style>
+                                                </materialDesign:PackIcon>
+                                                
+                                                <TextBlock Grid.Column="1" Text="{Binding CategoryName}" 
+                                                         FontWeight="Bold" VerticalAlignment="Center"/>
+                                                
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:F0}% ({1}/{2})">
+                                                            <Binding Path="Completeness"/>
+                                                            <Binding Path="GrantedCount"/>
+                                                            <Binding Path="TotalCount"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="FontSize" Value="11"/>
+                                                            <Setter Property="Opacity" Value="0.7"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Healthy">
+                                                                    <Setter Property="Foreground" Value="Green"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Warning">
+                                                                    <Setter Property="Foreground" Value="Orange"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Critical">
+                                                                    <Setter Property="Foreground" Value="Red"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                            
+                                            <!-- Permission List -->
+                                            <ItemsControl ItemsSource="{Binding Permissions}" Margin="20,5,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
+                                                            <TextBlock Text="{Binding Status}" FontFamily="Segoe UI Emoji" 
+                                                                     Width="20" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding Permission}" FontFamily="Consolas" 
+                                                                     FontSize="11" VerticalAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="✅ Przyznane">
+                                                                                <Setter Property="Foreground" Value="Green"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Status}" Value="❌ Brakuje">
+                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </materialDesign:Card>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </materialDesign:Card>
+
                 <!-- Recommendations -->
                 <materialDesign:Card Margin="0,0,0,15" Padding="15">
                     <StackPanel>

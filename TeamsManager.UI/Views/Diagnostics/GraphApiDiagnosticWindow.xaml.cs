@@ -7,6 +7,8 @@ using TeamsManager.UI.Tools;
 using TeamsManager.UI.Services;
 using TeamsManager.UI.Services.Abstractions;
 using MaterialDesignThemes.Wpf;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace TeamsManager.UI.Views.Diagnostics
 {
@@ -24,7 +26,7 @@ namespace TeamsManager.UI.Views.Diagnostics
             
             var apiService = serviceProvider.GetRequiredService<ITeamsManagerApiService>();
             var logger = serviceProvider.GetRequiredService<ILogger<GraphApiDiagnosticTool>>();
-            _diagnosticTool = new GraphApiDiagnosticTool(apiService, logger);
+            _diagnosticTool = new GraphApiDiagnosticTool(apiService, logger, serviceProvider);
             
             _logger = serviceProvider.GetRequiredService<ILogger<GraphApiDiagnosticWindow>>();
             
@@ -54,6 +56,7 @@ namespace TeamsManager.UI.Views.Diagnostics
                 LoadingCard.Visibility = Visibility.Visible;
                 TestResultsItemsControl.Visibility = Visibility.Collapsed;
                 RecommendationsItemsControl.Visibility = Visibility.Collapsed;
+                PermissionsCard.Visibility = Visibility.Collapsed;
 
                 _logger.LogInformation("Rozpoczynanie diagnostyki Graph API w oknie");
 
@@ -71,6 +74,9 @@ namespace TeamsManager.UI.Views.Diagnostics
                 TestResultsItemsControl.ItemsSource = report.TestResults;
                 RecommendationsItemsControl.ItemsSource = report.Recommendations;
 
+                // Sprawdź czy mamy szczegółowe dane uprawnień i wyświetl je
+                UpdatePermissionsSection(report);
+
                 _logger.LogInformation("Diagnostyka Graph API zakończona w oknie. Status: {Status}", report.OverallStatus);
             }
             catch (Exception ex)
@@ -81,6 +87,7 @@ namespace TeamsManager.UI.Views.Diagnostics
                 LoadingCard.Visibility = Visibility.Collapsed;
                 TestResultsItemsControl.Visibility = Visibility.Visible;
                 RecommendationsItemsControl.Visibility = Visibility.Visible;
+                PermissionsCard.Visibility = Visibility.Collapsed;
 
                 // Pokaż błąd
                 UpdateOverallStatus("Critical");
@@ -144,6 +151,98 @@ namespace TeamsManager.UI.Views.Diagnostics
             }
         }
 
+        private void UpdatePermissionsSection(GraphDiagnosticReport report)
+        {
+            try
+            {
+                // Znajdź test szczegółowych uprawnień
+                var permissionsTest = report.TestResults?.FirstOrDefault(t => 
+                    t.TestName.Contains("Szczegółowa analiza uprawnień biznesowych"));
+
+                if (permissionsTest?.Data != null)
+                {
+                    // Pokaż sekcję uprawnień
+                    PermissionsCard.Visibility = Visibility.Visible;
+
+                    // Deserializuj dane z testu (używamy dynamic bo Data jest object)
+                    dynamic data = permissionsTest.Data;
+                    
+                    if (data?.Summary != null && data?.Categories != null)
+                    {
+                        // Zaktualizuj podsumowanie
+                        var summary = data.Summary;
+                        PermissionSummaryText.Text = $"Status uprawnień: {summary.Status}";
+                        PermissionCompletenessText.Text = $"Kompletność: {summary.OverallCompleteness:F1}% ({summary.TotalGranted}/{summary.TotalRequired} uprawnień)";
+
+                        // Ustaw ikonę podsumowania
+                        switch (summary.Status?.ToString()?.ToLower())
+                        {
+                            case "healthy":
+                                PermissionSummaryIcon.Kind = PackIconKind.CheckCircle;
+                                PermissionSummaryIcon.Foreground = Brushes.Green;
+                                break;
+                            case "warning":
+                                PermissionSummaryIcon.Kind = PackIconKind.AlertCircle;
+                                PermissionSummaryIcon.Foreground = Brushes.Orange;
+                                break;
+                            case "critical":
+                                PermissionSummaryIcon.Kind = PackIconKind.CloseCircle;
+                                PermissionSummaryIcon.Foreground = Brushes.Red;
+                                break;
+                            default:
+                                PermissionSummaryIcon.Kind = PackIconKind.QuestionMarkCircle;
+                                PermissionSummaryIcon.Foreground = Brushes.Gray;
+                                break;
+                        }
+
+                        // Przygotuj dane kategorii
+                        var categoryViewModels = new List<PermissionCategoryViewModel>();
+                        
+                        foreach (var categoryPair in data.Categories)
+                        {
+                            string categoryName = categoryPair.Key;
+                            dynamic categoryData = categoryPair.Value;
+                            
+                            var permissionDetails = new List<PermissionDetailViewModel>();
+                            if (categoryData?.Details != null)
+                            {
+                                foreach (var detail in categoryData.Details)
+                                {
+                                    permissionDetails.Add(new PermissionDetailViewModel
+                                    {
+                                        Permission = detail.Permission?.ToString() ?? "",
+                                        Status = detail.Status?.ToString() ?? ""
+                                    });
+                                }
+                            }
+
+                            categoryViewModels.Add(new PermissionCategoryViewModel
+                            {
+                                CategoryName = categoryName,
+                                Status = categoryData?.Status?.ToString() ?? "Unknown",
+                                Completeness = Convert.ToDouble(categoryData?.Completeness ?? 0),
+                                GrantedCount = categoryData?.Granted?.Count ?? 0,
+                                TotalCount = (categoryData?.Granted?.Count ?? 0) + (categoryData?.Missing?.Count ?? 0),
+                                Permissions = permissionDetails
+                            });
+                        }
+
+                        PermissionCategoriesItemsControl.ItemsSource = categoryViewModels;
+                    }
+                }
+                else
+                {
+                    // Ukryj sekcję uprawnień jeśli nie ma danych
+                    PermissionsCard.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Błąd podczas aktualizacji sekcji uprawnień");
+                PermissionsCard.Visibility = Visibility.Collapsed;
+            }
+        }
+
         /// <summary>
         /// Otwiera okno diagnostyczne Graph API
         /// </summary>
@@ -163,5 +262,27 @@ namespace TeamsManager.UI.Views.Diagnostics
                     "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
+
+    /// <summary>
+    /// ViewModel dla kategorii uprawnień
+    /// </summary>
+    public class PermissionCategoryViewModel
+    {
+        public string CategoryName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public double Completeness { get; set; }
+        public int GrantedCount { get; set; }
+        public int TotalCount { get; set; }
+        public List<PermissionDetailViewModel> Permissions { get; set; } = new();
+    }
+
+    /// <summary>
+    /// ViewModel dla szczegółów uprawnienia
+    /// </summary>
+    public class PermissionDetailViewModel
+    {
+        public string Permission { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
     }
 } 
