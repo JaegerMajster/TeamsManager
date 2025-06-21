@@ -114,6 +114,16 @@ namespace TeamsManager.UI.Services
                 throw new InvalidOperationException("Brak konfiguracji Azure AD. Wywołaj SetConfiguration przed StartAsync.");
             }
             
+            // ===== SZCZEGÓŁOWE LOGOWANIE KONFIGURACJI AZURE AD =====
+            _logger.LogInformation("[EMBEDDED-API] 🔍 SZCZEGÓŁY KONFIGURACJI Azure AD:");
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - ClientId: {ClientId}", _azureAdConfig.Api?.ClientId);
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - ClientSecret: {ClientSecret}", 
+                string.IsNullOrEmpty(_azureAdConfig.Api?.ClientSecret) ? "NOT SET" : "SET");
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - ClientSecret Length: {Length}", _azureAdConfig.Api?.ClientSecret?.Length ?? 0);
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - Audience: {Audience}", _azureAdConfig.Api?.Audience);
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - ApiScope: {ApiScope}", _azureAdConfig.Api?.ApiScope);
+            _logger.LogInformation("[EMBEDDED-API] 🔍   - IsValid(): {IsValid}", _azureAdConfig.Api?.IsValid());
+            
             if (_applicationConfig?.IsValid() != true)
             {
                 _logger.LogWarning("[EMBEDDED-API] ⚠️ Brak prawidłowej konfiguracji aplikacji - używam domyślnej");
@@ -378,14 +388,7 @@ namespace TeamsManager.UI.Services
             
             services.AddHttpClient("ExternalApis");
             
-            // Rejestracja HttpClient dla dependency injection - SINGLETON żeby uniknąć ObjectDisposedException
-            services.AddSingleton<HttpClient>(provider =>
-            {
-                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
-                return httpClientFactory.CreateClient("MicrosoftGraph");
-            });
-            
-            services.AddScoped<IModernHttpService, ModernHttpService>();
+
             services.AddSingleton<ModernCircuitBreaker>(provider =>
             {
                 var logger = provider.GetRequiredService<ILogger<ModernCircuitBreaker>>();
@@ -452,6 +455,28 @@ namespace TeamsManager.UI.Services
             // ===== GRAPH API CONFIGURATION =====
             services.AddSingleton<GraphApiConfiguration>();
             _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano GraphApiConfiguration");
+            
+            // ===== MODERN HTTP SERVICE =====
+            // Rejestracja ModernHttpService tylko jeśli IConfidentialClientApplication jest dostępny
+            if (_azureAdConfig?.Api?.IsValid() == true)
+            {
+                services.AddScoped<IModernHttpService>(provider =>
+                {
+                    var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                    var logger = provider.GetRequiredService<ILogger<ModernHttpService>>();
+                    var confidentialClientApp = provider.GetRequiredService<IConfidentialClientApplication>();
+                    var graphConfig = provider.GetRequiredService<GraphApiConfiguration>();
+                    
+                    // Tworzymy HttpClient przez factory - to zapobiega ObjectDisposedException
+                    var httpClient = httpClientFactory.CreateClient("MicrosoftGraph");
+                    return new ModernHttpService(httpClient, logger, confidentialClientApp, graphConfig);
+                });
+                _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano ModernHttpService z factory pattern");
+            }
+            else
+            {
+                _logger.LogWarning("[EMBEDDED-API] ❌ NIE rejestruję ModernHttpService - brak konfiguracji Azure AD");
+            }
             
             // ===== GRAPH API SERVICES =====
             services.AddGraphServices(includeAdminNotificationService: false); // Bez admin notifications w embedded
