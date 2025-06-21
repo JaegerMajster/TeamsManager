@@ -51,18 +51,15 @@ namespace TeamsManager.UI.Services
         private readonly HttpClient _httpClient;
         private readonly IMsalAuthService _authService;
         private readonly ILogger<TeamsManagerApiService> _logger;
-        private readonly EmbeddedApiServer _embeddedApiServer;
 
         public TeamsManagerApiService(
             HttpClient httpClient,
             IMsalAuthService authService,
-            ILogger<TeamsManagerApiService> logger,
-            EmbeddedApiServer embeddedApiServer)
+            ILogger<TeamsManagerApiService> logger)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _embeddedApiServer = embeddedApiServer ?? throw new ArgumentNullException(nameof(embeddedApiServer));
         }
 
         public async Task<GraphDiagnosticInfo?> GetGraphConnectionDiagnosticsAsync()
@@ -380,12 +377,11 @@ namespace TeamsManager.UI.Services
         {
             try
             {
-                var baseUrl = _embeddedApiServer.BaseUrl;
-                if (string.IsNullOrEmpty(baseUrl))
-                {
-                    _logger.LogWarning("[DIAGNOSTIC] EmbeddedApiServer nie zwrócił URL - używam fallback");
-                    baseUrl = "https://localhost:7037";
-                }
+                // TYMCZASOWE ROZWIĄZANIE: Używaj bezpośrednio localhost:7037
+                // EmbeddedApiServer nie jest uruchamiany, więc zwraca port 0
+                var baseUrl = "https://localhost:7037";
+                
+                _logger.LogDebug("[DIAGNOSTIC] Używam stały URL API: {BaseUrl}", baseUrl);
                 
                 var fullUrl = $"{baseUrl.TrimEnd('/')}/{endpoint.TrimStart('/')}";
                 _logger.LogDebug("[DIAGNOSTIC] Zbudowano URL: {FullUrl}", fullUrl);

@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using TeamsManager.Data;
 using Microsoft.Extensions.Logging;
+using TeamsManager.Core.Extensions;
 
 namespace TeamsManager.Data
 {
@@ -11,6 +12,13 @@ namespace TeamsManager.Data
     {
         static async Task Main(string[] args)
         {
+            // ===== SCENTRALIZOWANE LOGOWANIE TEAMSMANAGER =====
+            using var loggerFactory = LoggingExtensions.CreateTeamsManagerLoggerFactory("Data", enableDiagnostics: true);
+            var logger = loggerFactory.CreateLogger<Program>();
+            
+            logger.LogInformation("=== Uruchomienie aplikacji TeamsManager.Data ===");
+            logger.LogInformation("System logowania: Data będzie zapisywać logi do plików z prefiksem 'data-'");
+            
             Console.WriteLine("=== Test bazy danych TeamsManager ===");
             
             // Konfiguracja DbContext

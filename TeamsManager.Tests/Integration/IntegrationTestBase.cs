@@ -1,10 +1,12 @@
 ﻿// Plik: TeamsManager.Tests/Integration/IntegrationTestBase.cs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TeamsManager.Data;
 using TeamsManager.Tests.Infrastructure;
 using TeamsManager.Tests.Infrastructure.Services;
 using TeamsManager.Core.Abstractions;
+using TeamsManager.Core.Extensions;
 using System;
 using System.Threading.Tasks;
 
@@ -20,6 +22,10 @@ namespace TeamsManager.Tests.Integration
         protected IntegrationTestBase()
         {
             var services = new ServiceCollection();
+
+            // ===== SCENTRALIZOWANE LOGOWANIE TEAMSMANAGER =====
+            // Testy będą zapisywać logi do plików z prefiksem "tests-"
+            services.AddTeamsManagerLogging("Tests");
 
             // 1. Rejestracja TestCurrentUserService jako ICurrentUserService (Singleton dla spójności w teście)
             services.AddSingleton<TestCurrentUserService>();

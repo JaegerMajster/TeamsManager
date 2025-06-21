@@ -19,9 +19,6 @@ namespace TeamsManager.Tests.Repositories
         {
             base.ConfigureServices(services);
 
-            // Rejestracja loggera dla EfUnitOfWork (tylko dla testów)
-            services.AddLogging(builder => builder.AddConsole());
-
             // Rejestracja wszystkich repozytoriów używanych w testach
             services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();
             services.AddScoped<IOperationHistoryRepository, OperationHistoryRepository>();
