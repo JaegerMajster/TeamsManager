@@ -44,6 +44,12 @@ using TeamsManager.Core.Abstractions.Services.Cache;
 using TeamsManager.Core.Abstractions.Services.Auth;
 using Microsoft.AspNetCore.Routing;
 using TeamsManager.Core.Abstractions;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using Microsoft.AspNetCore.Http;
+using TeamsManager.UI.Services.Auth;
+using TeamsManager.UI.Middleware;
 
 namespace TeamsManager.UI.Services
 {
@@ -436,6 +442,10 @@ namespace TeamsManager.UI.Services
                         .Build();
                 });
                 
+                // ✅ NAPRAWKA OBO: Rejestracja EmbeddedOboTokenManager
+                services.AddScoped<EmbeddedOboTokenManager>();
+                _logger.LogInformation("[EMBEDDED-API] ✅ Zarejestrowano EmbeddedOboTokenManager dla przepływu OBO");
+                
                 services.AddScoped<ITokenManager>(provider =>
                 {
                     var confidentialClientApp = provider.GetRequiredService<IConfidentialClientApplication>();
@@ -550,6 +560,9 @@ namespace TeamsManager.UI.Services
                 logger.LogInformation("[EMBEDDED-API] ==================== KONIEC REQUEST ====================");
             });
             
+            // ✅ NAPRAWKA OBO: TokenValidationMiddleware musi być przed routing
+            app.UseMiddleware<TokenValidationMiddleware>();
+            
             app.UseRouting();
             
             // ✅ CORS (musi być przed Authentication)
@@ -561,7 +574,7 @@ namespace TeamsManager.UI.Services
                 endpoints.MapControllers();
             });
             
-            _logger.LogInformation("[EMBEDDED-API] ✅ Skonfigurowano pipeline API");
+            _logger.LogInformation("[EMBEDDED-API] ✅ Skonfigurowano pipeline API z TokenValidationMiddleware");
         }
 
         private int FindAvailablePort(int startPort, int endPort)

@@ -58,8 +58,11 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Wykonywanie żądania GET do: {Url}", url);
-                var response = await client.GetAsync(url);
+                // ✅ NAPRAWKA OBO: Sprawdź czy URL jest względny i dodaj Graph base URL
+                var finalUrl = GetAbsoluteUrl(url);
+                
+                _logger.LogDebug("Wykonywanie żądania GET do: {Url} (finalne URL: {FinalUrl})", url, finalUrl);
+                var response = await client.GetAsync(finalUrl);
                 _logger.LogDebug("Żądanie GET zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
@@ -85,9 +88,12 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Wykonywanie żądania POST do: {Url}", url);
+                // ✅ NAPRAWKA OBO: Sprawdź czy URL jest względny i dodaj Graph base URL
+                var finalUrl = GetAbsoluteUrl(url);
+                
+                _logger.LogDebug("Wykonywanie żądania POST do: {Url} (finalne URL: {FinalUrl})", url, finalUrl);
                 var httpContent = new StringContent(content ?? string.Empty, Encoding.UTF8, "application/json");
-                var response = await client.PostAsync(url, httpContent);
+                var response = await client.PostAsync(finalUrl, httpContent);
                 _logger.LogDebug("Żądanie POST zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
@@ -113,9 +119,12 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Wykonywanie żądania PATCH do: {Url}", url);
+                // ✅ NAPRAWKA OBO: Sprawdź czy URL jest względny i dodaj Graph base URL
+                var finalUrl = GetAbsoluteUrl(url);
+                
+                _logger.LogDebug("Wykonywanie żądania PATCH do: {Url} (finalne URL: {FinalUrl})", url, finalUrl);
                 var httpContent = new StringContent(content ?? string.Empty, Encoding.UTF8, "application/json");
-                var response = await client.PatchAsync(url, httpContent);
+                var response = await client.PatchAsync(finalUrl, httpContent);
                 _logger.LogDebug("Żądanie PATCH zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
@@ -141,8 +150,11 @@ namespace TeamsManager.Core.Services
 
             try
             {
-                _logger.LogDebug("Wykonywanie żądania DELETE do: {Url}", url);
-                var response = await client.DeleteAsync(url);
+                // ✅ NAPRAWKA OBO: Sprawdź czy URL jest względny i dodaj Graph base URL
+                var finalUrl = GetAbsoluteUrl(url);
+                
+                _logger.LogDebug("Wykonywanie żądania DELETE do: {Url} (finalne URL: {FinalUrl})", url, finalUrl);
+                var response = await client.DeleteAsync(finalUrl);
                 _logger.LogDebug("Żądanie DELETE zakończone. Status: {StatusCode}", response.StatusCode);
                 return response;
             }
@@ -1094,28 +1106,6 @@ namespace TeamsManager.Core.Services
         }
 
         /// <summary>
-        /// Wykonuje żądanie PATCH z obiektem typu T
-        /// </summary>
-        public async Task PatchAsync<T>(string url, T content, Dictionary<string, string>? headers = null)
-        {
-            try
-            {
-                var jsonContent = JsonSerializer.Serialize(content, _jsonOptions);
-                var response = await PatchAsync(url, jsonContent, headers);
-                
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning("Żądanie PATCH<T> zakończone niepowodzeniem dla URL: {Url}, Status: {StatusCode}", 
-                        url, response.StatusCode);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Błąd podczas wykonywania żądania PATCH<T> dla URL: {Url}", url);
-            }
-        }
-
-        /// <summary>
         /// Wykonuje żądanie PUT z obiektem typu T
         /// </summary>
         public async Task PutAsync<T>(string url, T content, Dictionary<string, string>? headers = null)
@@ -1147,6 +1137,52 @@ namespace TeamsManager.Core.Services
             {
                 _logger.LogError(ex, "Błąd podczas wykonywania żądania PUT<T> dla URL: {Url}", url);
             }
+        }
+
+        /// <summary>
+        /// Wykonuje żądanie PATCH z obiektem typu T
+        /// </summary>
+        public async Task PatchAsync<T>(string url, T content, Dictionary<string, string>? headers = null)
+        {
+            try
+            {
+                var jsonContent = JsonSerializer.Serialize(content, _jsonOptions);
+                var response = await PatchAsync(url, jsonContent, headers);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Żądanie PATCH<T> zakończone niepowodzeniem dla URL: {Url}, Status: {StatusCode}", 
+                        url, response.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Błąd podczas wykonywania żądania PATCH<T> dla URL: {Url}", url);
+            }
+        }
+
+        private string GetAbsoluteUrl(string url)
+        {
+            // Jeśli URL jest już absolutny, zwróć go bez zmian
+            if (Uri.IsWellFormedUriString(url, UriKind.Absolute))
+            {
+                return url;
+            }
+            
+            // Jeśli URL jest względny i dotyczy Graph API, dodaj base URL
+            if (url.StartsWith("v1.0/") || url.StartsWith("/v1.0/") || url.StartsWith("me") || url.StartsWith("/me"))
+            {
+                var baseUrl = "https://graph.microsoft.com/";
+                var cleanUrl = url.TrimStart('/');
+                if (!cleanUrl.StartsWith("v1.0/"))
+                {
+                    cleanUrl = "v1.0/" + cleanUrl;
+                }
+                return baseUrl + cleanUrl;
+            }
+            
+            // W przeciwnym razie zwróć URL bez zmian (może być lokalny endpoint)
+            return url;
         }
     }
 } 
