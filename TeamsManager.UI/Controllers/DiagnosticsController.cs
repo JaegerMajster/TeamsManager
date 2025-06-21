@@ -11,7 +11,7 @@ namespace TeamsManager.UI.Controllers
     /// Kontroler do diagnostyki systemu Graph API
     /// </summary>
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/advanced-diagnostics")]
     [Authorize]
     public class DiagnosticsController : ControllerBase
     {

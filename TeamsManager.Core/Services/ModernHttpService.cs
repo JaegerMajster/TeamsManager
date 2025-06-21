@@ -53,7 +53,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
-            using var client = GetHttpClient(url);
+            var client = GetHttpClient(url);
             AddHeaders(client, headers);
 
             try
@@ -80,7 +80,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
-            using var client = GetHttpClient(url);
+            var client = GetHttpClient(url);
             AddHeaders(client, headers);
 
             try
@@ -108,7 +108,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
-            using var client = GetHttpClient(url);
+            var client = GetHttpClient(url);
             AddHeaders(client, headers);
 
             try
@@ -136,7 +136,7 @@ namespace TeamsManager.Core.Services
                 throw new ArgumentException("URL nie może być null lub pusty", nameof(url));
             }
 
-            using var client = GetHttpClient(url);
+            var client = GetHttpClient(url);
             AddHeaders(client, headers);
 
             try

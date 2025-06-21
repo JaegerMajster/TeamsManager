@@ -104,7 +104,10 @@ namespace TeamsManager.UI.Services.Configuration
         {
             try
             {
+                _logger.LogInformation("🔍 [DEBUG] Rozpoczęcie ładowania konfiguracji {ConfigName} typu {Type}", configName, typeof(T).Name);
+                
                 var filePath = GetConfigFilePath(configName);
+                _logger.LogInformation("🔍 [DEBUG] Ścieżka pliku: {FilePath}", filePath);
                 
                 if (!File.Exists(filePath))
                 {
@@ -113,19 +116,36 @@ namespace TeamsManager.UI.Services.Configuration
                 }
 
                 var jsonContent = await File.ReadAllTextAsync(filePath);
+                _logger.LogInformation("🔍 [DEBUG] Odczytano {Length} znaków z pliku", jsonContent.Length);
+                _logger.LogInformation("🔍 [DEBUG] Pierwsze 200 znaków: {Preview}", 
+                    jsonContent.Length > 200 ? jsonContent.Substring(0, 200) + "..." : jsonContent);
                 
                 // Sprawdź czy plik jest zaszyfrowany
                 if (IsEncrypted(configName))
                 {
-                    _logger.LogInformation("Odczytywanie zaszyfrowanego pliku {ConfigName}", configName);
+                    _logger.LogInformation("🔍 [DEBUG] Konfiguracja {ConfigName} jest zaszyfrowana", configName);
                     
                     var encryptedData = JsonSerializer.Deserialize<EncryptedData>(jsonContent);
+                    _logger.LogInformation("🔍 [DEBUG] Deserializacja EncryptedData: {Success}", encryptedData != null ? "SUKCES" : "BŁĄD");
                     
                     if (encryptedData != null)
                     {
-                        _logger.LogInformation("Rozpoczęcie odszyfrowywania danych");
+                        _logger.LogInformation("🔍 [DEBUG] EncryptedData - Data length: {DataLength}, IV length: {IvLength}, Salt length: {SaltLength}, Method: {Method}", 
+                            encryptedData.Data?.Length ?? 0, 
+                            encryptedData.IV?.Length ?? 0, 
+                            encryptedData.Salt?.Length ?? 0,
+                            encryptedData.EncryptionMethod ?? "NULL");
+                        
+                        _logger.LogInformation("🔍 [DEBUG] Rozpoczęcie odszyfrowywania danych");
                         
                         var decryptedJson = _encryption.Decrypt(encryptedData);
+                        _logger.LogInformation("🔍 [DEBUG] Odszyfrowywanie zakończone - długość: {Length}", decryptedJson?.Length ?? 0);
+                        
+                        if (!string.IsNullOrEmpty(decryptedJson))
+                        {
+                            _logger.LogInformation("🔍 [DEBUG] Odszyfrowane dane (pierwsze 500 znaków): {Preview}", 
+                                decryptedJson.Length > 500 ? decryptedJson.Substring(0, 500) + "..." : decryptedJson);
+                        }
                         
                         // Użyj tej samej polityki nazewnictwa co przy zapisie
                         var jsonOptions = new JsonSerializerOptions 
@@ -133,7 +153,27 @@ namespace TeamsManager.UI.Services.Configuration
                             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                         };
                         
-                        return JsonSerializer.Deserialize<T>(decryptedJson, jsonOptions);
+                        var result = JsonSerializer.Deserialize<T>(decryptedJson, jsonOptions);
+                        _logger.LogInformation("🔍 [DEBUG] Deserializacja do typu {Type}: {Success}", typeof(T).Name, result != null ? "SUKCES" : "BŁĄD");
+                        
+                        // Sprawdź czy to AzureAdConfiguration i wyloguj szczegóły
+                        if (result is AzureAdConfiguration azureConfig)
+                        {
+                            _logger.LogInformation("🔍 [DEBUG] AzureAdConfiguration - TenantId: {TenantId}, Instance: {Instance}", 
+                                azureConfig.TenantId ?? "NULL", azureConfig.Instance ?? "NULL");
+                            _logger.LogInformation("🔍 [DEBUG] AzureAdConfiguration.Api - IsNull: {IsNull}", azureConfig.Api == null);
+                            if (azureConfig.Api != null)
+                            {
+                                _logger.LogInformation("🔍 [DEBUG] Api.ClientId: {ClientId}, Api.ClientSecret: {HasSecret}, Api.Audience: {Audience}, Api.ApiScope: {ApiScope}",
+                                    azureConfig.Api.ClientId ?? "NULL",
+                                    !string.IsNullOrEmpty(azureConfig.Api.ClientSecret) ? "SET" : "NULL",
+                                    azureConfig.Api.Audience ?? "NULL",
+                                    azureConfig.Api.ApiScope ?? "NULL");
+                                _logger.LogInformation("🔍 [DEBUG] Api.IsValid(): {IsValid}", azureConfig.Api.IsValid());
+                            }
+                        }
+                        
+                        return result;
                     }
                     else
                     {
@@ -142,14 +182,17 @@ namespace TeamsManager.UI.Services.Configuration
                 }
                 else
                 {
-                    return JsonSerializer.Deserialize<T>(jsonContent);
+                    _logger.LogInformation("🔍 [DEBUG] Konfiguracja {ConfigName} nie jest zaszyfrowana", configName);
+                    var result = JsonSerializer.Deserialize<T>(jsonContent);
+                    _logger.LogInformation("🔍 [DEBUG] Deserializacja niezaszyfrowanych danych: {Success}", result != null ? "SUKCES" : "BŁĄD");
+                    return result;
                 }
 
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Błąd podczas wczytywania konfiguracji {ConfigName}", configName);
+                _logger.LogError(ex, "🔍 [DEBUG] Błąd podczas wczytywania konfiguracji {ConfigName}", configName);
                 throw;
             }
         }

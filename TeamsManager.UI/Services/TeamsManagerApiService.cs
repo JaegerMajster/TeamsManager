@@ -51,15 +51,18 @@ namespace TeamsManager.UI.Services
         private readonly HttpClient _httpClient;
         private readonly IMsalAuthService _authService;
         private readonly ILogger<TeamsManagerApiService> _logger;
+        private readonly EmbeddedApiServer _embeddedApiServer;
 
         public TeamsManagerApiService(
             HttpClient httpClient,
             IMsalAuthService authService,
-            ILogger<TeamsManagerApiService> logger)
+            ILogger<TeamsManagerApiService> logger,
+            EmbeddedApiServer embeddedApiServer)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _embeddedApiServer = embeddedApiServer ?? throw new ArgumentNullException(nameof(embeddedApiServer));
         }
 
         public async Task<GraphDiagnosticInfo?> GetGraphConnectionDiagnosticsAsync()
@@ -71,7 +74,7 @@ namespace TeamsManager.UI.Services
                 
                 await EnsureAuthenticatedAsync();
                 
-                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/status");
                 _logger.LogInformation("[DIAGNOSTIC] Wysyłam żądanie GET do: {Url}", url);
                 var response = await _httpClient.GetAsync(url);
                 
@@ -123,7 +126,7 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = true
                 };
                 
-                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/test");
                 var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
@@ -152,7 +155,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Sprawdzanie uprawnień Graph API: {Permissions}", string.Join(", ", requiredPermissions));
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/permissions");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/permissions");
                 var response = await _httpClient.PostAsJsonAsync(url, requiredPermissions);
                 
                 if (response.IsSuccessStatusCode)
@@ -181,7 +184,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie stanu połączenia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/status");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -221,7 +224,7 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = false
                 };
                 
-                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/test");
                 var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
@@ -250,7 +253,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie pełnego raportu diagnostycznego Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/status");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -279,7 +282,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu połączenia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/status");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/status");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -319,7 +322,7 @@ namespace TeamsManager.UI.Services
                     RunTestsInParallel = true
                 };
                 
-                var url = BuildApiUrl("api/diagnostics/graph/test");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/test");
                 var response = await _httpClient.PostAsJsonAsync(url, requestBody);
                 
                 if (response.IsSuccessStatusCode)
@@ -348,7 +351,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie uprawnień Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/permissions");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/permissions");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -370,18 +373,26 @@ namespace TeamsManager.UI.Services
             }
         }
 
-        /// <summary>
-        /// Buduje pełny URL dla endpointu API na podstawie EmbeddedApiServer
-        /// </summary>
-        private string BuildApiUrl(string endpoint)
+        private async Task<string> BuildApiUrlAsync(string endpoint)
         {
             try
             {
-                // TYMCZASOWE ROZWIĄZANIE: Używaj bezpośrednio localhost:7037
-                // EmbeddedApiServer nie jest uruchamiany, więc zwraca port 0
-                var baseUrl = "https://localhost:7037";
+                // Upewnij się, że EmbeddedApiServer jest uruchomiony
+                _logger.LogDebug("[DIAGNOSTIC] Sprawdzanie stanu EmbeddedApiServer: IsRunning={IsRunning}", _embeddedApiServer.IsRunning);
                 
-                _logger.LogDebug("[DIAGNOSTIC] Używam stały URL API: {BaseUrl}", baseUrl);
+                if (!_embeddedApiServer.IsRunning)
+                {
+                    _logger.LogInformation("[DIAGNOSTIC] EmbeddedApiServer nie działa - uruchamianie...");
+                    var startResult = await _embeddedApiServer.StartAsync();
+                    _logger.LogInformation("[DIAGNOSTIC] EmbeddedApiServer uruchomiony: {Success} na: {BaseUrl}", startResult, _embeddedApiServer.BaseUrl);
+                }
+                else
+                {
+                    _logger.LogDebug("[DIAGNOSTIC] EmbeddedApiServer już działa na: {BaseUrl}", _embeddedApiServer.BaseUrl);
+                }
+                
+                var baseUrl = _embeddedApiServer.BaseUrl;
+                _logger.LogDebug("[DIAGNOSTIC] Używam EmbeddedApiServer URL: {BaseUrl}", baseUrl);
                 
                 var fullUrl = $"{baseUrl.TrimEnd('/')}/{endpoint.TrimStart('/')}";
                 _logger.LogDebug("[DIAGNOSTIC] Zbudowano URL: {FullUrl}", fullUrl);
@@ -389,9 +400,11 @@ namespace TeamsManager.UI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[DIAGNOSTIC] Błąd podczas budowania URL API");
-                // Fallback URL
-                return $"https://localhost:7037/{endpoint.TrimStart('/')}";
+                _logger.LogError(ex, "[DIAGNOSTIC] Błąd podczas budowania URL API z EmbeddedApiServer");
+                // Fallback do stałego URL w przypadku problemów
+                var fallbackUrl = $"https://localhost:7037/{endpoint.TrimStart('/')}";
+                _logger.LogWarning("[DIAGNOSTIC] Używam fallback URL: {FallbackUrl}", fallbackUrl);
+                return fallbackUrl;
             }
         }
 
@@ -475,7 +488,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu rate limit Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/rate-limit");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/rate-limit");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -504,7 +517,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu zdrowia Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/health");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/health");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -533,7 +546,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Wykonywanie operacji batch Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/graph/batch");
+                var url = await BuildApiUrlAsync("api/graph/batch");
                 var response = await _httpClient.PostAsJsonAsync(url, batchRequest);
                 
                 if (response.IsSuccessStatusCode)
@@ -562,7 +575,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie metryk Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/metrics");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/metrics");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -591,7 +604,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie statusu cache Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/cache");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/cache");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -647,7 +660,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie informacji o tokenie Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/token");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/token");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -676,7 +689,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Odświeżanie tokenu Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/token/refresh");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/token/refresh");
                 var response = await _httpClient.PostAsync(url, null);
                 
                 if (response.IsSuccessStatusCode)
@@ -704,7 +717,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie dostępnych endpointów Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/endpoints");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/endpoints");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -733,7 +746,7 @@ namespace TeamsManager.UI.Services
                 _logger.LogDebug("[API-SERVICE] Pobieranie informacji o quota Graph API");
                 
                 await EnsureAuthenticatedAsync();
-                var url = BuildApiUrl("api/diagnostics/graph/quota");
+                var url = await BuildApiUrlAsync("api/diagnostics/graph/quota");
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)

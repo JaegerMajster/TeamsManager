@@ -45,6 +45,7 @@ using TeamsManager.UI.Views.Common;
 using TeamsManager.UI.ViewModels.Dialogs;
 using TeamsManager.Core.Models.Configuration;
 using TeamsManager.UI.Models.Configuration;
+using TeamsManager.UI.Services;
 
 namespace TeamsManager.UI
 {
@@ -112,8 +113,7 @@ namespace TeamsManager.UI
             // Nowy serwis konfiguracji API z automatycznym wykrywaniem
             services.AddScoped<IApiConfigurationService, ApiConfigurationService>();
             
-            // Embedded API Server
-            services.AddSingleton<EmbeddedApiServer>();
+            // Embedded API Server będzie zarejestrowany na końcu po wszystkich zależnościach
             
             // NOWY UNIWERSALNY SYSTEM KONFIGURACJI (Clean Architecture)
             services.AddSingleton<TeamsManager.Core.Abstractions.Services.IConfigurationService, 
@@ -672,6 +672,17 @@ namespace TeamsManager.UI
             services.AddTransient<UserControls.Teams.TestDataDialog>();
             
             // --- KONIEC: REJESTRACJA BRAKUJĄCYCH VIEWMODELI (ETAP 6.0) ---
+            
+            // ===== EMBEDDED API SERVER - REJESTRACJA NA KOŃCU =====
+            // Rejestracja EmbeddedApiServer na końcu po wszystkich zależnościach
+            services.AddSingleton<EmbeddedApiServer>(provider =>
+            {
+                var logger = provider.GetRequiredService<ILogger<EmbeddedApiServer>>();
+                logger.LogInformation("🔧 [FACTORY] Tworzenie EmbeddedApiServer - konfiguracja będzie ładowana z systemu V2.0");
+                
+                // EmbeddedApiServer sam załaduje konfigurację z systemu V2.0
+                return new EmbeddedApiServer(logger);
+            });
         }
 
         /// <summary>
@@ -920,6 +931,58 @@ namespace TeamsManager.UI
                 }
                 
                 logger.LogInformation("✅ Konfiguracja jest kompletna - kontynuuję uruchomienie");
+                
+                // ===== URUCHOMIENIE EMBEDDED API SERVER =====
+                logger.LogInformation("🚀 Uruchamiam EmbeddedApiServer...");
+                try
+                {
+                    var embeddedApiServer = ServiceProvider.GetRequiredService<EmbeddedApiServer>();
+                    var embeddedConfigManager = ServiceProvider.GetRequiredService<IConfigurationManagerV2>();
+                    
+                    logger.LogInformation("[EMBEDDED-API] 🔧 Ładowanie konfiguracji z systemu V2.0...");
+                    
+                    // Załaduj konfigurację Azure AD i Application
+                    var azureAdConfig = await embeddedConfigManager.LoadAzureAdConfigurationAsync();
+                    var applicationConfig = await embeddedConfigManager.LoadApplicationConfigurationAsync();
+                    
+                    logger.LogInformation("[EMBEDDED-API] 🔧 Konfiguracja załadowana:");
+                    logger.LogInformation("[EMBEDDED-API] 🔧   - Azure AD: {AzureAdConfig}", 
+                        azureAdConfig == null ? "NULL" : $"ClientId={azureAdConfig.Api?.ClientId}, IsValid={azureAdConfig.Api?.IsValid()}");
+                    logger.LogInformation("[EMBEDDED-API] 🔧   - Application: {ApplicationConfig}", 
+                        applicationConfig == null ? "NULL" : $"Name={applicationConfig.ApplicationName}, IsValid={applicationConfig.IsValid()}");
+                    
+                    // SZCZEGÓŁOWE LOGOWANIE CLIENT SECRET
+                    if (azureAdConfig?.Api != null)
+                    {
+                        logger.LogInformation("[EMBEDDED-API] 🔧 SZCZEGÓŁY Azure AD API:");
+                        logger.LogInformation("[EMBEDDED-API] 🔧   - ClientId: {ClientId}", azureAdConfig.Api.ClientId ?? "NULL");
+                        logger.LogInformation("[EMBEDDED-API] 🔧   - ClientSecret is set: {ClientSecretSet}", !string.IsNullOrWhiteSpace(azureAdConfig.Api.ClientSecret));
+                        logger.LogInformation("[EMBEDDED-API] 🔧   - Audience: {Audience}", azureAdConfig.Api.Audience ?? "NULL");
+                        logger.LogInformation("[EMBEDDED-API] 🔧   - ApiScope: {ApiScope}", azureAdConfig.Api.ApiScope ?? "NULL");
+                        logger.LogInformation("[EMBEDDED-API] 🔧   - IsValid(): {IsValid}", azureAdConfig.Api.IsValid());
+                    }
+                    else
+                    {
+                        logger.LogError("[EMBEDDED-API] ❌ azureAdConfig.Api jest NULL!");
+                    }
+                    
+                    // Przekaż konfigurację do EmbeddedApiServer
+                    embeddedApiServer.SetConfiguration(azureAdConfig, applicationConfig);
+                    
+                    // Uruchom EmbeddedApiServer
+                    await embeddedApiServer.StartAsync();
+                    logger.LogInformation($"✅ EmbeddedApiServer uruchomiony na: {embeddedApiServer.BaseUrl}");
+                    System.Diagnostics.Debug.WriteLine($"[EMBEDDED-API] Server uruchomiony na: {embeddedApiServer.BaseUrl}");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "❌ Błąd podczas uruchamiania EmbeddedApiServer");
+                    System.Diagnostics.Debug.WriteLine($"[EMBEDDED-API] Błąd uruchomienia: {ex.Message}");
+                    
+                    // Nie przerywamy uruchamiania aplikacji - EmbeddedApiServer to funkcja dodatkowa
+                    MessageBox.Show($"Nie udało się uruchomić wewnętrznego serwera API:\n{ex.Message}\n\nAplikacja będzie działać z ograniczoną funkcjonalnością.",
+                                  "Ostrzeżenie", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 
                 // Przywróć normalny ShutdownMode przed uruchomieniem serwera
                 try

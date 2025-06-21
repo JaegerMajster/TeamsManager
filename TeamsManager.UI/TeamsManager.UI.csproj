@@ -48,13 +48,21 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.HealthChecks" Version="2.2.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authorization" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Cors" Version="2.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Polly" Version="8.5.0" />
+    <PackageReference Include="Polly.Extensions" Version="8.5.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TeamsManager.Core\TeamsManager.Core.csproj" />
     <ProjectReference Include="..\TeamsManager.Data\TeamsManager.Data.csproj" />
     <ProjectReference Include="..\TeamsManager.Application\TeamsManager.Application.csproj" />
+    <ProjectReference Include="..\TeamsManager.Api\TeamsManager.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
